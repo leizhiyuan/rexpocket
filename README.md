@@ -29,7 +29,7 @@ The phone and the computer must share a network, or sit inside your own VPN / Ta
 ## On the phone
 
 1. Add a host: name, IP or domain, port `7297`, plaintext on.
-2. Tap the host. A single session opens directly; several sessions show a list first.
+2. Tapping a host always lands on the session list. Opening a session that has one pane goes straight to the terminal; a window with several panes asks which one to show first, so only one pane is ever drawn.
 3. Terminal: drag down to read scrollback, and the arrow at the bottom right returns to following the output. Pinch to change the font size, long-press to select and then tap `Copy` in the toolbar. The `Sessions` sidebar lists sessions / windows / panes, and the window chips switch windows.
 4. Toolbar: `Esc`, `Ctrl` (double-tap to lock), `Tab`, `/`, arrows, `C-c` `C-d` `C-z` `C-l`, paste and copy.
 5. The composer writes into the terminal. Tap `Send` to send the text followed by Enter; long-press it to send a single Enter without the text.

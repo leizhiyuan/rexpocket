@@ -25,6 +25,7 @@
     <string name="session_new">New session</string>
     <string name="session_enter">Enter</string>
     <string name="session_tap_to_enter">Tap to enter</string>
+    <string name="pane_pick_title">Choose a pane</string>
     <string name="session_window_count">%1$d windows</string>
     <string name="session_none_live">This Rex has no sessions yet.</string>
     <string name="session_loading">Reading sessions…</string>

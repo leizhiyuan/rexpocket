@@ -108,6 +108,9 @@ private val Amber = Color(0xFFF0C674)
 private val Danger = Color(0xFFFF5D5D)
 private val Line = Color(0xFF2C3129)
 
+/** One pane of the session the user opened, offered before the terminal appears. */
+data class PaneChoice(val blockId: String, val label: String, val window: String)
+
 sealed interface Route {
     data object Home : Route
     data object Picker : Route
@@ -127,7 +130,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     private var session: PocketSession? = null
     private var sessionJob: Job? = null
     private var watch: Job? = null
-    private var autoJumped = false
+    /** Panes of the session the user just opened, waiting for a choice. */
+    val paneChoices = MutableStateFlow<List<PaneChoice>>(emptyList())
 
     fun saveHost(host: SavedHost) {
         store.upsert(host)
@@ -142,7 +146,6 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     fun connect(target: SavedHost) {
         disconnectQuiet()
         host = target
-        autoJumped = false
         store.setLastHost(target.id)
         val previousSession = store.lastSession(target.id)
         val s = PocketSession(Endpoint(target.host, target.port, target.plaintext))
@@ -153,14 +156,53 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             s.state.collect { st ->
                 _pocket.value = st
                 if (st.activeSessionId != null) store.setLastSession(target.id, st.activeSessionId)
-                if (autoJumped || st.phase != Phase.Live || st.view == null) return@collect
-                autoJumped = true
-                // Come back to where the phone was last looking, not to a blank picker.
-                val remembered = previousSession?.takeIf { it == st.activeSessionId }
-                if (remembered == null && st.sessions.size != 1) return@collect
+            }
+        }
+    }
+
+    /**
+     * Opens a session and, when its window holds several panes, asks which one to show first.
+     * Only one pane is ever rendered, so the choice has to happen before the terminal appears.
+     */
+    fun openSession(id: String) {
+        val s = session ?: return
+        viewModelScope.launch {
+            try {
+                s.openSession(id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                s.note(e.message ?: getApplication<Application>().getString(R.string.error_operation_failed))
+                return@launch
+            }
+            val window = s.state.value.view?.activeWindow()
+            val panes = window?.blocks.orEmpty()
+            if (panes.size > 1) {
+                paneChoices.value = panes.map { PaneChoice(it.id, it.label, window?.label.orEmpty()) }
+            } else {
                 route.value = Route.Term
             }
         }
+    }
+
+    fun choosePane(blockId: String) {
+        paneChoices.value = emptyList()
+        val s = session ?: return
+        viewModelScope.launch {
+            try {
+                // Focus first, so the terminal never flashes the pane the server had focused.
+                s.focusBlock(blockId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                s.note(e.message ?: getApplication<Application>().getString(R.string.error_operation_failed))
+            }
+            route.value = Route.Term
+        }
+    }
+
+    fun dismissPaneChoice() {
+        paneChoices.value = emptyList()
     }
 
     /**
@@ -180,7 +222,6 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun showPicker() {
-        autoJumped = true
         route.value = Route.Picker
     }
 
@@ -223,6 +264,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val hosts by model.hosts.collectAsState()
     val pocket by model.pocket.collectAsState()
     val font by model.fontScale.collectAsState()
+    val panes by model.paneChoices.collectAsState()
     LaunchedEffect(Unit) { model.restore() }
     Box(Modifier.fillMaxSize().background(Bg)) {
         when (route) {
@@ -236,11 +278,11 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                 hostLabel = model.host?.label ?: "Rex",
                 state = pocket,
                 onBack = model::disconnect,
-                onOpen = {
-                    model.act { openSession(it) }
-                    model.showTerm()
-                },
+                onOpen = model::openSession,
                 onCreate = { model.act { createShell(it) }; model.showTerm() },
+                paneChoices = panes,
+                onChoosePane = model::choosePane,
+                onDismissPanes = model::dismissPaneChoice,
             )
             Route.Term -> TermScreen(
                 state = pocket,
@@ -418,6 +460,9 @@ private fun PickerScreen(
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
     onCreate: (String?) -> Unit,
+    paneChoices: List<PaneChoice>,
+    onChoosePane: (String) -> Unit,
+    onDismissPanes: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp)) {
@@ -479,6 +524,37 @@ private fun PickerScreen(
                 .clickable { onCreate(null) }
                 .padding(vertical = 14.dp),
             fontWeight = FontWeight.SemiBold,
+        )
+    }
+    if (paneChoices.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = onDismissPanes,
+            containerColor = Card,
+            title = { Text(stringResource(R.string.pane_pick_title), color = Ink) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    paneChoices.forEach { choice ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Bg)
+                                .clickable { onChoosePane(choice.blockId) }.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(choice.label, color = Ink, fontSize = 15.sp)
+                                if (choice.window.isNotBlank()) {
+                                    Text(choice.window, color = Muted, fontSize = 12.sp)
+                                }
+                            }
+                            Text(stringResource(R.string.session_enter), color = Accent)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onDismissPanes) {
+                    Text(stringResource(R.string.action_cancel), color = Muted)
+                }
+            },
         )
     }
 }
