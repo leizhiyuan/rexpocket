@@ -1,5 +1,7 @@
 package app.rexpocket.ui
 
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -12,6 +14,7 @@ import io.github.sagernet.libghostty.compose.rememberGhosttyTerminalState
 import io.github.sagernet.libghostty.compose.GhosttyTerminal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 
 /**
  * Terminal surface backed by libghostty-vt.
@@ -45,12 +48,16 @@ fun TerminalPane(
         )
     }
     val currentInput = rememberUpdatedState(onInput)
+    val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
     val currentResize = rememberUpdatedState(onResize)
 
     DisposableEffect(session) {
         session.transport = object : GhosttyTerminalSession.Transport {
             override fun sendInput(data: ByteArray) {
-                currentInput.value(data)
+                // A swipe over a full-screen TUI turns into one mouse-wheel report per row, and
+                // each report used to be its own round trip. Batching them keeps the gesture
+                // attached to the finger.
+                input.post(data)
             }
 
             override fun sendResize(columns: Int, rows: Int, widthPixels: Int, heightPixels: Int) {
@@ -62,6 +69,7 @@ fun TerminalPane(
         session.systemClipboardWriteEnabled = false
         onSession(session)
         onDispose {
+            input.flush()
             onSession(null)
             session.transport = null
             session.close()
@@ -117,4 +125,38 @@ private fun payloadFor(dump: String, previous: String?): String {
         return body.substring(previousBody.length) + tail
     }
     return RESET + body + tail
+}
+
+/**
+ * Coalesces terminal input produced in quick succession (wheel reports from a swipe, fast
+ * typing) into one write, so a gesture does not turn into dozens of serialized round trips.
+ */
+private class InputBatcher(private val send: (ByteArray) -> Unit) {
+    private val handler = Handler(Looper.getMainLooper())
+    private val buffer = ByteArrayOutputStream()
+    private val flushTask = Runnable { flush() }
+
+    fun post(data: ByteArray) {
+        buffer.write(data, 0, data.size)
+        if (!pending) {
+            pending = true
+            handler.postDelayed(flushTask, WINDOW_MS)
+        }
+    }
+
+    fun flush() {
+        handler.removeCallbacks(flushTask)
+        pending = false
+        if (buffer.size() == 0) return
+        val bytes = buffer.toByteArray()
+        buffer.reset()
+        send(bytes)
+    }
+
+    private var pending = false
+
+    private companion object {
+        /** Long enough to collect one gesture frame, short enough to feel immediate. */
+        const val WINDOW_MS = 50L
+    }
 }

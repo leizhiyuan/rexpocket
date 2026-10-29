@@ -301,8 +301,23 @@ class PocketSession(
         lastVt = null
     }
 
-    /** Keystrokes from the terminal view arrive as UTF-8 bytes. */
-    suspend fun writeBytes(data: ByteArray) = sendText(String(data, Charsets.UTF_8))
+    /**
+     * Keystrokes and mouse reports from the terminal view arrive as UTF-8 bytes. They are sent
+     * without waiting for a reply so a swipe is not throttled by round trips.
+     */
+    suspend fun writeBytes(data: ByteArray) {
+        if (data.isEmpty()) return
+        val client = clientRef.get() ?: throw IllegalStateException("Not connected yet")
+        val (sid, block) = requireBlock()
+        client.send(
+            "com.superlogical.terminal.write",
+            JSONObject()
+                .put("session_id", sid)
+                .put("block_id", block)
+                .put("args", JSONObject().put("data", String(data, Charsets.UTF_8))),
+        )
+        lastVt = null
+    }
 
     /**
      * Typing a line means writing the text and then pressing Enter as a separate key event.
@@ -548,7 +563,7 @@ class PocketSession(
                     _state.update { it.copy(error = e.message) }
                 }
             }
-            delay(if (lastVt == null) 80 else 180)
+            delay(if (lastVt == null) 40 else 180)
         }
     }
 

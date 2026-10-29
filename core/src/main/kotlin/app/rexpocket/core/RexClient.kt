@@ -78,6 +78,19 @@ class RexClient(
         }
     }
 
+    /**
+     * Sends a request without waiting for the reply. Input uses this: the order of keystrokes
+     * matters but their result does not, and awaiting each one would serialize a whole gesture
+     * behind the network round trip.
+     */
+    fun send(method: String, payload: JSONObject? = null): Boolean {
+        val ws = socket ?: return false
+        val id = ids.incrementAndGet().toString()
+        val msg = JSONObject().put("type", "request").put("id", id).put("method", method)
+        if (payload != null) msg.put("payload", payload)
+        return ws.send(msg.toString())
+    }
+
     fun close() {
         if (!closed.compareAndSet(false, true)) return
         socket?.close(1000, "bye")
