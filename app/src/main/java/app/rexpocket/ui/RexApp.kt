@@ -4,7 +4,19 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.graphics.toArgb
+import android.widget.EditText
+import android.view.inputmethod.EditorInfo
+import android.text.TextWatcher
+import android.text.InputType
+import android.text.Editable
 import android.os.SystemClock
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.input.pointer.PointerEventType
+import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -60,8 +72,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -84,6 +94,7 @@ import app.rexpocket.data.SavedHost
 import io.github.sagernet.libghostty.GhosttyTerminalSession
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -751,34 +762,57 @@ private fun Composer(
     onSend: () -> Unit,
     onSendEnter: () -> Unit,
 ) {
-    val focusRequester = remember { FocusRequester() }
-    val keyboard = LocalSoftwareKeyboardController.current
+    var field by remember { mutableStateOf<EditText?>(null) }
+
+    fun showIme() {
+        val edit = field ?: return
+        edit.requestFocus()
+        edit.post { edit.context.getSystemService(InputMethodManager::class.java)?.showSoftInput(edit, 0) }
+    }
+
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BasicTextField(
-            value = draft,
-            onValueChange = onDraft,
-            textStyle = TextStyle(color = Ink, fontSize = 16.sp),
-            cursorBrush = SolidColor(Accent),
-            modifier = Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Card)
-                .pointerInput(Unit) {
-                    // Taps on the field must also pull the keyboard back up after the terminal
-                    // view has been touched and the IME hid itself.
-                    detectTapGestures {
-                        focusRequester.requestFocus()
-                        keyboard?.show()
+        AndroidView(
+            modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Card),
+            factory = { ctx ->
+                EditText(ctx).apply {
+                    background = null
+                    setTextColor(Ink.toArgb())
+                    setHintTextColor(Muted.toArgb())
+                    hint = ctx.getString(R.string.composer_hint)
+                    textSize = 16f
+                    setPadding(28, 18, 28, 18)
+                    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                    imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                    maxLines = 4
+                    isSingleLine = false
+                    addTextChangedListener(object : TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                        override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                        override fun afterTextChanged(s: Editable?) {
+                            onDraft(s?.toString().orEmpty())
+                        }
+                    })
+                    setOnFocusChangeListener { _, focused ->
+                        // An EditText reports focus before the input connection is ready.
+                        if (focused) post { context.getSystemService(InputMethodManager::class.java)?.showSoftInput(this, 0) }
                     }
+                    // Focus does not change when the field is already focused, which is the case
+                    // after the keyboard was dismissed with Back, so taps ask for the IME too.
+                    setOnClickListener {
+                        requestFocus()
+                        post { context.getSystemService(InputMethodManager::class.java)?.showSoftInput(this, 0) }
+                    }
+                    field = this
                 }
-                .focusRequester(focusRequester)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            decorationBox = { inner ->
-                if (draft.isEmpty()) Text(stringResource(R.string.composer_hint), color = Muted, fontSize = 16.sp)
-                inner()
+            },
+            update = { view ->
+                if (view.text.toString() != draft) {
+                    view.setText(draft)
+                    view.setSelection(draft.length)
+                }
             },
         )
         Spacer(Modifier.width(6.dp))
@@ -789,7 +823,10 @@ private fun Composer(
             modifier = Modifier
                 .clip(RoundedCornerShape(12.dp))
                 .background(Card)
-                .combinedClickable(onClick = onSend, onLongClick = onSendEnter)
+                .combinedClickable(
+                    onClick = { onSend(); showIme() },
+                    onLongClick = { onSendEnter(); showIme() },
+                )
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         )
     }
