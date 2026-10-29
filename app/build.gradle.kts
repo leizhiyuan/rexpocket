@@ -15,6 +15,9 @@ android {
         targetSdk = 35
         versionCode = 4
         versionName = "0.0.3"
+
+        // libbox is built for arm64 only, so the APK must not claim the other ABIs either.
+        ndk.abiFilters += "arm64-v8a"
     }
 
     buildTypes {
@@ -28,11 +31,18 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    packaging {
+        // libbox is a 57 MB uncompressed arm64 library. Stored as-is it would be the whole APK,
+        // so let the installer unpack it instead of keeping it uncompressed for mmap loading.
+        jniLibs.useLegacyPackaging = true
     }
 }
 
@@ -59,4 +69,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("io.github.sagernet:libghostty-android:0.1.0-alpha01")
     implementation("io.github.sagernet:libghostty-android-compose-legacy:0.1.0-alpha01")
+    // Built from sing-box 1.14.4 with the Tailscale endpoint, see tools/build-libbox.sh.
+    implementation(files("libs/libbox.aar"))
 }

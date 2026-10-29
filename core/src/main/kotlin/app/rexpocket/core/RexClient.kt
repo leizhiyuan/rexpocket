@@ -11,6 +11,8 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -177,10 +179,22 @@ class RexClient(
     }
 
     companion object {
-        fun defaultHttp(): OkHttpClient = OkHttpClient.Builder()
+        /**
+         * [socksPort] is the loopback port of the app's own Tailscale inbound. OkHttp hands a SOCKS5
+         * proxy the hostname unresolved, so a tailnet name is resolved by Tailscale itself.
+         */
+        fun defaultHttp(socksPort: Int = 0): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(0, TimeUnit.MILLISECONDS)
             .pingInterval(30, TimeUnit.SECONDS)
+            .apply {
+                if (socksPort > 0) {
+                    proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", socksPort)))
+                }
+            }
             .build()
+
+        /** A client whose sockets go through the app's own Tailscale inbound on [socksPort]. */
+        fun forSocksPort(socksPort: Int): RexClient = RexClient(defaultHttp(socksPort))
     }
 }

@@ -20,6 +20,23 @@
     <string name="field_port">Port</string>
     <string name="field_plaintext">Plaintext ws://</string>
     <string name="field_plaintext_warning">In plaintext mode anyone who can reach the port has full access.</string>
+    <string name="field_via_tailscale">Via Tailscale</string>
+
+    <string name="tailscale_title">Tailscale</string>
+    <string name="tailscale_on">On</string>
+    <string name="tailscale_off">Off</string>
+    <string name="tailscale_enable">Join your tailnet</string>
+    <string name="tailscale_auth_key">Auth key</string>
+    <string name="tailscale_hostname">Node name (optional)</string>
+    <string name="tailscale_hint">The app runs its own Tailscale node, so the phone can reach tailnet names such as host.tailnet-xxxx.ts.net without the Tailscale app and without a VPN. Paste an auth key from the Tailscale admin console, or leave it empty and authorize the node through the link it shows; either way the node keeps its login afterwards. Mark each host that lives on the tailnet with Via Tailscale.</string>
+    <string name="tailscale_state_running">Running</string>
+    <string name="tailscale_state_starting">Starting…</string>
+    <string name="tailscale_state_needs_login">Login needed</string>
+    <string name="tailscale_state_needs_approval">Waiting for approval</string>
+    <string name="tailscale_state_stopped">Stopped</string>
+    <string name="tailscale_login_hint">Tap the link to copy it, open it in a browser, authorize this node, then come back.</string>
+    <string name="tailscale_login_copied">Login link copied</string>
+    <string name="tailscale_login_banner">Tailscale needs a login: tap to copy the link, open it in a browser and authorize this node.</string>
 
     <string name="sessions">Sessions</string>
     <string name="session_new">New session</string>

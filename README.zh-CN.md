@@ -24,7 +24,7 @@
 rex server start --extra-listen :7297 --allow-anonymous
 ```
 
-手机和电脑要在同一网络，或者你自己的 VPN / Tailscale 路由里。应用默认 `ws://主机:7297/api/control`，子协议 `rex.control.v1`。
+手机和电脑要在同一网络、你自己的 VPN / Tailscale 路由里，或者让应用自己加入 tailnet（见 [Tailscale](#tailscale)）。应用默认 `ws://主机:7297/api/control`，子协议 `rex.control.v1`。
 
 ## 手机上
 
@@ -37,6 +37,17 @@ rex server start --extra-listen :7297 --allow-anonymous
 7. `Esc`、`Tab`、方向键、`⏎` 和 `/` 发给窗格里跑的程序，所以 `/` 能打开 pi 的命令菜单、方向键能在菜单里走。在输入框里打 `/model` 再发送，文字会进到 pi 里，但紧随其后的那个回车被命令菜单吃掉，只用来补全候选，所以再点一下 `⏎` 才真正执行。
 8. 「会话」列出这台 Rex 上的所有会话，点一下就切过去。「···」从底部弹出操作，按窗格 / 标签页 / 会话分组。进行中或等待你时，顶栏有「停」，发送 `Ctrl-C`。
 
+## Tailscale
+
+应用可以自己加入 tailnet：tailnet 里的主机用 MagicDNS 名字（`host.tailnet-xxxx.ts.net`）或 `100.x` 地址就能连，不用装 Tailscale 应用，也不占手机唯一的 VPN 位。节点跑在应用里（sing-box 的 Tailscale 端点），只有本应用连 Rex 的流量走它，手机其余流量不受影响。
+
+1. 首页的 `Tailscale`：打开开关并保存。可以粘 Tailscale 管理后台（`Settings → Keys`）生成的认证密钥（可重复使用、已授权的密钥比较省事），也可以留空，改用链接授权这个节点。
+2. 编辑主机并打开「走 Tailscale」。这条连接就交给回环地址上的 SOCKS5 入站，由 sing-box 路由进 tailnet：名字由 MagicDNS 解析，`100.x` 地址由 Tailscale 拨号。
+3. 第一次连接会启动节点。还需要登录时，会话列表上有一条提示：点一下复制登录链接，在浏览器里授权这个节点再回来，正在重试的连接就会接上。登录状态会留着，只有这一次。
+4. 首页那一行和 `Tailscale` 设置里显示节点状态（`启动中`、`需要登录`、`运行中`）以及 tailnet 看到的节点名；节点名留空时用设备型号，失败时退回 `rexpocket`。回到主机列表会停掉节点。
+
+库只有 arm64-v8a：`app/libs/libbox.aar`，解包后约 57 MB，由 sing-box 1.14.4 用 [tools/build-libbox.sh](tools/build-libbox.sh) 构建。要别的 ABI 或别的协议集，改脚本重编。
+
 ## 语言
 
 界面提供英文和简体中文。英文是默认语言（`values/`），中文在 `values-zh/`，所以英文系统启动就是英文，中文系统启动就是中文。Android 13 及以上支持单独切换应用语言。
@@ -48,5 +59,7 @@ rex server start --extra-listen :7297 --allow-anonymous
 ```sh
 ./gradlew :core:test :app:assembleDebug
 ```
+
+`app/libs/libbox.aar` 已随仓库提供（见 [Tailscale](#tailscale)），不需要单独构建。
 
 调试包在 `app/build/outputs/apk/debug/app-debug.apk`。

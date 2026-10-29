@@ -11,6 +11,15 @@ data class SavedHost(
     val host: String,
     val port: Int,
     val plaintext: Boolean,
+    /** Reach this host through the built-in Tailscale node instead of the phone's network. */
+    val viaTailscale: Boolean = false,
+)
+
+/** Settings for the Tailscale node the app runs itself. */
+data class TailscaleSettings(
+    val enabled: Boolean = false,
+    val authKey: String = "",
+    val hostname: String = "",
 )
 
 class HostStore(context: Context) {
@@ -29,6 +38,7 @@ class HostStore(context: Context) {
                         host = o.optString("host"),
                         port = o.optInt("port", 7297),
                         plaintext = o.optBoolean("plaintext", true),
+                        viaTailscale = o.optBoolean("viaTailscale", false),
                     ),
                 )
             }
@@ -83,6 +93,20 @@ class HostStore(context: Context) {
     private fun panes(hostId: String): JSONObject =
         JSONObject(prefs.getString(panesKey(hostId), null) ?: "{}")
 
+    fun tailscale(): TailscaleSettings = TailscaleSettings(
+        enabled = prefs.getBoolean(KEY_TAILSCALE_ENABLED, false),
+        authKey = prefs.getString(KEY_TAILSCALE_KEY, "").orEmpty(),
+        hostname = prefs.getString(KEY_TAILSCALE_HOSTNAME, "").orEmpty(),
+    )
+
+    fun setTailscale(settings: TailscaleSettings) {
+        prefs.edit()
+            .putBoolean(KEY_TAILSCALE_ENABLED, settings.enabled)
+            .putString(KEY_TAILSCALE_KEY, settings.authKey.trim())
+            .putString(KEY_TAILSCALE_HOSTNAME, settings.hostname.trim())
+            .apply()
+    }
+
     fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)
 
     fun setFontScale(scale: Float) {
@@ -98,7 +122,8 @@ class HostStore(context: Context) {
                     .put("label", h.label)
                     .put("host", h.host)
                     .put("port", h.port)
-                    .put("plaintext", h.plaintext),
+                    .put("plaintext", h.plaintext)
+                    .put("viaTailscale", h.viaTailscale),
             )
         }
         prefs.edit().putString(KEY_HOSTS, arr.toString()).apply()
@@ -108,6 +133,9 @@ class HostStore(context: Context) {
         private const val KEY_HOSTS = "hosts"
         private const val KEY_LAST_HOST = "last_host"
         private const val KEY_FONT = "font_scale"
+        private const val KEY_TAILSCALE_ENABLED = "tailscale_enabled"
+        private const val KEY_TAILSCALE_KEY = "tailscale_auth_key"
+        private const val KEY_TAILSCALE_HOSTNAME = "tailscale_hostname"
         fun newId(): String = UUID.randomUUID().toString()
         private fun lastKey(id: String) = "last:$id"
         private fun panesKey(id: String) = "panes:$id"

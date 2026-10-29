@@ -94,18 +94,25 @@ import app.rexpocket.core.Phase
 import app.rexpocket.core.PocketSession
 import app.rexpocket.core.PocketState
 import app.rexpocket.core.ProgramRecord
+import app.rexpocket.core.RexClient
 import app.rexpocket.core.SessionView
 import app.rexpocket.core.WindowInfo
 import app.rexpocket.data.HostStore
 import app.rexpocket.R
 import app.rexpocket.data.SavedHost
+import app.rexpocket.data.TailscaleSettings
+import app.rexpocket.net.TailscaleBox
+import app.rexpocket.net.TailscaleConfig
+import app.rexpocket.net.TailscaleStatus
 import io.github.sagernet.libghostty.GhosttyTerminalSession
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val Bg = Color(0xFF10120F)
 private val Card = Color(0xFF1C1F1A)
@@ -125,7 +132,10 @@ sealed interface Route {
 
 class RexViewModel(app: Application) : AndroidViewModel(app) {
     private val store = HostStore(app)
+    private val tailscaleBox = TailscaleBox(app)
     val hosts = MutableStateFlow(store.list())
+    val tailscale = MutableStateFlow(store.tailscale())
+    val tailscaleStatus: StateFlow<TailscaleStatus> = tailscaleBox.status
     val route = MutableStateFlow<Route>(Route.Home)
     private val _pocket = MutableStateFlow(PocketState())
     val pocket: StateFlow<PocketState> = _pocket
@@ -136,7 +146,21 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     private var session: PocketSession? = null
     private var sessionJob: Job? = null
     private var watch: Job? = null
+    private var connectJob: Job? = null
 
+    override fun onCleared() {
+        tailscaleBox.stopAsync()
+        super.onCleared()
+    }
+
+    fun saveTailscale(settings: TailscaleSettings) {
+        store.setTailscale(settings)
+        val next = store.tailscale()
+        if (next == tailscale.value) return
+        tailscale.value = next
+        // The next connect starts the node again with the new settings.
+        tailscaleBox.stopAsync()
+    }
 
     fun saveHost(host: SavedHost) {
         store.upsert(host)
@@ -157,27 +181,63 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         host = target
         store.setLastHost(target.id)
         val previousSession = store.lastSession(target.id)
-        val s = PocketSession(Endpoint(target.host, target.port, target.plaintext))
-        session = s
         route.value = Route.Picker
-        sessionJob = s.start(viewModelScope, previousSession)
-        var saved: Pair<String, String>? = null
-        var resumed = false
-        watch = viewModelScope.launch {
-            s.state.collect { st ->
-                _pocket.value = st
-                if (st.activeSessionId != null) store.setLastSession(target.id, st.activeSessionId)
-                // Only a pane that was on the terminal screen counts. Connecting already selects
-                // a session, and its Rex focus must not replace the pane remembered for it.
-                val sid = st.activeSessionId
-                val shown = st.view?.takeIf { it.sessionId == sid }?.focusedBlock()?.id
-                if (route.value == Route.Term && sid != null && shown != null && saved != sid to shown) {
-                    saved = sid to shown
-                    store.setLastPane(target.id, sid, shown, st.sessions.map { it.id })
+        val settings = store.tailscale()
+        val viaTailscale = target.viaTailscale && settings.enabled
+        connectJob = viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                // Nothing of this connection goes through the node, so do not leave it running.
+                if (!viaTailscale) tailscaleBox.stop()
+            }
+            // The node has to be up before Rex is dialed, because the Rex connection itself is
+            // what goes through it. Joining the tailnet takes a moment on the first connect.
+            val socksPort = if (viaTailscale) {
+                _pocket.value = PocketState(
+                    phase = Phase.Connecting,
+                    endpointLabel = "${target.host}:${target.port}",
+                )
+                try {
+                    withContext(Dispatchers.IO) {
+                        tailscaleBox.start(
+                            TailscaleConfig(authKey = settings.authKey, hostname = settings.hostname),
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _pocket.value = PocketState(
+                        phase = Phase.Failed,
+                        endpointLabel = "${target.host}:${target.port}",
+                        error = e.message,
+                    )
+                    return@launch
                 }
-                if (!resume || resumed || st.phase != Phase.Live || st.sessions.isEmpty()) return@collect
-                resumed = true
-                resumeInto(s, previousSession)
+            } else {
+                0
+            }
+            val s = PocketSession(Endpoint(target.host, target.port, target.plaintext)) {
+                RexClient.forSocksPort(socksPort)
+            }
+            session = s
+            sessionJob = s.start(viewModelScope, previousSession)
+            var saved: Pair<String, String>? = null
+            var resumed = false
+            watch = viewModelScope.launch {
+                s.state.collect { st ->
+                    _pocket.value = st
+                    if (st.activeSessionId != null) store.setLastSession(target.id, st.activeSessionId)
+                    // Only a pane that was on the terminal screen counts. Connecting already selects
+                    // a session, and its Rex focus must not replace the pane remembered for it.
+                    val sid = st.activeSessionId
+                    val shown = st.view?.takeIf { it.sessionId == sid }?.focusedBlock()?.id
+                    if (route.value == Route.Term && sid != null && shown != null && saved != sid to shown) {
+                        saved = sid to shown
+                        store.setLastPane(target.id, sid, shown, st.sessions.map { it.id })
+                    }
+                    if (!resume || resumed || st.phase != Phase.Live || st.sessions.isEmpty()) return@collect
+                    resumed = true
+                    resumeInto(s, previousSession)
+                }
             }
         }
     }
@@ -231,6 +291,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         disconnectQuiet()
         store.setLastHost(null)
         route.value = Route.Home
+        // Leaving Rex stops the node, so the tunnel is only up while it is used.
+        tailscaleBox.stopAsync()
     }
 
     fun showPicker() {
@@ -238,7 +300,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun showTerm() {
-        route.value = Route.Term
+        // Nothing to draw while the node or the connection is still missing.
+        if (session != null) route.value = Route.Term
     }
 
     fun setFont(scale: Float) {
@@ -261,6 +324,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun disconnectQuiet() {
+        connectJob?.cancel()
+        connectJob = null
         watch?.cancel()
         session?.stop()
         sessionJob?.cancel()
@@ -276,18 +341,24 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val hosts by model.hosts.collectAsState()
     val pocket by model.pocket.collectAsState()
     val font by model.fontScale.collectAsState()
+    val tailscale by model.tailscale.collectAsState()
+    val tailscaleStatus by model.tailscaleStatus.collectAsState()
     LaunchedEffect(Unit) { model.restore() }
     Box(Modifier.fillMaxSize().background(Bg)) {
         when (route) {
             Route.Home -> HomeScreen(
                 hosts = hosts,
+                tailscale = tailscale,
+                tailscaleStatus = tailscaleStatus,
                 onSave = model::saveHost,
                 onDelete = model::deleteHost,
                 onOpen = model::connect,
+                onTailscale = model::saveTailscale,
             )
             Route.Picker -> PickerScreen(
                 hostLabel = model.host?.label ?: "Rex",
                 state = pocket,
+                tailscaleStatus = tailscaleStatus,
                 onBack = model::disconnect,
                 onOpen = model::openSession,
                 onCreate = { model.act { createShell(it) }; model.showTerm() },
@@ -307,12 +378,16 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
 @Composable
 private fun HomeScreen(
     hosts: List<SavedHost>,
+    tailscale: TailscaleSettings,
+    tailscaleStatus: TailscaleStatus,
     onSave: (SavedHost) -> Unit,
     onDelete: (String) -> Unit,
     onOpen: (SavedHost) -> Unit,
+    onTailscale: (TailscaleSettings) -> Unit,
 ) {
     var editing by remember { mutableStateOf<SavedHost?>(null) }
     var creating by remember { mutableStateOf(false) }
+    var tailscaleOpen by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(28.dp))
         Text("REXPOCKET", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp)
@@ -326,6 +401,8 @@ private fun HomeScreen(
             lineHeight = 21.sp,
         )
         Spacer(Modifier.height(22.dp))
+        TailscaleRow(tailscale, tailscaleStatus) { tailscaleOpen = true }
+        Spacer(Modifier.height(10.dp))
         if (hosts.isEmpty()) {
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp),
@@ -353,9 +430,13 @@ private fun HomeScreen(
                         Column(Modifier.weight(1f)) {
                             Text(host.label, color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Medium)
                             Text(
-                                "${host.host}:${host.port} · " + stringResource(
-                                    if (host.plaintext) R.string.host_transport_plain else R.string.host_transport_tls,
-                                ),
+                                listOfNotNull(
+                                    "${host.host}:${host.port}",
+                                    stringResource(
+                                        if (host.plaintext) R.string.host_transport_plain else R.string.host_transport_tls,
+                                    ),
+                                    stringResource(R.string.tailscale_title).takeIf { host.viaTailscale },
+                                ).joinToString(" · "),
                                 color = Muted,
                                 fontSize = 13.sp,
                             )
@@ -380,6 +461,7 @@ private fun HomeScreen(
     if (creating || editing != null) {
         HostDialog(
             initial = editing,
+            tailscaleEnabled = tailscale.enabled,
             onDismiss = { creating = false; editing = null },
             onDelete = editing?.let { host -> { onDelete(host.id); creating = false; editing = null } },
             onSave = {
@@ -389,11 +471,131 @@ private fun HomeScreen(
             },
         )
     }
+    if (tailscaleOpen) {
+        TailscaleDialog(
+            initial = tailscale,
+            status = tailscaleStatus,
+            onDismiss = { tailscaleOpen = false },
+            onSave = {
+                onTailscale(it)
+                tailscaleOpen = false
+            },
+        )
+    }
+}
+
+/** The built-in Tailscale node: off by default, and only hosts marked for it use the tunnel. */
+@Composable
+private fun TailscaleRow(settings: TailscaleSettings, status: TailscaleStatus, onOpen: () -> Unit) {
+    val state = tailnetState(status)
+    val detail = when {
+        !settings.enabled -> stringResource(R.string.tailscale_off)
+        state.isEmpty() -> stringResource(R.string.tailscale_on)
+        else -> state
+    }
+    val color = when {
+        !settings.enabled -> Muted
+        state.isEmpty() || status.backendState == "Running" -> Accent
+        else -> Amber
+    }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Card).clickable(onClick = onOpen)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(10.dp).clip(CircleShape)
+                .background(if (settings.enabled) Accent else Muted),
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(stringResource(R.string.tailscale_title), color = Ink, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Text(detail, color = color, fontSize = 13.sp)
+    }
+}
+
+/** Tailscale's backend state in the app's own words; empty while nothing is running. */
+@Composable
+private fun tailnetState(status: TailscaleStatus): String = when (status.backendState) {
+    "" -> ""
+    "Running" -> stringResource(R.string.tailscale_state_running)
+    "Starting" -> stringResource(R.string.tailscale_state_starting)
+    "NeedsLogin" -> stringResource(R.string.tailscale_state_needs_login)
+    "NeedsMachineAuth" -> stringResource(R.string.tailscale_state_needs_approval)
+    "Stopped", "NoState" -> stringResource(R.string.tailscale_state_stopped)
+    else -> status.text.ifBlank { status.backendState }
+}
+
+@Composable
+private fun TailscaleDialog(
+    initial: TailscaleSettings,
+    status: TailscaleStatus,
+    onDismiss: () -> Unit,
+    onSave: (TailscaleSettings) -> Unit,
+) {
+    val context = LocalContext.current
+    var enabled by remember { mutableStateOf(initial.enabled) }
+    var key by remember { mutableStateOf(initial.authKey) }
+    var hostname by remember { mutableStateOf(initial.hostname) }
+    val state = tailnetState(status)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Card,
+        title = { Text(stringResource(R.string.tailscale_title), color = Ink) },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.tailscale_enable), color = Ink, modifier = Modifier.weight(1f))
+                    Switch(checked = enabled, onCheckedChange = { enabled = it })
+                }
+                Field(stringResource(R.string.tailscale_auth_key), key) { key = it }
+                Field(stringResource(R.string.tailscale_hostname), hostname) { hostname = it }
+                if (state.isNotEmpty()) {
+                    // The node's own message is the only place a rejected key or a pending
+                    // approval is spelled out, so show it next to the state.
+                    Text(
+                        listOfNotNull(
+                            state,
+                            status.networkName.ifBlank { null },
+                            status.text.ifBlank { null }?.takeIf { it != state },
+                        ).joinToString(" · "),
+                        color = if (status.backendState == "Running") Accent else Amber,
+                        fontSize = 13.sp,
+                    )
+                }
+                if (status.authUrl.isNotBlank()) {
+                    Text(
+                        status.authUrl,
+                        color = Accent,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.clickable {
+                            clipboardSet(context, status.authUrl)
+                            toast(context, context.getString(R.string.tailscale_login_copied))
+                        },
+                    )
+                    Text(stringResource(R.string.tailscale_login_hint), color = Muted, fontSize = 12.sp, lineHeight = 17.sp)
+                }
+                Text(stringResource(R.string.tailscale_hint), color = Muted, fontSize = 12.sp, lineHeight = 17.sp)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(TailscaleSettings(enabled, key, hostname)) }) {
+                Text(stringResource(R.string.action_save), color = Accent)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Muted) }
+        },
+    )
 }
 
 @Composable
 private fun HostDialog(
     initial: SavedHost?,
+    tailscaleEnabled: Boolean,
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)?,
     onSave: (SavedHost) -> Unit,
@@ -402,6 +604,7 @@ private fun HostDialog(
     var host by remember { mutableStateOf(initial?.host ?: "") }
     var port by remember { mutableStateOf((initial?.port ?: 7297).toString()) }
     var plain by remember { mutableStateOf(initial?.plaintext ?: true) }
+    var viaTailscale by remember { mutableStateOf(initial?.viaTailscale ?: false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Card,
@@ -414,11 +617,21 @@ private fun HostDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Field(stringResource(R.string.field_name), label) { label = it }
-                Field(stringResource(R.string.field_address), host) { host = it }
+                Field(stringResource(R.string.field_address), host) {
+                    host = it
+                    // A MagicDNS name is a tailnet node; offer to reach it that way.
+                    if (initial == null && it.trim().endsWith(".ts.net", ignoreCase = true)) viaTailscale = true
+                }
                 Field(stringResource(R.string.field_port), port) { port = it.filter { ch -> ch.isDigit() }.take(5) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.field_plaintext), color = Ink, modifier = Modifier.weight(1f))
                     Switch(checked = plain, onCheckedChange = { plain = it })
+                }
+                if (tailscaleEnabled) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.field_via_tailscale), color = Ink, modifier = Modifier.weight(1f))
+                        Switch(checked = viaTailscale, onCheckedChange = { viaTailscale = it })
+                    }
                 }
                 Text(stringResource(R.string.field_plaintext_warning), color = Amber, fontSize = 12.sp)
             }
@@ -434,6 +647,7 @@ private fun HostDialog(
                         host = host.trim(),
                         port = p,
                         plaintext = plain,
+                        viaTailscale = viaTailscale,
                     ),
                 )
             }) { Text(stringResource(R.string.action_save), color = Accent) }
@@ -481,11 +695,13 @@ private fun Field(hint: String, value: String, autoFocus: Boolean = false, onCha
 private fun PickerScreen(
     hostLabel: String,
     state: PocketState,
+    tailscaleStatus: TailscaleStatus,
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
     onCreate: (String?) -> Unit,
 ) {
     BackHandler(onBack = onBack)
+    val context = LocalContext.current
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -497,6 +713,19 @@ private fun PickerScreen(
         }
         state.error?.let {
             Text(it, color = Danger, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+        }
+        // A node that still needs a login is the usual reason this list stays empty, and the link
+        // that fixes it is only known to the node itself.
+        if (tailscaleStatus.authUrl.isNotBlank()) {
+            Text(
+                stringResource(R.string.tailscale_login_banner),
+                color = Amber,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 8.dp).clickable {
+                    clipboardSet(context, tailscaleStatus.authUrl)
+                    toast(context, context.getString(R.string.tailscale_login_copied))
+                },
+            )
         }
         Spacer(Modifier.height(16.dp))
         Text(stringResource(R.string.sessions), color = Muted, fontSize = 12.sp)
