@@ -33,8 +33,9 @@ The phone and the computer must share a network, or sit inside your own VPN / Ta
 3. Session → tab → pane. Rex calls a tab a window. Under the header, the tab bar lists the session's tabs: tap one to switch, and Rex brings back the pane that tab last had focused. A tab holding several panes shows their count, and below it a pane strip lists them by number. The phone draws only one pane at a time, so a desktop split shows up as chips here rather than side by side. `+` on either row adds a tab or a pane. Long-press a tab or pane chip for a sheet to rename or close it; closing asks first.
 4. Terminal: drag down to read scrollback, and the arrow at the bottom right returns to following the output. Pinch to change the font size, long-press to select and then tap `Copy` in the toolbar.
 5. Toolbar: `Esc`, `Ctrl` (double-tap to lock), `Tab`, `/`, arrows, `C-c` `C-d` `C-z` `C-l`, paste and copy.
-6. The composer writes into the terminal. Tap `Send` to send the text followed by Enter; long-press it to send a single Enter without the text.
-7. `Sessions` opens a list of the sessions on this Rex; tap one to switch to it. `···` opens a sheet of actions grouped by level: pane, tab, session. While a program is working or waiting for you the header shows `Stop`, which sends `Ctrl-C`.
+6. The composer writes into the terminal. `Send`, or the keyboard's own send key, writes the text and then presses Enter; with the box empty it presses Enter alone, which is how a full-screen program such as pi confirms the item its menu has selected. Long-press `Send` to send Enter without the text.
+7. `Esc`, `Tab`, the arrows and `/` are keys for the program in the pane, so `/` opens pi's command menu and the arrows walk it. Typing a command such as `/model` in the composer and sending it works too.
+8. `Sessions` opens a list of the sessions on this Rex; tap one to switch to it. `···` opens a sheet of actions grouped by level: pane, tab, session. While a program is working or waiting for you the header shows `Stop`, which sends `Ctrl-C`.
 
 ## Languages
 

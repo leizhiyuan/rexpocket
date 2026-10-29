@@ -7,6 +7,7 @@ import android.content.Context
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.graphics.toArgb
 import android.widget.EditText
+import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
 import android.text.TextWatcher
 import android.text.InputType
@@ -648,10 +649,10 @@ private fun TermScreen(
             onDraft = { draft = it },
             onSend = {
                 val text = draft
-                if (text.isNotEmpty()) {
-                    draft = ""
-                    onAct { submitLine(text) }
-                }
+                draft = ""
+                // An empty composer sends the Enter key alone, which is how a full-screen program
+                // such as pi confirms the item its menu has selected.
+                onAct { submitLine(text) }
             },
             onSendEnter = { onAct { sendKey("enter") } },
         )
@@ -1112,6 +1113,9 @@ private fun Composer(
     onSendEnter: () -> Unit,
 ) {
     var field by remember { mutableStateOf<EditText?>(null) }
+    // The field outlives recomposition, so its callbacks read the current send through a state.
+    val send = remember { mutableStateOf(onSend) }
+    send.value = onSend
 
     fun showIme() {
         val edit = field ?: return
@@ -1133,15 +1137,32 @@ private fun Composer(
                     hint = ctx.getString(R.string.composer_hint)
                     textSize = 16f
                     setPadding(28, 18, 28, 18)
-                    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-                    imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI
-                    maxLines = 4
-                    isSingleLine = false
+                    inputType = InputType.TYPE_CLASS_TEXT
+                    // One line, so the keyboard offers its send key instead of a newline.
+                    imeOptions = EditorInfo.IME_ACTION_SEND or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                    maxLines = 1
+                    isSingleLine = true
+                    setOnEditorActionListener { _, _, _ ->
+                        send.value()
+                        true
+                    }
+                    // Some IMEs send the Enter key itself rather than the editor action.
+                    setOnKeyListener { _, code, event ->
+                        if (code == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN) {
+                            send.value()
+                            true
+                        } else {
+                            false
+                        }
+                    }
                     addTextChangedListener(object : TextWatcher {
                         override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
                         override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
                         override fun afterTextChanged(s: Editable?) {
-                            onDraft(s?.toString().orEmpty())
+                            // A committed newline would otherwise ride along with the text; Enter
+                            // sends the line through the listener above instead.
+                            val text = s?.toString().orEmpty().replace("\n", "")
+                            if (text != s?.toString()) setText(text) else onDraft(text)
                         }
                     })
                     setOnFocusChangeListener { _, focused ->
