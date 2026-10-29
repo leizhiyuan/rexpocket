@@ -13,13 +13,16 @@ android {
         applicationId = "app.rexpocket"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.0.1"
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Personal build: sign with the debug key so a sideloaded APK can be updated
+            // without keeping a private keystore in the repository.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
