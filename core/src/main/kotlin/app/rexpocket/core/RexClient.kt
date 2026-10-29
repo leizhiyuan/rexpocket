@@ -52,7 +52,7 @@ class RexClient(
     }
 
     suspend fun call(method: String, payload: JSONObject? = null, timeoutMs: Long = 20_000): JSONObject {
-        val ws = socket ?: throw IllegalStateException("还没连上 Rex")
+        val ws = socket ?: throw IllegalStateException("Not connected to Rex")
         val id = ids.incrementAndGet().toString()
         val waiter = CompletableDeferred<JSONObject>()
         pending[id] = waiter
@@ -60,7 +60,7 @@ class RexClient(
         if (payload != null) msg.put("payload", payload)
         if (!ws.send(msg.toString())) {
             pending.remove(id)
-            throw IllegalStateException("控制连接已断开")
+            throw IllegalStateException("Control connection closed")
         }
         try {
             val response = withTimeout(timeoutMs) { waiter.await() }
@@ -81,8 +81,8 @@ class RexClient(
     fun close() {
         if (!closed.compareAndSet(false, true)) return
         socket?.close(1000, "bye")
-        failPending(IllegalStateException("连接已关闭"))
-        if (!opened.isCompleted) opened.completeExceptionally(IllegalStateException("连接已关闭"))
+        failPending(IllegalStateException("Connection closed"))
+        if (!opened.isCompleted) opened.completeExceptionally(IllegalStateException("Connection closed"))
         finish(null)
     }
 
@@ -139,14 +139,14 @@ class RexClient(
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            val err = IllegalStateException(reason.ifBlank { "连接关闭 ($code)" })
+            val err = IllegalStateException(reason.ifBlank { "Connection closed ($code)" })
             failPending(err)
             if (!opened.isCompleted) opened.completeExceptionally(err)
             finish(err)
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            val err = IllegalStateException(response?.message?.takeIf { it.isNotBlank() } ?: t.message ?: "连接失败", t)
+            val err = IllegalStateException(response?.message?.takeIf { it.isNotBlank() } ?: t.message ?: "Connection failed", t)
             failPending(err)
             if (!opened.isCompleted) opened.completeExceptionally(err)
             finish(err)

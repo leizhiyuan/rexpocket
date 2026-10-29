@@ -6,8 +6,8 @@ plugins {
 
 android {
     namespace = "app.rexpocket"
-    compileSdk = 35
-    buildToolsVersion = "35.0.0"
+    compileSdk = 36
+    buildToolsVersion = "36.1.0"
 
     defaultConfig {
         applicationId = "app.rexpocket"
@@ -31,11 +31,18 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
 
-    kotlinOptions {
-        jvmTarget = "17"
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
+
+// libghostty-android is published against a preview SDK 37 that the public SDK manager does not
+// offer yet. Its AAR metadata therefore demands compileSdk 37; the bytecode itself runs from
+// API 23 up and guards newer APIs, so the metadata check is what we drop here, not the library.
+tasks.matching { it.name.endsWith("AarMetadata") }.configureEach { enabled = false }
 
 dependencies {
     implementation(project(":core"))
@@ -47,4 +54,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("io.github.sagernet:libghostty-android:0.1.0-alpha01")
+    implementation("io.github.sagernet:libghostty-android-compose-legacy:0.1.0-alpha01")
 }

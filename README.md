@@ -1,33 +1,44 @@
+<p align="center">
+  <b>English</b> · <a href="README.zh-CN.md">简体中文</a>
+</p>
+
 # RexPocket
 
-手机上的 Rex 客户端。交互参照 [Moshi](https://getmoshi.app/docs/rex)：主机列表、会话选择、侧栏里的会话 / 窗口 / 窗格、底栏特殊键、滑动切窗口。只连你自己的 Rex，不经过第三方。
+A Rex client for your phone. The interaction follows [Moshi](https://getmoshi.app/docs/rex): a host list, session picker, a sidebar with sessions / windows / panes, and a toolbar of special keys. It only talks to your own Rex, never through a third party.
 
-屏幕内容用服务器文档里的 `com.superlogical.terminal.format`（`vt`）重放，大约每 180ms 拉一次。没有内置 Ghostty，所以不解析数据流开头的 `GHOSTSNP` 快照。正在查看的窗格会被 `session.own_block` 占住，尺寸跟手机走；离开会话或断开后会 `disown`，桌面端可以拿回尺寸。
+The screen is replayed from the server's `com.superlogical.terminal.format` (`vt`) dump, polled roughly every 180 ms. That dump is a linear replay of the whole scrollback plus the screen, so rendering is handed to [libghostty-vt](https://github.com/sagernet/libghostty-android): the first dump resets with `RIS` and replays in full, and later polls feed only the appended tail, so the native scroll position is not yanked back to the bottom while you type or read. The pane you are viewing is held with `session.own_block` and sized to the phone; leaving the session or disconnecting `disown`s it so the desktop can take the size back.
 
-## 电脑上
+Sending a line means writing the text and then pressing Enter as a separate key event. Full-screen TUIs such as pi read a newline inside pasted text as a line break in their own input box, so a newline bundled with the text only breaks the line instead of submitting it.
 
-只在你信任的网络上开明文端口。连上的人拥有这台 Rex 的全部权限。
+## On the computer
+
+Expose a plaintext port only on a network you trust. Anyone who can connect has full access to that Rex.
 
 ```sh
 rex server start --extra-listen :7297 --allow-anonymous
 ```
 
-手机和电脑要在同一网络，或者你自己的 VPN / Tailscale 路由里。应用默认 `ws://主机:7297/api/control`，子协议 `rex.control.v1`。
+The phone and the computer must share a network, or sit inside your own VPN / Tailscale route. The app uses `ws://host:7297/api/control` with the `rex.control.v1` subprotocol by default.
 
-## 手机上
+## On the phone
 
-1. 添加主机：名称、IP 或域名、端口 `7297`、明文打开。
-2. 点主机。有一个会话会直接进入，多个会话先出列表。
-3. 底栏：`Esc` `Ctrl`（双击锁定）`Tab` `C-c` 方向键、粘贴。双击终端粘贴，左右滑切窗口，双指捏合改字号，长按选词后点复制。
-4. 输入框把文字写进终端。`↵` 表示发送时带换行，点一下改成不带回车。
-5. 「会话」打开侧栏，点窗口或窗格就会 `focus`。进行中或等待你时，顶栏有「停」，发送 `Ctrl-C`。
+1. Add a host: name, IP or domain, port `7297`, plaintext on.
+2. Tap the host. A single session opens directly; several sessions show a list first.
+3. Terminal: drag down to read scrollback, and the arrow at the bottom right returns to following the output. Pinch to change the font size, long-press to select and then tap `Copy` in the toolbar. The `Sessions` sidebar lists sessions / windows / panes, and the window chips switch windows.
+4. Toolbar: `Esc`, `Ctrl` (double-tap to lock), `Tab`, `/`, arrows, `C-c` `C-d` `C-z` `C-l`, paste and copy.
+5. The composer writes into the terminal. Tap `Send` to send the text followed by Enter; long-press it to send a single Enter without the text.
+6. `Sessions` opens the sidebar, where tapping a window or pane `focus`es it. While a program is working or waiting for you the header shows `Stop`, which sends `Ctrl-C`.
 
-## 构建
+## Languages
 
-需要 Android SDK 35 和 JDK 17。
+The UI ships in English and Simplified Chinese. English is the default (`values/`), Chinese lives in `values-zh/`, so an English device starts in English and a Chinese device starts in Chinese. Per-app language selection works on Android 13 and later.
+
+## Build
+
+Requires Android SDK 36 and JDK 17.
 
 ```sh
 ./gradlew :core:test :app:assembleDebug
 ```
 
-调试包在 `app/build/outputs/apk/debug/app-debug.apk`。
+The debug APK lands in `app/build/outputs/apk/debug/app-debug.apk`.

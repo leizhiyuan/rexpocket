@@ -53,6 +53,17 @@ class HostStore(context: Context) {
         }.apply()
     }
 
+    /** Host the app should reconnect to when it starts again after being killed. */
+    fun lastHost(): String? = prefs.getString(KEY_LAST_HOST, null)
+
+    fun setLastHost(id: String?) {
+        prefs.edit().apply {
+            if (id.isNullOrBlank()) remove(KEY_LAST_HOST) else putString(KEY_LAST_HOST, id)
+        }.apply()
+    }
+
+    fun find(id: String): SavedHost? = list().firstOrNull { it.id == id }
+
     fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)
 
     fun setFontScale(scale: Float) {
@@ -76,6 +87,7 @@ class HostStore(context: Context) {
 
     companion object {
         private const val KEY_HOSTS = "hosts"
+        private const val KEY_LAST_HOST = "last_host"
         private const val KEY_FONT = "font_scale"
         fun newId(): String = UUID.randomUUID().toString()
         private fun lastKey(id: String) = "last:$id"

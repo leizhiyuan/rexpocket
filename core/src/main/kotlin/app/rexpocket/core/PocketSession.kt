@@ -27,7 +27,10 @@ data class TermSize(val cols: Int, val rows: Int, val cellWidthPx: Int, val cell
 
 data class PocketState(
     val phase: Phase = Phase.Idle,
-    val statusLine: String = "未连接",
+    /** host:port of the server this state belongs to, shown while connecting. */
+    val endpointLabel: String = "",
+    /** True when the server accepted our reconnect token and kept the session. */
+    val resumed: Boolean = false,
     val error: String? = null,
     val clientId: String? = null,
     val sessions: List<ListedSession> = emptyList(),
@@ -36,8 +39,9 @@ data class PocketState(
     val views: Map<String, SessionView> = emptyMap(),
     val blockStatus: Map<String, ProgramRecord> = emptyMap(),
     val pwd: String? = null,
-    val term: VtScreen.Snapshot? = null,
-    val termVersion: Int = 0,
+    /** Raw `format=vt` dump of the focused block: scrollback and screen as one replay. */
+    val vt: String? = null,
+    val vtVersion: Int = 0,
 )
 
 /**
@@ -78,7 +82,6 @@ class PocketSession(
                     _state.update {
                         it.copy(
                             phase = if (it.phase == Phase.Live) Phase.Reconnecting else Phase.Connecting,
-                            statusLine = "重新连接…",
                             error = e.message,
                         )
                     }
@@ -111,7 +114,7 @@ class PocketSession(
             }
         }
         clientRef.getAndSet(null)?.close()
-        _state.update { it.copy(phase = Phase.Idle, statusLine = "已断开") }
+        _state.update { it.copy(phase = Phase.Idle, resumed = false) }
     }
 
     fun setSize(cols: Int, rows: Int, cellWidthPx: Int, cellHeightPx: Int) {
@@ -257,7 +260,7 @@ class PocketSession(
                 sessions = rest,
                 activeSessionId = rest.firstOrNull()?.id,
                 view = null,
-                term = null,
+                vt = null,
             )
         }
         ownedBlock = null
@@ -296,6 +299,22 @@ class PocketSession(
             JSONObject().put("session_id", sid).put("block_id", block).put("args", JSONObject().put("data", text)),
         )
         lastVt = null
+    }
+
+    /** Keystrokes from the terminal view arrive as UTF-8 bytes. */
+    suspend fun writeBytes(data: ByteArray) = sendText(String(data, Charsets.UTF_8))
+
+    /**
+     * Typing a line means writing the text and then pressing Enter as a separate key event.
+     * Full-screen UIs such as pi read a newline inside pasted text as a line break in their
+     * own input box instead of accepting it, so the newline cannot ride along with the text.
+     */
+    suspend fun submitLine(text: String) {
+        if (text.isNotEmpty()) {
+            sendText(text)
+            delay(40)
+        }
+        sendKey("enter")
     }
 
     suspend fun paste(text: String) {
@@ -341,11 +360,13 @@ class PocketSession(
     private suspend fun runConnection() {
         val client = clientFactory()
         clientRef.set(client)
-        _state.update { it.copy(phase = Phase.Connecting, statusLine = "正在连接 ${endpoint.host}:${endpoint.port}", error = null) }
+        _state.update {
+            it.copy(phase = Phase.Connecting, endpointLabel = "${endpoint.host}:${endpoint.port}", error = null)
+        }
         try {
             val welcome = client.connect(endpoint, reconnectToken)
             reconnectToken = welcome.reconnectToken
-            _state.update { it.copy(clientId = welcome.clientId, statusLine = if (welcome.resumed) "已恢复" else "已连接") }
+            _state.update { it.copy(clientId = welcome.clientId, resumed = welcome.resumed) }
             coroutineScope {
                 launch {
                     client.events.collect { event ->
@@ -360,11 +381,11 @@ class PocketSession(
                 }
                 bootstrap()
                 if (!ready.isCompleted) ready.complete(Unit)
-                _state.update { it.copy(phase = Phase.Live, statusLine = "在线", error = null) }
+                _state.update { it.copy(phase = Phase.Live, error = null) }
                 launch { formatLoop() }
                 launch { statusLoop() }
                 val cause = client.awaitClosed()
-                throw IllegalStateException(cause?.message ?: "控制连接中断", cause)
+                throw IllegalStateException(cause?.message ?: "Control connection dropped", cause)
             }
         } finally {
             withContext(NonCancellable) {
@@ -455,7 +476,7 @@ class PocketSession(
                 views = it.views - id,
                 view = view,
                 activeSessionId = if (it.activeSessionId == id) rest.firstOrNull()?.id else it.activeSessionId,
-                term = if (it.activeSessionId == id) null else it.term,
+                vt = if (it.activeSessionId == id) null else it.vt,
             )
         }
     }
@@ -512,10 +533,7 @@ class PocketSession(
                     val vt = readFormat(sid, block)
                     if (vt != lastVt) {
                         lastVt = vt
-                        val screen = VtScreen(size.cols, size.rows)
-                        screen.feed(vt)
-                        val snap = screen.snapshot()
-                        _state.update { it.copy(term = snap, termVersion = it.termVersion + 1, error = null) }
+                        _state.update { it.copy(vt = vt, vtVersion = it.vtVersion + 1, error = null) }
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -642,16 +660,16 @@ class PocketSession(
     }
 
     private suspend fun rpc(method: String, payload: JSONObject?): JSONObject {
-        val client = clientRef.get() ?: throw IllegalStateException("还没连上")
+        val client = clientRef.get() ?: throw IllegalStateException("Not connected yet")
         return callMutex.withLock { client.call(method, payload) }
     }
 
     private fun requireSession(): String =
-        _state.value.activeSessionId ?: throw IllegalStateException("没有打开的会话")
+        _state.value.activeSessionId ?: throw IllegalStateException("No open session")
 
     private fun requireBlock(): Pair<String, String> {
         val sid = requireSession()
-        val block = _state.value.view?.focusedBlock()?.id ?: throw IllegalStateException("这个窗口里没有终端")
+        val block = _state.value.view?.focusedBlock()?.id ?: throw IllegalStateException("No terminal in this window")
         return sid to block
     }
 

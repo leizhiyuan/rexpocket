@@ -9,7 +9,9 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -53,14 +56,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -71,7 +79,9 @@ import app.rexpocket.core.PocketSession
 import app.rexpocket.core.PocketState
 import app.rexpocket.core.ProgramRecord
 import app.rexpocket.data.HostStore
+import app.rexpocket.R
 import app.rexpocket.data.SavedHost
+import io.github.sagernet.libghostty.GhosttyTerminalSession
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -122,24 +132,39 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         disconnectQuiet()
         host = target
         autoJumped = false
+        store.setLastHost(target.id)
+        val previousSession = store.lastSession(target.id)
         val s = PocketSession(Endpoint(target.host, target.port, target.plaintext))
         session = s
         route.value = Route.Picker
-        sessionJob = s.start(viewModelScope, store.lastSession(target.id))
+        sessionJob = s.start(viewModelScope, previousSession)
         watch = viewModelScope.launch {
             s.state.collect { st ->
                 _pocket.value = st
                 if (st.activeSessionId != null) store.setLastSession(target.id, st.activeSessionId)
-                if (!autoJumped && st.phase == Phase.Live && st.sessions.size == 1 && st.view != null) {
-                    autoJumped = true
-                    route.value = Route.Term
-                }
+                if (autoJumped || st.phase != Phase.Live || st.view == null) return@collect
+                autoJumped = true
+                // Come back to where the phone was last looking, not to a blank picker.
+                val remembered = previousSession?.takeIf { it == st.activeSessionId }
+                if (remembered == null && st.sessions.size != 1) return@collect
+                route.value = Route.Term
             }
         }
     }
 
+    /**
+     * After the process is killed in the background, reopen the host and session that were on
+     * screen. The Rex server keeps the session, so this is a reconnect rather than a new one.
+     */
+    fun restore() {
+        if (route.value != Route.Home || session != null) return
+        val target = store.lastHost()?.let { store.find(it) } ?: return
+        connect(target)
+    }
+
     fun disconnect() {
         disconnectQuiet()
+        store.setLastHost(null)
         route.value = Route.Home
     }
 
@@ -166,7 +191,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                s.note(e.message ?: "操作失败")
+                s.note(e.message ?: getApplication<Application>().getString(R.string.error_operation_failed))
             }
         }
     }
@@ -187,6 +212,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val hosts by model.hosts.collectAsState()
     val pocket by model.pocket.collectAsState()
     val font by model.fontScale.collectAsState()
+    LaunchedEffect(Unit) { model.restore() }
     Box(Modifier.fillMaxSize().background(Bg)) {
         when (route) {
             Route.Home -> HomeScreen(
@@ -229,10 +255,10 @@ private fun HomeScreen(
         Spacer(Modifier.height(28.dp))
         Text("REXPOCKET", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp)
         Spacer(Modifier.height(8.dp))
-        Text("你的 Rex，在口袋里", color = Ink, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.home_title), color = Ink, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         Text(
-            "连到你自己电脑上的 Rex。明文端口 7297，不经过别的服务器。",
+            stringResource(R.string.home_subtitle),
             color = Muted,
             fontSize = 15.sp,
             lineHeight = 21.sp,
@@ -242,10 +268,10 @@ private fun HomeScreen(
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp),
             ) {
-                Text("还没有主机", color = Ink, fontWeight = FontWeight.Medium)
+                Text(stringResource(R.string.home_no_hosts), color = Ink, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "在电脑上只对信任的网络开放：\nrex server start --extra-listen :7297 --allow-anonymous\n然后把 IP 加到这里。明文连接拥有这台 Rex 的全部权限。",
+                    stringResource(R.string.home_no_hosts_body),
                     color = Muted,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
@@ -265,19 +291,21 @@ private fun HomeScreen(
                         Column(Modifier.weight(1f)) {
                             Text(host.label, color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Medium)
                             Text(
-                                "${host.host}:${host.port} · ${if (host.plaintext) "明文" else "TLS"}",
+                                "${host.host}:${host.port} · " + stringResource(
+                                    if (host.plaintext) R.string.host_transport_plain else R.string.host_transport_tls,
+                                ),
                                 color = Muted,
                                 fontSize = 13.sp,
                             )
                         }
-                        Text("编辑", color = Accent, modifier = Modifier.clickable { editing = host }.padding(8.dp))
+                        Text(stringResource(R.string.action_edit), color = Accent, modifier = Modifier.clickable { editing = host }.padding(8.dp))
                     }
                 }
             }
         }
         if (hosts.isEmpty()) Spacer(Modifier.weight(1f))
         Text(
-            "添加主机",
+            stringResource(R.string.action_add_host),
             color = Bg,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 18.dp)
@@ -315,17 +343,22 @@ private fun HostDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Card,
-        title = { Text(if (initial == null) "添加主机" else "编辑主机", color = Ink) },
+        title = {
+            Text(
+                if (initial == null) stringResource(R.string.action_add_host) else stringResource(R.string.action_edit_host),
+                color = Ink,
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Field("名称", label) { label = it }
-                Field("地址", host) { host = it }
-                Field("端口", port) { port = it.filter { ch -> ch.isDigit() }.take(5) }
+                Field(stringResource(R.string.field_name), label) { label = it }
+                Field(stringResource(R.string.field_address), host) { host = it }
+                Field(stringResource(R.string.field_port), port) { port = it.filter { ch -> ch.isDigit() }.take(5) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("明文 ws://", color = Ink, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.field_plaintext), color = Ink, modifier = Modifier.weight(1f))
                     Switch(checked = plain, onCheckedChange = { plain = it })
                 }
-                Text("明文模式下，任何能连上端口的人都有完整权限。", color = Amber, fontSize = 12.sp)
+                Text(stringResource(R.string.field_plaintext_warning), color = Amber, fontSize = 12.sp)
             }
         },
         confirmButton = {
@@ -341,12 +374,12 @@ private fun HostDialog(
                         plaintext = plain,
                     ),
                 )
-            }) { Text("保存", color = Accent) }
+            }) { Text(stringResource(R.string.action_save), color = Accent) }
         },
         dismissButton = {
             Row {
-                if (onDelete != null) TextButton(onClick = onDelete) { Text("删除", color = Danger) }
-                TextButton(onClick = onDismiss) { Text("取消", color = Muted) }
+                if (onDelete != null) TextButton(onClick = onDelete) { Text(stringResource(R.string.action_delete), color = Danger) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Muted) }
             }
         },
     )
@@ -382,18 +415,20 @@ private fun PickerScreen(
             Text("‹", color = Accent, fontSize = 28.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 8.dp))
             Column(Modifier.weight(1f)) {
                 Text(hostLabel, color = Ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-                Text(state.statusLine, color = if (state.phase == Phase.Live) Accent else Amber, fontSize = 13.sp)
+                Text(phaseText(state), color = if (state.phase == Phase.Live) Accent else Amber, fontSize = 13.sp)
             }
         }
         state.error?.let {
             Text(it, color = Danger, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
         }
         Spacer(Modifier.height(16.dp))
-        Text("会话", color = Muted, fontSize = 12.sp)
+        Text(stringResource(R.string.sessions), color = Muted, fontSize = 12.sp)
         Spacer(Modifier.height(8.dp))
         if (state.sessions.isEmpty()) {
             Text(
-                if (state.phase == Phase.Live) "这台 Rex 上还没有会话。" else "正在读取会话…",
+                stringResource(
+                    if (state.phase == Phase.Live) R.string.session_none_live else R.string.session_loading,
+                ),
                 color = Muted,
                 modifier = Modifier.padding(vertical = 12.dp),
             )
@@ -409,19 +444,23 @@ private fun PickerScreen(
                         Column(Modifier.weight(1f)) {
                             Text(session.label, color = Ink, fontSize = 16.sp)
                             Text(
-                                if (windows == null) "点按进入" else "$windows 个窗口",
+                                if (windows == null) {
+                                    stringResource(R.string.session_tap_to_enter)
+                                } else {
+                                    stringResource(R.string.session_window_count, windows)
+                                },
                                 color = Muted,
                                 fontSize = 12.sp,
                             )
                         }
-                        Text("进入", color = Accent)
+                        Text(stringResource(R.string.session_enter), color = Accent)
                     }
                 }
             }
         }
         Spacer(Modifier.weight(1f))
         Text(
-            "新会话",
+            stringResource(R.string.session_new),
             color = Bg,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 18.dp)
@@ -445,14 +484,13 @@ private fun TermScreen(
     val drawer = rememberDrawerState(androidx.compose.material3.DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var draft by remember { mutableStateOf("") }
-    var withNewline by remember { mutableStateOf(true) }
     var ctrl by remember { mutableStateOf(false) }
     var ctrlLock by remember { mutableStateOf(false) }
     var lastCtrl by remember { mutableLongStateOf(0L) }
     var menu by remember { mutableStateOf(false) }
     var dpad by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf<String?>(null) }
-    var termView by remember { mutableStateOf<TerminalView?>(null) }
+    var termSession by remember { mutableStateOf<GhosttyTerminalSession?>(null) }
     val view = state.view
     val focused = view?.focusedBlock()
     val status = focused?.let { state.blockStatus[it.id] }
@@ -463,6 +501,8 @@ private fun TermScreen(
 
     ModalNavigationDrawer(
         drawerState = drawer,
+        // Swiping the terminal scrolls; the drawer opens from the sessions button.
+        gesturesEnabled = false,
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = Card) {
                 Sidebar(state, onAct) {
@@ -478,27 +518,27 @@ private fun TermScreen(
             ) {
                 HeaderButton("‹") { onBack() }
                 Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
-                    Text(view?.label ?: state.statusLine, color = Ink, fontSize = 16.sp, maxLines = 1)
+                    Text(view?.label ?: phaseText(state), color = Ink, fontSize = 16.sp, maxLines = 1)
                     Text(subtitle(state, status), color = Muted, fontSize = 11.sp, maxLines = 1)
                 }
                 if (status?.state == "working" || status?.state == "blocked") {
-                    HeaderButton("停", Amber) { onAct { sendKey("key_c", mods = "ctrl", codepoint = 99) } }
+                    HeaderButton(stringResource(R.string.header_stop), Amber) { onAct { sendKey("key_c", mods = "ctrl", codepoint = 99) } }
                 }
-                HeaderButton("会话") { scope.launch { drawer.open() } }
+                HeaderButton(stringResource(R.string.header_sessions)) { scope.launch { drawer.open() } }
                 Box {
                     HeaderButton("···") { menu = true }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        MenuItem("新窗口") { menu = false; onAct { newWindow() } }
-                        MenuItem("左右分屏") { menu = false; onAct { split(vertical = false) } }
-                        MenuItem("上下分屏") { menu = false; onAct { split(vertical = true) } }
-                        MenuItem("放大窗格") { menu = false; onAct { zoom() } }
-                        MenuItem("下一个窗格") { menu = false; onAct { nextPane(true) } }
-                        MenuItem("重命名会话") { menu = false; rename = "session" }
-                        MenuItem("重命名窗口") { menu = false; rename = "window" }
-                        MenuItem("重命名窗格") { menu = false; rename = "block" }
-                        MenuItem("关闭窗格") { menu = false; onAct { closeBlock() } }
-                        MenuItem("关闭窗口") { menu = false; onAct { closeWindow() } }
-                        MenuItem("结束会话") { menu = false; onAct { destroySession() } }
+                        MenuItem(stringResource(R.string.menu_new_window)) { menu = false; onAct { newWindow() } }
+                        MenuItem(stringResource(R.string.menu_split_vertical)) { menu = false; onAct { split(vertical = false) } }
+                        MenuItem(stringResource(R.string.menu_split_horizontal)) { menu = false; onAct { split(vertical = true) } }
+                        MenuItem(stringResource(R.string.menu_zoom)) { menu = false; onAct { zoom() } }
+                        MenuItem(stringResource(R.string.menu_next_pane)) { menu = false; onAct { nextPane(true) } }
+                        MenuItem(stringResource(R.string.menu_rename_session)) { menu = false; rename = "session" }
+                        MenuItem(stringResource(R.string.menu_rename_window)) { menu = false; rename = "window" }
+                        MenuItem(stringResource(R.string.menu_rename_pane)) { menu = false; rename = "block" }
+                        MenuItem(stringResource(R.string.menu_close_pane)) { menu = false; onAct { closeBlock() } }
+                        MenuItem(stringResource(R.string.menu_close_window)) { menu = false; onAct { closeWindow() } }
+                        MenuItem(stringResource(R.string.menu_kill_session)) { menu = false; onAct { destroySession() } }
                     }
                 }
             }
@@ -506,47 +546,28 @@ private fun TermScreen(
             state.error?.let {
                 Text(it, color = Danger, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
             }
-            AndroidView(
+            TerminalPane(
+                vt = state.vt,
+                vtVersion = state.vtVersion,
+                fontScale = fontScale,
+                onFont = onFont,
+                onInput = { bytes -> onAct { writeBytes(bytes) } },
+                onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
+                onSession = { termSession = it },
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp),
-                factory = { ctx ->
-                    TerminalView(ctx).apply {
-                        termView = this
-                        this.fontScale = fontScale
-                        onGrid = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } }
-                        onSwipeWindow = { forward -> onAct { nextWindow(forward) } }
-                        onPaste = {
-                            val text = clipboard(context)
-                            if (text.isNullOrEmpty()) toast(context, "剪贴板是空的") else onAct { paste(text) }
-                        }
-                        onFontScale = onFont
-                    }
-                },
-                update = { view ->
-                    termView = view
-                    view.fontScale = fontScale
-                    view.snapshot = state.term
-                    view.onGrid = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } }
-                    view.onSwipeWindow = { forward -> onAct { nextWindow(forward) } }
-                    view.onPaste = {
-                        val text = clipboard(context)
-                        if (text.isNullOrEmpty()) toast(context, "剪贴板是空的") else onAct { paste(text) }
-                    }
-                    view.onFontScale = onFont
-                },
             )
             if (dpad) Dpad(onAct)
             Composer(
                 draft = draft,
-                newline = withNewline,
                 onDraft = { draft = it },
-                onToggleNewline = { withNewline = !withNewline },
                 onSend = {
                     val text = draft
                     if (text.isNotEmpty()) {
                         draft = ""
-                        onAct { sendText(if (withNewline) text + "\n" else text) }
+                        onAct { submitLine(text) }
                     }
                 },
+                onSendEnter = { onAct { sendKey("enter") } },
             )
             Toolbar(
                 ctrl = ctrl || ctrlLock,
@@ -572,14 +593,15 @@ private fun TermScreen(
                 },
                 onPaste = {
                     val text = clipboard(context)
-                    if (text.isNullOrEmpty()) toast(context, "剪贴板是空的") else onAct { paste(text) }
+                    if (text.isNullOrEmpty()) toast(context, context.getString(R.string.toast_clipboard_empty)) else onAct { paste(text) }
                 },
                 onCopy = {
-                    val text = termView?.selectedText().orEmpty()
-                    if (text.isBlank()) toast(context, "长按屏幕选中文字") else {
+                    val text = termSession?.selectionText().orEmpty()
+                    if (text.isBlank()) {
+                        toast(context, context.getString(R.string.toast_select_text))
+                    } else {
                         clipboardSet(context, text)
-                        termView?.clearSelection()
-                        toast(context, "已复制")
+                        toast(context, context.getString(R.string.toast_copied))
                     }
                 },
                 onDpad = { dpad = !dpad },
@@ -595,14 +617,14 @@ private fun TermScreen(
             title = {
                 Text(
                     when (rename) {
-                        "window" -> "重命名窗口"
-                        "block" -> "重命名窗格"
-                        else -> "重命名会话"
+                        "window" -> stringResource(R.string.menu_rename_window)
+                        "block" -> stringResource(R.string.menu_rename_pane)
+                        else -> stringResource(R.string.menu_rename_session)
                     },
                     color = Ink,
                 )
             },
-            text = { Field("名称", text) { text = it } },
+            text = { Field(stringResource(R.string.field_name), text) { text = it } },
             confirmButton = {
                 TextButton(onClick = {
                     val kind = rename
@@ -614,9 +636,11 @@ private fun TermScreen(
                             else -> renameSession(text)
                         }
                     }
-                }) { Text("保存", color = Accent) }
+                }) { Text(stringResource(R.string.action_save), color = Accent) }
             },
-            dismissButton = { TextButton(onClick = { rename = null }) { Text("取消", color = Muted) } },
+            dismissButton = {
+                TextButton(onClick = { rename = null }) { Text(stringResource(R.string.action_cancel), color = Muted) }
+            },
         )
     }
 }
@@ -624,10 +648,10 @@ private fun TermScreen(
 @Composable
 private fun Sidebar(state: PocketState, onAct: (suspend PocketSession.() -> Unit) -> Unit, onClose: () -> Unit) {
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(16.dp)) {
-        Text("这台机器", color = Muted, fontSize = 12.sp)
+        Text(stringResource(R.string.sidebar_machine), color = Muted, fontSize = 12.sp)
         Spacer(Modifier.height(8.dp))
         Text(
-            "新会话",
+            stringResource(R.string.session_new),
             color = Accent,
             modifier = Modifier.clickable {
                 onAct { createShell(null) }
@@ -719,14 +743,16 @@ private fun WindowRow(state: PocketState, onAct: (suspend PocketSession.() -> Un
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Composer(
     draft: String,
-    newline: Boolean,
     onDraft: (String) -> Unit,
-    onToggleNewline: () -> Unit,
     onSend: () -> Unit,
+    onSendEnter: () -> Unit,
 ) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -736,15 +762,36 @@ private fun Composer(
             onValueChange = onDraft,
             textStyle = TextStyle(color = Ink, fontSize = 16.sp),
             cursorBrush = SolidColor(Accent),
-            modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Card).padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Card)
+                .pointerInput(Unit) {
+                    // Taps on the field must also pull the keyboard back up after the terminal
+                    // view has been touched and the IME hid itself.
+                    detectTapGestures {
+                        focusRequester.requestFocus()
+                        keyboard?.show()
+                    }
+                }
+                .focusRequester(focusRequester)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             decorationBox = { inner ->
-                if (draft.isEmpty()) Text("输入后发送到终端", color = Muted, fontSize = 16.sp)
+                if (draft.isEmpty()) Text(stringResource(R.string.composer_hint), color = Muted, fontSize = 16.sp)
                 inner()
             },
         )
         Spacer(Modifier.width(6.dp))
-        HeaderButton(if (newline) "↵" else "→") { onToggleNewline() }
-        HeaderButton("发送", Accent) { onSend() }
+        Text(
+            stringResource(R.string.composer_send),
+            color = Accent,
+            fontSize = 16.sp,
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(Card)
+                .combinedClickable(onClick = onSend, onLongClick = onSendEnter)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+        )
     }
 }
 
@@ -764,19 +811,19 @@ private fun Toolbar(
             .padding(horizontal = 6.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Tool("Esc") { onKey("escape", "", 0) }
-        Tool(if (locked) "Ctrl锁" else "Ctrl", if (ctrl) Accent else Ink) { onCtrl() }
-        Tool("Tab") { onKey("tab", "", 0) }
+        Tool(stringResource(R.string.key_escape)) { onKey("escape", "", 0) }
+        Tool(stringResource(if (locked) R.string.key_ctrl_lock else R.string.key_ctrl), if (ctrl) Accent else Ink) { onCtrl() }
+        Tool(stringResource(R.string.key_tab)) { onKey("tab", "", 0) }
         Tool("/") { onKey("slash", "", '/'.code) }
-        Tool("↑") { onKey("arrow_up", "", 0) }
-        Tool("↓") { onKey("arrow_down", "", 0) }
-        Tool("C-c", Amber) { onKey("key_c", "ctrl", 99) }
-        Tool("C-d") { onKey("key_d", "ctrl", 100) }
-        Tool("C-z") { onKey("key_z", "ctrl", 122) }
-        Tool("C-l") { onKey("key_l", "ctrl", 108) }
-        Tool("粘贴") { onPaste() }
-        Tool("复制") { onCopy() }
-        Tool(if (dpad) "方向开" else "方向") { onDpad() }
+        Tool(stringResource(R.string.key_up)) { onKey("arrow_up", "", 0) }
+        Tool(stringResource(R.string.key_down)) { onKey("arrow_down", "", 0) }
+        Tool(stringResource(R.string.key_ctrl_c), Amber) { onKey("key_c", "ctrl", 99) }
+        Tool(stringResource(R.string.key_ctrl_d)) { onKey("key_d", "ctrl", 100) }
+        Tool(stringResource(R.string.key_ctrl_z)) { onKey("key_z", "ctrl", 122) }
+        Tool(stringResource(R.string.key_ctrl_l)) { onKey("key_l", "ctrl", 108) }
+        Tool(stringResource(R.string.key_paste)) { onPaste() }
+        Tool(stringResource(R.string.key_copy)) { onCopy() }
+        Tool(stringResource(if (dpad) R.string.key_dpad_on else R.string.key_dpad)) { onDpad() }
     }
 }
 
@@ -785,14 +832,14 @@ private fun Dpad(onAct: (suspend PocketSession.() -> Unit) -> Unit) {
     fun key(code: String) = onAct { sendKey(code) }
     Column(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row {
-            Tool("⌫") { key("backspace") }
-            Tool("↑") { key("arrow_up") }
-            Tool("停", Amber) { onAct { sendKey("key_c", mods = "ctrl", codepoint = 99) } }
+            Tool(stringResource(R.string.key_backspace)) { key("backspace") }
+            Tool(stringResource(R.string.key_up)) { key("arrow_up") }
+            Tool(stringResource(R.string.header_stop), Amber) { onAct { sendKey("key_c", mods = "ctrl", codepoint = 99) } }
         }
         Row {
-            Tool("←") { key("arrow_left") }
-            Tool("↓") { key("arrow_down") }
-            Tool("→") { key("arrow_right") }
+            Tool(stringResource(R.string.key_left)) { key("arrow_left") }
+            Tool(stringResource(R.string.key_down)) { key("arrow_down") }
+            Tool(stringResource(R.string.key_right)) { key("arrow_right") }
         }
     }
 }
@@ -818,6 +865,7 @@ private fun MenuItem(label: String, onClick: () -> Unit) {
     DropdownMenuItem(text = { Text(label) }, onClick = onClick)
 }
 
+@Composable
 private fun subtitle(state: PocketState, status: ProgramRecord?): String {
     val window = state.view?.activeWindow()?.label
     val block = state.view?.focusedBlock()?.label
@@ -827,22 +875,32 @@ private fun subtitle(state: PocketState, status: ProgramRecord?): String {
         status?.let { statusLabel(it) },
         state.pwd?.let { path -> path.substringAfterLast('/').ifBlank { path } },
     )
-    return bits.joinToString(" · ").ifBlank { state.statusLine }
+    return bits.joinToString(" · ").ifBlank { phaseText(state) }
 }
 
+@Composable
+private fun phaseText(state: PocketState): String = when (state.phase) {
+    Phase.Idle -> stringResource(R.string.status_idle)
+    Phase.Connecting -> stringResource(R.string.status_connecting, state.endpointLabel)
+    Phase.Live -> stringResource(if (state.resumed) R.string.status_resumed else R.string.status_live)
+    Phase.Reconnecting -> stringResource(R.string.status_reconnecting)
+    Phase.Failed -> stringResource(R.string.status_failed)
+}
+
+@Composable
 private fun statusLabel(status: ProgramRecord): String {
     val name = status.app ?: status.title
     val base = when (status.state) {
-        "working" -> "进行中"
+        "working" -> stringResource(R.string.state_running)
         "blocked" -> when (status.kind) {
-            "permission" -> "等待批准"
-            "question" -> "等待回答"
-            "auth" -> "等待登录"
-            else -> "等待你"
+            "permission" -> stringResource(R.string.state_waiting_approval)
+            "question" -> stringResource(R.string.state_waiting_answer)
+            "auth" -> stringResource(R.string.state_waiting_login)
+            else -> stringResource(R.string.state_waiting_you)
         }
-        "done" -> "完成"
-        "error" -> "失败"
-        else -> "空闲"
+        "done" -> stringResource(R.string.state_done)
+        "error" -> stringResource(R.string.state_failed)
+        else -> stringResource(R.string.state_idle)
     }
     val msg = status.msg?.take(42)
     return listOfNotNull(name, base, msg).joinToString(" ")

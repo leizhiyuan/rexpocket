@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RexPocket</string>
+
+    <string name="home_tagline">REXPOCKET</string>
+    <string name="home_title">你的 Rex，在口袋里</string>
+    <string name="home_subtitle">连到你自己电脑上的 Rex。明文端口 7297，不经过别的服务器。</string>
+    <string name="home_no_hosts">还没有主机</string>
+    <string name="home_no_hosts_body">在电脑上只对信任的网络开放：\nrex server start --extra-listen :7297 --allow-anonymous\n然后把 IP 加到这里。明文连接拥有这台 Rex 的全部权限。</string>
+    <string name="host_transport_plain">明文</string>
+    <string name="host_transport_tls">TLS</string>
+    <string name="action_edit">编辑</string>
+    <string name="action_add_host">添加主机</string>
+    <string name="action_edit_host">编辑主机</string>
+    <string name="action_save">保存</string>
+    <string name="action_delete">删除</string>
+    <string name="action_cancel">取消</string>
+    <string name="field_name">名称</string>
+    <string name="field_address">地址</string>
+    <string name="field_port">端口</string>
+    <string name="field_plaintext">明文 ws://</string>
+    <string name="field_plaintext_warning">明文模式下，任何能连上端口的人都有完整权限。</string>
+
+    <string name="sessions">会话</string>
+    <string name="session_new">新会话</string>
+    <string name="session_enter">进入</string>
+    <string name="session_tap_to_enter">点按进入</string>
+    <string name="session_window_count">%1$d 个窗口</string>
+    <string name="session_none_live">这台 Rex 上还没有会话。</string>
+    <string name="session_loading">正在读取会话…</string>
+
+    <string name="status_idle">未连接</string>
+    <string name="status_connecting">正在连接 %1$s</string>
+    <string name="status_live">在线</string>
+    <string name="status_resumed">已恢复</string>
+    <string name="status_reconnecting">重新连接…</string>
+    <string name="status_failed">连接失败</string>
+
+    <string name="header_stop">停</string>
+    <string name="header_sessions">会话</string>
+    <string name="menu_new_window">新窗口</string>
+    <string name="menu_split_vertical">左右分屏</string>
+    <string name="menu_split_horizontal">上下分屏</string>
+    <string name="menu_zoom">放大窗格</string>
+    <string name="menu_next_pane">下一个窗格</string>
+    <string name="menu_rename_session">重命名会话</string>
+    <string name="menu_rename_window">重命名窗口</string>
+    <string name="menu_rename_pane">重命名窗格</string>
+    <string name="menu_close_pane">关闭窗格</string>
+    <string name="menu_close_window">关闭窗口</string>
+    <string name="menu_kill_session">结束会话</string>
+
+    <string name="composer_hint">输入后发送到终端</string>
+    <string name="composer_send">发送</string>
+    <string name="composer_send_hint">点按：发送并回车。长按：只发一个回车。</string>
+
+    <string name="key_escape">Esc</string>
+    <string name="key_ctrl">Ctrl</string>
+    <string name="key_ctrl_lock">Ctrl锁</string>
+    <string name="key_tab">Tab</string>
+    <string name="key_ctrl_c">C-c</string>
+    <string name="key_ctrl_d">C-d</string>
+    <string name="key_ctrl_z">C-z</string>
+    <string name="key_ctrl_l">C-l</string>
+    <string name="key_paste">粘贴</string>
+    <string name="key_copy">复制</string>
+    <string name="key_dpad">方向</string>
+    <string name="key_dpad_on">方向开</string>
+    <string name="key_backspace">⌫</string>
+    <string name="key_up">↑</string>
+    <string name="key_down">↓</string>
+    <string name="key_left">←</string>
+    <string name="key_right">→</string>
+
+    <string name="sidebar_machine">这台机器</string>
+
+    <string name="state_running">进行中</string>
+    <string name="state_waiting_approval">等待批准</string>
+    <string name="state_waiting_answer">等待回答</string>
+    <string name="state_waiting_login">等待登录</string>
+    <string name="state_waiting_you">等待你</string>
+    <string name="state_done">完成</string>
+    <string name="state_failed">失败</string>
+    <string name="state_idle">空闲</string>
+
+    <string name="toast_clipboard_empty">剪贴板是空的</string>
+    <string name="toast_select_text">长按屏幕选中文字</string>
+    <string name="toast_copied">已复制</string>
+    <string name="error_operation_failed">操作失败</string>
+</resources>

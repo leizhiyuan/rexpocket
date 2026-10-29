@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RexPocket</string>
+
+    <string name="home_tagline">REXPOCKET</string>
+    <string name="home_title">Your Rex, in your pocket</string>
+    <string name="home_subtitle">Connect to Rex on your own computer. Plain port 7297, no third party.</string>
+    <string name="home_no_hosts">No hosts yet</string>
+    <string name="home_no_hosts_body">Open it on your computer only on a network you trust:\nrex server start --extra-listen :7297 --allow-anonymous\nThen add the address here. A plaintext connection has full access to that Rex.</string>
+    <string name="host_transport_plain">plain</string>
+    <string name="host_transport_tls">TLS</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_add_host">Add host</string>
+    <string name="action_edit_host">Edit host</string>
+    <string name="action_save">Save</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="field_name">Name</string>
+    <string name="field_address">Address</string>
+    <string name="field_port">Port</string>
+    <string name="field_plaintext">Plaintext ws://</string>
+    <string name="field_plaintext_warning">In plaintext mode anyone who can reach the port has full access.</string>
+
+    <string name="sessions">Sessions</string>
+    <string name="session_new">New session</string>
+    <string name="session_enter">Enter</string>
+    <string name="session_tap_to_enter">Tap to enter</string>
+    <string name="session_window_count">%1$d windows</string>
+    <string name="session_none_live">This Rex has no sessions yet.</string>
+    <string name="session_loading">Reading sessions…</string>
+
+    <string name="status_idle">Disconnected</string>
+    <string name="status_connecting">Connecting to %1$s</string>
+    <string name="status_live">Online</string>
+    <string name="status_resumed">Resumed</string>
+    <string name="status_reconnecting">Reconnecting…</string>
+    <string name="status_failed">Failed</string>
+
+    <string name="header_stop">Stop</string>
+    <string name="header_sessions">Sessions</string>
+    <string name="menu_new_window">New window</string>
+    <string name="menu_split_vertical">Split left/right</string>
+    <string name="menu_split_horizontal">Split top/bottom</string>
+    <string name="menu_zoom">Zoom pane</string>
+    <string name="menu_next_pane">Next pane</string>
+    <string name="menu_rename_session">Rename session</string>
+    <string name="menu_rename_window">Rename window</string>
+    <string name="menu_rename_pane">Rename pane</string>
+    <string name="menu_close_pane">Close pane</string>
+    <string name="menu_close_window">Close window</string>
+    <string name="menu_kill_session">End session</string>
+
+    <string name="composer_hint">Type, then send to the terminal</string>
+    <string name="composer_send">Send</string>
+    <string name="composer_send_hint">Tap: send and press Enter. Long press: send an Enter alone.</string>
+
+    <string name="key_escape">Esc</string>
+    <string name="key_ctrl">Ctrl</string>
+    <string name="key_ctrl_lock">CtrlLock</string>
+    <string name="key_tab">Tab</string>
+    <string name="key_ctrl_c">C-c</string>
+    <string name="key_ctrl_d">C-d</string>
+    <string name="key_ctrl_z">C-z</string>
+    <string name="key_ctrl_l">C-l</string>
+    <string name="key_paste">Paste</string>
+    <string name="key_copy">Copy</string>
+    <string name="key_dpad">Arrows</string>
+    <string name="key_dpad_on">Arrows on</string>
+    <string name="key_backspace">⌫</string>
+    <string name="key_up">↑</string>
+    <string name="key_down">↓</string>
+    <string name="key_left">←</string>
+    <string name="key_right">→</string>
+
+    <string name="sidebar_machine">This machine</string>
+
+    <string name="state_running">running</string>
+    <string name="state_waiting_approval">waiting for approval</string>
+    <string name="state_waiting_answer">waiting for an answer</string>
+    <string name="state_waiting_login">waiting for login</string>
+    <string name="state_waiting_you">waiting for you</string>
+    <string name="state_done">done</string>
+    <string name="state_failed">failed</string>
+    <string name="state_idle">idle</string>
+
+    <string name="toast_clipboard_empty">Clipboard is empty</string>
+    <string name="toast_select_text">Long-press the screen to select text</string>
+    <string name="toast_copied">Copied</string>
+    <string name="error_operation_failed">Operation failed</string>
+</resources>

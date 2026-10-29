@@ -63,7 +63,7 @@ class PocketSessionTest {
                 session.sendText("printf '$token\\n'\n")
                 val seen = withTimeout(15_000) {
                     while (true) {
-                        val text = session.state.value.term?.plainScreen().orEmpty()
+                        val text = session.state.value.vt.orEmpty()
                         if (text.contains(token)) return@withTimeout text
                         delay(100)
                     }
