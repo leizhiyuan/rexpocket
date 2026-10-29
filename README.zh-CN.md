@@ -10,6 +10,12 @@
 
 发送一行是「写文字」再加一次独立的回车按键，不把换行拼进粘贴内容里。pi 这类全屏 TUI 会把粘贴内容里的换行当成自己输入框的换行，所以拼在一起只换行不提交。
 
+## 截图
+
+| 主机 | 会话 | 终端 |
+| --- | --- | --- |
+| ![主机](docs/screenshots/home-zh.png) | ![会话](docs/screenshots/sessions-zh.png) | ![终端](docs/screenshots/terminal-zh.png) |
+
 ## 电脑上
 
 只在你信任的网络上开明文端口。连上的人拥有这台 Rex 的全部权限。

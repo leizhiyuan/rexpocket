@@ -10,6 +10,12 @@ The screen is replayed from the server's `com.superlogical.terminal.format` (`vt
 
 Sending a line means writing the text and then pressing Enter as a separate key event. Full-screen TUIs such as pi read a newline inside pasted text as a line break in their own input box, so a newline bundled with the text only breaks the line instead of submitting it.
 
+## Screenshots
+
+| Hosts | Sessions | Terminal |
+| --- | --- | --- |
+| ![Hosts](docs/screenshots/home-en.png) | ![Sessions](docs/screenshots/sessions-en.png) | ![Terminal](docs/screenshots/terminal-en.png) |
+
 ## On the computer
 
 Expose a plaintext port only on a network you trust. Anyone who can connect has full access to that Rex.
