@@ -67,6 +67,7 @@
     <string name="key_ctrl">Ctrl</string>
     <string name="key_ctrl_lock">CtrlLock</string>
     <string name="key_tab">Tab</string>
+    <string name="key_enter">⏎</string>
     <string name="key_ctrl_c">C-c</string>
     <string name="key_ctrl_d">C-d</string>
     <string name="key_ctrl_z">C-z</string>

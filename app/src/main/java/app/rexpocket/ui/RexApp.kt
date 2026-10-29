@@ -1221,6 +1221,9 @@ private fun Toolbar(
         Tool(stringResource(R.string.key_escape)) { onKey("escape", "", 0) }
         Tool(stringResource(if (locked) R.string.key_ctrl_lock else R.string.key_ctrl), if (ctrl) Accent else Ink) { onCtrl() }
         Tool(stringResource(R.string.key_tab)) { onKey("tab", "", 0) }
+        // A slash command typed into pi opens its command menu, and the first Enter only accepts
+        // the highlighted entry. This key sends the Enter that runs it.
+        Tool(stringResource(R.string.key_enter)) { onKey("enter", "", 0) }
         Tool("/") { onKey("slash", "", '/'.code) }
         Tool(stringResource(R.string.key_up)) { onKey("arrow_up", "", 0) }
         Tool(stringResource(R.string.key_down)) { onKey("arrow_down", "", 0) }
