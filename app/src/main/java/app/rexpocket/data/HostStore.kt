@@ -64,6 +64,14 @@ class HostStore(context: Context) {
 
     fun find(id: String): SavedHost? = list().firstOrNull { it.id == id }
 
+    fun lastBlock(hostId: String): String? = prefs.getString(blockKey(hostId), null)
+
+    fun setLastBlock(hostId: String, blockId: String?) {
+        prefs.edit().apply {
+            if (blockId.isNullOrBlank()) remove(blockKey(hostId)) else putString(blockKey(hostId), blockId)
+        }.apply()
+    }
+
     fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)
 
     fun setFontScale(scale: Float) {
@@ -91,5 +99,6 @@ class HostStore(context: Context) {
         private const val KEY_FONT = "font_scale"
         fun newId(): String = UUID.randomUUID().toString()
         private fun lastKey(id: String) = "last:$id"
+        private fun blockKey(id: String) = "last_block:$id"
     }
 }

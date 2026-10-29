@@ -57,7 +57,16 @@ data class WindowInfo(
     val focusedBlockId: String?,
     val zoomedBlockId: String?,
     val blocks: List<BlockInfo>,
-)
+) {
+    /** The pane this tab shows on the phone: its focused block, or its first one. */
+    fun focusedBlock(): BlockInfo? = blocks.firstOrNull { it.id == focusedBlockId } ?: blocks.firstOrNull()
+
+    fun focusedIndex(): Int = focusedBlock()?.let { blocks.indexOf(it) } ?: -1
+
+    /** The most urgent program state among this tab's panes, for the tab's status dot. */
+    fun status(byBlock: Map<String, ProgramRecord>): ProgramRecord? =
+        summarizeStatus(blocks.mapNotNull { byBlock[it.id] })
+}
 
 data class SessionView(
     val revision: Long,
@@ -69,11 +78,7 @@ data class SessionView(
     fun activeWindow(): WindowInfo? =
         windows.firstOrNull { it.id == activeWindowId } ?: windows.firstOrNull()
 
-    fun focusedBlock(): BlockInfo? {
-        val window = activeWindow() ?: return null
-        val id = window.focusedBlockId
-        return window.blocks.firstOrNull { it.id == id } ?: window.blocks.firstOrNull()
-    }
+    fun focusedBlock(): BlockInfo? = activeWindow()?.focusedBlock()
 
     fun allBlocks(): List<BlockInfo> = windows.flatMap { it.blocks }
 }

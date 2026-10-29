@@ -40,7 +40,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,6 +50,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Switch
@@ -58,6 +61,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,6 +92,8 @@ import app.rexpocket.core.Phase
 import app.rexpocket.core.PocketSession
 import app.rexpocket.core.PocketState
 import app.rexpocket.core.ProgramRecord
+import app.rexpocket.core.SessionView
+import app.rexpocket.core.WindowInfo
 import app.rexpocket.data.HostStore
 import app.rexpocket.R
 import app.rexpocket.data.SavedHost
@@ -109,8 +115,6 @@ private val Danger = Color(0xFFFF5D5D)
 private val Line = Color(0xFF2C3129)
 
 /** One pane of the session the user opened, offered before the terminal appears. */
-data class PaneChoice(val blockId: String, val label: String, val window: String)
-
 sealed interface Route {
     data object Home : Route
     data object Picker : Route
@@ -130,8 +134,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     private var session: PocketSession? = null
     private var sessionJob: Job? = null
     private var watch: Job? = null
-    /** Panes of the session the user just opened, waiting for a choice. */
-    val paneChoices = MutableStateFlow<List<PaneChoice>>(emptyList())
+
 
     fun saveHost(host: SavedHost) {
         store.upsert(host)
@@ -143,26 +146,69 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         hosts.value = store.list()
     }
 
-    fun connect(target: SavedHost) {
+    /**
+     * Connects and, when [resume] is set, goes back to the session and pane the app was showing
+     * before the process died. A plain connect stops at the session list.
+     */
+    fun connect(target: SavedHost, resume: Boolean = false) {
         disconnectQuiet()
         host = target
         store.setLastHost(target.id)
         val previousSession = store.lastSession(target.id)
+        val previousBlock = store.lastBlock(target.id)
         val s = PocketSession(Endpoint(target.host, target.port, target.plaintext))
         session = s
         route.value = Route.Picker
         sessionJob = s.start(viewModelScope, previousSession)
+        var rememberedBlock = previousBlock
+        var resumed = false
         watch = viewModelScope.launch {
             s.state.collect { st ->
                 _pocket.value = st
                 if (st.activeSessionId != null) store.setLastSession(target.id, st.activeSessionId)
+                val focused = st.view?.focusedBlock()?.id
+                if (focused != null && focused != rememberedBlock) {
+                    rememberedBlock = focused
+                    store.setLastBlock(target.id, focused)
+                }
+                if (!resume || resumed || st.phase != Phase.Live || st.sessions.isEmpty()) return@collect
+                resumed = true
+                resumeInto(s, target.id, previousSession, previousBlock)
             }
         }
     }
 
+    /** Reopens the remembered session and pane; falls back to the pane chooser or the list. */
+    private suspend fun resumeInto(
+        s: PocketSession,
+        hostId: String,
+        sessionId: String?,
+        blockId: String?,
+    ) {
+        val target = sessionId?.takeIf { id -> s.state.value.sessions.any { it.id == id } } ?: return
+        try {
+            s.openSession(target)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return
+        }
+        // The remembered pane may be gone; then the session's own focused pane is shown.
+        if (blockId != null && s.state.value.view?.allBlocks()?.any { it.id == blockId } == true) {
+            try {
+                s.focusBlock(blockId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                store.setLastBlock(hostId, null)
+            }
+        }
+        route.value = Route.Term
+    }
+
     /**
-     * Opens a session and, when its window holds several panes, asks which one to show first.
-     * Only one pane is ever rendered, so the choice has to happen before the terminal appears.
+     * Opens a session on the tab and pane Rex already has focused, the same place the desktop
+     * shows. Only that one pane is drawn; the tab bar and the pane strip move between the others.
      */
     fun openSession(id: String) {
         val s = session ?: return
@@ -175,34 +221,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                 s.note(e.message ?: getApplication<Application>().getString(R.string.error_operation_failed))
                 return@launch
             }
-            val window = s.state.value.view?.activeWindow()
-            val panes = window?.blocks.orEmpty()
-            if (panes.size > 1) {
-                paneChoices.value = panes.map { PaneChoice(it.id, it.label, window?.label.orEmpty()) }
-            } else {
-                route.value = Route.Term
-            }
-        }
-    }
-
-    fun choosePane(blockId: String) {
-        paneChoices.value = emptyList()
-        val s = session ?: return
-        viewModelScope.launch {
-            try {
-                // Focus first, so the terminal never flashes the pane the server had focused.
-                s.focusBlock(blockId)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                s.note(e.message ?: getApplication<Application>().getString(R.string.error_operation_failed))
-            }
             route.value = Route.Term
         }
-    }
-
-    fun dismissPaneChoice() {
-        paneChoices.value = emptyList()
     }
 
     /**
@@ -212,7 +232,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     fun restore() {
         if (route.value != Route.Home || session != null) return
         val target = store.lastHost()?.let { store.find(it) } ?: return
-        connect(target)
+        connect(target, resume = true)
     }
 
     fun disconnect() {
@@ -264,7 +284,6 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val hosts by model.hosts.collectAsState()
     val pocket by model.pocket.collectAsState()
     val font by model.fontScale.collectAsState()
-    val panes by model.paneChoices.collectAsState()
     LaunchedEffect(Unit) { model.restore() }
     Box(Modifier.fillMaxSize().background(Bg)) {
         when (route) {
@@ -280,9 +299,6 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                 onBack = model::disconnect,
                 onOpen = model::openSession,
                 onCreate = { model.act { createShell(it) }; model.showTerm() },
-                paneChoices = panes,
-                onChoosePane = model::choosePane,
-                onDismissPanes = model::dismissPaneChoice,
             )
             Route.Term -> TermScreen(
                 state = pocket,
@@ -460,9 +476,6 @@ private fun PickerScreen(
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
     onCreate: (String?) -> Unit,
-    paneChoices: List<PaneChoice>,
-    onChoosePane: (String) -> Unit,
-    onDismissPanes: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp)) {
@@ -526,38 +539,14 @@ private fun PickerScreen(
             fontWeight = FontWeight.SemiBold,
         )
     }
-    if (paneChoices.isNotEmpty()) {
-        AlertDialog(
-            onDismissRequest = onDismissPanes,
-            containerColor = Card,
-            title = { Text(stringResource(R.string.pane_pick_title), color = Ink) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    paneChoices.forEach { choice ->
-                        Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Bg)
-                                .clickable { onChoosePane(choice.blockId) }.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(choice.label, color = Ink, fontSize = 15.sp)
-                                if (choice.window.isNotBlank()) {
-                                    Text(choice.window, color = Muted, fontSize = 12.sp)
-                                }
-                            }
-                            Text(stringResource(R.string.session_enter), color = Accent)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = onDismissPanes) {
-                    Text(stringResource(R.string.action_cancel), color = Muted)
-                }
-            },
-        )
-    }
 }
+
+/** Something long-pressed or picked from the menu that needs a rename or a confirmation. */
+private data class Rename(val kind: Level, val id: String, val current: String)
+
+private data class Confirm(val kind: Level, val id: String, val name: String)
+
+private enum class Level { Session, Tab, Pane }
 
 @Composable
 private fun TermScreen(
@@ -576,9 +565,11 @@ private fun TermScreen(
     var lastCtrl by remember { mutableLongStateOf(0L) }
     var menu by remember { mutableStateOf(false) }
     var dpad by remember { mutableStateOf(false) }
-    var rename by remember { mutableStateOf<String?>(null) }
+    var rename by remember { mutableStateOf<Rename?>(null) }
+    var confirm by remember { mutableStateOf<Confirm?>(null) }
     var termSession by remember { mutableStateOf<GhosttyTerminalSession?>(null) }
     val view = state.view
+    val tab = view?.activeWindow()
     val focused = view?.focusedBlock()
     val status = focused?.let { state.blockStatus[it.id] }
 
@@ -615,34 +606,86 @@ private fun TermScreen(
                 Box {
                     HeaderButton("···") { menu = true }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        MenuItem(stringResource(R.string.menu_new_window)) { menu = false; onAct { newWindow() } }
-                        MenuItem(stringResource(R.string.menu_split_vertical)) { menu = false; onAct { split(vertical = false) } }
-                        MenuItem(stringResource(R.string.menu_split_horizontal)) { menu = false; onAct { split(vertical = true) } }
-                        MenuItem(stringResource(R.string.menu_zoom)) { menu = false; onAct { zoom() } }
-                        MenuItem(stringResource(R.string.menu_next_pane)) { menu = false; onAct { nextPane(true) } }
-                        MenuItem(stringResource(R.string.menu_rename_session)) { menu = false; rename = "session" }
-                        MenuItem(stringResource(R.string.menu_rename_window)) { menu = false; rename = "window" }
-                        MenuItem(stringResource(R.string.menu_rename_pane)) { menu = false; rename = "block" }
-                        MenuItem(stringResource(R.string.menu_close_pane)) { menu = false; onAct { closeBlock() } }
-                        MenuItem(stringResource(R.string.menu_close_window)) { menu = false; onAct { closeWindow() } }
-                        MenuItem(stringResource(R.string.menu_kill_session)) { menu = false; onAct { destroySession() } }
+                        MenuSection(stringResource(R.string.level_pane))
+                        MenuItem(stringResource(R.string.menu_split_right)) { menu = false; onAct { split(vertical = false) } }
+                        MenuItem(stringResource(R.string.menu_split_below)) { menu = false; onAct { split(vertical = true) } }
+                        if (focused != null) {
+                            MenuItem(stringResource(R.string.menu_rename_pane)) {
+                                menu = false
+                                rename = Rename(Level.Pane, focused.id, focused.label)
+                            }
+                            MenuItem(stringResource(R.string.menu_close_pane), Danger) {
+                                menu = false
+                                confirm = Confirm(Level.Pane, focused.id, focused.label)
+                            }
+                        }
+                        HorizontalDivider(color = Line)
+                        MenuSection(stringResource(R.string.level_tab))
+                        MenuItem(stringResource(R.string.menu_new_tab)) { menu = false; onAct { newWindow() } }
+                        if (view != null && tab != null) {
+                            val title = tabTitle(view, tab)
+                            MenuItem(stringResource(R.string.menu_rename_tab)) {
+                                menu = false
+                                rename = Rename(Level.Tab, tab.id, tab.label)
+                            }
+                            MenuItem(stringResource(R.string.menu_close_tab), Danger) {
+                                menu = false
+                                confirm = Confirm(Level.Tab, tab.id, title)
+                            }
+                        }
+                        HorizontalDivider(color = Line)
+                        MenuSection(stringResource(R.string.level_session))
+                        if (view != null) {
+                            MenuItem(stringResource(R.string.menu_rename_session)) {
+                                menu = false
+                                rename = Rename(Level.Session, view.sessionId, view.label)
+                            }
+                            MenuItem(stringResource(R.string.menu_kill_session), Danger) {
+                                menu = false
+                                confirm = Confirm(Level.Session, view.sessionId, view.label)
+                            }
+                        }
                     }
                 }
             }
-            WindowRow(state, onAct)
+            if (view != null) {
+                TabBar(
+                    view = view,
+                    status = state.blockStatus,
+                    onSelect = { w -> if (w.id != view.activeWindowId) onAct { focusWindow(w.id) } },
+                    onRename = { w -> rename = Rename(Level.Tab, w.id, w.label) },
+                    onClose = { w, title -> confirm = Confirm(Level.Tab, w.id, title) },
+                    onNew = { onAct { newWindow() } },
+                )
+                if (tab != null && tab.blocks.size > 1) {
+                    PaneStrip(
+                        tab = tab,
+                        status = state.blockStatus,
+                        onSelect = { b -> if (b.id != focused?.id) onAct { focusBlock(b.id) } },
+                        onRename = { b -> rename = Rename(Level.Pane, b.id, b.label) },
+                        onClose = { b -> confirm = Confirm(Level.Pane, b.id, b.label) },
+                        onNew = { onAct { split(vertical = false) } },
+                    )
+                }
+            }
             state.error?.let {
                 Text(it, color = Danger, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
             }
-            TerminalPane(
-                vt = state.vt,
-                vtVersion = state.vtVersion,
-                fontScale = fontScale,
-                onFont = onFont,
-                onInput = { bytes -> onAct { writeBytes(bytes) } },
-                onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
-                onSession = { termSession = it },
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp),
-            )
+            // One emulator per shown pane, fed only with the dump read from that pane, so switching
+            // never flashes the previous pane's screen or mixes two panes' scrollback.
+            val shown = focused?.id
+            key(shown) {
+                TerminalPane(
+                    vt = state.vt.takeIf { shown != null && state.vtBlockId == shown },
+                    vtVersion = state.vtVersion,
+                    fontScale = fontScale,
+                    onFont = onFont,
+                    onInput = { bytes -> onAct { writeBytes(bytes) } },
+                    onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
+                    onSession = { termSession = it },
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp),
+                )
+            }
             if (dpad) Dpad(onAct)
             Composer(
                 draft = draft,
@@ -696,17 +739,17 @@ private fun TermScreen(
         }
     }
 
-    if (rename != null) {
-        var text by remember(rename) { mutableStateOf("") }
+    rename?.let { target ->
+        var text by remember(target) { mutableStateOf(target.current) }
         AlertDialog(
             onDismissRequest = { rename = null },
             containerColor = Card,
             title = {
                 Text(
-                    when (rename) {
-                        "window" -> stringResource(R.string.menu_rename_window)
-                        "block" -> stringResource(R.string.menu_rename_pane)
-                        else -> stringResource(R.string.menu_rename_session)
+                    when (target.kind) {
+                        Level.Tab -> stringResource(R.string.menu_rename_tab)
+                        Level.Pane -> stringResource(R.string.menu_rename_pane)
+                        Level.Session -> stringResource(R.string.menu_rename_session)
                     },
                     color = Ink,
                 )
@@ -714,13 +757,14 @@ private fun TermScreen(
             text = { Field(stringResource(R.string.field_name), text) { text = it } },
             confirmButton = {
                 TextButton(onClick = {
-                    val kind = rename
                     rename = null
+                    val label = text.trim()
+                    if (label.isEmpty() || label == target.current) return@TextButton
                     onAct {
-                        when (kind) {
-                            "window" -> renameWindow(text)
-                            "block" -> renameBlock(text)
-                            else -> renameSession(text)
+                        when (target.kind) {
+                            Level.Tab -> renameWindow(label, target.id)
+                            Level.Pane -> renameBlock(label, target.id)
+                            Level.Session -> renameSession(label)
                         }
                     }
                 }) { Text(stringResource(R.string.action_save), color = Accent) }
@@ -730,8 +774,199 @@ private fun TermScreen(
             },
         )
     }
+
+    confirm?.let { target ->
+        AlertDialog(
+            onDismissRequest = { confirm = null },
+            containerColor = Card,
+            title = {
+                Text(
+                    when (target.kind) {
+                        Level.Tab -> stringResource(R.string.confirm_close_tab, target.name)
+                        Level.Pane -> stringResource(R.string.confirm_close_pane, target.name)
+                        Level.Session -> stringResource(R.string.confirm_kill_session, target.name)
+                    },
+                    color = Ink,
+                )
+            },
+            text = {
+                Text(
+                    when (target.kind) {
+                        Level.Tab -> stringResource(R.string.confirm_close_tab_body)
+                        Level.Pane -> stringResource(R.string.confirm_close_pane_body)
+                        Level.Session -> stringResource(R.string.confirm_kill_session_body)
+                    },
+                    color = Muted,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = null
+                    onAct {
+                        when (target.kind) {
+                            Level.Tab -> closeWindow(target.id)
+                            Level.Pane -> closeBlock(target.id)
+                            Level.Session -> destroySession()
+                        }
+                    }
+                }) { Text(stringResource(R.string.action_close), color = Danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirm = null }) { Text(stringResource(R.string.action_cancel), color = Muted) }
+            },
+        )
+    }
 }
 
+/**
+ * Rex's windows are the tabs of a session. Every tab is a chip here; the shown one is filled.
+ * A tab holding several panes carries their count, and its dot is the most urgent pane state.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TabBar(
+    view: SessionView,
+    status: Map<String, ProgramRecord>,
+    onSelect: (WindowInfo) -> Unit,
+    onRename: (WindowInfo) -> Unit,
+    onClose: (WindowInfo, String) -> Unit,
+    onNew: () -> Unit,
+) {
+    val list = rememberLazyListState()
+    val activeIndex = view.windows.indexOfFirst { it.id == view.activeWindow()?.id }
+    LaunchedEffect(activeIndex) { if (activeIndex >= 0) list.animateScrollToItem(activeIndex) }
+    LazyRow(
+        state = list,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items(view.windows, key = { it.id }) { window ->
+            val on = window.id == view.activeWindow()?.id
+            val title = tabTitle(view, window)
+            var actions by remember { mutableStateOf(false) }
+            Box {
+                Row(
+                    Modifier.clip(RoundedCornerShape(10.dp))
+                        .background(if (on) Accent else Card)
+                        .combinedClickable(onClick = { onSelect(window) }, onLongClick = { actions = true })
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StatusDot(window.status(status), on)
+                    Text(
+                        title,
+                        color = if (on) Bg else Ink,
+                        fontSize = 13.sp,
+                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1,
+                    )
+                    if (window.blocks.size > 1) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "${window.blocks.size}",
+                            color = if (on) Accent else Muted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.clip(RoundedCornerShape(99.dp)).background(if (on) Bg else Line)
+                                .padding(horizontal = 6.dp),
+                        )
+                    }
+                }
+                DropdownMenu(expanded = actions, onDismissRequest = { actions = false }) {
+                    MenuItem(stringResource(R.string.menu_rename_tab)) { actions = false; onRename(window) }
+                    MenuItem(stringResource(R.string.menu_close_tab), Danger) { actions = false; onClose(window, title) }
+                }
+            }
+        }
+        item(key = "new-tab") {
+            Text(
+                "+",
+                color = Accent,
+                fontSize = 16.sp,
+                modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Card).clickable(onClick = onNew)
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The panes of the shown tab. The phone draws one pane at a time, so a split on the desktop
+ * becomes a row of numbered chips here, and only the chosen one is on screen.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PaneStrip(
+    tab: WindowInfo,
+    status: Map<String, ProgramRecord>,
+    onSelect: (BlockInfo) -> Unit,
+    onRename: (BlockInfo) -> Unit,
+    onClose: (BlockInfo) -> Unit,
+    onNew: () -> Unit,
+) {
+    val list = rememberLazyListState()
+    val current = tab.focusedBlock()?.id
+    val index = tab.focusedIndex()
+    LaunchedEffect(tab.id, index) { if (index >= 0) list.animateScrollToItem(index) }
+    LazyRow(
+        state = list,
+        modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 4.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items(tab.blocks, key = { it.id }) { block ->
+            val on = block.id == current
+            val record = status[block.id]
+            var actions by remember { mutableStateOf(false) }
+            Box {
+                Row(
+                    Modifier.clip(RoundedCornerShape(99.dp))
+                        .border(1.dp, if (on) Accent else Line, RoundedCornerShape(99.dp))
+                        .combinedClickable(onClick = { onSelect(block) }, onLongClick = { actions = true })
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StatusDot(record, false)
+                    Text(
+                        "${tab.blocks.indexOf(block) + 1}",
+                        color = if (on) Accent else Muted,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(paneTitle(block, record), color = if (on) Accent else Ink, fontSize = 12.sp, maxLines = 1)
+                }
+                DropdownMenu(expanded = actions, onDismissRequest = { actions = false }) {
+                    MenuItem(stringResource(R.string.menu_rename_pane)) { actions = false; onRename(block) }
+                    MenuItem(stringResource(R.string.menu_close_pane), Danger) { actions = false; onClose(block) }
+                }
+            }
+        }
+        item(key = "new-pane") {
+            Text(
+                "+",
+                color = Accent,
+                fontSize = 14.sp,
+                modifier = Modifier.clip(RoundedCornerShape(99.dp)).border(1.dp, Line, RoundedCornerShape(99.dp))
+                    .clickable(onClick = onNew).padding(horizontal = 12.dp, vertical = 2.dp),
+            )
+        }
+    }
+}
+
+/** A dot only for states worth a glance; idle panes stay quiet. */
+@Composable
+private fun StatusDot(status: ProgramRecord?, onAccent: Boolean) {
+    if (status == null || status.state == "idle") return
+    Box(
+        Modifier.padding(end = 6.dp).size(7.dp).clip(CircleShape)
+            .background(if (onAccent) Bg else statusColor(status)),
+    )
+}
+
+/** Machine (sessions) → session's tabs → a tab's panes, with the shown pane highlighted. */
 @Composable
 private fun Sidebar(state: PocketState, onAct: (suspend PocketSession.() -> Unit) -> Unit, onClose: () -> Unit) {
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(16.dp)) {
@@ -745,34 +980,47 @@ private fun Sidebar(state: PocketState, onAct: (suspend PocketSession.() -> Unit
                 onClose()
             }.padding(vertical = 6.dp),
         )
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
             items(state.sessions, key = { it.id }) { session ->
                 val active = session.id == state.activeSessionId
-                Text(
-                    session.label,
-                    color = if (active) Accent else Ink,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        onAct { openSession(session.id) }
-                        onClose()
-                    }.padding(vertical = 8.dp),
-                )
-                val windows = state.views[session.id]?.windows.orEmpty()
-                val current = state.view
-                if (active && current != null) {
-                    windows.forEach { window ->
-                        Text(
-                            "  ${window.label}",
-                            color = if (window.id == current.activeWindowId) Ink else Muted,
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                onAct { focusWindow(window.id) }
-                            }.padding(vertical = 3.dp),
-                            fontSize = 14.sp,
-                        )
-                        window.blocks.forEach { block ->
-                            BlockRow(block, state.blockStatus[block.id], block.id == current.focusedBlock()?.id) {
-                                onAct { focusBlock(block.id) }
-                                onClose()
+                val current = state.view?.takeIf { active && it.sessionId == session.id }
+                Column {
+                    Text(
+                        session.label,
+                        color = if (active) Accent else Ink,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            if (!active) onAct { openSession(session.id) }
+                            onClose()
+                        }.padding(vertical = 8.dp),
+                    )
+                    if (current != null) {
+                        val shownTab = current.activeWindow()?.id
+                        val shownPane = current.focusedBlock()?.id
+                        current.windows.forEach { window ->
+                            val onTab = window.id == shownTab
+                            Row(
+                                Modifier.fillMaxWidth().clickable {
+                                    if (!onTab) onAct { focusWindow(window.id) }
+                                    onClose()
+                                }.padding(start = 12.dp, top = 5.dp, bottom = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                StatusDot(window.status(state.blockStatus), false)
+                                Text(
+                                    tabTitle(current, window),
+                                    color = if (onTab) Ink else Muted,
+                                    fontWeight = if (onTab) FontWeight.Medium else FontWeight.Normal,
+                                    fontSize = 14.sp,
+                                )
+                            }
+                            if (window.blocks.size > 1) {
+                                window.blocks.forEachIndexed { i, block ->
+                                    BlockRow(i + 1, block, state.blockStatus[block.id], block.id == shownPane) {
+                                        if (block.id != shownPane) onAct { focusBlock(block.id) }
+                                        onClose()
+                                    }
+                                }
                             }
                         }
                     }
@@ -783,51 +1031,34 @@ private fun Sidebar(state: PocketState, onAct: (suspend PocketSession.() -> Unit
 }
 
 @Composable
-private fun BlockRow(block: BlockInfo, status: ProgramRecord?, focused: Boolean, onClick: () -> Unit) {
+private fun BlockRow(number: Int, block: BlockInfo, status: ProgramRecord?, focused: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 18.dp, top = 3.dp, bottom = 3.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 28.dp, top = 3.dp, bottom = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor(status)))
         Spacer(Modifier.width(8.dp))
         Column {
-            Text(block.label, color = if (focused) Accent else Ink, fontSize = 14.sp)
+            Text("$number  ${paneTitle(block, status)}", color = if (focused) Accent else Ink, fontSize = 14.sp)
             val detail = status?.msg ?: status?.title
             if (!detail.isNullOrBlank()) Text(detail, color = Muted, fontSize = 11.sp, maxLines = 1)
         }
     }
 }
 
+/** Rex names an unlabeled window "Window " plus an id tail; the tab's position reads better. */
 @Composable
-private fun WindowRow(state: PocketState, onAct: (suspend PocketSession.() -> Unit) -> Unit) {
-    val view = state.view ?: return
-    val windows = view.windows
-    if (windows.size < 2 && (view.activeWindow()?.blocks?.size ?: 0) < 2) return
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        windows.forEach { window ->
-            val on = window.id == view.activeWindowId
-            Text(
-                window.label,
-                color = if (on) Bg else Ink,
-                fontSize = 12.sp,
-                modifier = Modifier.clip(RoundedCornerShape(99.dp)).background(if (on) Accent else Line)
-                    .clickable { onAct { focusWindow(window.id) } }.padding(horizontal = 10.dp, vertical = 4.dp),
-            )
-        }
-        view.activeWindow()?.blocks?.takeIf { it.size > 1 }?.forEach { block ->
-            val on = block.id == view.focusedBlock()?.id
-            Text(
-                block.label,
-                color = if (on) Accent else Muted,
-                fontSize = 12.sp,
-                modifier = Modifier.clip(RoundedCornerShape(99.dp)).border(1.dp, if (on) Accent else Line, RoundedCornerShape(99.dp))
-                    .clickable { onAct { focusBlock(block.id) } }.padding(horizontal = 10.dp, vertical = 4.dp),
-            )
-        }
-    }
+private fun tabTitle(view: SessionView, window: WindowInfo): String {
+    val number = view.windows.indexOf(window) + 1
+    return if (GENERATED_WINDOW_LABEL.matches(window.label)) stringResource(R.string.tab_number, number) else window.label
+}
+
+private val GENERATED_WINDOW_LABEL = Regex("Window [0-9a-f]{6,}")
+
+/** A pane left at the default "shell" label is named after the program running in it. */
+private fun paneTitle(block: BlockInfo, status: ProgramRecord?): String {
+    val app = status?.app?.takeIf { it.isNotBlank() }
+    return if (block.label == "shell" && app != null) app else block.label
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -974,17 +1205,19 @@ private fun HeaderButton(label: String, color: Color = Accent, onClick: () -> Un
 }
 
 @Composable
-private fun MenuItem(label: String, onClick: () -> Unit) {
-    DropdownMenuItem(text = { Text(label) }, onClick = onClick)
+private fun MenuItem(label: String, color: Color = Color.Unspecified, onClick: () -> Unit) {
+    DropdownMenuItem(text = { Text(label, color = color) }, onClick = onClick)
+}
+
+@Composable
+private fun MenuSection(label: String) {
+    Text(label, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
 }
 
 @Composable
 private fun subtitle(state: PocketState, status: ProgramRecord?): String {
-    val window = state.view?.activeWindow()?.label
-    val block = state.view?.focusedBlock()?.label
+    // The tab bar and pane strip already name the tab and pane; the subtitle says what runs there.
     val bits = listOfNotNull(
-        window,
-        block,
         status?.let { statusLabel(it) },
         state.pwd?.let { path -> path.substringAfterLast('/').ifBlank { path } },
     )

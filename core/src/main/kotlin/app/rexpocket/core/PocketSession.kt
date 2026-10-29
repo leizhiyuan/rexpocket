@@ -41,6 +41,8 @@ data class PocketState(
     val pwd: String? = null,
     /** Raw `format=vt` dump of the focused block: scrollback and screen as one replay. */
     val vt: String? = null,
+    /** Block [vt] was read from. The UI draws it only while that block is the shown pane. */
+    val vtBlockId: String? = null,
     val vtVersion: Int = 0,
 )
 
@@ -207,45 +209,38 @@ class PocketSession(
         rpc("session.new_split", body)
     }
 
+    /**
+     * Shows a pane. Rex makes the pane's window the active one as part of the same call, so this
+     * also switches tabs. The local view follows at once, so the header, the tab bar and the
+     * terminal move together instead of waiting for the view event.
+     */
     suspend fun focusBlock(blockId: String) {
         val sid = requireSession()
-        rpc("session.focus_block", JSONObject().put("session_id", sid).put("block_id", blockId))
+        val payload = rpc("session.focus_block", JSONObject().put("session_id", sid).put("block_id", blockId))
+        val window = _state.value.view?.windows?.firstOrNull { w -> w.blocks.any { it.id == blockId } }
+        if (window != null) showLocally(window.id, blockId, payload.optLong("revision", -1))
         lastVt = null
     }
 
+    /** Shows a tab. Rex brings back the pane that tab last had focused. */
     suspend fun focusWindow(windowId: String) {
         val sid = requireSession()
-        rpc("session.focus_window", JSONObject().put("session_id", sid).put("window_id", windowId))
+        val payload = rpc("session.focus_window", JSONObject().put("session_id", sid).put("window_id", windowId))
+        showLocally(windowId, null, payload.optLong("revision", -1))
         lastVt = null
     }
 
-    suspend fun nextWindow(forward: Boolean) {
+    /** Closes a pane, the shown one by default. Closing a tab's last pane closes the tab. */
+    suspend fun closeBlock(blockId: String? = null) {
         val sid = requireSession()
-        val method = if (forward) "session.focus_next_window" else "session.focus_previous_window"
-        rpc(method, JSONObject().put("session_id", sid).put("wrap", true))
-    }
-
-    suspend fun nextPane(forward: Boolean) {
-        val sid = requireSession()
-        val method = if (forward) "session.focus_next_pane" else "session.focus_previous_pane"
-        rpc(method, JSONObject().put("session_id", sid).put("wrap", true))
-    }
-
-    suspend fun zoom() {
-        val sid = requireSession()
-        val block = _state.value.view?.focusedBlock()?.id ?: return
-        rpc("session.zoom_block", JSONObject().put("session_id", sid).put("block_id", block))
-    }
-
-    suspend fun closeBlock() {
-        val sid = requireSession()
-        val block = _state.value.view?.focusedBlock()?.id ?: return
+        val block = blockId ?: _state.value.view?.focusedBlock()?.id ?: return
         rpc("block.close", JSONObject().put("session_id", sid).put("block_id", block))
     }
 
-    suspend fun closeWindow() {
+    /** Closes a tab and every pane in it, the shown tab by default. */
+    suspend fun closeWindow(windowId: String? = null) {
         val sid = requireSession()
-        val window = _state.value.view?.activeWindow()?.id
+        val window = windowId ?: _state.value.view?.activeWindow()?.id
         val body = JSONObject().put("session_id", sid)
         if (window != null) body.put("window_id", window)
         rpc("session.close_window", body)
@@ -273,18 +268,18 @@ class PocketSession(
         rpc("session.set_label", JSONObject().put("session_id", sid).put("label", label))
     }
 
-    suspend fun renameWindow(label: String) {
+    suspend fun renameWindow(label: String, windowId: String? = null) {
         val sid = requireSession()
-        val window = _state.value.view?.activeWindow()?.id ?: return
+        val window = windowId ?: _state.value.view?.activeWindow()?.id ?: return
         rpc(
             "session.set_window_label",
             JSONObject().put("session_id", sid).put("window_id", window).put("label", label),
         )
     }
 
-    suspend fun renameBlock(label: String) {
+    suspend fun renameBlock(label: String, blockId: String? = null) {
         val sid = requireSession()
-        val block = _state.value.view?.focusedBlock()?.id ?: return
+        val block = blockId ?: _state.value.view?.focusedBlock()?.id ?: return
         rpc(
             "session.set_block_label",
             JSONObject().put("session_id", sid).put("block_id", block).put("label", label),
@@ -506,6 +501,28 @@ class PocketSession(
         applyView(parseView(payload))
     }
 
+    /**
+     * Mirrors a focus change the server just accepted. [revision] is the one the call returned,
+     * so a view fetched before the change cannot overwrite it, while any later change still does.
+     */
+    private fun showLocally(windowId: String, blockId: String?, revision: Long) {
+        _state.update { st ->
+            val view = st.view ?: return@update st
+            if (view.windows.none { it.id == windowId }) return@update st
+            val windows = if (blockId == null) {
+                view.windows
+            } else {
+                view.windows.map { if (it.id == windowId) it.copy(focusedBlockId = blockId) else it }
+            }
+            val next = view.copy(
+                revision = maxOf(view.revision, revision),
+                activeWindowId = windowId,
+                windows = windows,
+            )
+            st.copy(view = next, views = st.views + (next.sessionId to next))
+        }
+    }
+
     private fun applyView(view: SessionView) {
         if (view.sessionId.isEmpty()) return
         _state.update {
@@ -548,7 +565,7 @@ class PocketSession(
                     val vt = readFormat(sid, block)
                     if (vt != lastVt) {
                         lastVt = vt
-                        _state.update { it.copy(vt = vt, vtVersion = it.vtVersion + 1, error = null) }
+                        _state.update { it.copy(vt = vt, vtBlockId = block, vtVersion = it.vtVersion + 1, error = null) }
                     }
                 } catch (e: CancellationException) {
                     throw e

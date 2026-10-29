@@ -8,6 +8,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import io.github.sagernet.libghostty.GhosttyTerminalSession
 import io.github.sagernet.libghostty.compose.rememberGhosttyTerminalState
@@ -87,7 +88,9 @@ fun TerminalPane(
     GhosttyTerminal(
         session = session,
         state = termState,
-        modifier = modifier,
+        // The view fills its whole canvas and draws rows scrolled above its top; Compose hosts
+        // Android views without clipping, so unclipped it paints over the header and tab bar.
+        modifier = modifier.clipToBounds(),
         fontSizeSp = 12f * fontScale,
         // The composer owns the IME; the view must not grab it on attach.
         focusOnAttach = false,

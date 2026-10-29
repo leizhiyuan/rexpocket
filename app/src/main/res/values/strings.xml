@@ -25,7 +25,6 @@
     <string name="session_new">New session</string>
     <string name="session_enter">Enter</string>
     <string name="session_tap_to_enter">Tap to enter</string>
-    <string name="pane_pick_title">Choose a pane</string>
     <string name="session_window_count">%1$d windows</string>
     <string name="session_none_live">This Rex has no sessions yet.</string>
     <string name="session_loading">Reading sessions…</string>
@@ -39,16 +38,25 @@
 
     <string name="header_stop">Stop</string>
     <string name="header_sessions">Sessions</string>
-    <string name="menu_new_window">New window</string>
-    <string name="menu_split_vertical">Split left/right</string>
-    <string name="menu_split_horizontal">Split top/bottom</string>
-    <string name="menu_zoom">Zoom pane</string>
-    <string name="menu_next_pane">Next pane</string>
+    <string name="level_session">Session</string>
+    <string name="level_tab">Tab</string>
+    <string name="level_pane">Pane</string>
+    <string name="tab_number">Tab %1$d</string>
+    <string name="menu_new_tab">New tab</string>
+    <string name="menu_rename_tab">Rename tab</string>
+    <string name="menu_close_tab">Close tab</string>
+    <string name="menu_split_right">New pane on the right</string>
+    <string name="menu_split_below">New pane below</string>
+    <string name="action_close">Close</string>
+    <string name="confirm_close_pane">Close pane %1$s?</string>
+    <string name="confirm_close_pane_body">The program running in it ends. Closing the last pane of a tab closes the tab.</string>
+    <string name="confirm_close_tab">Close %1$s?</string>
+    <string name="confirm_close_tab_body">Every pane in this tab closes and its programs end.</string>
+    <string name="confirm_kill_session">End session %1$s?</string>
+    <string name="confirm_kill_session_body">All tabs and panes in this session close, on every device.</string>
     <string name="menu_rename_session">Rename session</string>
-    <string name="menu_rename_window">Rename window</string>
     <string name="menu_rename_pane">Rename pane</string>
     <string name="menu_close_pane">Close pane</string>
-    <string name="menu_close_window">Close window</string>
     <string name="menu_kill_session">End session</string>
 
     <string name="composer_hint">Type, then send to the terminal</string>

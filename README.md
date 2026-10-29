@@ -4,7 +4,7 @@
 
 # RexPocket
 
-A Rex client for your phone. The interaction follows [Moshi](https://getmoshi.app/docs/rex): a host list, session picker, a sidebar with sessions / windows / panes, and a toolbar of special keys. It only talks to your own Rex, never through a third party.
+A Rex client for your phone. The interaction follows [Moshi](https://getmoshi.app/docs/rex): a host list, session picker, a sidebar with sessions / tabs / panes, and a toolbar of special keys. It only talks to your own Rex, never through a third party.
 
 The screen is replayed from the server's `com.superlogical.terminal.format` (`vt`) dump, polled roughly every 180 ms. That dump is a linear replay of the whole scrollback plus the screen, so rendering is handed to [libghostty-vt](https://github.com/sagernet/libghostty-android): the first dump resets with `RIS` and replays in full, and later polls feed only the appended tail, so the native scroll position is not yanked back to the bottom while you type or read. The pane you are viewing is held with `session.own_block` and sized to the phone; leaving the session or disconnecting `disown`s it so the desktop can take the size back.
 
@@ -29,11 +29,12 @@ The phone and the computer must share a network, or sit inside your own VPN / Ta
 ## On the phone
 
 1. Add a host: name, IP or domain, port `7297`, plaintext on.
-2. Tapping a host always lands on the session list. Opening a session that has one pane goes straight to the terminal; a window with several panes asks which one to show first, so only one pane is ever drawn.
-3. Terminal: drag down to read scrollback, and the arrow at the bottom right returns to following the output. Pinch to change the font size, long-press to select and then tap `Copy` in the toolbar. The `Sessions` sidebar lists sessions / windows / panes, and the window chips switch windows.
-4. Toolbar: `Esc`, `Ctrl` (double-tap to lock), `Tab`, `/`, arrows, `C-c` `C-d` `C-z` `C-l`, paste and copy.
-5. The composer writes into the terminal. Tap `Send` to send the text followed by Enter; long-press it to send a single Enter without the text.
-6. `Sessions` opens the sidebar, where tapping a window or pane `focus`es it. While a program is working or waiting for you the header shows `Stop`, which sends `Ctrl-C`.
+2. Tapping a host always lands on the session list. Opening a session shows the tab and pane Rex has focused, the same place the desktop is on.
+3. Session → tab → pane. Rex calls a tab a window. Under the header, the tab bar lists the session's tabs: tap one to switch, and Rex brings back the pane that tab last had focused. A tab holding several panes shows their count, and below it a pane strip lists them by number. The phone draws only one pane at a time, so a desktop split shows up as chips here rather than side by side. `+` on either row adds a tab or a pane. Long-press a tab or pane chip to rename or close it; closing asks first.
+4. Terminal: drag down to read scrollback, and the arrow at the bottom right returns to following the output. Pinch to change the font size, long-press to select and then tap `Copy` in the toolbar.
+5. Toolbar: `Esc`, `Ctrl` (double-tap to lock), `Tab`, `/`, arrows, `C-c` `C-d` `C-z` `C-l`, paste and copy.
+6. The composer writes into the terminal. Tap `Send` to send the text followed by Enter; long-press it to send a single Enter without the text.
+7. `Sessions` opens the sidebar, which lists every session, the open session's tabs and their panes. `···` groups actions by level: pane, tab, session. While a program is working or waiting for you the header shows `Stop`, which sends `Ctrl-C`.
 
 ## Languages
 

@@ -25,7 +25,6 @@
     <string name="session_new">新会话</string>
     <string name="session_enter">进入</string>
     <string name="session_tap_to_enter">点按进入</string>
-    <string name="pane_pick_title">选择窗格</string>
     <string name="session_window_count">%1$d 个窗口</string>
     <string name="session_none_live">这台 Rex 上还没有会话。</string>
     <string name="session_loading">正在读取会话…</string>
@@ -39,16 +38,25 @@
 
     <string name="header_stop">停</string>
     <string name="header_sessions">会话</string>
-    <string name="menu_new_window">新窗口</string>
-    <string name="menu_split_vertical">左右分屏</string>
-    <string name="menu_split_horizontal">上下分屏</string>
-    <string name="menu_zoom">放大窗格</string>
-    <string name="menu_next_pane">下一个窗格</string>
+    <string name="level_session">会话</string>
+    <string name="level_tab">标签页</string>
+    <string name="level_pane">窗格</string>
+    <string name="tab_number">标签 %1$d</string>
+    <string name="menu_new_tab">新标签页</string>
+    <string name="menu_rename_tab">重命名标签页</string>
+    <string name="menu_close_tab">关闭标签页</string>
+    <string name="menu_split_right">右侧新建窗格</string>
+    <string name="menu_split_below">下方新建窗格</string>
+    <string name="action_close">关闭</string>
+    <string name="confirm_close_pane">关闭窗格 %1$s？</string>
+    <string name="confirm_close_pane_body">里面运行的程序会结束。关闭标签页的最后一个窗格会关闭整个标签页。</string>
+    <string name="confirm_close_tab">关闭 %1$s？</string>
+    <string name="confirm_close_tab_body">这个标签页里的所有窗格都会关闭，程序随之结束。</string>
+    <string name="confirm_kill_session">结束会话 %1$s？</string>
+    <string name="confirm_kill_session_body">会话里的所有标签页和窗格都会关闭，所有设备上都是。</string>
     <string name="menu_rename_session">重命名会话</string>
-    <string name="menu_rename_window">重命名窗口</string>
     <string name="menu_rename_pane">重命名窗格</string>
     <string name="menu_close_pane">关闭窗格</string>
-    <string name="menu_close_window">关闭窗口</string>
     <string name="menu_kill_session">结束会话</string>
 
     <string name="composer_hint">输入后发送到终端</string>
