@@ -42,7 +42,7 @@ class HostStore(context: Context) {
 
     fun delete(id: String) {
         write(list().filter { it.id != id })
-        prefs.edit().remove(lastKey(id)).apply()
+        prefs.edit().remove(lastKey(id)).remove(panesKey(id)).apply()
     }
 
     fun lastSession(hostId: String): String? = prefs.getString(lastKey(hostId), null)
@@ -64,13 +64,24 @@ class HostStore(context: Context) {
 
     fun find(id: String): SavedHost? = list().firstOrNull { it.id == id }
 
-    fun lastBlock(hostId: String): String? = prefs.getString(blockKey(hostId), null)
+    /** The pane the phone last showed in [sessionId], so reopening the session goes back to it. */
+    fun lastPane(hostId: String, sessionId: String): String? =
+        panes(hostId).optString(sessionId).takeIf { it.isNotEmpty() }
 
-    fun setLastBlock(hostId: String, blockId: String?) {
-        prefs.edit().apply {
-            if (blockId.isNullOrBlank()) remove(blockKey(hostId)) else putString(blockKey(hostId), blockId)
-        }.apply()
+    /**
+     * Remembers the pane shown in [sessionId]. Entries for sessions missing from [alive] are
+     * dropped, so destroyed sessions do not pile up.
+     */
+    fun setLastPane(hostId: String, sessionId: String, blockId: String, alive: Collection<String>) {
+        val current = panes(hostId)
+        val next = JSONObject()
+        current.keys().forEach { key -> if (key in alive) next.put(key, current.getString(key)) }
+        next.put(sessionId, blockId)
+        prefs.edit().putString(panesKey(hostId), next.toString()).apply()
     }
+
+    private fun panes(hostId: String): JSONObject =
+        JSONObject(prefs.getString(panesKey(hostId), null) ?: "{}")
 
     fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)
 
@@ -99,6 +110,6 @@ class HostStore(context: Context) {
         private const val KEY_FONT = "font_scale"
         fun newId(): String = UUID.randomUUID().toString()
         private fun lastKey(id: String) = "last:$id"
-        private fun blockKey(id: String) = "last_block:$id"
+        private fun panesKey(id: String) = "panes:$id"
     }
 }

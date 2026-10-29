@@ -33,6 +33,44 @@ class RexModelsTest {
     }
 
     @Test
+    fun reopeningASessionPrefersThePaneLastShownOnThePhone() {
+        val view = view(
+            active = "w1",
+            window("w1", focused = "a", "a", "b"),
+            window("w2", focused = "c", "c", "d"),
+        )
+        assertEquals("d", view.paneToShow(remembered = "d")?.id)
+        // Gone, or never seen: fall back to the pane Rex has focused, where the desktop is.
+        assertEquals("a", view.paneToShow(remembered = "gone")?.id)
+        assertEquals("a", view.paneToShow(remembered = null)?.id)
+    }
+
+    @Test
+    fun showingAPaneMakesItsTabActiveAndFocusesItThere() {
+        val view = view(
+            active = "w1",
+            window("w1", focused = "a", "a", "b"),
+            window("w2", focused = "c", "c", "d"),
+        )
+        val next = view.showingPane("d", revision = 9)!!
+        assertEquals("w2", next.activeWindowId)
+        assertEquals("d", next.focusedBlock()?.id)
+        assertEquals("a", next.windows[0].focusedBlockId)
+        assertEquals(9L, next.revision)
+        // A stale revision from the call never moves the view backwards.
+        assertEquals(9L, next.showingPane("c", revision = 3)!!.revision)
+        assertNull(view.showingPane("gone", revision = 9))
+    }
+
+    @Test
+    fun showingATabKeepsThePaneItLastHadFocused() {
+        val view = view(active = "w1", window("w1", focused = "a", "a"), window("w2", focused = "d", "c", "d"))
+        val next = view.showingTab("w2", revision = 4)!!
+        assertEquals("d", next.focusedBlock()?.id)
+        assertNull(view.showingTab("gone", revision = 4))
+    }
+
+    @Test
     fun focusedBlockFallsBackToTheFirstPaneOfTheTab() {
         val w = window("w1", focused = null, "a", "b")
         assertEquals("a", w.focusedBlock()?.id)

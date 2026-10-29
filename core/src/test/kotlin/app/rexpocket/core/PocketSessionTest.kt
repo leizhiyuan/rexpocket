@@ -83,6 +83,56 @@ class PocketSessionTest {
             }
         }
     }
+
+    /** Moving to another session must hand the pane left behind back to the desktop. */
+    @Test
+    fun switchingSessionsReleasesThePreviousPane() {
+        val endpoint = testEndpoint()
+        assumeTrue(
+            "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
+            portOpen(endpoint.host, endpoint.port),
+        )
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(endpoint)
+            val created = ArrayList<String>()
+            try {
+                session.start(scope, preferredSessionId = null)
+                withTimeout(15_000) { session.awaitReady() }
+                session.setSize(80, 24, 8, 16)
+                val stamp = System.currentTimeMillis()
+
+                session.createShell("rexpocket-test-a-$stamp")
+                val first = session.state.value.activeSessionId!!
+                created += first
+                val firstBlock = awaitOwnedFocus(session)
+
+                session.createShell("rexpocket-test-b-$stamp")
+                created += session.state.value.activeSessionId!!
+                awaitOwnedFocus(session)
+
+                assertDisowned(endpoint, first, firstBlock)
+            } finally {
+                session.stop()
+                scope.cancel()
+                created.forEach { destroyQuietly(endpoint, it) }
+            }
+        }
+    }
+}
+
+/**
+ * Waits until the shown pane is on screen, owned by this client, and returns its id. Creating a
+ * session already makes the creator the owner, so ownership alone does not prove the phone took it.
+ */
+private suspend fun awaitOwnedFocus(session: PocketSession): String = withTimeout(15_000) {
+    while (true) {
+        val st = session.state.value
+        val block = st.view?.takeIf { it.sessionId == st.activeSessionId }?.focusedBlock()
+        if (block != null && block.owner == st.clientId && st.vtBlockId == block.id) return@withTimeout block.id
+        delay(50)
+    }
+    error("unreachable")
 }
 
 private fun testEndpoint(): Endpoint {

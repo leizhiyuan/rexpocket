@@ -80,6 +80,33 @@ data class SessionView(
 
     fun focusedBlock(): BlockInfo? = activeWindow()?.focusedBlock()
 
+    /**
+     * The pane to show when this session is opened: the one the phone showed last time, if it
+     * still exists, otherwise the one Rex has focused, which is where the desktop is.
+     */
+    fun paneToShow(remembered: String?): BlockInfo? =
+        remembered?.let { id -> allBlocks().firstOrNull { it.id == id } } ?: focusedBlock()
+
+    /**
+     * This view after Rex accepted focus on [blockId]: its tab becomes active and the pane is
+     * focused there. [revision] is what the call returned; the view never goes backwards. Null
+     * when the pane is not in any tab.
+     */
+    fun showingPane(blockId: String, revision: Long): SessionView? {
+        val window = windows.firstOrNull { w -> w.blocks.any { it.id == blockId } } ?: return null
+        return copy(
+            revision = maxOf(this.revision, revision),
+            activeWindowId = window.id,
+            windows = windows.map { if (it.id == window.id) it.copy(focusedBlockId = blockId) else it },
+        )
+    }
+
+    /** This view after Rex made [windowId] active; that tab keeps the pane it last had focused. */
+    fun showingTab(windowId: String, revision: Long): SessionView? {
+        if (windows.none { it.id == windowId }) return null
+        return copy(revision = maxOf(this.revision, revision), activeWindowId = windowId)
+    }
+
     fun allBlocks(): List<BlockInfo> = windows.flatMap { it.blocks }
 }
 

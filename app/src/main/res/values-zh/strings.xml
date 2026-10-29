@@ -25,7 +25,7 @@
     <string name="session_new">新会话</string>
     <string name="session_enter">进入</string>
     <string name="session_tap_to_enter">点按进入</string>
-    <string name="session_window_count">%1$d 个窗口</string>
+    <string name="session_window_count">%1$d 个标签页</string>
     <string name="session_none_live">这台 Rex 上还没有会话。</string>
     <string name="session_loading">正在读取会话…</string>
 
@@ -81,7 +81,6 @@
     <string name="key_left">←</string>
     <string name="key_right">→</string>
 
-    <string name="sidebar_machine">这台机器</string>
 
     <string name="state_running">进行中</string>
     <string name="state_waiting_approval">等待批准</string>

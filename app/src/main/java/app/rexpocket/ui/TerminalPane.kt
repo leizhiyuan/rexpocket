@@ -159,7 +159,10 @@ private class InputBatcher(private val send: (ByteArray) -> Unit) {
     private var pending = false
 
     private companion object {
-        /** Long enough to collect one gesture frame, short enough to feel immediate. */
-        const val WINDOW_MS = 50L
+        /**
+         * One display frame: enough to gather the reports a frame of finger movement produces.
+         * Writes are fire-and-forget, so a longer wait only delays the scrolled frame.
+         */
+        const val WINDOW_MS = 16L
     }
 }

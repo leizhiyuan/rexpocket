@@ -5,6 +5,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -62,8 +63,14 @@ class PocketSession(
     private val clientRef = AtomicReference<RexClient?>(null)
     private val sizeRef = AtomicReference(TermSize(80, 24, 8, 16))
     private var ownedBlock: String? = null
+    /** Session [ownedBlock] lives in; it can differ from the active one right after a switch. */
+    private var ownedSession: String? = null
     private var lastResize: TermSize? = null
     private var lastVt: String? = null
+    /** Wakes the screen poll early after input, so it need not sit out its idle interval. */
+    private val wake = Channel<Unit>(Channel.CONFLATED)
+    /** Until this [System.nanoTime], the screen is polled at [BUSY_POLL_MS]: input just went in. */
+    @Volatile private var busyUntil = 0L
     private var preferred: String? = null
     private var reconnectToken: String? = null
     private val ready = CompletableDeferred<Unit>()
@@ -133,10 +140,22 @@ class PocketSession(
         }
     }
 
-    suspend fun openSession(sessionId: String) {
+    /**
+     * Opens a session on [rememberedBlock], the pane the phone showed there last time, when it
+     * still exists; otherwise on the pane Rex has focused. The pane is focused before the view is
+     * published, so the terminal never shows another pane first.
+     */
+    suspend fun openSession(sessionId: String, rememberedBlock: String? = null) {
         preferred = sessionId
+        // The pane left behind goes back to the desktop, or it stays at the phone's size.
+        if (ownedSession != sessionId) disownQuietly()
         val payload = rpc("session.attach", JSONObject().put("session_id", sessionId))
-        val view = parseView(payload.getJSONObject("view"))
+        var view = parseView(payload.getJSONObject("view"))
+        val pane = view.paneToShow(rememberedBlock)
+        if (pane != null && pane.id != view.focusedBlock()?.id) {
+            val focused = rpc("session.focus_block", JSONObject().put("session_id", sessionId).put("block_id", pane.id))
+            view = view.showingPane(pane.id, focused.optLong("revision", -1)) ?: view
+        }
         // applyView only replaces the shown view when this session is already active.
         // Opening another session has to force it, or the old view stays on screen.
         applyView(view)
@@ -149,7 +168,6 @@ class PocketSession(
             )
         }
         lastVt = null
-        ownedBlock = null
     }
 
     suspend fun createShell(label: String?) {
@@ -217,8 +235,7 @@ class PocketSession(
     suspend fun focusBlock(blockId: String) {
         val sid = requireSession()
         val payload = rpc("session.focus_block", JSONObject().put("session_id", sid).put("block_id", blockId))
-        val window = _state.value.view?.windows?.firstOrNull { w -> w.blocks.any { it.id == blockId } }
-        if (window != null) showLocally(window.id, blockId, payload.optLong("revision", -1))
+        showLocally { it.showingPane(blockId, payload.optLong("revision", -1)) }
         lastVt = null
     }
 
@@ -226,7 +243,7 @@ class PocketSession(
     suspend fun focusWindow(windowId: String) {
         val sid = requireSession()
         val payload = rpc("session.focus_window", JSONObject().put("session_id", sid).put("window_id", windowId))
-        showLocally(windowId, null, payload.optLong("revision", -1))
+        showLocally { it.showingTab(windowId, payload.optLong("revision", -1)) }
         lastVt = null
     }
 
@@ -258,7 +275,9 @@ class PocketSession(
                 vt = null,
             )
         }
+        // Its blocks are gone with it; there is nothing left to disown.
         ownedBlock = null
+        ownedSession = null
         val next = _state.value.activeSessionId
         if (next != null) openSession(next)
     }
@@ -293,7 +312,7 @@ class PocketSession(
             "com.superlogical.terminal.write",
             JSONObject().put("session_id", sid).put("block_id", block).put("args", JSONObject().put("data", text)),
         )
-        lastVt = null
+        expectRedraw()
     }
 
     /**
@@ -311,7 +330,7 @@ class PocketSession(
                 .put("block_id", block)
                 .put("args", JSONObject().put("data", String(data, Charsets.UTF_8))),
         )
-        lastVt = null
+        expectRedraw()
     }
 
     /**
@@ -342,7 +361,7 @@ class PocketSession(
                         .put("payload", JSONObject().put("text", text)),
                 ),
         )
-        lastVt = null
+        expectRedraw()
     }
 
     suspend fun sendKey(code: String, mods: String = "", text: String = "", codepoint: Int = text.firstCodePoint()) {
@@ -364,7 +383,7 @@ class PocketSession(
                         .put("action", "press"),
                 ),
         )
-        lastVt = null
+        expectRedraw()
     }
 
     private suspend fun runConnection() {
@@ -502,23 +521,12 @@ class PocketSession(
     }
 
     /**
-     * Mirrors a focus change the server just accepted. [revision] is the one the call returned,
-     * so a view fetched before the change cannot overwrite it, while any later change still does.
+     * Mirrors a focus change the server just accepted. The change carries the revision the call
+     * returned, so a view fetched before it cannot overwrite it, while any later change still does.
      */
-    private fun showLocally(windowId: String, blockId: String?, revision: Long) {
+    private fun showLocally(change: (SessionView) -> SessionView?) {
         _state.update { st ->
-            val view = st.view ?: return@update st
-            if (view.windows.none { it.id == windowId }) return@update st
-            val windows = if (blockId == null) {
-                view.windows
-            } else {
-                view.windows.map { if (it.id == windowId) it.copy(focusedBlockId = blockId) else it }
-            }
-            val next = view.copy(
-                revision = maxOf(view.revision, revision),
-                activeWindowId = windowId,
-                windows = windows,
-            )
+            val next = st.view?.let(change) ?: return@update st
             st.copy(view = next, views = st.views + (next.sessionId to next))
         }
     }
@@ -580,8 +588,29 @@ class PocketSession(
                     _state.update { it.copy(error = e.message) }
                 }
             }
-            delay(if (lastVt == null) 40 else 180)
+            awaitNextPoll()
         }
+    }
+
+    /**
+     * A full-screen program such as pi takes the mouse, so a swipe becomes wheel reports and every
+     * scrolled frame has to come back through this poll; a plain shell scrolls inside the phone's
+     * emulator and never waits on it. Input therefore wakes the poll at once and keeps it fast
+     * for a moment, while an idle screen is still read only every [IDLE_POLL_MS].
+     */
+    private suspend fun awaitNextPoll() {
+        val wait = when {
+            lastVt == null -> BUSY_POLL_MS
+            System.nanoTime() < busyUntil -> BUSY_POLL_MS
+            else -> IDLE_POLL_MS
+        }
+        withTimeoutOrNull(wait) { wake.receive() }
+    }
+
+    /** Input changes the screen soon; read it now and keep reading quickly for a moment. */
+    private fun expectRedraw() {
+        busyUntil = System.nanoTime() + BUSY_WINDOW_MS * 1_000_000
+        wake.trySend(Unit)
     }
 
     private suspend fun readFormat(sid: String, block: String): String {
@@ -623,12 +652,13 @@ class PocketSession(
     }
 
     private suspend fun ensureOwned(sid: String, block: String) {
-        if (ownedBlock == block) return
+        if (ownedBlock == block && ownedSession == sid) return
         val previous = ownedBlock
+        val previousSession = ownedSession ?: sid
         if (previous != null && previous != block) {
             rpc(
                 "session.disown_block",
-                JSONObject().put("session_id", sid).put("block_ids", JSONArray().put(previous)),
+                JSONObject().put("session_id", previousSession).put("block_ids", JSONArray().put(previous)),
             )
         }
         rpc(
@@ -639,13 +669,14 @@ class PocketSession(
                 .put("mode", "take"),
         )
         ownedBlock = block
+        ownedSession = sid
         lastResize = null
         lastVt = null
     }
 
     private suspend fun disownQuietly() {
         val block = ownedBlock ?: return
-        val sid = _state.value.activeSessionId ?: return
+        val sid = ownedSession ?: return
         val client = clientRef.get() ?: return
         try {
             client.call(
@@ -655,6 +686,7 @@ class PocketSession(
         } catch (_: Exception) {
         }
         ownedBlock = null
+        ownedSession = null
     }
 
     private suspend fun statusLoop() {
@@ -711,6 +743,15 @@ class PocketSession(
         return list.map { if (it.id == item.id) item else it }
     }
 }
+
+/** Screen poll interval while nothing is being typed or scrolled. */
+private const val IDLE_POLL_MS = 180L
+
+/** Poll interval right after input, and while no screen has arrived yet. */
+private const val BUSY_POLL_MS = 30L
+
+/** How long input keeps the poll fast: long enough to catch the redraws a keystroke or swipe sets off. */
+private const val BUSY_WINDOW_MS = 600L
 
 private fun String.firstCodePoint(): Int =
     if (isEmpty()) 0 else codePointAt(0)
