@@ -43,7 +43,6 @@
     <string name="home_hosts">主机</string>
     <string name="session_new">新会话</string>
     <string name="session_enter">进入</string>
-    <string name="session_tap_to_enter">点按进入</string>
     <string name="session_window_count">%1$d 个标签页</string>
     <string name="session_none_live">这台 Rex 上还没有会话。</string>
     <string name="session_loading">正在读取会话…</string>
