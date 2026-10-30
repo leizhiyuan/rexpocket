@@ -73,6 +73,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                 onFont = model::setFont,
                 onBack = model::showPicker,
                 onOpenSession = model::openSession,
+                watchPane = model::watchPane,
                 onRetry = model::retryNow,
                 onDismissNotice = model::dismissNotice,
                 onAct = model::act,

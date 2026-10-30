@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -60,17 +61,21 @@ class PocketSessionTest {
                 }
                 assertEquals(created.clientId, owned)
 
-                val token = "rexpocket-ok-" + System.nanoTime()
-                session.sendText("printf '$token\\n'\n")
-                val seen = withTimeout(15_000) {
-                    while (true) {
-                        val text = session.state.value.vt.orEmpty()
-                        if (text.contains(token)) return@withTimeout text
-                        delay(100)
-                    }
-                    ""
+                val stream = StringBuilder()
+                val feeder = collectPane(scope, session, blockId!!, stream)
+                try {
+                    val token = "rexpocket-ok-" + System.nanoTime()
+                    session.sendText("printf '$token\\n'\n")
+                    val seen = withTimeoutOrNull(15_000) {
+                        while (!stripAnsi(stream.toString()).contains(token)) delay(100)
+                        true
+                    } ?: false
+                    assertTrue("stream did not carry $token:\n${stream.toString()}", seen)
+                    // The stream opens with the pane as Rex has it, which is what the emulator restores.
+                    assertTrue("stream did not start with a snapshot", stream.startsWith(SNAPSHOT_MARK))
+                } finally {
+                    feeder.cancel()
                 }
-                assertTrue(seen.contains(token))
 
                 // Stop joins the control coroutine so disown runs before the socket closes.
                 session.stop()
@@ -106,7 +111,9 @@ class PocketSessionTest {
                 session.setSize(200, 24, 8, 16)
                 session.createShell("rexpocket-test-order-" + System.currentTimeMillis())
                 sessionId = session.state.value.activeSessionId
-                awaitOwnedFocus(session)
+                val block = awaitOwnedFocus(session)
+                val stream = StringBuilder()
+                val feeder = collectPane(scope, session, block, stream)
 
                 // Digits come from the terminal view, letters from the toolbar, interleaved.
                 val expected = StringBuilder("echo ")
@@ -124,11 +131,14 @@ class PocketSessionTest {
                 val line = expected.toString().removePrefix("echo ")
                 // The shell's echo of the command line and its output; the terminal may wrap either,
                 // so line breaks are taken out before looking.
+                // The typed characters must reach the shell in the order they were sent: the shell
+                // echoes them, and the stream carries that echo.
                 val seen = withTimeoutOrNull(15_000) {
-                    while (screenText(session).replace("\r", "").replace("\n", "").split(line).size < 3) delay(100)
+                    while (!stripAnsi(stream.toString()).replace("\r", "").replace("\n", "").contains(line)) delay(100)
                     true
                 } ?: false
-                assertTrue("expected $line, screen:\n${screenText(session)}", seen)
+                feeder.cancel()
+                assertTrue("expected $line, stream:\n${stripAnsi(stream.toString())}", seen)
             } finally {
                 session.stop()
                 scope.cancel()
@@ -137,9 +147,9 @@ class PocketSessionTest {
         }
     }
 
-    /** While the app is in the background nothing is polled; coming back reads the screen at once. */
+    /** Stopping the collector ends the stream; collecting again starts over from a new snapshot. */
     @Test
-    fun aPausedSessionReadsNothingUntilItResumes() {
+    fun aStreamThatStopsStartsAgainWithASnapshot() {
         val endpoint = testEndpoint()
         assumeTrue(
             "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
@@ -153,23 +163,33 @@ class PocketSessionTest {
                 session.start(scope, preferredSessionId = null)
                 withTimeout(15_000) { session.awaitReady() }
                 session.setSize(80, 24, 8, 16)
-                session.createShell("rexpocket-test-pause-" + System.currentTimeMillis())
+                session.createShell("rexpocket-test-again-" + System.currentTimeMillis())
                 sessionId = session.state.value.activeSessionId
-                awaitOwnedFocus(session)
+                val block = awaitOwnedFocus(session)
 
-                session.setActive(false)
+                val first = StringBuilder()
+                val feeder = collectPane(scope, session, block, first)
+                withTimeout(10_000) { while (!first.startsWith(SNAPSHOT_MARK)) delay(50) }
+                session.sendText("echo first-round\n")
+                withTimeout(10_000) {
+                    while (!stripAnsi(first.toString()).contains("first-round")) delay(50)
+                }
+                feeder.cancel()
+                // Rex takes a moment to notice the stream is gone before the next one can open.
                 delay(500)
-                val before = session.state.value.vtVersion
-                session.sendText("echo paused-marker\n")
-                delay(1_500)
-                assertEquals("screen read while paused", before, session.state.value.vtVersion)
 
-                session.setActive(true)
-                val seen = withTimeoutOrNull(5_000) {
-                    while (!screenText(session).contains("\npaused-marker")) delay(50)
-                    true
-                } ?: false
-                assertTrue("screen not read after resuming", seen)
+                val second = StringBuilder()
+                val again = collectPane(scope, session, block, second)
+                try {
+                    // A new collection starts its own stream, and every stream opens with a snapshot.
+                    withTimeout(10_000) { while (!second.startsWith(SNAPSHOT_MARK)) delay(50) }
+                    session.sendText("echo second-round\n")
+                    withTimeout(10_000) {
+                        while (!stripAnsi(second.toString()).contains("second-round")) delay(50)
+                    }
+                } finally {
+                    again.cancel()
+                }
             } finally {
                 session.stop()
                 scope.cancel()
@@ -228,11 +248,11 @@ class PocketSessionTest {
                 session.createShell("rexpocket-test-a-$stamp")
                 val first = session.state.value.activeSessionId!!
                 created += first
-                val firstBlock = awaitOwnedFocus(session)
-
+                // Taking a pane is part of watching it, so both panes are actually watched here.
+                val firstBlock = awaitWatchedPane(scope, session)
                 session.createShell("rexpocket-test-b-$stamp")
                 created += session.state.value.activeSessionId!!
-                awaitOwnedFocus(session)
+                awaitWatchedPane(scope, session)
 
                 assertDisowned(endpoint, first, firstBlock)
             } finally {
@@ -244,25 +264,63 @@ class PocketSessionTest {
     }
 }
 
+/** Watches the shown pane until its snapshot arrives, and returns the block it is. */
+private suspend fun awaitWatchedPane(scope: CoroutineScope, session: PocketSession): String {
+    val block = awaitOwnedFocus(session)
+    val seen = StringBuilder()
+    val feeder = collectPane(scope, session, block, seen)
+    try {
+        withTimeout(15_000) {
+            while (!synchronized(seen) { seen.startsWith(SNAPSHOT_MARK) }) delay(50)
+        }
+    } finally {
+        feeder.cancel()
+    }
+    return block
+}
+
 /**
- * Waits until the shown pane is on screen, owned by this client, and returns its id. Creating a
- * session already makes the creator the owner, so ownership alone does not prove the phone took it.
+ * Waits until the shown pane belongs to this client, and returns its id. Creating a session already
+ * makes the creator the owner, so this alone does not prove the phone took it.
  */
 private suspend fun awaitOwnedFocus(session: PocketSession): String = withTimeout(15_000) {
     while (true) {
         val st = session.state.value
         val block = st.view?.takeIf { it.sessionId == st.activeSessionId }?.focusedBlock()
-        if (block != null && block.owner == st.clientId && st.vtBlockId == block.id) return@withTimeout block.id
+        if (block != null && block.owner == st.clientId) return@withTimeout block.id
         delay(50)
     }
     error("unreachable")
 }
 
-/** The shown pane's screen with its escape sequences removed, close enough to what is on it. */
-private fun screenText(session: PocketSession): String =
-    session.state.value.vt.orEmpty()
-        .replace(Regex("\u001b\\[[0-9;?]*[ -/]*[@-~]"), "")
-        .replace(Regex("\u001b\\][^\u0007\u001b]*(\u0007|\u001b\\\\)"), "")
+/** Marks where a snapshot began in a collected stream. */
+private const val SNAPSHOT_MARK = "\u0000SNAPSHOT\u0000"
+
+/**
+ * Collects a pane the way the terminal screen does, into [into]: a mark per snapshot, then only the
+ * output that followed the last one, which is what a restored emulator would show growing. The
+ * collector must outlive the typing, so it is returned to cancel at the end.
+ */
+private fun collectPane(scope: CoroutineScope, session: PocketSession, blockId: String, into: StringBuilder) =
+    scope.launch(Dispatchers.Default) {
+        session.watchPane(blockId).collect { feed ->
+            synchronized(into) {
+                when (feed) {
+                    is TerminalFeed.Snapshot -> {
+                        into.append(SNAPSHOT_MARK)
+                        // The snapshot replaces the screen, so earlier text is no longer shown.
+                        into.setLength(into.length)
+                    }
+                    is TerminalFeed.Output -> into.append(feed.bytes.toString(Charsets.UTF_8))
+                }
+            }
+        }
+    }
+
+/** Text with its escape sequences removed, close enough to what a screen would show. */
+private fun stripAnsi(text: String): String = text
+    .replace(Regex("\u001b\\[[0-9;?]*[ -/]*[@-~]"), "")
+    .replace(Regex("\u001b\\][^\u0007\u001b]*(\u0007|\u001b\\\\)"), "")
 
 private fun testEndpoint(): Endpoint {
     val host = System.getenv("REX_TEST_HOST")?.takeIf { it.isNotBlank() } ?: "127.0.0.1"

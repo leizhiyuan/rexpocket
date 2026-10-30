@@ -1,87 +1,81 @@
 package app.rexpocket.ui
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
+import app.rexpocket.core.TerminalFeed
 import io.github.sagernet.libghostty.GhosttyTerminalSession
-import io.github.sagernet.libghostty.compose.rememberGhosttyTerminalState
 import io.github.sagernet.libghostty.compose.GhosttyTerminal
+import io.github.sagernet.libghostty.compose.rememberGhosttyTerminalState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
 /**
  * Terminal surface backed by libghostty-vt.
  *
- * Rex hands out a full `format=vt` replay of scrollback plus screen, so every update starts
- * from a RIS reset before the dump goes in. That keeps the emulator's scrollback in sync with
- * the server's instead of appending the same history again on each poll.
+ * Rex streams a pane: a `GHOSTSNP` snapshot of it first, then its output as it comes. The snapshot
+ * becomes the emulator itself, so the pane arrives complete - scrollback, colours, cursor and the
+ * escape sequence the program was in the middle of - and everything after it is fed in order.
  */
 @Composable
 fun TerminalPane(
-    vt: String?,
-    vtVersion: Int,
+    blockId: String,
+    feeds: (String) -> Flow<TerminalFeed>,
     fontScale: Float,
     onFont: (Float) -> Unit,
     onInput: (ByteArray) -> Unit,
     onResize: (columns: Int, rows: Int, cellWidthPx: Int, cellHeightPx: Int) -> Unit,
     modifier: Modifier = Modifier,
     onSession: (GhosttyTerminalSession?) -> Unit = {},
+    onError: (Exception) -> Unit = {},
 ) {
     val context = LocalContext.current
     val termState = rememberGhosttyTerminalState()
-    val lastFed = remember { java.util.concurrent.atomic.AtomicReference<String?>(null) }
-    val session = remember {
-        GhosttyTerminalSession(
-            context,
-            GhosttyTerminalSession.Options(
-                columns = 80,
-                rows = 24,
-                maxScrollbackLines = 10_000,
-            ),
-        )
-    }
+    // Replaced when Rex sends a new snapshot: a reconnect, or a pane whose stream started over.
+    var session by remember(blockId) { mutableStateOf<GhosttyTerminalSession?>(null) }
     val currentInput = rememberUpdatedState(onInput)
-    val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
     val currentResize = rememberUpdatedState(onResize)
+    val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
 
-    DisposableEffect(session) {
-        session.transport = object : GhosttyTerminalSession.Transport {
-            override fun sendInput(data: ByteArray) {
-                // A swipe over a full-screen TUI turns into one mouse-wheel report per row, and
-                // each report used to be its own round trip. Batching them keeps the gesture
-                // attached to the finger.
-                input.post(data)
+    LaunchedEffect(blockId) {
+        // The stream reports its own failures; anything that still escapes must not take the app down.
+        try {
+            feeds(blockId).collect { feed ->
+                when (feed) {
+                    is TerminalFeed.Snapshot -> {
+                        val restored = withContext(Dispatchers.Default) {
+                            GhosttyTerminalSession.restore(context, feed.bytes)
+                        } ?: return@collect
+                        bind(restored, input, currentResize)
+                        // The old emulator goes only after the new one is ready, so nothing flashes.
+                        val previous = session
+                        session = restored
+                        onSession(restored)
+                        withContext(Dispatchers.Default) { previous?.close() }
+                    }
+                    is TerminalFeed.Output -> {
+                        // One reader, in order: a second coroutine would interleave the bytes.
+                        withContext(Dispatchers.Default) { session?.feedOutput(feed.bytes) }
+                    }
+                }
             }
-
-            override fun sendResize(columns: Int, rows: Int, widthPixels: Int, heightPixels: Int) {
-                currentResize.value(columns, rows, widthPixels, heightPixels)
-            }
-
-            override fun close() = Unit
-        }
-        session.systemClipboardWriteEnabled = false
-        onSession(session)
-        onDispose {
-            input.flush()
-            onSession(null)
-            session.transport = null
-            session.close()
-        }
-    }
-
-    LaunchedEffect(vtVersion) {
-        val dump = vt ?: return@LaunchedEffect
-        withContext(Dispatchers.Default) {
-            val previous = lastFed.getAndSet(dump)
-            session.feedOutput(payloadFor(dump, previous).toByteArray(Charsets.UTF_8))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onError(e)
         }
     }
 
@@ -104,30 +98,40 @@ fun TerminalPane(
             view.urlDetectionEnabled = false
         },
     )
-}
 
-private const val RESET = "\u001bc"
-
-/** Cursor placement and SGR reset that the server writes after the screen text. */
-private val TRAILING_CONTROL = Regex("(?:\\u001b\\[[0-9;]*[HJm])+$")
-
-private fun splitTrailingControl(dump: String): Pair<String, String> {
-    val match = TRAILING_CONTROL.find(dump) ?: return dump to ""
-    return dump.substring(0, match.range.first) to dump.substring(match.range.first)
-}
-
-/**
- * Rex sends the whole scrollback and screen on every poll. Replaying it from a RIS reset would
- * throw away the emulator's scroll position on every keystroke, so the common case - output
- * appended to the transcript - feeds just the new tail.
- */
-private fun payloadFor(dump: String, previous: String?): String {
-    val (body, tail) = splitTrailingControl(dump)
-    val previousBody = previous?.let { splitTrailingControl(it).first }
-    if (previousBody != null && previousBody.isNotEmpty() && body.length > previousBody.length && body.startsWith(previousBody)) {
-        return body.substring(previousBody.length) + tail
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            input.flush()
+            onSession(null)
+            session?.let { s ->
+                s.transport = null
+                s.close()
+            }
+            session = null
+        }
     }
-    return RESET + body + tail
+}
+
+/** Sends what the emulator produces, and reports its grid, through the screen's callbacks. */
+private fun bind(
+    session: GhosttyTerminalSession,
+    input: InputBatcher,
+    resize: androidx.compose.runtime.State<(Int, Int, Int, Int) -> Unit>,
+) {
+    session.transport = object : GhosttyTerminalSession.Transport {
+        override fun sendInput(data: ByteArray) {
+            // A swipe over a full-screen TUI turns into one mouse-wheel report per row, and each
+            // report used to be its own round trip. Batching keeps the gesture attached to the finger.
+            input.post(data)
+        }
+
+        override fun sendResize(columns: Int, rows: Int, widthPixels: Int, heightPixels: Int) {
+            resize.value(columns, rows, widthPixels, heightPixels)
+        }
+
+        override fun close() = Unit
+    }
+    session.systemClipboardWriteEnabled = false
 }
 
 /**

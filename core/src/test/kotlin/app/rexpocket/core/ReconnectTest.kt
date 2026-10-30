@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
@@ -102,5 +103,27 @@ class ProblemTest {
     fun aDropIsADropWhateverCausedIt() {
         val e = ConnectionDroppedException("reset", java.net.SocketException("Connection reset"))
         assertEquals(Trouble.Dropped, e.toProblem().trouble)
+    }
+}
+
+/** The screen keeps asking for its pane while the connection is down; that must not crash it. */
+class WatchPaneTest {
+    @Test
+    fun watchingAPaneWhileDisconnectedKeepsTryingInsteadOfThrowing() = runBlocking {
+        val port = ServerSocket(0).use { it.localPort }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val session = PocketSession(Endpoint("127.0.0.1", port))
+        try {
+            session.start(scope)
+            // No connection, no session: the flow has nothing to show yet and must wait, not fail.
+            val job = scope.launch(Dispatchers.Default) {
+                session.watchPane("block:none").collect { }
+            }
+            delay(2_000)
+            assertTrue("watching a pane threw or finished", job.isActive)
+        } finally {
+            session.stop()
+            scope.cancel()
+        }
     }
 }

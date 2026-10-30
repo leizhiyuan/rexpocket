@@ -8,6 +8,8 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -44,11 +46,6 @@ data class PocketState(
     val views: Map<String, SessionView> = emptyMap(),
     val blockStatus: Map<String, ProgramRecord> = emptyMap(),
     val pwd: String? = null,
-    /** Raw `format=vt` dump of the focused block: scrollback and screen as one replay. */
-    val vt: String? = null,
-    /** Block [vt] was read from. The UI draws it only while that block is the shown pane. */
-    val vtBlockId: String? = null,
-    val vtVersion: Int = 0,
 )
 
 /**
@@ -60,6 +57,8 @@ class PocketSession(
     private val endpoint: Endpoint,
     /** The list this host had last time, shown until the live one arrives with the bootstrap. */
     cachedSessions: List<ListedSession> = emptyList(),
+    /** The app's own Tailscale inbound, when a terminal stream has to go through it like the control one. */
+    private val socksPort: Int = 0,
     private val clientFactory: () -> RexClient = { RexClient() },
 ) {
     private val _state = MutableStateFlow(PocketState(sessions = cachedSessions))
@@ -72,11 +71,6 @@ class PocketSession(
     /** Session [ownedBlock] lives in; it can differ from the active one right after a switch. */
     private var ownedSession: String? = null
     private var lastResize: TermSize? = null
-    private var lastVt: String? = null
-    /** Wakes the screen poll early after input, so it need not sit out its idle interval. */
-    private val wake = Channel<Unit>(Channel.CONFLATED)
-    /** Until this [System.nanoTime], the screen is polled at [BUSY_POLL_MS]: input just went in. */
-    @Volatile private var busyUntil = 0L
     private var preferred: String? = null
     private var reconnectToken: String? = null
     private val ready = CompletableDeferred<Unit>()
@@ -97,9 +91,6 @@ class PocketSession(
     /** Wakes the wait between connection attempts. */
     private val retry = Channel<Unit>(Channel.CONFLATED)
     private val noticeIds = java.util.concurrent.atomic.AtomicLong()
-
-    /** The message of the last screen read that failed, so a failure repeating every poll shows once. */
-    private var screenFailure: String? = null
 
     /** False while nobody can see the screen; the polls wait instead of reading it. */
     private val active = MutableStateFlow(true)
@@ -142,7 +133,6 @@ class PocketSession(
      */
     fun setActive(visible: Boolean) {
         active.value = visible
-        if (visible) expectRedraw()
     }
 
     /** Skips the rest of the wait before the next connection attempt. Nothing to skip while live. */
@@ -193,7 +183,6 @@ class PocketSession(
         if (sizeRef.get() != next) {
             sizeRef.set(next)
             lastResize = null
-            lastVt = null
         }
     }
 
@@ -224,7 +213,6 @@ class PocketSession(
                 sessions = mergeSession(it.sessions, ListedSession(sessionId, view.label)),
             )
         }
-        lastVt = null
     }
 
     suspend fun createShell(label: String?) {
@@ -293,7 +281,6 @@ class PocketSession(
         val sid = requireSession()
         val payload = rpc("session.focus_block", JSONObject().put("session_id", sid).put("block_id", blockId))
         showLocally { it.showingPane(blockId, payload.optLong("revision", -1)) }
-        lastVt = null
     }
 
     /** Shows a tab. Rex brings back the pane that tab last had focused. */
@@ -301,7 +288,6 @@ class PocketSession(
         val sid = requireSession()
         val payload = rpc("session.focus_window", JSONObject().put("session_id", sid).put("window_id", windowId))
         showLocally { it.showingTab(windowId, payload.optLong("revision", -1)) }
-        lastVt = null
     }
 
     /** Closes a pane, the shown one by default. Closing a tab's last pane closes the tab. */
@@ -329,7 +315,6 @@ class PocketSession(
                 sessions = rest,
                 activeSessionId = rest.firstOrNull()?.id,
                 view = null,
-                vt = null,
             )
         }
         // Its blocks are gone with it; there is nothing left to disown.
@@ -439,7 +424,6 @@ class PocketSession(
     private fun input(call: InputCall): CompletableDeferred<Unit> {
         if (clientRef.get() == null) throw NotReadyException("Not connected yet")
         input.trySend(call)
-        expectRedraw()
         return call.done
     }
 
@@ -455,7 +439,6 @@ class PocketSession(
             } catch (e: Exception) {
                 call.done.completeExceptionally(e)
             }
-            expectRedraw()
         }
     }
 
@@ -487,7 +470,6 @@ class PocketSession(
                 if (!ready.isCompleted) ready.complete(Unit)
                 _state.update { it.copy(phase = Phase.Live, problem = null) }
                 launch { inputLoop(client) }
-                launch { formatLoop() }
                 launch { statusLoop() }
                 val cause = client.awaitClosed()
                 throw ConnectionDroppedException(cause?.message ?: "Control connection dropped", cause)
@@ -586,7 +568,6 @@ class PocketSession(
                 views = it.views - id,
                 view = view,
                 activeSessionId = if (it.activeSessionId == id) rest.firstOrNull()?.id else it.activeSessionId,
-                vt = if (it.activeSessionId == id) null else it.vt,
             )
         }
     }
@@ -628,116 +609,90 @@ class PocketSession(
         }
     }
 
-    private suspend fun formatLoop() {
+    /**
+     * The shown pane's bytes, for as long as this flow is collected: Rex's snapshot of it first,
+     * then its output as it comes. Taking the pane, so Rex sizes it for this phone, and sizing it
+     * happen here too, because all three belong to watching it. Ending the collection stops it.
+     */
+    fun watchPane(blockId: String): Flow<TerminalFeed> = flow {
+        var backoff = MIN_BACKOFF_MS
         while (true) {
-            active.first { it }
             val sid = _state.value.activeSessionId
-            val block = _state.value.view?.takeIf { it.sessionId == sid }?.focusedBlock()?.id
-            if (sid != null && block != null) {
+            if (sid == null) {
+                // Nothing to watch until a session is open; the connection may still be coming up.
+                delay(backoff)
+                backoff = (backoff * 2).coerceAtMost(PANE_RETRY_MAX_MS)
+                continue
+            }
+            try {
+                ensureOwned(sid, blockId)
+                coroutineScope {
+                    launch { sizeLoop(sid, blockId) }
+                    val stream = TerminalStream(endpoint, { RexClient.defaultHttp(socksPort) }) { ticket(sid, blockId) }
+                    try {
+                        stream.feeds().collect { emit(it) }
+                    } finally {
+                        stream.close()
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: RexCallException) {
+                // The pane or its session is gone; watching it again cannot help.
+                if (e.code == "not_found" || e.code == "session_not_found") {
+                    note(e.toProblem())
+                    return@flow
+                }
+                note(e.toProblem())
+            } catch (e: Exception) {
+                note(e.toProblem())
+            }
+            delay(backoff)
+            backoff = (backoff * 2).coerceAtMost(PANE_RETRY_MAX_MS)
+        }
+    }
+
+    /** Applies the phone's size to the pane whenever it changes. */
+    private suspend fun sizeLoop(sid: String, blockId: String) {
+        while (true) {
+            val size = sizeRef.get()
+            if (lastResize != size) {
                 try {
-                    ensureOwned(sid, block)
-                    val size = sizeRef.get()
-                    if (lastResize != size) {
-                        rpc(
-                            "com.superlogical.terminal.resize",
-                            JSONObject().put("session_id", sid).put("block_id", block).put(
-                                "args",
-                                JSONObject()
-                                    .put("columns", size.cols)
-                                    .put("rows", size.rows)
-                                    .put("cell_width_px", size.cellWidthPx)
-                                    .put("cell_height_px", size.cellHeightPx),
-                            ),
-                        )
-                        lastResize = size
-                        delay(40)
-                    }
-                    val vt = readFormat(sid, block)
-                    if (vt != lastVt) {
-                        lastVt = vt
-                        _state.update { it.copy(vt = vt, vtBlockId = block, vtVersion = it.vtVersion + 1) }
-                    }
-                    screenFailure = null
+                    rpc(
+                        "com.superlogical.terminal.resize",
+                        JSONObject().put("session_id", sid).put("block_id", blockId).put(
+                            "args",
+                            JSONObject()
+                                .put("columns", size.cols)
+                                .put("rows", size.rows)
+                                .put("cell_width_px", size.cellWidthPx)
+                                .put("cell_height_px", size.cellHeightPx),
+                        ),
+                    )
+                    lastResize = size
                 } catch (e: CancellationException) {
                     throw e
-                } catch (e: RexCallException) {
-                    if (e.code == "session_not_found" || e.code == "not_found") {
-                        lastVt = null
-                        ownedBlock = null
-                    } else {
-                        screenReadFailed(e)
-                    }
                 } catch (e: Exception) {
-                    screenReadFailed(e)
+                    // The connection is coming back; the outer loop starts this over.
+                    return
                 }
             }
-            awaitNextPoll()
+            // setSize forgets lastResize; nothing else changes it, so this is the wait for a new size.
+            while (lastResize == size) delay(100)
         }
     }
 
-    private fun screenReadFailed(e: Exception) {
-        if (e.message == screenFailure) return
-        screenFailure = e.message
-        note(e.toProblem())
-    }
-
-    /**
-     * A full-screen program such as pi takes the mouse, so a swipe becomes wheel reports and every
-     * scrolled frame has to come back through this poll; a plain shell scrolls inside the phone's
-     * emulator and never waits on it. Input therefore wakes the poll at once and keeps it fast
-     * for a moment, while an idle screen is still read only every [IDLE_POLL_MS].
-     */
-    private suspend fun awaitNextPoll() {
-        val wait = when {
-            lastVt == null -> BUSY_POLL_MS
-            System.nanoTime() < busyUntil -> BUSY_POLL_MS
-            else -> IDLE_POLL_MS
-        }
-        withTimeoutOrNull(wait) { wake.receive() }
-    }
-
-    /** Input changes the screen soon; read it now and keep reading quickly for a moment. */
-    private fun expectRedraw() {
-        busyUntil = System.nanoTime() + BUSY_WINDOW_MS * 1_000_000
-        wake.trySend(Unit)
-    }
-
-    private suspend fun readFormat(sid: String, block: String): String {
+    /** A one-time ticket for a new stream on this pane. */
+    private suspend fun ticket(sid: String, blockId: String): String {
         val payload = rpc(
-            "com.superlogical.terminal.format",
-            JSONObject().put("session_id", sid).put("block_id", block).put(
-                "args",
-                JSONObject()
-                    .put("format", "vt")
-                    .put("trim", true)
-                    .put("extra_cursor", true)
-                    .put("extra_style", true)
-                    .put("extra_modes", true)
-                    .put("extra_palette", true)
-                    .put("extra_scrolling_region", true)
-                    .put("max_bytes", 180_000),
-            ),
+            "data.connect",
+            JSONObject()
+                .put("session_id", sid)
+                .put("block_id", blockId)
+                .put("data_ref_id", "terminal")
+                .put("subprotocol", TerminalStream.PROTOCOL),
         )
-        val first = payload.optString("content")
-        if (!payload.has("id") || payload.isNull("id") || payload.optBoolean("eof", false)) return first
-        val id = payload.getLong("id")
-        val all = StringBuilder(first)
-        var offset = first.toByteArray(Charsets.UTF_8).size
-        var guard = 0
-        while (guard++ < 12 && all.length < 1_500_000) {
-            val more = rpc(
-                "com.superlogical.terminal.blob_read",
-                JSONObject().put("session_id", sid).put("block_id", block).put(
-                    "args",
-                    JSONObject().put("id", id).put("offset", offset).put("max_bytes", 180_000),
-                ),
-            )
-            val chunk = more.optString("data")
-            all.append(chunk)
-            offset += chunk.toByteArray(Charsets.UTF_8).size
-            if (more.optBoolean("eof", false) || chunk.isEmpty()) break
-        }
-        return all.toString()
+        return payload.getString("ticket")
     }
 
     private suspend fun ensureOwned(sid: String, block: String) {
@@ -760,7 +715,6 @@ class PocketSession(
         ownedBlock = block
         ownedSession = sid
         lastResize = null
-        lastVt = null
     }
 
     private suspend fun disownQuietly() {
@@ -841,14 +795,8 @@ private const val MIN_BACKOFF_MS = 400L
 
 private const val MAX_BACKOFF_MS = 8_000L
 
-/** Screen poll interval while nothing is being typed or scrolled. */
-private const val IDLE_POLL_MS = 180L
-
-/** Poll interval right after input, and while no screen has arrived yet. */
-private const val BUSY_POLL_MS = 30L
-
-/** How long input keeps the poll fast: long enough to catch the redraws a keystroke or swipe sets off. */
-private const val BUSY_WINDOW_MS = 600L
+/** Wait before the screen tries its pane again, after the connection or the stream let go. */
+private const val PANE_RETRY_MAX_MS = 5_000L
 
 private fun String.firstCodePoint(): Int =
     if (isEmpty()) 0 else codePointAt(0)

@@ -16,6 +16,9 @@ import app.rexpocket.core.PocketSession
 import app.rexpocket.core.PocketState
 import app.rexpocket.core.Problem
 import app.rexpocket.core.Trouble
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.Flow
+import app.rexpocket.core.TerminalFeed
 import app.rexpocket.core.toProblem
 import app.rexpocket.core.RexClient
 import app.rexpocket.data.HostStore
@@ -217,6 +220,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                 Endpoint(target.host, target.port, target.plaintext),
                 clientFactory = { RexClient.forSocksPort(socksPort) },
                 cachedSessions = cached,
+                // The terminal stream takes the same route as the control connection.
+                socksPort = socksPort,
             )
             session = s
             sessionReady.complete(s)
@@ -246,6 +251,13 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             combine(s.state, route) { st, r -> if (r == Route.Term) shownPane(st) else null }
                 .filterNotNull().distinctUntilChanged()
                 .collect { (sid, block) -> store.setLastPane(hostId, sid, block, s.state.value.sessions.map { it.id }) }
+        }
+        // A session that is no longer on Rex, such as after Rex restarted, leaves nothing to show:
+        // back to the list rather than an empty terminal.
+        launch {
+            s.state.map { it.phase to it.activeSessionId }.distinctUntilChanged().collect { (phase, active) ->
+                if (phase == Phase.Live && active == null && route.value == Route.Term) route.value = Route.Picker
+            }
         }
         if (resumeTo != null) {
             launch {
@@ -337,6 +349,9 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         val target = store.lastHost()?.let { store.find(it) } ?: return
         connect(target, resume = true)
     }
+
+    /** The shown pane's bytes for as long as the screen collects them; see [PocketSession.watchPane]. */
+    fun watchPane(blockId: String): Flow<TerminalFeed> = session?.watchPane(blockId) ?: emptyFlow()
 
     fun retryNow() {
         session?.retryNow()

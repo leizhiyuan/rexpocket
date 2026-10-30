@@ -58,6 +58,9 @@ import app.rexpocket.core.BlockInfo
 import app.rexpocket.core.ComposerDrafts
 import app.rexpocket.core.Phase
 import app.rexpocket.core.PocketSession
+import kotlinx.coroutines.flow.Flow
+import app.rexpocket.core.TerminalFeed
+import app.rexpocket.core.toProblem
 import app.rexpocket.core.PocketState
 import app.rexpocket.core.ProgramRecord
 import app.rexpocket.core.SessionView
@@ -123,6 +126,7 @@ internal fun TermScreen(
     onFont: (Float) -> Unit,
     onBack: () -> Unit,
     onOpenSession: (String) -> Unit,
+    watchPane: (String) -> Flow<TerminalFeed>,
     onRetry: () -> Unit,
     onDismissNotice: (Long) -> Unit,
     onAct: (suspend PocketSession.() -> Unit) -> Unit,
@@ -186,18 +190,19 @@ internal fun TermScreen(
             }
         }
         TermBanner(state, onRetry = onRetry, onDismiss = onDismissNotice)
-        // One emulator per shown pane, fed only with the dump read from that pane, so switching
-        // never flashes the previous pane's screen or mixes two panes' scrollback.
+        // One emulator per shown pane, fed only with that pane's stream, so switching never mixes
+        // two panes' scrollback.
         val shown = focused?.id
         key(shown) {
             TerminalPane(
-                vt = state.vt.takeIf { shown != null && state.vtBlockId == shown },
-                vtVersion = state.vtVersion,
+                blockId = shown.orEmpty(),
+                feeds = watchPane,
                 fontScale = fontScale,
                 onFont = onFont,
                 onInput = { bytes -> onAct { writeBytes(bytes) } },
                 onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
                 onSession = { termSession = it },
+                onError = { onAct { note(it.toProblem()) } },
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp),
             )
         }
