@@ -15,10 +15,9 @@ data class SavedHost(
     val viaTailscale: Boolean = false,
 )
 
-/** Settings for the Tailscale node the app runs itself. */
+/** Settings for the Tailscale node the app runs itself: joined, and the name it goes by. */
 data class TailscaleSettings(
     val enabled: Boolean = false,
-    val authKey: String = "",
     val hostname: String = "",
 )
 
@@ -95,14 +94,12 @@ class HostStore(context: Context) {
 
     fun tailscale(): TailscaleSettings = TailscaleSettings(
         enabled = prefs.getBoolean(KEY_TAILSCALE_ENABLED, false),
-        authKey = prefs.getString(KEY_TAILSCALE_KEY, "").orEmpty(),
         hostname = prefs.getString(KEY_TAILSCALE_HOSTNAME, "").orEmpty(),
     )
 
     fun setTailscale(settings: TailscaleSettings) {
         prefs.edit()
             .putBoolean(KEY_TAILSCALE_ENABLED, settings.enabled)
-            .putString(KEY_TAILSCALE_KEY, settings.authKey.trim())
             .putString(KEY_TAILSCALE_HOSTNAME, settings.hostname.trim())
             .apply()
     }
@@ -134,7 +131,6 @@ class HostStore(context: Context) {
         private const val KEY_LAST_HOST = "last_host"
         private const val KEY_FONT = "font_scale"
         private const val KEY_TAILSCALE_ENABLED = "tailscale_enabled"
-        private const val KEY_TAILSCALE_KEY = "tailscale_auth_key"
         private const val KEY_TAILSCALE_HOSTNAME = "tailscale_hostname"
         fun newId(): String = UUID.randomUUID().toString()
         private fun lastKey(id: String) = "last:$id"

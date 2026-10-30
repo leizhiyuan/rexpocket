@@ -41,10 +41,10 @@ The phone and the computer must share a network, or sit inside your own VPN / Ta
 
 The app can join your tailnet itself, so a host there is reachable by its MagicDNS name (`host.tailnet-xxxx.ts.net`) or its `100.x` address without the Tailscale app and without taking the phone's one VPN slot. The node runs inside the app (sing-box's Tailscale endpoint): only the connections this app opens for Rex go through it, the rest of the phone is untouched.
 
-1. `Tailscale` on the home screen: switch it on and save. Paste an auth key from the Tailscale admin console (`Settings → Keys`; a reusable, pre-authorized key is convenient) or leave the field empty to authorize the node by link instead.
-2. Edit the host and turn on `Via Tailscale`. That connection is then dialed through a SOCKS5 inbound on loopback that sing-box routes into the tailnet, so a MagicDNS name is resolved by Tailscale and a `100.x` address is dialed by it.
-3. The first connection starts the node. While it still needs a login, the session list shows a banner: tap it to copy the login link, authorize the node in a browser, and come back - the connection that was retrying goes through. The node keeps that login, so this happens once.
-4. The home screen row and the `Tailscale` dialog show the node's state (`Starting`, `Login needed`, `Running`) and the node name the tailnet sees; the field stays empty for a device name and falls back to the model name. Leaving Rex stops the node again.
+1. The `Tailscale` row on the home screen asks for this phone's node name; saving joins the tailnet: the app starts its node and, when it has never been authorized, opens the authorization page in a browser by itself. The login stays in the app, so this happens once.
+2. A host is just an address: `192.0.2.10`, `host:7300` or `wss://host:443`. The port, plaintext or TLS, and whether the host goes through Tailscale all follow from it - a `.ts.net` name or a `100.x` address goes through the node (443 + TLS by default), anything else is 7297 plaintext, and the line under the field shows what the app worked out.
+3. An address on a tailnet while the phone has not joined yet shows a note in the dialog: the host is saved anyway, and tapping the note joins right there.
+4. A tailnet connection is dialed through a SOCKS5 inbound on loopback that sing-box routes into the tailnet, so a MagicDNS name is resolved by Tailscale and a `100.x` address is dialed by it. The node stays `Running` while the app runs.
 
 The library is arm64-v8a only: `app/libs/libbox.aar`, ~57 MB unpacked, built from sing-box 1.14.4 by [tools/build-libbox.sh](tools/build-libbox.sh). Rebuild it for another ABI, or with other protocol tags, if you need them.
 

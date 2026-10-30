@@ -2,6 +2,8 @@ package app.rexpocket.ui
 
 import android.app.Application
 import android.content.ClipData
+import android.content.Intent
+import android.net.Uri
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.ui.viewinterop.AndroidView
@@ -90,6 +92,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.rexpocket.core.BlockInfo
 import app.rexpocket.core.Endpoint
+import app.rexpocket.core.HostAddress
+import app.rexpocket.core.HostAddressParser
 import app.rexpocket.core.Phase
 import app.rexpocket.core.PocketSession
 import app.rexpocket.core.PocketState
@@ -147,18 +151,47 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     private var sessionJob: Job? = null
     private var watch: Job? = null
     private var connectJob: Job? = null
+    private var tailnetJob: Job? = null
+    private val _tailnetError = MutableStateFlow<String?>(null)
+    val tailnetError: StateFlow<String?> = _tailnetError
 
     override fun onCleared() {
         tailscaleBox.stopAsync()
         super.onCleared()
     }
 
-    fun saveTailscale(settings: TailscaleSettings) {
-        store.setTailscale(settings)
+    /**
+     * Joins the tailnet under [hostname] (blank means the device's own name). The node starts here,
+     * not on the first connect, so the app can hand out the login link while the user is looking
+     * at the Tailscale row; a node that is already logged in just comes back up.
+     */
+    fun joinTailnet(hostname: String) {
+        store.setTailscale(TailscaleSettings(enabled = true, hostname = hostname.trim()))
         val next = store.tailscale()
-        if (next == tailscale.value) return
+        val changed = next != tailscale.value
         tailscale.value = next
-        // The next connect starts the node again with the new settings.
+        if (changed) tailscaleBox.stopAsync()
+        startTailnet(next)
+    }
+
+    /** Brings the node up for [settings]; the login it already has makes this a plain restart. */
+    private fun startTailnet(settings: TailscaleSettings) {
+        tailnetJob?.cancel()
+        _tailnetError.value = null
+        tailnetJob = viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { tailscaleBox.start(TailscaleConfig(authKey = "", hostname = settings.hostname)) }
+                    .onFailure { _tailnetError.value = it.message ?: "Tailscale could not start" }
+            }
+        }
+    }
+
+    /** Leaves the tailnet: the node stops and its login stays in the app for the next join. */
+    fun leaveTailnet() {
+        // The name is kept: rejoining later should not ask for it again.
+        store.setTailscale(TailscaleSettings(enabled = false, hostname = tailscale.value.hostname))
+        tailscale.value = store.tailscale()
+        tailnetJob?.cancel()
         tailscaleBox.stopAsync()
     }
 
@@ -183,7 +216,16 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         val previousSession = store.lastSession(target.id)
         route.value = Route.Picker
         val settings = store.tailscale()
-        val viaTailscale = target.viaTailscale && settings.enabled
+        if (target.viaTailscale && !settings.enabled) {
+            // The host is saved either way; without a joined node there is no route to it.
+            _pocket.value = PocketState(
+                phase = Phase.Failed,
+                endpointLabel = "${target.host}:${target.port}",
+                error = getApplication<Application>().getString(R.string.error_join_tailnet_first),
+            )
+            return
+        }
+        val viaTailscale = target.viaTailscale
         connectJob = viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 // Nothing of this connection goes through the node, so do not leave it running.
@@ -198,9 +240,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 try {
                     withContext(Dispatchers.IO) {
-                        tailscaleBox.start(
-                            TailscaleConfig(authKey = settings.authKey, hostname = settings.hostname),
-                        )
+                        tailscaleBox.start(TailscaleConfig(authKey = "", hostname = settings.hostname))
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -282,6 +322,9 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
      * screen. The Rex server keeps the session, so this is a reconnect rather than a new one.
      */
     fun restore() {
+        // A phone that has joined a tailnet keeps the node up: the Tailscale row is the honest
+        // answer to "am I in the tailnet", and a host on a tailnet can then be dialed at once.
+        if (tailscale.value.enabled) startTailnet(tailscale.value)
         if (route.value != Route.Home || session != null) return
         val target = store.lastHost()?.let { store.find(it) } ?: return
         connect(target, resume = true)
@@ -291,8 +334,6 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         disconnectQuiet()
         store.setLastHost(null)
         route.value = Route.Home
-        // Leaving Rex stops the node, so the tunnel is only up while it is used.
-        tailscaleBox.stopAsync()
     }
 
     fun showPicker() {
@@ -343,7 +384,17 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val font by model.fontScale.collectAsState()
     val tailscale by model.tailscale.collectAsState()
     val tailscaleStatus by model.tailscaleStatus.collectAsState()
+    val tailnetError by model.tailnetError.collectAsState()
+    val context = LocalContext.current
+    var tailscaleOpen by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { model.restore() }
+    // A node that still needs a login can only say so through the link it prints, so take the
+    // user straight to it instead of leaving a URL to copy.
+    val authUrl = tailscaleStatus.authUrl
+    LaunchedEffect(authUrl) {
+        if (authUrl.isBlank()) return@LaunchedEffect
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))) }
+    }
     Box(Modifier.fillMaxSize().background(Bg)) {
         when (route) {
             Route.Home -> HomeScreen(
@@ -353,12 +404,14 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                 onSave = model::saveHost,
                 onDelete = model::deleteHost,
                 onOpen = model::connect,
-                onTailscale = model::saveTailscale,
+                onTailscale = { tailscaleOpen = true },
             )
             Route.Picker -> PickerScreen(
                 hostLabel = model.host?.label ?: "Rex",
                 state = pocket,
                 tailscaleStatus = tailscaleStatus,
+                tailscaleEnabled = tailscale.enabled,
+                onTailscale = { tailscaleOpen = true },
                 onBack = model::disconnect,
                 onOpen = model::openSession,
                 onCreate = { model.act { createShell(it) }; model.showTerm() },
@@ -373,6 +426,22 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
             )
         }
     }
+    if (tailscaleOpen) {
+        TailscaleDialog(
+            initial = tailscale,
+            status = tailscaleStatus,
+            error = tailnetError,
+            onDismiss = { tailscaleOpen = false },
+            onJoin = { name ->
+                model.joinTailnet(name)
+                tailscaleOpen = false
+            },
+            onLeave = {
+                model.leaveTailnet()
+                tailscaleOpen = false
+            },
+        )
+    }
 }
 
 @Composable
@@ -383,11 +452,10 @@ private fun HomeScreen(
     onSave: (SavedHost) -> Unit,
     onDelete: (String) -> Unit,
     onOpen: (SavedHost) -> Unit,
-    onTailscale: (TailscaleSettings) -> Unit,
+    onTailscale: () -> Unit,
 ) {
     var editing by remember { mutableStateOf<SavedHost?>(null) }
     var creating by remember { mutableStateOf(false) }
-    var tailscaleOpen by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(28.dp))
         Text("REXPOCKET", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp)
@@ -401,7 +469,7 @@ private fun HomeScreen(
             lineHeight = 21.sp,
         )
         Spacer(Modifier.height(22.dp))
-        TailscaleRow(tailscale, tailscaleStatus) { tailscaleOpen = true }
+        TailscaleRow(tailscale, tailscaleStatus, onOpen = onTailscale)
         Spacer(Modifier.height(10.dp))
         if (hosts.isEmpty()) {
             Column(
@@ -469,33 +537,31 @@ private fun HomeScreen(
                 creating = false
                 editing = null
             },
-        )
-    }
-    if (tailscaleOpen) {
-        TailscaleDialog(
-            initial = tailscale,
-            status = tailscaleStatus,
-            onDismiss = { tailscaleOpen = false },
-            onSave = {
-                onTailscale(it)
-                tailscaleOpen = false
+            onJoinTailnet = {
+                creating = false
+                editing = null
+                onTailscale()
             },
         )
     }
 }
 
-/** The built-in Tailscale node: off by default, and only hosts marked for it use the tunnel. */
+/**
+ * The tailnet row: joining is a thing you do on purpose, so the row says whether the phone is in a
+ * tailnet and under which name, and tapping it asks for that name once.
+ */
 @Composable
 private fun TailscaleRow(settings: TailscaleSettings, status: TailscaleStatus, onOpen: () -> Unit) {
     val state = tailnetState(status)
+    val joined = settings.enabled && (status.backendState == "Running")
     val detail = when {
-        !settings.enabled -> stringResource(R.string.tailscale_off)
-        state.isEmpty() -> stringResource(R.string.tailscale_on)
-        else -> state
+        !settings.enabled -> stringResource(R.string.tailscale_not_joined)
+        state.isNotEmpty() -> state
+        else -> stringResource(R.string.tailscale_state_starting)
     }
     val color = when {
         !settings.enabled -> Muted
-        state.isEmpty() || status.backendState == "Running" -> Accent
+        joined -> Accent
         else -> Amber
     }
     Row(
@@ -503,12 +569,17 @@ private fun TailscaleRow(settings: TailscaleSettings, status: TailscaleStatus, o
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier.size(10.dp).clip(CircleShape)
-                .background(if (settings.enabled) Accent else Muted),
-        )
+        Box(Modifier.size(10.dp).clip(CircleShape).background(if (joined) Accent else if (settings.enabled) Amber else Muted))
         Spacer(Modifier.width(12.dp))
-        Text(stringResource(R.string.tailscale_title), color = Ink, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.tailscale_title), color = Ink, fontSize = 15.sp)
+            Text(
+                settings.hostname.ifBlank { status.networkName }.ifBlank { stringResource(R.string.tailscale_no_name) },
+                color = Muted,
+                fontSize = 12.sp,
+                maxLines = 1,
+            )
+        }
         Text(detail, color = color, fontSize = 13.sp)
     }
 }
@@ -529,12 +600,12 @@ private fun tailnetState(status: TailscaleStatus): String = when (status.backend
 private fun TailscaleDialog(
     initial: TailscaleSettings,
     status: TailscaleStatus,
+    error: String?,
     onDismiss: () -> Unit,
-    onSave: (TailscaleSettings) -> Unit,
+    onJoin: (String) -> Unit,
+    onLeave: () -> Unit,
 ) {
     val context = LocalContext.current
-    var enabled by remember { mutableStateOf(initial.enabled) }
-    var key by remember { mutableStateOf(initial.authKey) }
     var hostname by remember { mutableStateOf(initial.hostname) }
     val state = tailnetState(status)
     AlertDialog(
@@ -546,25 +617,18 @@ private fun TailscaleDialog(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.tailscale_enable), color = Ink, modifier = Modifier.weight(1f))
-                    Switch(checked = enabled, onCheckedChange = { enabled = it })
-                }
-                Field(stringResource(R.string.tailscale_auth_key), key) { key = it }
                 Field(stringResource(R.string.tailscale_hostname), hostname) { hostname = it }
-                if (state.isNotEmpty()) {
-                    // The node's own message is the only place a rejected key or a pending
-                    // approval is spelled out, so show it next to the state.
+                if (initial.enabled) {
                     Text(
                         listOfNotNull(
-                            state,
+                            state.ifBlank { null },
                             status.networkName.ifBlank { null },
-                            status.text.ifBlank { null }?.takeIf { it != state },
-                        ).joinToString(" · "),
+                        ).joinToString(" · ").ifBlank { stringResource(R.string.tailscale_state_starting) },
                         color = if (status.backendState == "Running") Accent else Amber,
                         fontSize = 13.sp,
                     )
                 }
+                error?.let { Text(it, color = Danger, fontSize = 12.sp) }
                 if (status.authUrl.isNotBlank()) {
                     Text(
                         status.authUrl,
@@ -582,16 +646,29 @@ private fun TailscaleDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(TailscaleSettings(enabled, key, hostname)) }) {
-                Text(stringResource(R.string.action_save), color = Accent)
+            TextButton(onClick = { onJoin(hostname) }) {
+                Text(
+                    stringResource(if (initial.enabled) R.string.action_save else R.string.tailscale_join),
+                    color = Accent,
+                )
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Muted) }
+            Row {
+                if (initial.enabled) {
+                    TextButton(onClick = onLeave) { Text(stringResource(R.string.tailscale_leave), color = Danger) }
+                }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Muted) }
+            }
         },
     )
 }
 
+/**
+ * Adding a host is a name and an address. The port, the scheme and whether the address has to go
+ * through the built-in Tailscale node all follow from the address, and the line under the field
+ * says what the app made of it.
+ */
 @Composable
 private fun HostDialog(
     initial: SavedHost?,
@@ -599,12 +676,19 @@ private fun HostDialog(
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)?,
     onSave: (SavedHost) -> Unit,
+    onJoinTailnet: () -> Unit,
 ) {
+    val context = LocalContext.current
     var label by remember { mutableStateOf(initial?.label ?: "") }
-    var host by remember { mutableStateOf(initial?.host ?: "") }
-    var port by remember { mutableStateOf((initial?.port ?: 7297).toString()) }
-    var plain by remember { mutableStateOf(initial?.plaintext ?: true) }
-    var viaTailscale by remember { mutableStateOf(initial?.viaTailscale ?: false) }
+    var address by remember {
+        mutableStateOf(
+            initial?.let { host ->
+                val scheme = if (host.plaintext) "ws" else "wss"
+                "$scheme://${host.host}:${host.port}"
+            } ?: "",
+        )
+    }
+    val parsed = remember(address) { HostAddressParser.parse(address) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Card,
@@ -617,39 +701,41 @@ private fun HostDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Field(stringResource(R.string.field_name), label) { label = it }
-                Field(stringResource(R.string.field_address), host) {
-                    host = it
-                    // A MagicDNS name is a tailnet node; offer to reach it that way.
-                    if (initial == null && it.trim().endsWith(".ts.net", ignoreCase = true)) viaTailscale = true
+                Field(stringResource(R.string.field_address), address) { address = it }
+                if (parsed != null) {
+                    Text(
+                        listOfNotNull(
+                            "${parsed.host}:${parsed.port}",
+                            stringResource(if (parsed.plaintext) R.string.host_transport_plain else R.string.host_transport_tls),
+                            stringResource(R.string.tailscale_title).takeIf { parsed.viaTailscale },
+                        ).joinToString(" · "),
+                        color = Muted,
+                        fontSize = 12.sp,
+                    )
+                } else if (address.isNotBlank()) {
+                    Text(stringResource(R.string.host_address_invalid), color = Danger, fontSize = 12.sp)
                 }
-                Field(stringResource(R.string.field_port), port) { port = it.filter { ch -> ch.isDigit() }.take(5) }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.field_plaintext), color = Ink, modifier = Modifier.weight(1f))
-                    Switch(checked = plain, onCheckedChange = { plain = it })
+                val tailnetTarget = parsed
+                if (tailnetTarget != null && tailnetTarget.viaTailscale && !tailscaleEnabled) {
+                    Text(
+                        stringResource(R.string.tailscale_need_join_host),
+                        color = Amber,
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable {
+                            onSave(asSavedHost(initial, label, tailnetTarget, viaTailscale = true))
+                            onJoinTailnet()
+                        },
+                    )
                 }
-                if (tailscaleEnabled) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(R.string.field_via_tailscale), color = Ink, modifier = Modifier.weight(1f))
-                        Switch(checked = viaTailscale, onCheckedChange = { viaTailscale = it })
-                    }
+                if (parsed?.plaintext == true) {
+                    Text(stringResource(R.string.field_plaintext_warning), color = Amber, fontSize = 12.sp)
                 }
-                Text(stringResource(R.string.field_plaintext_warning), color = Amber, fontSize = 12.sp)
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                val p = port.toIntOrNull() ?: return@TextButton
-                if (host.isBlank() || p !in 1..65535) return@TextButton
-                onSave(
-                    SavedHost(
-                        id = initial?.id ?: HostStore.newId(),
-                        label = label.ifBlank { host.trim() },
-                        host = host.trim(),
-                        port = p,
-                        plaintext = plain,
-                        viaTailscale = viaTailscale,
-                    ),
-                )
+                val target = parsed ?: return@TextButton
+                onSave(asSavedHost(initial, label, target, viaTailscale = target.viaTailscale))
             }) { Text(stringResource(R.string.action_save), color = Accent) }
         },
         dismissButton = {
@@ -665,7 +751,6 @@ private fun HostDialog(
 private fun Field(hint: String, value: String, autoFocus: Boolean = false, onChange: (String) -> Unit) {
     // With autoFocus the field opens focused with its text selected, so a rename can be typed over.
     var field by remember { mutableStateOf(TextFieldValue(value, if (autoFocus) TextRange(0, value.length) else TextRange(value.length))) }
-    if (field.text != value) field = TextFieldValue(value, TextRange(value.length))
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     if (autoFocus) {
@@ -673,6 +758,10 @@ private fun Field(hint: String, value: String, autoFocus: Boolean = false, onCha
             focus.requestFocus()
             keyboard?.show()
         }
+    }
+    // Written outside composition: setting state while composing makes the field lose a tap's focus.
+    LaunchedEffect(value) {
+        if (field.text != value) field = TextFieldValue(value, TextRange(value.length))
     }
     Column {
         Text(hint, color = Muted, fontSize = 12.sp)
@@ -691,11 +780,27 @@ private fun Field(hint: String, value: String, autoFocus: Boolean = false, onCha
     }
 }
 
+private fun asSavedHost(
+    initial: SavedHost?,
+    label: String,
+    parsed: HostAddress,
+    viaTailscale: Boolean,
+) = SavedHost(
+    id = initial?.id ?: HostStore.newId(),
+    label = label.trim().ifBlank { parsed.host },
+    host = parsed.host,
+    port = parsed.port,
+    plaintext = parsed.plaintext,
+    viaTailscale = viaTailscale,
+)
+
 @Composable
 private fun PickerScreen(
     hostLabel: String,
     state: PocketState,
     tailscaleStatus: TailscaleStatus,
+    tailscaleEnabled: Boolean,
+    onTailscale: () -> Unit,
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
     onCreate: (String?) -> Unit,
@@ -714,16 +819,28 @@ private fun PickerScreen(
         state.error?.let {
             Text(it, color = Danger, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
         }
-        // A node that still needs a login is the usual reason this list stays empty, and the link
-        // that fixes it is only known to the node itself.
-        if (tailscaleStatus.authUrl.isNotBlank()) {
+        // The two reasons this list can stay empty, and for both of them the fix is one tap away.
+        if (!tailscaleEnabled) {
+            Text(
+                stringResource(R.string.tailscale_need_join),
+                color = Amber,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 8.dp).clickable(onClick = onTailscale),
+            )
+        } else if (tailscaleStatus.authUrl.isNotBlank()) {
             Text(
                 stringResource(R.string.tailscale_login_banner),
                 color = Amber,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(top = 8.dp).clickable {
-                    clipboardSet(context, tailscaleStatus.authUrl)
-                    toast(context, context.getString(R.string.tailscale_login_copied))
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse(tailscaleStatus.authUrl),
+                            ),
+                        )
+                    }
                 },
             )
         }
