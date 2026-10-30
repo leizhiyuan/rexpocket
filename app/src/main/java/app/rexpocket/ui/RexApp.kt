@@ -103,6 +103,7 @@ import app.rexpocket.core.BlockInfo
 import app.rexpocket.core.Endpoint
 import app.rexpocket.core.HostAddress
 import app.rexpocket.core.HostAddressParser
+import app.rexpocket.core.ListedSession
 import app.rexpocket.core.Phase
 import app.rexpocket.core.PocketSession
 import app.rexpocket.core.PocketState
@@ -242,6 +243,15 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         if (BuildConfig.DEBUG) {
             Log.i(CONN_TAG, "connect ${target.host}:${target.port} tailnet=$viaTailscale plaintext=${target.plaintext}")
         }
+        // Draw the list the host had last time straight away; the live one replaces it below.
+        val cached = store.cachedSessions(target.id)
+        if (cached.isNotEmpty() && !resume) {
+            _pocket.value = PocketState(
+                phase = Phase.Connecting,
+                endpointLabel = "${target.host}:${target.port}",
+                sessions = cached,
+            )
+        }
         connectJob = viewModelScope.launch {
             // A host on the phone's own network is dialed directly, and the tailnet node stays as it
             // is: the home screen says the phone is in a tailnet, so that must not depend on which
@@ -285,17 +295,36 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             sessionJob = s.start(viewModelScope, previousSession)
             var saved: Pair<String, String>? = null
             var resumed = false
+            val startedAt = SystemClock.elapsedRealtime()
             watch = viewModelScope.launch {
                 var lastPhase: Phase? = null
                 var lastError: String? = null
+                var timedLive = false
+                var timedSessions = false
+                var lastSessions: List<ListedSession> = emptyList()
                 s.state.collect { st ->
                     if (BuildConfig.DEBUG && (st.phase != lastPhase || st.error != lastError)) {
                         Log.i(CONN_TAG, "phase=${st.phase} error=${st.error ?: "-"}")
                         lastPhase = st.phase
                         lastError = st.error
                     }
+                    if (BuildConfig.DEBUG) {
+                        val elapsed = SystemClock.elapsedRealtime() - startedAt
+                        if (!timedLive && st.phase == Phase.Live) {
+                            timedLive = true
+                            Log.i(CONN_TAG, "first live after ${elapsed}ms")
+                        }
+                        if (!timedSessions && st.sessions.isNotEmpty()) {
+                            timedSessions = true
+                            Log.i(CONN_TAG, "${st.sessions.size} sessions after ${elapsed}ms")
+                        }
+                    }
                     _pocket.value = st
                     if (st.activeSessionId != null) store.setLastSession(target.id, st.activeSessionId)
+                    if (st.sessions.isNotEmpty() && st.sessions != lastSessions) {
+                        lastSessions = st.sessions
+                        store.setCachedSessions(target.id, st.sessions)
+                    }
                     // Only a pane that was on the terminal screen counts. Connecting already selects
                     // a session, and its Rex focus must not replace the pane remembered for it.
                     val sid = st.activeSessionId
@@ -398,11 +427,13 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         connectJob?.cancel()
         connectJob = null
         watch?.cancel()
-        session?.stop()
-        sessionJob?.cancel()
-        session = null
         watch = null
+        val closing = session
+        session = null
+        sessionJob?.cancel()
         _pocket.value = PocketState()
+        // The teardown waits for a disown round trip; leaving the screen must not wait with it.
+        if (closing != null) viewModelScope.launch(Dispatchers.IO) { runCatching { closing.stop() } }
     }
 }
 
@@ -905,8 +936,10 @@ private fun PickerScreen(
                 Text(phaseText(state), color = if (state.phase == Phase.Live) Accent else Amber, fontSize = 13.sp)
             }
         }
-        state.error?.let {
-            Text(it, color = Danger, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+        // A retry that fails and succeeds again within a second is noise; a real failure stays.
+        val shownError = rememberSettledError(state.phase, state.error)
+        shownError?.let {
+            Text(it, color = Danger, fontSize = TextStyles.label, modifier = Modifier.padding(top = Space.s))
         }
         // The two reasons this list can stay empty, and for both of them the fix is one tap away.
         if (!tailscaleEnabled) {
@@ -971,6 +1004,26 @@ private fun PickerScreen(
             fontWeight = FontWeight.SemiBold,
         )
     }
+}
+
+/**
+ * Errors that survive a moment. A tailnet dial can fail once while the node comes up and be fine
+ * 400 ms later; flashing that in red teaches the user to ignore the red.
+ */
+@Composable
+private fun rememberSettledError(phase: Phase, error: String?): String? {
+    var settled by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(error, phase) {
+        if (error == null) {
+            settled = null
+        } else if (phase == Phase.Failed) {
+            settled = error
+        } else {
+            delay(2_500)
+            settled = error
+        }
+    }
+    return settled
 }
 
 /** Something long-pressed or picked from the menu that needs a rename or a confirmation. */

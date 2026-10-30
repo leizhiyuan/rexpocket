@@ -1,6 +1,7 @@
 package app.rexpocket.data
 
 import android.content.Context
+import app.rexpocket.core.ListedSession
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -51,7 +52,29 @@ class HostStore(context: Context) {
 
     fun delete(id: String) {
         write(list().filter { it.id != id })
-        prefs.edit().remove(lastKey(id)).remove(panesKey(id)).apply()
+        prefs.edit().remove(lastKey(id)).remove(panesKey(id)).remove(sessionsKey(id)).apply()
+    }
+
+    /**
+     * The session list this host had last time, so the picker can draw it while the connection is
+     * still opening instead of showing an empty screen for a second.
+     */
+    fun cachedSessions(hostId: String): List<ListedSession> {
+        val raw = prefs.getString(sessionsKey(hostId), null) ?: return emptyList()
+        val arr = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+        return buildList {
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val id = o.optString("id").takeIf { it.isNotBlank() } ?: continue
+                add(ListedSession(id, o.optString("label")))
+            }
+        }
+    }
+
+    fun setCachedSessions(hostId: String, sessions: List<ListedSession>) {
+        val arr = JSONArray()
+        sessions.forEach { arr.put(JSONObject().put("id", it.id).put("label", it.label)) }
+        prefs.edit().putString(sessionsKey(hostId), arr.toString()).apply()
     }
 
     fun lastSession(hostId: String): String? = prefs.getString(lastKey(hostId), null)
@@ -135,5 +158,6 @@ class HostStore(context: Context) {
         fun newId(): String = UUID.randomUUID().toString()
         private fun lastKey(id: String) = "last:$id"
         private fun panesKey(id: String) = "panes:$id"
+        private fun sessionsKey(id: String) = "sessions:$id"
     }
 }
