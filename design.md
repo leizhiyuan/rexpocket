@@ -1,11 +1,11 @@
-<!-- Hallmark v2.0.0 · redesign of app.rexpocket · audit + rebuild of the three screens · 2026-10-30 -->
+<!-- Hallmark v2.0.0 · redesign of me.leaver.rexpocket · audit + rebuild of the three screens · 2026-10-30 -->
 <!-- Critique: the app was three screens of defaults: an eyebrow in tracked caps over a slogan, meta
      strings joined by middle dots, decorative dots before labels, and a dozen near-identical font
      sizes. It now has one paper, one signal, one scale, and labels that say what they are. -->
 
 # RexPocket design system
 
-Every colour, font size and corner radius on screen comes from `app/src/main/java/app/rexpocket/ui/Theme.kt`.
+Every colour, font size and corner radius on screen comes from `app/src/main/java/me/leaver/rexpocket/ui/Theme.kt`.
 A screen that needs a value the tokens do not have is a broken screen, not a special case.
 
 Two deliberate exceptions: the toolbar keys use a 14 sp mono face sized to fit a key, and

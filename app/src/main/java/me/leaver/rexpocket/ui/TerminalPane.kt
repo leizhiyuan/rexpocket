@@ -1,0 +1,176 @@
+package me.leaver.rexpocket.ui
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.platform.LocalContext
+import me.leaver.rexpocket.core.TerminalFeed
+import io.github.sagernet.libghostty.GhosttyTerminalSession
+import io.github.sagernet.libghostty.compose.GhosttyTerminal
+import io.github.sagernet.libghostty.compose.rememberGhosttyTerminalState
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+
+/**
+ * Terminal surface backed by libghostty-vt.
+ *
+ * Rex streams a pane: a `GHOSTSNP` snapshot of it first, then its output as it comes. The snapshot
+ * becomes the emulator itself, so the pane arrives complete - scrollback, colours, cursor and the
+ * escape sequence the program was in the middle of - and everything after it is fed in order.
+ */
+@Composable
+fun TerminalPane(
+    blockId: String,
+    feeds: (String) -> Flow<TerminalFeed>,
+    fontScale: Float,
+    onFont: (Float) -> Unit,
+    onInput: (ByteArray) -> Unit,
+    onResize: (columns: Int, rows: Int, cellWidthPx: Int, cellHeightPx: Int) -> Unit,
+    modifier: Modifier = Modifier,
+    onSession: (GhosttyTerminalSession?) -> Unit = {},
+    onError: (Exception) -> Unit = {},
+) {
+    val context = LocalContext.current
+    val termState = rememberGhosttyTerminalState()
+    // Replaced when Rex sends a new snapshot: a reconnect, or a pane whose stream started over.
+    var session by remember(blockId) { mutableStateOf<GhosttyTerminalSession?>(null) }
+    val currentInput = rememberUpdatedState(onInput)
+    val currentResize = rememberUpdatedState(onResize)
+    val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
+
+    LaunchedEffect(blockId) {
+        // The stream reports its own failures; anything that still escapes must not take the app down.
+        try {
+            feeds(blockId).collect { feed ->
+                when (feed) {
+                    is TerminalFeed.Snapshot -> {
+                        val restored = withContext(Dispatchers.Default) {
+                            GhosttyTerminalSession.restore(context, feed.bytes)
+                        } ?: return@collect
+                        bind(restored, input, currentResize)
+                        // The old emulator goes only after the new one is ready, so nothing flashes.
+                        val previous = session
+                        session = restored
+                        onSession(restored)
+                        withContext(Dispatchers.Default) { previous?.close() }
+                    }
+                    is TerminalFeed.Output -> {
+                        // One reader, in order: a second coroutine would interleave the bytes.
+                        withContext(Dispatchers.Default) { session?.feedOutput(feed.bytes) }
+                    }
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onError(e)
+        }
+    }
+
+    val theme = remember { terminalTheme() }
+    GhosttyTerminal(
+        session = session,
+        state = termState,
+        // A restored snapshot carries the desktop's default colours; the app's own are applied here,
+        // so a pane never flips from the app's paper to a white one after a reconnect.
+        theme = theme,
+        // The view fills its whole canvas and draws rows scrolled above its top; Compose hosts
+        // Android views without clipping, so unclipped it paints over the header and tab bar.
+        modifier = modifier.clipToBounds(),
+        fontSizeSp = 12f * fontScale,
+        // The composer owns the IME; the view must not grab it on attach.
+        focusOnAttach = false,
+        onFontSizeChanged = { onFont(it / 12f) },
+        configure = { view ->
+            // The app has its own composer and toolbar: the view renders and handles selection,
+            // while every keystroke goes through the composer so focus never moves away from it.
+            view.showImeOnTap = false
+            view.isFocusable = false
+            view.isFocusableInTouchMode = false
+            view.urlDetectionEnabled = false
+        },
+    )
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            input.flush()
+            onSession(null)
+            session?.let { s ->
+                s.transport = null
+                s.close()
+            }
+            session = null
+        }
+    }
+}
+
+/** Sends what the emulator produces, and reports its grid, through the screen's callbacks. */
+private fun bind(
+    session: GhosttyTerminalSession,
+    input: InputBatcher,
+    resize: androidx.compose.runtime.State<(Int, Int, Int, Int) -> Unit>,
+) {
+    session.transport = object : GhosttyTerminalSession.Transport {
+        override fun sendInput(data: ByteArray) {
+            // A swipe over a full-screen TUI turns into one mouse-wheel report per row, and each
+            // report used to be its own round trip. Batching keeps the gesture attached to the finger.
+            input.post(data)
+        }
+
+        override fun sendResize(columns: Int, rows: Int, widthPixels: Int, heightPixels: Int) {
+            resize.value(columns, rows, widthPixels, heightPixels)
+        }
+
+        override fun close() = Unit
+    }
+    session.systemClipboardWriteEnabled = false
+}
+
+/**
+ * Coalesces terminal input produced in quick succession (wheel reports from a swipe, fast
+ * typing) into one write, so a gesture does not turn into dozens of serialized round trips.
+ */
+private class InputBatcher(private val send: (ByteArray) -> Unit) {
+    private val handler = Handler(Looper.getMainLooper())
+    private val buffer = ByteArrayOutputStream()
+    private val flushTask = Runnable { flush() }
+
+    fun post(data: ByteArray) {
+        buffer.write(data, 0, data.size)
+        if (!pending) {
+            pending = true
+            handler.postDelayed(flushTask, WINDOW_MS)
+        }
+    }
+
+    fun flush() {
+        handler.removeCallbacks(flushTask)
+        pending = false
+        if (buffer.size() == 0) return
+        val bytes = buffer.toByteArray()
+        buffer.reset()
+        send(bytes)
+    }
+
+    private var pending = false
+
+    private companion object {
+        /**
+         * One display frame: enough to gather the reports a frame of finger movement produces.
+         * Writes are fire-and-forget, so a longer wait only delays the scrolled frame.
+         */
+        const val WINDOW_MS = 16L
+    }
+}

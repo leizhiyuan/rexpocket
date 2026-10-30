@@ -5,12 +5,12 @@ plugins {
 }
 
 android {
-    namespace = "app.rexpocket"
+    namespace = "me.leaver.rexpocket"
     compileSdk = 36
     buildToolsVersion = "36.1.0"
 
     defaultConfig {
-        applicationId = "app.rexpocket"
+        applicationId = "me.leaver.rexpocket"
         minSdk = 26
         targetSdk = 35
         versionCode = 7
