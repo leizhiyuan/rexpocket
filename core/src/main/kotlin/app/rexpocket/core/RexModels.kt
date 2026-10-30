@@ -174,13 +174,15 @@ fun parseView(obj: JSONObject): SessionView {
 
 fun parseSessions(array: JSONArray?): List<ListedSession> {
     if (array == null) return emptyList()
-    return buildList {
-        for (i in 0 until array.length()) {
-            val o = array.optJSONObject(i) ?: continue
-            val id = o.optNullableString("session_id") ?: continue
-            add(ListedSession(id, o.optNullableString("label") ?: shortId(id)))
-        }
+    val seen = LinkedHashMap<String, ListedSession>()
+    for (i in 0 until array.length()) {
+        val o = array.optJSONObject(i) ?: continue
+        val id = o.optNullableString("session_id") ?: continue
+        // Rex can list a session twice while one is being moved; the list is drawn with the id as
+        // its key, so a repeat is a crash rather than a repeated row.
+        seen[id] = ListedSession(id, o.optNullableString("label") ?: shortId(id))
     }
+    return seen.values.toList()
 }
 
 fun parseProgramRecords(obj: JSONObject): List<ProgramRecord> {

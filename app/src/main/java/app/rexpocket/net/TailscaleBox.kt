@@ -178,12 +178,17 @@ class TailscaleBox(private val context: Context) {
     @Synchronized
     fun stop() {
         if (server != null) Log.i(LOG_TAG, "stopping the node on port $port")
-        stopLocked()
+        runCatching { stopLocked() }.onFailure { Log.w(LOG_TAG, "stop failed: ${it.message}") }
     }
 
-    /** Tears the box down off the caller's thread; closing it talks to the node. */
+    /**
+     * Tears the box down off the caller's thread; closing it talks to the node. A failure here
+     * must not reach the default handler: that would kill the app over a stop it wanted anyway.
+     */
     fun stopAsync() {
-        Thread({ stop() }, "tailscale-stop").start()
+        Thread({
+            runCatching { stop() }.onFailure { Log.w(LOG_TAG, "stop failed: ${it.message}") }
+        }, "tailscale-stop").start()
     }
 
     private fun stopLocked() {

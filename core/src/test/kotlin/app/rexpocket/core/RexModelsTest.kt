@@ -96,6 +96,23 @@ class RexModelsTest {
         assertEquals(3, view.allBlocks().size)
     }
 
+
+    @Test
+    fun aSessionListedTwiceKeepsOneRow() {
+        // Rex can report the same session twice while it moves; the list is keyed by id, so a
+        // repeat used to crash the screen.
+        val json = org.json.JSONArray(
+            """[
+                {"session_id":"session:a","label":"one"},
+                {"session_id":"session:b","label":"beta"},
+                {"session_id":"session:a","label":"renamed"}
+            ]""",
+        )
+        val sessions = parseSessions(json)
+        assertEquals(listOf("session:a", "session:b"), sessions.map { it.id })
+        assertEquals("renamed", sessions.first().label)
+    }
+
     private fun view(active: String, vararg windows: WindowInfo) =
         SessionView(revision = 1, sessionId = "s", label = "s", activeWindowId = active, windows = windows.toList())
 

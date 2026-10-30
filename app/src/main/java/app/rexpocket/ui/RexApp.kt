@@ -243,7 +243,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         connectJob = viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 // Nothing of this connection goes through the node, so do not leave it running.
-                if (!viaTailscale) tailscaleBox.stop()
+                if (!viaTailscale) runCatching { tailscaleBox.stop() }
             }
             // The node has to be up before Rex is dialed, because the Rex connection itself is
             // what goes through it. Joining the tailnet takes a moment on the first connect.
