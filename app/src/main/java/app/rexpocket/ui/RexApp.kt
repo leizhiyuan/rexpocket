@@ -103,6 +103,7 @@ import app.rexpocket.core.BlockInfo
 import app.rexpocket.core.Endpoint
 import app.rexpocket.core.HostAddress
 import app.rexpocket.core.HostAddressParser
+import app.rexpocket.core.ListedSession
 import app.rexpocket.core.Phase
 import app.rexpocket.core.PocketSession
 import app.rexpocket.core.PocketState
@@ -129,14 +130,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val Bg = Color(0xFF10120F)
-private val Card = Color(0xFF1C1F1A)
-private val Ink = Color(0xFFE7E9E4)
-private val Muted = Color(0xFF8E9488)
-private val Accent = Color(0xFF00FF41)
-private val Amber = Color(0xFFF0C674)
-private val Danger = Color(0xFFFF5D5D)
-private val Line = Color(0xFF2C3129)
+// The palette lives in Theme.kt; these names keep the screens readable.
+private val Bg = Colors.bg
+private val Card = Colors.surface
+private val Ink = Colors.ink
+private val Muted = Colors.muted
+private val Accent = Colors.accent
+private val Amber = Colors.amber
+private val Danger = Colors.danger
+private val Line = Colors.line
+private val OnAccent = Colors.onAccent
 
 /** One pane of the session the user opened, offered before the terminal appears. */
 sealed interface Route {
@@ -240,6 +243,15 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         if (BuildConfig.DEBUG) {
             Log.i(CONN_TAG, "connect ${target.host}:${target.port} tailnet=$viaTailscale plaintext=${target.plaintext}")
         }
+        // Draw the list the host had last time straight away; the live one replaces it below.
+        val cached = store.cachedSessions(target.id)
+        if (cached.isNotEmpty() && !resume) {
+            _pocket.value = PocketState(
+                phase = Phase.Connecting,
+                endpointLabel = "${target.host}:${target.port}",
+                sessions = cached,
+            )
+        }
         connectJob = viewModelScope.launch {
             // A host on the phone's own network is dialed directly, and the tailnet node stays as it
             // is: the home screen says the phone is in a tailnet, so that must not depend on which
@@ -283,17 +295,36 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             sessionJob = s.start(viewModelScope, previousSession)
             var saved: Pair<String, String>? = null
             var resumed = false
+            val startedAt = SystemClock.elapsedRealtime()
             watch = viewModelScope.launch {
                 var lastPhase: Phase? = null
                 var lastError: String? = null
+                var timedLive = false
+                var timedSessions = false
+                var lastSessions: List<ListedSession> = emptyList()
                 s.state.collect { st ->
                     if (BuildConfig.DEBUG && (st.phase != lastPhase || st.error != lastError)) {
                         Log.i(CONN_TAG, "phase=${st.phase} error=${st.error ?: "-"}")
                         lastPhase = st.phase
                         lastError = st.error
                     }
+                    if (BuildConfig.DEBUG) {
+                        val elapsed = SystemClock.elapsedRealtime() - startedAt
+                        if (!timedLive && st.phase == Phase.Live) {
+                            timedLive = true
+                            Log.i(CONN_TAG, "first live after ${elapsed}ms")
+                        }
+                        if (!timedSessions && st.sessions.isNotEmpty()) {
+                            timedSessions = true
+                            Log.i(CONN_TAG, "${st.sessions.size} sessions after ${elapsed}ms")
+                        }
+                    }
                     _pocket.value = st
                     if (st.activeSessionId != null) store.setLastSession(target.id, st.activeSessionId)
+                    if (st.sessions.isNotEmpty() && st.sessions != lastSessions) {
+                        lastSessions = st.sessions
+                        store.setCachedSessions(target.id, st.sessions)
+                    }
                     // Only a pane that was on the terminal screen counts. Connecting already selects
                     // a session, and its Rex focus must not replace the pane remembered for it.
                     val sid = st.activeSessionId
@@ -396,11 +427,13 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         connectJob?.cancel()
         connectJob = null
         watch?.cancel()
-        session?.stop()
-        sessionJob?.cancel()
-        session = null
         watch = null
+        val closing = session
+        session = null
+        sessionJob?.cancel()
         _pocket.value = PocketState()
+        // The teardown waits for a disown round trip; leaving the screen must not wait with it.
+        if (closing != null) viewModelScope.launch(Dispatchers.IO) { runCatching { closing.stop() } }
     }
 }
 
@@ -485,22 +518,23 @@ private fun HomeScreen(
     var editing by remember { mutableStateOf<SavedHost?>(null) }
     var creating by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp)) {
-        Spacer(Modifier.height(28.dp))
-        Text("REXPOCKET", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp)
-        Spacer(Modifier.height(8.dp))
-        Text(stringResource(R.string.home_title), color = Ink, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Space.xxl))
+        Text(
+            stringResource(R.string.home_hosts),
+            color = Ink,
+            fontSize = TextStyles.display,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(Space.s))
         Text(
             stringResource(R.string.home_subtitle),
             color = Muted,
-            fontSize = 15.sp,
-            lineHeight = 21.sp,
+            fontSize = TextStyles.body,
+            lineHeight = bodyLeading,
         )
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(Space.xl))
         TailscaleRow(tailscale, tailscaleStatus, onOpen = onTailscale)
-        Spacer(Modifier.height(18.dp))
-        Text(stringResource(R.string.home_hosts), color = Muted, fontSize = 12.sp)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Space.l))
         if (hosts.isEmpty()) {
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp),
@@ -520,13 +554,13 @@ private fun HomeScreen(
                 items(hosts, key = { it.id }) { host ->
                     EntryCard(
                         title = host.label,
-                        detail = listOfNotNull(
-                            "${host.host}:${host.port}",
+                        detail = "${host.host}:${host.port}",
+                        tags = listOfNotNull(
                             stringResource(
                                 if (host.plaintext) R.string.host_transport_plain else R.string.host_transport_tls,
                             ),
                             stringResource(R.string.tailscale_title).takeIf { host.viaTailscale },
-                        ).joinToString(" · "),
+                        ),
                         trailing = stringResource(R.string.action_edit),
                         onOpen = { onOpen(host) },
                         onTrailing = { editing = host },
@@ -537,7 +571,7 @@ private fun HomeScreen(
         if (hosts.isEmpty()) Spacer(Modifier.weight(1f))
         Text(
             stringResource(R.string.action_add_host),
-            color = Bg,
+            color = OnAccent,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 18.dp)
                 .clip(RoundedCornerShape(14.dp)).background(Accent).clickable { creating = true }
@@ -580,31 +614,31 @@ private fun TailscaleRow(settings: TailscaleSettings, status: TailscaleStatus, o
         // Joined, but the node is not up right now: say so instead of pretending to start.
         else -> stringResource(R.string.tailscale_state_stopped)
     }
-    val color = when {
-        !settings.enabled -> Muted
-        joined -> Accent
-        else -> Amber
-    }
-    // A strip, not a card: this is the state of the phone's own node, not one of the hosts below.
+    // The phone's own node is not a destination, so it carries no card: it is a line of state that
+    // opens the node's settings, and it sits on the paper instead of above it.
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-            .border(1.dp, Line, RoundedCornerShape(10.dp))
-            .clickable(onClick = onOpen).padding(horizontal = 12.dp, vertical = 9.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.chip)).clickable(onClick = onOpen)
+            .padding(horizontal = Space.s, vertical = Space.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(7.dp).clip(CircleShape).background(if (joined) Accent else if (settings.enabled) Amber else Muted))
-        Spacer(Modifier.width(10.dp))
-        Text(stringResource(R.string.tailscale_title), color = Muted, fontSize = 12.sp, letterSpacing = 0.5.sp)
-        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.tailscale_title), color = Muted, fontSize = TextStyles.label)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                settings.hostname.ifBlank { status.networkName }.ifBlank { stringResource(R.string.tailscale_no_name) },
+                color = Ink,
+                fontSize = TextStyles.body,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         Text(
-            settings.hostname.ifBlank { status.networkName }.ifBlank { stringResource(R.string.tailscale_no_name) },
-            color = if (joined) Ink else Muted,
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            detail,
+            color = if (joined) Accent else if (settings.enabled) Amber else Muted,
+            fontSize = TextStyles.label,
         )
-        Text(detail, color = color, fontSize = 12.sp)
+        Spacer(Modifier.width(Space.xs))
+        Text("›", color = Muted, fontSize = TextStyles.body)
     }
 }
 
@@ -616,30 +650,58 @@ private fun TailscaleRow(settings: TailscaleSettings, status: TailscaleStatus, o
 private fun EntryCard(
     title: String,
     detail: String,
+    tags: List<String>,
     trailing: String,
     onOpen: () -> Unit,
     onTrailing: (() -> Unit)? = null,
 ) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Card).clickable(onClick = onOpen)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Card).clickable(onClick = onOpen)
+            .padding(horizontal = Space.l, vertical = Space.m + 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.height(2.dp))
-            // A tailnet address is long; two lines keep it readable instead of cut in the middle.
-            Text(detail, color = Muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(title, color = Ink, fontSize = TextStyles.body, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (detail.isNotBlank()) {
+                Spacer(Modifier.height(Space.xs))
+                // An address is a figure, so it is set in the mono face; everything else stays body.
+                Text(
+                    detail,
+                    color = Muted,
+                    fontSize = TextStyles.label,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (tags.isNotEmpty()) {
+                Spacer(Modifier.height(Space.s))
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                    tags.forEach { Tag(it) }
+                }
+            }
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(Space.m))
         Text(
             trailing,
             color = Accent,
-            fontSize = 13.sp,
+            fontSize = TextStyles.label,
             modifier = (if (onTrailing != null) Modifier.clickable(onClick = onTrailing) else Modifier)
-                .padding(horizontal = 6.dp, vertical = 6.dp),
+                .padding(horizontal = Space.s - 2.dp, vertical = Space.s - 2.dp),
         )
     }
+}
+
+/** A one-word fact about a row: plaintext, TLS, Tailscale. A hairline, not a coloured pill. */
+@Composable
+private fun Tag(text: String) {
+    Text(
+        text,
+        color = Muted,
+        fontSize = TextStyles.label,
+        modifier = Modifier.clip(RoundedCornerShape(Space.xs)).border(1.dp, Line, RoundedCornerShape(Space.xs))
+            .padding(horizontal = Space.s - 2.dp, vertical = 2.dp),
+    )
 }
 
 /** Tailscale's backend state in the app's own words; empty while nothing is running. */
@@ -874,8 +936,10 @@ private fun PickerScreen(
                 Text(phaseText(state), color = if (state.phase == Phase.Live) Accent else Amber, fontSize = 13.sp)
             }
         }
-        state.error?.let {
-            Text(it, color = Danger, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+        // A retry that fails and succeeds again within a second is noise; a real failure stays.
+        val shownError = rememberSettledError(state.phase, state.error)
+        shownError?.let {
+            Text(it, color = Danger, fontSize = TextStyles.label, modifier = Modifier.padding(top = Space.s))
         }
         // The two reasons this list can stay empty, and for both of them the fix is one tap away.
         if (!tailscaleEnabled) {
@@ -919,11 +983,9 @@ private fun PickerScreen(
                     val windows = state.views[session.id]?.windows?.size
                     EntryCard(
                         title = session.label,
-                        detail = if (windows == null) {
-                            stringResource(R.string.session_tap_to_enter)
-                        } else {
-                            stringResource(R.string.session_window_count, windows)
-                        },
+                        // No filler under the name: the count when it is known, nothing when it is not.
+                        detail = windows?.let { stringResource(R.string.session_window_count, it) }.orEmpty(),
+                        tags = emptyList(),
                         trailing = stringResource(R.string.session_enter),
                         onOpen = { onOpen(session.id) },
                     )
@@ -933,7 +995,7 @@ private fun PickerScreen(
         Spacer(Modifier.weight(1f))
         Text(
             stringResource(R.string.session_new),
-            color = Bg,
+            color = OnAccent,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 18.dp)
                 .clip(RoundedCornerShape(14.dp)).background(Accent)
@@ -942,6 +1004,26 @@ private fun PickerScreen(
             fontWeight = FontWeight.SemiBold,
         )
     }
+}
+
+/**
+ * Errors that survive a moment. A tailnet dial can fail once while the node comes up and be fine
+ * 400 ms later; flashing that in red teaches the user to ignore the red.
+ */
+@Composable
+private fun rememberSettledError(phase: Phase, error: String?): String? {
+    var settled by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(error, phase) {
+        if (error == null) {
+            settled = null
+        } else if (phase == Phase.Failed) {
+            settled = error
+        } else {
+            delay(2_500)
+            settled = error
+        }
+    }
+    return settled
 }
 
 /** Something long-pressed or picked from the menu that needs a rename or a confirmation. */
@@ -993,8 +1075,12 @@ private fun TermScreen(
         ) {
             HeaderButton("‹") { onBack() }
             Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
-                Text(view?.label ?: phaseText(state), color = Ink, fontSize = 16.sp, maxLines = 1)
-                Text(subtitle(state, status), color = Muted, fontSize = 11.sp, maxLines = 1)
+                Text(view?.label ?: phaseText(state), color = Ink, fontSize = TextStyles.body, maxLines = 1)
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                    subtitleParts(state, status).forEach { part ->
+                        Text(part, color = Muted, fontSize = TextStyles.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
             }
             if (status?.state == "working" || status?.state == "blocked") {
                 HeaderButton(stringResource(R.string.header_stop), Amber) { onAct { sendKey("key_c", mods = "ctrl", codepoint = 99) } }
@@ -1005,7 +1091,6 @@ private fun TermScreen(
         if (view != null) {
             TabBar(
                 view = view,
-                status = state.blockStatus,
                 onSelect = { w -> if (w.id != view.activeWindowId) onAct { focusWindow(w.id) } },
                 onLongPress = { w -> sheet = Sheet.TabActions(w.id) },
                 onNew = { onAct { newWindow() } },
@@ -1242,16 +1327,16 @@ private fun TermScreen(
 @Composable
 private fun TabBar(
     view: SessionView,
-    status: Map<String, ProgramRecord>,
     onSelect: (WindowInfo) -> Unit,
     onLongPress: (WindowInfo) -> Unit,
     onNew: () -> Unit,
 ) {
     val list = rememberLazyListState()
+    val motion = !rememberReducedMotion()
     val activeIndex = view.windows.indexOfFirst { it.id == view.activeWindow()?.id }
     // Keep the tab in use in the middle of the row: a row of chips that always starts at the left
     // edge makes a session with ten tabs impossible to read.
-    LaunchedEffect(activeIndex, view.windows.size) { list.centerOn(activeIndex) }
+    LaunchedEffect(activeIndex, view.windows.size) { list.centerOn(activeIndex, animate = motion) }
     Row(
         Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1266,7 +1351,8 @@ private fun TabBar(
                         .padding(horizontal = 12.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    StatusDot(window.status(status), on)
+                    // The header subtitle already says what the program is doing; a dot here would
+                    // only repeat it, in a shape nobody can read.
                     Text(
                         tabTitle(view, window),
                         color = if (on) Bg else Ink,
@@ -1281,7 +1367,7 @@ private fun TabBar(
                         Text(
                             "${window.blocks.size}",
                             color = if (on) Accent else Muted,
-                            fontSize = 11.sp,
+                            fontSize = TextStyles.label,
                             modifier = Modifier.clip(RoundedCornerShape(99.dp)).background(if (on) Bg else Line)
                                 .padding(horizontal = 6.dp),
                         )
@@ -1314,9 +1400,10 @@ private fun PaneStrip(
     onNew: () -> Unit,
 ) {
     val list = rememberLazyListState()
+    val motion = !rememberReducedMotion()
     val current = tab.focusedBlock()?.id
     val index = tab.focusedIndex()
-    LaunchedEffect(tab.id, index, tab.blocks.size) { list.centerOn(index) }
+    LaunchedEffect(tab.id, index, tab.blocks.size) { list.centerOn(index, animate = motion) }
     Row(
         Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1332,7 +1419,6 @@ private fun PaneStrip(
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    StatusDot(record, false)
                     Text(
                         "${tab.blocks.indexOf(block) + 1}",
                         color = if (on) Accent else Muted,
@@ -1382,35 +1468,25 @@ private fun ScrollRow(state: LazyListState, modifier: Modifier = Modifier, conte
         if (moreBefore) {
             Box(
                 Modifier.align(Alignment.CenterStart).width(18.dp).fillMaxHeight()
-                    .background(Brush.horizontalGradient(listOf(Bg, Color.Transparent))),
+                    .background(Brush.horizontalGradient(listOf(Bg, Colors.clear))),
             )
         }
         if (moreAfter) {
             Box(
                 Modifier.align(Alignment.CenterEnd).width(18.dp).fillMaxHeight()
-                    .background(Brush.horizontalGradient(listOf(Color.Transparent, Bg))),
+                    .background(Brush.horizontalGradient(listOf(Colors.clear, Bg))),
             )
         }
     }
 }
 
 /** Scrolls [index] to the middle of the row when it is already on screen, else to the left edge. */
-private suspend fun LazyListState.centerOn(index: Int) {
+private suspend fun LazyListState.centerOn(index: Int, animate: Boolean) {
     if (index < 0) return
     val info = layoutInfo
     val item = info.visibleItemsInfo.firstOrNull { it.index == index }
     val offset = if (item != null) item.offset - (info.viewportSize.width - item.size) / 2 else 0
-    animateScrollToItem(index, offset)
-}
-
-/** A dot only for states worth a glance; idle panes stay quiet. */
-@Composable
-private fun StatusDot(status: ProgramRecord?, onAccent: Boolean) {
-    if (status == null || status.state == "idle") return
-    Box(
-        Modifier.padding(end = 6.dp).size(7.dp).clip(CircleShape)
-            .background(if (onAccent) Bg else statusColor(status)),
-    )
+    if (animate) animateScrollToItem(index, offset) else scrollToItem(index, offset)
 }
 
 /**
@@ -1469,7 +1545,7 @@ private fun ActionSheet(onDismiss: () -> Unit, title: String? = null, content: @
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
         containerColor = Bg,
         contentColor = Ink,
-        scrimColor = Color.Black.copy(alpha = 0.6f),
+        scrimColor = Colors.scrim,
         dragHandle = {
             Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 36.dp, height = 4.dp).clip(CircleShape).background(Line))
         },
@@ -1720,13 +1796,13 @@ private fun HeaderButton(label: String, color: Color = Accent, onClick: () -> Un
 }
 
 @Composable
-private fun subtitle(state: PocketState, status: ProgramRecord?): String {
+private fun subtitleParts(state: PocketState, status: ProgramRecord?): List<String> {
     // The tab bar and pane strip already name the tab and pane; the subtitle says what runs there.
-    val bits = listOfNotNull(
+    val parts = listOfNotNull(
         status?.let { statusLabel(it) },
         state.pwd?.let { path -> path.substringAfterLast('/').ifBlank { path } },
     )
-    return bits.joinToString(" · ").ifBlank { phaseText(state) }
+    return parts.ifEmpty { listOf(phaseText(state)) }
 }
 
 @Composable
@@ -1760,7 +1836,7 @@ private fun statusLabel(status: ProgramRecord): String {
 private fun statusColor(status: ProgramRecord?): Color = when (status?.state) {
     "working" -> Accent
     "blocked" -> Amber
-    "done" -> Color(0xFF7DDE92)
+    "done" -> Colors.done
     "error" -> Danger
     else -> Muted
 }

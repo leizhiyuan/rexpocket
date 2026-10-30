@@ -111,17 +111,17 @@ class PocketSession(
         _state.update { it.copy(error = message) }
     }
 
-    fun stop() {
+    /**
+     * Tears the session down: cancel, then wait for the connection's NonCancellable finally to
+     * disown its pane before the socket closes. Suspending, because that wait is a network round
+     * trip and callers used to pay for it on the main thread.
+     */
+    suspend fun stop() {
         val job = runner
         runner = null
         job?.cancel()
-        // Join so the connection's NonCancellable finally can disown before the socket closes.
-        // Clearing clientRef first would skip that disown.
-        if (job != null) {
-            runBlocking {
-                withTimeoutOrNull(4_000) { job.join() }
-            }
-        }
+        // Clearing clientRef first would skip the disown, so the join comes first.
+        if (job != null) withTimeoutOrNull(4_000) { job.join() }
         clientRef.getAndSet(null)?.close()
         _state.update { it.copy(phase = Phase.Idle, resumed = false) }
     }
