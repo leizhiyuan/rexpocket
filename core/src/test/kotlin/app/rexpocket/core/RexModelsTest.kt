@@ -79,15 +79,10 @@ class RexModelsTest {
     }
 
     @Test
-    fun tabStatusIsTheMostUrgentOfItsPanes() {
-        val w = window("w1", focused = "a", "a", "b", "c")
-        val status = mapOf(
-            "a" to record("working"),
-            "b" to record("blocked"),
-            "x" to record("error"),
-        )
-        assertEquals("blocked", w.status(status)?.state)
-        assertNull(window("w2", focused = "z", "z").status(status))
+    fun aPaneStatusIsItsMostUrgentRecord() {
+        val records = listOf(record("working"), record("blocked"), record("done"))
+        assertEquals("blocked", summarizeStatus(records)?.state)
+        assertNull(summarizeStatus(emptyList()))
     }
 
     @Test

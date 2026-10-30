@@ -62,10 +62,6 @@ data class WindowInfo(
     fun focusedBlock(): BlockInfo? = blocks.firstOrNull { it.id == focusedBlockId } ?: blocks.firstOrNull()
 
     fun focusedIndex(): Int = focusedBlock()?.let { blocks.indexOf(it) } ?: -1
-
-    /** The most urgent program state among this tab's panes, for the tab's status dot. */
-    fun status(byBlock: Map<String, ProgramRecord>): ProgramRecord? =
-        summarizeStatus(blocks.mapNotNull { byBlock[it.id] })
 }
 
 data class SessionView(

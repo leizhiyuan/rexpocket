@@ -4,7 +4,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicLong
  */
 class RexClient(
     private val http: OkHttpClient = defaultHttp(),
+    private val connectTimeoutMs: Long = 12_000,
 ) {
     private val ids = AtomicLong(0)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JSONObject>>()
@@ -50,7 +51,10 @@ class RexClient(
             .header("Sec-WebSocket-Protocol", "rex.control.v1")
             .build()
         socket = http.newWebSocket(request, listener(reconnectToken))
-        return withTimeout(12_000) { opened.await() }
+        // withTimeout throws a CancellationException, which callers rightly pass through; a host
+        // that never says hello is a failure to retry, not a cancellation.
+        return withTimeoutOrNull(connectTimeoutMs) { opened.await() }
+            ?: throw RexTimeoutException("No answer from Rex within ${connectTimeoutMs / 1000}s")
     }
 
     suspend fun call(method: String, payload: JSONObject? = null, timeoutMs: Long = 20_000): JSONObject {
@@ -65,7 +69,8 @@ class RexClient(
             throw IllegalStateException("Control connection closed")
         }
         try {
-            val response = withTimeout(timeoutMs) { waiter.await() }
+            val response = withTimeoutOrNull(timeoutMs) { waiter.await() }
+                ?: throw RexTimeoutException("$method got no answer within ${timeoutMs / 1000}s")
             if (response.has("error") && !response.isNull("error")) {
                 val err = response.getJSONObject("error")
                 throw RexCallException(
@@ -96,7 +101,7 @@ class RexClient(
     fun close() {
         if (!closed.compareAndSet(false, true)) return
         socket?.close(1000, "bye")
-        failPending(IllegalStateException("Connection closed"))
+        failPending(ConnectionDroppedException("Connection closed", null))
         if (!opened.isCompleted) opened.completeExceptionally(IllegalStateException("Connection closed"))
         finish(null)
     }
@@ -154,19 +159,23 @@ class RexClient(
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            val err = IllegalStateException(reason.ifBlank { "Connection closed ($code)" })
+            val err = closedError(reason.ifBlank { "Connection closed ($code)" }, null)
             failPending(err)
             if (!opened.isCompleted) opened.completeExceptionally(err)
             finish(err)
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            val err = IllegalStateException(response?.message?.takeIf { it.isNotBlank() } ?: t.message ?: "Connection failed", t)
+            val err = closedError(response?.message?.takeIf { it.isNotBlank() } ?: t.message ?: "Connection failed", t)
             failPending(err)
             if (!opened.isCompleted) opened.completeExceptionally(err)
             finish(err)
         }
     }
+
+    /** A connection that was up dropped; one that never opened failed for [cause]'s reason. */
+    private fun closedError(message: String, cause: Throwable?): Exception =
+        if (opened.isCompleted) ConnectionDroppedException(message, cause) else IllegalStateException(message, cause)
 
     private fun finish(err: Throwable?) {
         if (!finished.isCompleted) finished.complete(err)

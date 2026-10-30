@@ -45,9 +45,6 @@ object Colors {
     /** Something failed, or an action that removes. */
     val danger = Color(0xFFFF5D5D)
 
-    /** Finished. Deliberately calmer than [accent], so "done" never reads as "go". */
-    val done = Color(0xFF7DDE92)
-
     /** Behind a sheet. */
     val scrim = Color(0x99000000)
 
@@ -84,6 +81,9 @@ object TextStyles {
 
 /** Line height for body copy at [TextStyles.body]; Chinese needs a little more than Latin. */
 val bodyLeading: TextUnit = 21.sp
+
+/** Line height for multi-line labels at [TextStyles.label], such as a dialog's hint. */
+val labelLeading: TextUnit = 17.sp
 
 /**
  * Android has no media query for this: the animation scales are the platform's reduced-motion

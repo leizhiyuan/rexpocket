@@ -5,8 +5,11 @@
 
 # RexPocket design system
 
-Every colour, size and radius on screen comes from `app/src/main/java/app/rexpocket/ui/Theme.kt`.
+Every colour, font size and corner radius on screen comes from `app/src/main/java/app/rexpocket/ui/Theme.kt`.
 A screen that needs a value the tokens do not have is a broken screen, not a special case.
+
+Two deliberate exceptions: the toolbar keys use a 14 sp mono face sized to fit a key, and
+spacing inside a component (a chip's padding, a gap of 2 dp) is still written where it is used.
 
 ## Material
 
@@ -24,11 +27,11 @@ glow. Surfaces are told apart by lightness, and a hairline is decoration, never 
 | `onAccent` | `#10120F` | text on `accent` | 13.8 |
 | `amber` | `#F0C674` | waiting on a person | 11.7 / 10.3 |
 | `danger` | `#FF5D5D` | failure, removal | 6.3 / 5.5 |
-| `done` | `#7DDE92` | finished, deliberately quieter than live | 11.4 / 10.1 |
 
 ## Type
 
-Four sizes, four jobs, nothing else: display 26, title 20, body 15 (leading 21), label 12.
+Four sizes, four jobs, nothing else: display 26, title 20, body 15 (leading 21), label 12
+(leading 17 when it wraps).
 Mono is used for figures and addresses only — never for a label, a control or a heading.
 
 ## Rules the screens follow

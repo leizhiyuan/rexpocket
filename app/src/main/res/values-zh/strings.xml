@@ -2,8 +2,6 @@
 <resources>
     <string name="app_name">RexPocket</string>
 
-    <string name="home_tagline">REXPOCKET</string>
-    <string name="home_title">你的 Rex，在口袋里</string>
     <string name="home_subtitle">连到你自己电脑上的 Rex：局域网直连，或走应用内置的 Tailscale，不占手机 VPN。</string>
     <string name="home_no_hosts">还没有主机</string>
     <string name="home_no_hosts_body">在电脑上只对信任的网络开放：\nrex server start --extra-listen :7297 --allow-anonymous\n然后把 IP 加到这里。明文连接拥有这台 Rex 的全部权限。</string>
@@ -43,6 +41,8 @@
     <string name="home_hosts">主机</string>
     <string name="session_new">新会话</string>
     <string name="session_enter">进入</string>
+    <string name="session_opening">正在打开…</string>
+    <string name="session_creating">正在创建…</string>
     <string name="session_window_count">%1$d 个标签页</string>
     <string name="session_none_live">这台 Rex 上还没有会话。</string>
     <string name="session_loading">正在读取会话…</string>
@@ -113,5 +113,17 @@
     <string name="toast_clipboard_empty">剪贴板是空的</string>
     <string name="toast_select_text">长按屏幕选中文字</string>
     <string name="toast_copied">已复制</string>
+    <string name="problem_unreachable">连不上 %1$s。确认 Rex 在运行，手机和它在同一网络。</string>
+    <string name="problem_timed_out">%1$s 接受了连接，但没有响应。</string>
+    <string name="problem_dropped">连接断开了，正在重连…</string>
+    <string name="problem_not_ready">还没连上，稍后再试。</string>
+    <string name="problem_tailnet">Tailscale 启动失败：%1$s</string>
+    <string name="problem_rejected">Rex 拒绝了：%1$s</string>
+    <string name="action_retry_now">立即重试</string>
+    <string name="action_dismiss">关闭</string>
+    <string name="confirm_delete_host">删除 %1$s？</string>
+    <string name="confirm_delete_host_body">只删掉保存的地址，那台 Rex 上的会话不受影响。</string>
+    <string name="action_back">返回</string>
+    <string name="action_more">更多操作</string>
     <string name="error_operation_failed">操作失败</string>
 </resources>

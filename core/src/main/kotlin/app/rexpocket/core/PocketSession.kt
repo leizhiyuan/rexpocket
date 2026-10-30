@@ -10,6 +10,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -32,7 +33,10 @@ data class PocketState(
     val endpointLabel: String = "",
     /** True when the server accepted our reconnect token and kept the session. */
     val resumed: Boolean = false,
-    val error: String? = null,
+    /** Why the connection is not live right now; kept while the next attempt runs, cleared once live. */
+    val problem: Problem? = null,
+    /** The last action that failed while the connection was fine; the UI shows it for a moment. */
+    val notice: Notice? = null,
     val clientId: String? = null,
     val sessions: List<ListedSession> = emptyList(),
     val activeSessionId: String? = null,
@@ -54,9 +58,11 @@ data class PocketState(
  */
 class PocketSession(
     private val endpoint: Endpoint,
+    /** The list this host had last time, shown until the live one arrives with the bootstrap. */
+    cachedSessions: List<ListedSession> = emptyList(),
     private val clientFactory: () -> RexClient = { RexClient() },
 ) {
-    private val _state = MutableStateFlow(PocketState())
+    private val _state = MutableStateFlow(PocketState(sessions = cachedSessions))
     val state: StateFlow<PocketState> = _state
 
     private val callMutex = Mutex()
@@ -76,26 +82,49 @@ class PocketSession(
     private val ready = CompletableDeferred<Unit>()
     private var runner: Job? = null
 
+    /**
+     * Every keystroke, paste and typed text, in the order it was typed. Rex runs `client.key` and
+     * `block.event` in order but `terminal.write` whenever it arrives, so two writes sent without
+     * waiting can swap places. One sender drains this queue and waits for each reply, which keeps
+     * the order, and it does not take [callMutex], so input never waits behind the screen poll.
+     */
+    private val input = Channel<InputCall>(Channel.UNLIMITED)
+
+    private class InputCall(val method: String, val payload: JSONObject) {
+        val done = CompletableDeferred<Unit>()
+    }
+
+    /** Wakes the wait between connection attempts. */
+    private val retry = Channel<Unit>(Channel.CONFLATED)
+    private val noticeIds = java.util.concurrent.atomic.AtomicLong()
+
+    /** The message of the last screen read that failed, so a failure repeating every poll shows once. */
+    private var screenFailure: String? = null
+
+    /** False while nobody can see the screen; the polls wait instead of reading it. */
+    private val active = MutableStateFlow(true)
+
     fun start(scope: CoroutineScope, preferredSessionId: String? = null): Job {
         preferred = preferredSessionId
         val job = scope.launch {
-            var backoff = 400L
+            var backoff = MIN_BACKOFF_MS
             while (isActive) {
                 try {
                     runConnection()
-                    backoff = 400L
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     if (!isActive) break
+                    // A connection that was up starts over from the shortest wait.
+                    if (_state.value.phase == Phase.Live) backoff = MIN_BACKOFF_MS
                     _state.update {
                         it.copy(
                             phase = if (it.phase == Phase.Live) Phase.Reconnecting else Phase.Connecting,
-                            error = e.message,
+                            problem = e.toProblem(),
                         )
                     }
-                    delay(backoff)
-                    backoff = (backoff * 2).coerceAtMost(8_000)
+                    val woken = withTimeoutOrNull(backoff) { retry.receive() } != null
+                    backoff = if (woken) MIN_BACKOFF_MS else (backoff * 2).coerceAtMost(MAX_BACKOFF_MS)
                 }
             }
         }
@@ -107,8 +136,36 @@ class PocketSession(
         ready.await()
     }
 
-    fun note(message: String?) {
-        _state.update { it.copy(error = message) }
+    /**
+     * Pauses the screen and status polls while the app is in the background, and reads the screen
+     * at once when it comes back. The connection stays open, so coming back needs no reconnect.
+     */
+    fun setActive(visible: Boolean) {
+        active.value = visible
+        if (visible) expectRedraw()
+    }
+
+    /** Skips the rest of the wait before the next connection attempt. Nothing to skip while live. */
+    fun retryNow() {
+        if (_state.value.phase != Phase.Live) retry.trySend(Unit)
+    }
+
+    /**
+     * Drops the connection and makes a new one at once: the network it ran on went away, and a
+     * socket on a vanished network can take a minute of pings to notice. Rex resumes it.
+     */
+    fun reconnectNow() {
+        clientRef.get()?.close()
+        retry.trySend(Unit)
+    }
+
+    fun note(problem: Problem) {
+        val notice = Notice(noticeIds.incrementAndGet(), problem)
+        _state.update { it.copy(notice = notice) }
+    }
+
+    fun dismissNotice(id: Long) {
+        _state.update { if (it.notice?.id == id) it.copy(notice = null) else it }
     }
 
     /**
@@ -187,7 +244,7 @@ class PocketSession(
         val payload = rpc("session.create", body)
         val id = payload.getString("session_id")
         val createdLabel = label?.trim().takeUnless { it.isNullOrEmpty() } ?: id
-        _state.update { it.copy(sessions = it.sessions + ListedSession(id, createdLabel)) }
+        _state.update { it.copy(sessions = mergeSession(it.sessions, ListedSession(id, createdLabel))) }
         openSession(id)
     }
 
@@ -305,32 +362,19 @@ class PocketSession(
         )
     }
 
+    /** Types [text] into the shown pane, after everything typed before it. */
     suspend fun sendText(text: String) {
         if (text.isEmpty()) return
-        val (sid, block) = requireBlock()
-        rpc(
-            "com.superlogical.terminal.write",
-            JSONObject().put("session_id", sid).put("block_id", block).put("args", JSONObject().put("data", text)),
-        )
-        expectRedraw()
+        input(write(text)).await()
     }
 
     /**
-     * Keystrokes and mouse reports from the terminal view arrive as UTF-8 bytes. They are sent
-     * without waiting for a reply so a swipe is not throttled by round trips.
+     * Keystrokes and mouse reports from the terminal view arrive as UTF-8 bytes. They join the
+     * input queue without waiting, so a swipe is never throttled by the caller.
      */
-    suspend fun writeBytes(data: ByteArray) {
+    fun writeBytes(data: ByteArray) {
         if (data.isEmpty()) return
-        val client = clientRef.get() ?: throw IllegalStateException("Not connected yet")
-        val (sid, block) = requireBlock()
-        client.send(
-            "com.superlogical.terminal.write",
-            JSONObject()
-                .put("session_id", sid)
-                .put("block_id", block)
-                .put("args", JSONObject().put("data", String(data, Charsets.UTF_8))),
-        )
-        expectRedraw()
+        input(write(String(data, Charsets.UTF_8)))
     }
 
     /**
@@ -349,41 +393,70 @@ class PocketSession(
     suspend fun paste(text: String) {
         if (text.isEmpty()) return
         val (sid, block) = requireBlock()
-        rpc(
-            "block.event",
-            JSONObject()
-                .put("session_id", sid)
-                .put("block_id", block)
-                .put(
-                    "event",
-                    JSONObject()
-                        .put("type", "paste")
-                        .put("payload", JSONObject().put("text", text)),
-                ),
-        )
-        expectRedraw()
+        input(
+            InputCall(
+                "block.event",
+                JSONObject()
+                    .put("session_id", sid)
+                    .put("block_id", block)
+                    .put("event", JSONObject().put("type", "paste").put("payload", JSONObject().put("text", text))),
+            ),
+        ).await()
     }
 
     suspend fun sendKey(code: String, mods: String = "", text: String = "", codepoint: Int = text.firstCodePoint()) {
         val (sid, block) = requireBlock()
-        rpc(
-            "client.key",
-            JSONObject()
-                .put("session_id", sid)
-                .put("block_id", block)
-                .put(
-                    "key",
-                    JSONObject()
-                        .put("key", code)
-                        .put("mods", mods)
-                        .put("consumed_mods", "")
-                        .put("text", text)
-                        .put("unshifted_codepoint", codepoint)
-                        .put("composing", false)
-                        .put("action", "press"),
-                ),
+        input(
+            InputCall(
+                "client.key",
+                JSONObject()
+                    .put("session_id", sid)
+                    .put("block_id", block)
+                    .put(
+                        "key",
+                        JSONObject()
+                            .put("key", code)
+                            .put("mods", mods)
+                            .put("consumed_mods", "")
+                            .put("text", text)
+                            .put("unshifted_codepoint", codepoint)
+                            .put("composing", false)
+                            .put("action", "press"),
+                    ),
+            ),
+        ).await()
+    }
+
+    private fun write(text: String): InputCall {
+        val (sid, block) = requireBlock()
+        return InputCall(
+            "com.superlogical.terminal.write",
+            JSONObject().put("session_id", sid).put("block_id", block).put("args", JSONObject().put("data", text)),
         )
+    }
+
+    /** Queues [call] behind everything typed before it; the result completes once Rex has it. */
+    private fun input(call: InputCall): CompletableDeferred<Unit> {
+        if (clientRef.get() == null) throw NotReadyException("Not connected yet")
+        input.trySend(call)
         expectRedraw()
+        return call.done
+    }
+
+    /** Sends queued input one call at a time, each after the reply to the one before. */
+    private suspend fun inputLoop(client: RexClient) {
+        for (call in input) {
+            try {
+                client.call(call.method, call.payload)
+                call.done.complete(Unit)
+            } catch (e: CancellationException) {
+                call.done.completeExceptionally(e)
+                throw e
+            } catch (e: Exception) {
+                call.done.completeExceptionally(e)
+            }
+            expectRedraw()
+        }
     }
 
     private suspend fun runConnection() {
@@ -406,17 +479,18 @@ class PocketSession(
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
-                            _state.update { it.copy(error = e.message) }
+                            note(e.toProblem())
                         }
                     }
                 }
                 bootstrap()
                 if (!ready.isCompleted) ready.complete(Unit)
-                _state.update { it.copy(phase = Phase.Live, error = null) }
+                _state.update { it.copy(phase = Phase.Live, problem = null) }
+                launch { inputLoop(client) }
                 launch { formatLoop() }
                 launch { statusLoop() }
                 val cause = client.awaitClosed()
-                throw IllegalStateException(cause?.message ?: "Control connection dropped", cause)
+                throw ConnectionDroppedException(cause?.message ?: "Control connection dropped", cause)
             }
         } finally {
             withContext(NonCancellable) {
@@ -427,6 +501,11 @@ class PocketSession(
             }
             client.close()
             if (clientRef.get() === client) clientRef.set(null)
+            // Input typed for this connection is not replayed on the next one: the pane may be gone.
+            while (true) {
+                val left = input.tryReceive().getOrNull() ?: break
+                left.done.completeExceptionally(ConnectionDroppedException("Connection dropped before the input was sent", null))
+            }
             ownedBlock = null
             lastResize = null
         }
@@ -551,6 +630,7 @@ class PocketSession(
 
     private suspend fun formatLoop() {
         while (true) {
+            active.first { it }
             val sid = _state.value.activeSessionId
             val block = _state.value.view?.takeIf { it.sessionId == sid }?.focusedBlock()?.id
             if (sid != null && block != null) {
@@ -575,8 +655,9 @@ class PocketSession(
                     val vt = readFormat(sid, block)
                     if (vt != lastVt) {
                         lastVt = vt
-                        _state.update { it.copy(vt = vt, vtBlockId = block, vtVersion = it.vtVersion + 1, error = null) }
+                        _state.update { it.copy(vt = vt, vtBlockId = block, vtVersion = it.vtVersion + 1) }
                     }
+                    screenFailure = null
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: RexCallException) {
@@ -584,14 +665,20 @@ class PocketSession(
                         lastVt = null
                         ownedBlock = null
                     } else {
-                        _state.update { it.copy(error = e.message) }
+                        screenReadFailed(e)
                     }
                 } catch (e: Exception) {
-                    _state.update { it.copy(error = e.message) }
+                    screenReadFailed(e)
                 }
             }
             awaitNextPoll()
         }
+    }
+
+    private fun screenReadFailed(e: Exception) {
+        if (e.message == screenFailure) return
+        screenFailure = e.message
+        note(e.toProblem())
     }
 
     /**
@@ -693,10 +780,13 @@ class PocketSession(
 
     private suspend fun statusLoop() {
         while (true) {
+            active.first { it }
             val view = _state.value.view
             if (view != null) {
+                // Only the shown tab's panes are drawn with their program: the pane strip names
+                // them, and the header says what the shown one is doing.
                 val next = LinkedHashMap<String, ProgramRecord>()
-                for (block in view.allBlocks()) {
+                for (block in view.activeWindow()?.blocks.orEmpty()) {
                     if (block.creator != null && block.creator != "com.superlogical.terminal") continue
                     try {
                         val payload = rpc(
@@ -726,16 +816,16 @@ class PocketSession(
     }
 
     private suspend fun rpc(method: String, payload: JSONObject?): JSONObject {
-        val client = clientRef.get() ?: throw IllegalStateException("Not connected yet")
+        val client = clientRef.get() ?: throw NotReadyException("Not connected yet")
         return callMutex.withLock { client.call(method, payload) }
     }
 
     private fun requireSession(): String =
-        _state.value.activeSessionId ?: throw IllegalStateException("No open session")
+        _state.value.activeSessionId ?: throw NotReadyException("No open session")
 
     private fun requireBlock(): Pair<String, String> {
         val sid = requireSession()
-        val block = _state.value.view?.focusedBlock()?.id ?: throw IllegalStateException("No terminal in this window")
+        val block = _state.value.view?.focusedBlock()?.id ?: throw NotReadyException("No terminal in this window")
         return sid to block
     }
 
@@ -745,6 +835,11 @@ class PocketSession(
         return list.map { if (it.id == item.id) item else it }
     }
 }
+
+/** First wait before a connection attempt is retried, and the wait after a connection that was up. */
+private const val MIN_BACKOFF_MS = 400L
+
+private const val MAX_BACKOFF_MS = 8_000L
 
 /** Screen poll interval while nothing is being typed or scrolled. */
 private const val IDLE_POLL_MS = 180L

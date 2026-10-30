@@ -7,6 +7,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -84,6 +85,128 @@ class PocketSessionTest {
         }
     }
 
+    /**
+     * Keystrokes from the terminal view, the toolbar and the composer go out through different
+     * methods. They must still reach the shell in the order they were typed.
+     */
+    @Test
+    fun mixedInputArrivesInTheOrderItWasTyped() {
+        val endpoint = testEndpoint()
+        assumeTrue(
+            "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
+            portOpen(endpoint.host, endpoint.port),
+        )
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(endpoint)
+            var sessionId: String? = null
+            try {
+                session.start(scope, preferredSessionId = null)
+                withTimeout(15_000) { session.awaitReady() }
+                session.setSize(200, 24, 8, 16)
+                session.createShell("rexpocket-test-order-" + System.currentTimeMillis())
+                sessionId = session.state.value.activeSessionId
+                awaitOwnedFocus(session)
+
+                // Digits come from the terminal view, letters from the toolbar, interleaved.
+                val expected = StringBuilder("echo ")
+                session.sendText("echo ")
+                for (i in 0 until 40) {
+                    val letter = 'a' + (i % 26)
+                    for (d in 0 until 4) {
+                        expected.append((i + d) % 10)
+                        session.writeBytes("${(i + d) % 10}".toByteArray())
+                    }
+                    expected.append(letter)
+                    session.sendKey("key_$letter", text = "$letter")
+                }
+                session.sendKey("enter")
+                val line = expected.toString().removePrefix("echo ")
+                // The shell's echo of the command line and its output; the terminal may wrap either,
+                // so line breaks are taken out before looking.
+                val seen = withTimeoutOrNull(15_000) {
+                    while (screenText(session).replace("\r", "").replace("\n", "").split(line).size < 3) delay(100)
+                    true
+                } ?: false
+                assertTrue("expected $line, screen:\n${screenText(session)}", seen)
+            } finally {
+                session.stop()
+                scope.cancel()
+                sessionId?.let { destroyQuietly(endpoint, it) }
+            }
+        }
+    }
+
+    /** While the app is in the background nothing is polled; coming back reads the screen at once. */
+    @Test
+    fun aPausedSessionReadsNothingUntilItResumes() {
+        val endpoint = testEndpoint()
+        assumeTrue(
+            "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
+            portOpen(endpoint.host, endpoint.port),
+        )
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(endpoint)
+            var sessionId: String? = null
+            try {
+                session.start(scope, preferredSessionId = null)
+                withTimeout(15_000) { session.awaitReady() }
+                session.setSize(80, 24, 8, 16)
+                session.createShell("rexpocket-test-pause-" + System.currentTimeMillis())
+                sessionId = session.state.value.activeSessionId
+                awaitOwnedFocus(session)
+
+                session.setActive(false)
+                delay(500)
+                val before = session.state.value.vtVersion
+                session.sendText("echo paused-marker\n")
+                delay(1_500)
+                assertEquals("screen read while paused", before, session.state.value.vtVersion)
+
+                session.setActive(true)
+                val seen = withTimeoutOrNull(5_000) {
+                    while (!screenText(session).contains("\npaused-marker")) delay(50)
+                    true
+                } ?: false
+                assertTrue("screen not read after resuming", seen)
+            } finally {
+                session.stop()
+                scope.cancel()
+                sessionId?.let { destroyQuietly(endpoint, it) }
+            }
+        }
+    }
+
+    /** Rex announces a new session as it creates it; the list must still hold it once. */
+    @Test
+    fun aCreatedSessionIsListedOnce() {
+        val endpoint = testEndpoint()
+        assumeTrue(
+            "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
+            portOpen(endpoint.host, endpoint.port),
+        )
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(endpoint)
+            var sessionId: String? = null
+            try {
+                session.start(scope, preferredSessionId = null)
+                withTimeout(15_000) { session.awaitReady() }
+                session.createShell("rexpocket-test-once-" + System.currentTimeMillis())
+                sessionId = session.state.value.activeSessionId
+                // The created event can land just after the call returns.
+                delay(500)
+                val ids = session.state.value.sessions.map { it.id }
+                assertEquals("listed twice: $ids", ids.distinct(), ids)
+            } finally {
+                session.stop()
+                scope.cancel()
+                sessionId?.let { destroyQuietly(endpoint, it) }
+            }
+        }
+    }
+
     /** Moving to another session must hand the pane left behind back to the desktop. */
     @Test
     fun switchingSessionsReleasesThePreviousPane() {
@@ -134,6 +257,12 @@ private suspend fun awaitOwnedFocus(session: PocketSession): String = withTimeou
     }
     error("unreachable")
 }
+
+/** The shown pane's screen with its escape sequences removed, close enough to what is on it. */
+private fun screenText(session: PocketSession): String =
+    session.state.value.vt.orEmpty()
+        .replace(Regex("\u001b\\[[0-9;?]*[ -/]*[@-~]"), "")
+        .replace(Regex("\u001b\\][^\u0007\u001b]*(\u0007|\u001b\\\\)"), "")
 
 private fun testEndpoint(): Endpoint {
     val host = System.getenv("REX_TEST_HOST")?.takeIf { it.isNotBlank() } ?: "127.0.0.1"
