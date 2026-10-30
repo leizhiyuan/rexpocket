@@ -196,8 +196,12 @@ private fun WaitingForPane(blockId: String, onRetry: () -> Unit, modifier: Modif
     }
 }
 
-/** How long a pane may wait for its snapshot before it says so. */
-private const val PANE_WAIT_MS = 3_000L
+/**
+ * How long a pane may wait for its snapshot before it offers to try again. A pane with a long
+ * scrollback arrives as several megabytes, which takes a while over a tunnel, so this waits long
+ * enough not to call a slow picture a missing one.
+ */
+private const val PANE_WAIT_MS = 12_000L
 
 /**
  * Coalesces terminal input produced in quick succession (wheel reports from a swipe, fast
