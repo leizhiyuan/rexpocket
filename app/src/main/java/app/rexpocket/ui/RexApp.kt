@@ -1,6 +1,8 @@
 package app.rexpocket.ui
 
 import android.app.Application
+import android.util.Log
+import app.rexpocket.BuildConfig
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
@@ -37,6 +39,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -45,7 +48,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -64,6 +71,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
@@ -85,6 +93,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.AndroidViewModel
@@ -113,6 +122,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -226,6 +237,9 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val viaTailscale = target.viaTailscale
+        if (BuildConfig.DEBUG) {
+            Log.i(CONN_TAG, "connect ${target.host}:${target.port} tailnet=$viaTailscale plaintext=${target.plaintext}")
+        }
         connectJob = viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 // Nothing of this connection goes through the node, so do not leave it running.
@@ -238,7 +252,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                     phase = Phase.Connecting,
                     endpointLabel = "${target.host}:${target.port}",
                 )
-                try {
+                val port = try {
                     withContext(Dispatchers.IO) {
                         tailscaleBox.start(TailscaleConfig(authKey = "", hostname = settings.hostname))
                     }
@@ -252,6 +266,14 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                     )
                     return@launch
                 }
+                // The node reports Running only once its WireGuard session is up; dialing before
+                // that just gets a SOCKS failure, which looks like a broken tunnel.
+                withTimeoutOrNull(NODE_READY_MS) {
+                    tailscaleBox.status.first {
+                        it.backendState in setOf("Running", "NeedsLogin", "NeedsMachineAuth", "Stopped")
+                    }
+                }
+                port
             } else {
                 0
             }
@@ -263,7 +285,14 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             var saved: Pair<String, String>? = null
             var resumed = false
             watch = viewModelScope.launch {
+                var lastPhase: Phase? = null
+                var lastError: String? = null
                 s.state.collect { st ->
+                    if (BuildConfig.DEBUG && (st.phase != lastPhase || st.error != lastError)) {
+                        Log.i(CONN_TAG, "phase=${st.phase} error=${st.error ?: "-"}")
+                        lastPhase = st.phase
+                        lastError = st.error
+                    }
                     _pocket.value = st
                     if (st.activeSessionId != null) store.setLastSession(target.id, st.activeSessionId)
                     // Only a pane that was on the terminal screen counts. Connecting already selects
@@ -1200,52 +1229,54 @@ private fun TabBar(
 ) {
     val list = rememberLazyListState()
     val activeIndex = view.windows.indexOfFirst { it.id == view.activeWindow()?.id }
-    LaunchedEffect(activeIndex) { if (activeIndex >= 0) list.animateScrollToItem(activeIndex) }
-    LazyRow(
-        state = list,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    // Keep the tab in use in the middle of the row: a row of chips that always starts at the left
+    // edge makes a session with ten tabs impossible to read.
+    LaunchedEffect(activeIndex, view.windows.size) { list.centerOn(activeIndex) }
+    Row(
+        Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        items(view.windows, key = { it.id }) { window ->
-            val on = window.id == view.activeWindow()?.id
-            Row(
-                Modifier.clip(RoundedCornerShape(10.dp))
-                    .background(if (on) Accent else Card)
-                    .combinedClickable(onClick = { onSelect(window) }, onLongClick = { onLongPress(window) })
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                StatusDot(window.status(status), on)
-                Text(
-                    tabTitle(view, window),
-                    color = if (on) Bg else Ink,
-                    fontSize = 13.sp,
-                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                )
-                if (window.blocks.size > 1) {
-                    Spacer(Modifier.width(6.dp))
+        ScrollRow(list, Modifier.weight(1f)) {
+            items(view.windows, key = { it.id }) { window ->
+                val on = window.id == view.activeWindow()?.id
+                Row(
+                    Modifier.clip(RoundedCornerShape(10.dp))
+                        .background(if (on) Accent else Card)
+                        .combinedClickable(onClick = { onSelect(window) }, onLongClick = { onLongPress(window) })
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StatusDot(window.status(status), on)
                     Text(
-                        "${window.blocks.size}",
-                        color = if (on) Accent else Muted,
-                        fontSize = 11.sp,
-                        modifier = Modifier.clip(RoundedCornerShape(99.dp)).background(if (on) Bg else Line)
-                            .padding(horizontal = 6.dp),
+                        tabTitle(view, window),
+                        color = if (on) Bg else Ink,
+                        fontSize = 13.sp,
+                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 160.dp),
                     )
+                    if (window.blocks.size > 1) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "${window.blocks.size}",
+                            color = if (on) Accent else Muted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.clip(RoundedCornerShape(99.dp)).background(if (on) Bg else Line)
+                                .padding(horizontal = 6.dp),
+                        )
+                    }
                 }
             }
         }
-        item(key = "new-tab") {
-            Text(
-                "+",
-                color = Accent,
-                fontSize = 16.sp,
-                modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Card).clickable(onClick = onNew)
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
-            )
-        }
+        // The add chip stays outside the scroll, so it is in the same place however many tabs there are.
+        Text(
+            "+",
+            color = Accent,
+            fontSize = 16.sp,
+            modifier = Modifier.padding(end = 8.dp).clip(RoundedCornerShape(10.dp)).background(Card)
+                .clickable(onClick = onNew).padding(horizontal = 14.dp, vertical = 4.dp),
+        )
     }
 }
 
@@ -1265,45 +1296,91 @@ private fun PaneStrip(
     val list = rememberLazyListState()
     val current = tab.focusedBlock()?.id
     val index = tab.focusedIndex()
-    LaunchedEffect(tab.id, index) { if (index >= 0) list.animateScrollToItem(index) }
-    LazyRow(
-        state = list,
-        modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 4.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    LaunchedEffect(tab.id, index, tab.blocks.size) { list.centerOn(index) }
+    Row(
+        Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        items(tab.blocks, key = { it.id }) { block ->
-            val on = block.id == current
-            val record = status[block.id]
-            Row(
-                Modifier.clip(RoundedCornerShape(99.dp))
-                    .border(1.dp, if (on) Accent else Line, RoundedCornerShape(99.dp))
-                    .combinedClickable(onClick = { onSelect(block) }, onLongClick = { onLongPress(block) })
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                StatusDot(record, false)
-                Text(
-                    "${tab.blocks.indexOf(block) + 1}",
-                    color = if (on) Accent else Muted,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(paneTitle(block, record), color = if (on) Accent else Ink, fontSize = 12.sp, maxLines = 1)
+        ScrollRow(list, Modifier.weight(1f)) {
+            items(tab.blocks, key = { it.id }) { block ->
+                val on = block.id == current
+                val record = status[block.id]
+                Row(
+                    Modifier.clip(RoundedCornerShape(99.dp))
+                        .border(1.dp, if (on) Accent else Line, RoundedCornerShape(99.dp))
+                        .combinedClickable(onClick = { onSelect(block) }, onLongClick = { onLongPress(block) })
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StatusDot(record, false)
+                    Text(
+                        "${tab.blocks.indexOf(block) + 1}",
+                        color = if (on) Accent else Muted,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        paneTitle(block, record),
+                        color = if (on) Accent else Ink,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 140.dp),
+                    )
+                }
             }
         }
-        item(key = "new-pane") {
-            Text(
-                "+",
-                color = Accent,
-                fontSize = 14.sp,
-                modifier = Modifier.clip(RoundedCornerShape(99.dp)).border(1.dp, Line, RoundedCornerShape(99.dp))
-                    .clickable(onClick = onNew).padding(horizontal = 12.dp, vertical = 2.dp),
+        Text(
+            "+",
+            color = Accent,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(end = 8.dp).clip(RoundedCornerShape(99.dp))
+                .border(1.dp, Line, RoundedCornerShape(99.dp)).clickable(onClick = onNew)
+                .padding(horizontal = 12.dp, vertical = 2.dp),
+        )
+    }
+}
+
+/**
+ * A row of chips that fades out where it continues, so a chip cut by the edge reads as "there is
+ * more" instead of as a broken layout. The add chip next to it stays put.
+ */
+@Composable
+private fun ScrollRow(state: LazyListState, modifier: Modifier = Modifier, content: LazyListScope.() -> Unit) {
+    val moreBefore by remember { derivedStateOf { state.canScrollBackward } }
+    val moreAfter by remember { derivedStateOf { state.canScrollForward } }
+    Box(modifier) {
+        LazyRow(
+            state = state,
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 8.dp, end = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+        if (moreBefore) {
+            Box(
+                Modifier.align(Alignment.CenterStart).width(18.dp).fillMaxHeight()
+                    .background(Brush.horizontalGradient(listOf(Bg, Color.Transparent))),
+            )
+        }
+        if (moreAfter) {
+            Box(
+                Modifier.align(Alignment.CenterEnd).width(18.dp).fillMaxHeight()
+                    .background(Brush.horizontalGradient(listOf(Color.Transparent, Bg))),
             )
         }
     }
+}
+
+/** Scrolls [index] to the middle of the row when it is already on screen, else to the left edge. */
+private suspend fun LazyListState.centerOn(index: Int) {
+    if (index < 0) return
+    val info = layoutInfo
+    val item = info.visibleItemsInfo.firstOrNull { it.index == index }
+    val offset = if (item != null) item.offset - (info.viewportSize.width - item.size) / 2 else 0
+    animateScrollToItem(index, offset)
 }
 
 /** A dot only for states worth a glance; idle panes stay quiet. */
@@ -1441,6 +1518,12 @@ private fun tabTitle(view: SessionView, window: WindowInfo): String {
     val number = view.windows.indexOf(window) + 1
     return if (GENERATED_WINDOW_LABEL.matches(window.label)) stringResource(R.string.tab_number, number) else window.label
 }
+
+/** How long a connection waits for the tailnet node to come up before dialing anyway. */
+private const val NODE_READY_MS = 30_000L
+
+/** Connection diagnostics: `adb logcat -s RexPocketConn`. */
+private const val CONN_TAG = "RexPocketConn"
 
 private val GENERATED_WINDOW_LABEL = Regex("Window [0-9a-f]{6,}")
 

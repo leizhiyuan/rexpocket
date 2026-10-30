@@ -389,8 +389,10 @@ class PocketSession(
     private suspend fun runConnection() {
         val client = clientFactory()
         clientRef.set(client)
+        // The last failure stays on screen while the next attempt runs: a picker that only says
+        // "connecting" while a tunnel is down gives no way to tell retrying from hanging.
         _state.update {
-            it.copy(phase = Phase.Connecting, endpointLabel = "${endpoint.host}:${endpoint.port}", error = null)
+            it.copy(phase = Phase.Connecting, endpointLabel = "${endpoint.host}:${endpoint.port}")
         }
         try {
             val welcome = client.connect(endpoint, reconnectToken)

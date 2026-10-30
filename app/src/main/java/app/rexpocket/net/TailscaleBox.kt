@@ -7,7 +7,9 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
+import android.util.Log
 import android.system.OsConstants
+import app.rexpocket.BuildConfig
 import io.nekohasekai.libbox.BridgeOptions
 import io.nekohasekai.libbox.BridgeSession
 import io.nekohasekai.libbox.CommandClient
@@ -63,6 +65,9 @@ data class TailscaleStatus(
 
 class TailscaleException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
+/** Tag shared by the tailnet diagnostics; `adb logcat -s RexPocketTS` shows the node's own log. */
+const val LOG_TAG = "RexPocketTS"
+
 /**
  * A sing-box box running inside the app: one Tailscale endpoint joined to the user's tailnet and
  * one `mixed` inbound on loopback. The Rex connection is then pointed at that inbound as a SOCKS5
@@ -93,7 +98,14 @@ class TailscaleBox(private val context: Context) {
      */
     @Synchronized
     fun start(config: TailscaleConfig): Int {
-        running?.let { if (it == config && server != null) return port }
+        running?.let {
+            if (it == config && server != null) {
+                Log.i(LOG_TAG, "reusing the node on port $port (hostname=${config.hostname.ifBlank { "default" }})")
+                return port
+            }
+            Log.i(LOG_TAG, "restarting the node: config changed (hostname=${config.hostname.ifBlank { "default" }})")
+        }
+        Log.i(LOG_TAG, "starting the node (hostname=${config.hostname.ifBlank { "default" }})")
         stopLocked()
         setupLibbox()
         val listenPort = try {
@@ -142,12 +154,16 @@ class TailscaleBox(private val context: Context) {
                     while (endpoints.hasNext()) {
                         val endpoint = endpoints.next()
                         if (endpoint.endpointTag != ENDPOINT_TAG) continue
-                        _status.value = TailscaleStatus(
+                        val next = TailscaleStatus(
                             backendState = endpoint.backendState.orEmpty(),
                             text = endpoint.stateText.orEmpty(),
                             authUrl = endpoint.authURL.orEmpty(),
                             networkName = endpoint.networkName.orEmpty(),
                         )
+                        if (next != _status.value) {
+                            Log.i(LOG_TAG, "node state ${next.backendState} ${next.text}".trim())
+                        }
+                        _status.value = next
                         return
                     }
                 }
@@ -161,6 +177,7 @@ class TailscaleBox(private val context: Context) {
 
     @Synchronized
     fun stop() {
+        if (server != null) Log.i(LOG_TAG, "stopping the node on port $port")
         stopLocked()
     }
 
@@ -534,7 +551,17 @@ class TailscaleBox(private val context: Context) {
 
         override fun writeGroups(message: OutboundGroupIterator) = Unit
 
-        override fun writeLogs(messageList: LogIterator) = Unit
+        /**
+         * libbox's own log carries the Tailscale side of the story: DERP home, netmap updates,
+         * handshake failures. Without it a dead tunnel and a dead peer look the same.
+         */
+        override fun writeLogs(messageList: LogIterator) {
+            if (!BuildConfig.DEBUG) return
+            while (messageList.hasNext()) {
+                val entry = messageList.next()
+                Log.d(LOG_TAG, "${entry.level} ${entry.message}")
+            }
+        }
 
         override fun writeOutbounds(message: OutboundGroupItemIterator) = Unit
 
