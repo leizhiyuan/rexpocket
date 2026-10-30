@@ -3,6 +3,7 @@ package me.leaver.rexpocket.ui
 import android.content.Context
 import android.util.Log
 import android.os.Handler
+import android.os.SystemClock
 import android.os.Looper
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.clickable
@@ -69,12 +70,18 @@ fun TerminalPane(
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
 
     LaunchedEffect(blockId, attempt) {
+        // How long a picture takes to arrive is the number that says whether the tunnel under it is
+        // good enough, so it is logged with the snapshot's size.
+        val askedAt = SystemClock.elapsedRealtime()
         // The stream reports its own failures; anything that still escapes must not take the app down.
         try {
             feeds(blockId).collect { feed ->
                 when (feed) {
                     is TerminalFeed.Snapshot -> {
-                        if (BuildConfig.DEBUG) Log.i(CONN_TAG, "pane $blockId: snapshot of ${feed.bytes.size} bytes")
+                        if (BuildConfig.DEBUG) {
+                            val waited = SystemClock.elapsedRealtime() - askedAt
+                            Log.i(CONN_TAG, "pane $blockId: ${feed.bytes.size} bytes after ${waited}ms")
+                        }
                         val restored = withContext(Dispatchers.Default) {
                             GhosttyTerminalSession.restore(context, feed.bytes)
                         }
