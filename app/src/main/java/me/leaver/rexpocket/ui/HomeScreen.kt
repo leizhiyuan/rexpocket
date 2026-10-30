@@ -55,6 +55,7 @@ internal fun HomeScreen(
     hosts: List<SavedHost>,
     tailscale: TailscaleSettings,
     tailscaleStatus: TailscaleStatus,
+    tailnetError: String?,
     onSave: (SavedHost) -> Unit,
     onDelete: (String) -> Unit,
     onOpen: (SavedHost) -> Unit,
@@ -78,7 +79,7 @@ internal fun HomeScreen(
             lineHeight = bodyLeading,
         )
         Spacer(Modifier.height(Space.xl))
-        TailscaleRow(tailscale, tailscaleStatus, onOpen = onTailscale)
+        TailscaleRow(tailscale, tailscaleStatus, tailnetError, onOpen = onTailscale)
         Spacer(Modifier.height(Space.l))
         if (hosts.isEmpty()) {
             Column(
@@ -150,14 +151,21 @@ internal fun HomeScreen(
  * tailnet and under which name, and tapping it asks for that name once.
  */
 @Composable
-internal fun TailscaleRow(settings: TailscaleSettings, status: TailscaleStatus, onOpen: () -> Unit) {
+internal fun TailscaleRow(
+    settings: TailscaleSettings,
+    status: TailscaleStatus,
+    error: String?,
+    onOpen: () -> Unit,
+) {
     val state = tailnetState(status)
     val joined = settings.enabled && (status.backendState == "Running")
     val detail = when {
         !settings.enabled -> stringResource(R.string.tailscale_not_joined)
+        // A node that failed to start says so here; the reason is a tap away, in its settings.
+        error != null -> stringResource(R.string.tailscale_state_failed)
         state.isNotEmpty() -> state
-        // Joined, but the node is not up right now: say so instead of pretending to start.
-        else -> stringResource(R.string.tailscale_state_stopped)
+        // Joined and not started yet: nothing has reported a state, which is not the same as stopped.
+        else -> stringResource(R.string.tailscale_state_starting)
     }
     // The phone's own node is not a destination, so it carries no card: it is a line of state that
     // opens the node's settings, and it sits on the paper instead of above it.
@@ -179,7 +187,12 @@ internal fun TailscaleRow(settings: TailscaleSettings, status: TailscaleStatus, 
         }
         Text(
             detail,
-            color = if (joined) Colors.accent else if (settings.enabled) Colors.amber else Colors.muted,
+            color = when {
+                error != null -> Colors.danger
+                joined -> Colors.accent
+                settings.enabled -> Colors.amber
+                else -> Colors.muted
+            },
             fontSize = TextStyles.label,
         )
         Spacer(Modifier.width(Space.xs))

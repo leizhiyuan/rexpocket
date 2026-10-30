@@ -32,6 +32,7 @@
     <string name="tailscale_state_starting">Starting…</string>
     <string name="tailscale_state_needs_login">Login needed</string>
     <string name="tailscale_state_needs_approval">Waiting for approval</string>
+    <string name="tailscale_state_failed">Failed to start</string>
     <string name="tailscale_state_stopped">Stopped</string>
     <string name="tailscale_login_hint">Approve this node in the browser, then come back: the connection is retrying.</string>
     <string name="tailscale_login_copied">Login link copied</string>

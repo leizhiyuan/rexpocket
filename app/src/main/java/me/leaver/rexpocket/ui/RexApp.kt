@@ -49,6 +49,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                 hosts = hosts,
                 tailscale = tailscale,
                 tailscaleStatus = tailscaleStatus,
+                tailnetError = tailnetError,
                 onSave = model::saveHost,
                 onDelete = model::deleteHost,
                 onOpen = model::connect,

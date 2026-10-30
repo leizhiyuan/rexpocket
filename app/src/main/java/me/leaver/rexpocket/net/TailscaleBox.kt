@@ -97,7 +97,18 @@ class TailscaleBox(private val context: Context) {
      * config has not changed. Blocking: call from an IO dispatcher.
      */
     @Synchronized
-    fun start(config: TailscaleConfig): Int {
+    fun start(config: TailscaleConfig): Int = try {
+        startService(config)
+    } catch (e: TailscaleException) {
+        // A cache file left locked by a process that was killed mid-run fails every start the same
+        // way, for good. It holds caches only - the tailnet login is in tailscale/tailscaled.state -
+        // so dropping it and trying once more is safe, and beats a node that never comes back.
+        if (!e.message.orEmpty().contains("cache-file") || !deleteCacheFile()) throw e
+        Log.w(LOG_TAG, "dropped a locked cache file, starting the node again")
+        startService(config)
+    }
+
+    private fun startService(config: TailscaleConfig): Int {
         running?.let {
             if (it == config && server != null) {
                 Log.i(LOG_TAG, "reusing the node on port $port (hostname=${config.hostname.ifBlank { "default" }})")
@@ -249,6 +260,10 @@ class TailscaleBox(private val context: Context) {
     }
 
     private fun stateDirectory(): File = File(context.filesDir, "tailscale")
+
+    /** libbox's own cache; a start that finds it locked cannot recover without this. */
+    private fun deleteCacheFile(): Boolean =
+        runCatching { File(File(context.filesDir, "libbox"), "cache.db").delete() }.getOrDefault(false)
 
     /**
      * Tailnet names are MagicDNS names, so the tailscale DNS server answers for them and the
