@@ -241,10 +241,9 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             Log.i(CONN_TAG, "connect ${target.host}:${target.port} tailnet=$viaTailscale plaintext=${target.plaintext}")
         }
         connectJob = viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                // Nothing of this connection goes through the node, so do not leave it running.
-                if (!viaTailscale) runCatching { tailscaleBox.stop() }
-            }
+            // A host on the phone's own network is dialed directly, and the tailnet node stays as it
+            // is: the home screen says the phone is in a tailnet, so that must not depend on which
+            // host happens to be open.
             // The node has to be up before Rex is dialed, because the Rex connection itself is
             // what goes through it. Joining the tailnet takes a moment on the first connect.
             val socksPort = if (viaTailscale) {
@@ -586,7 +585,8 @@ private fun TailscaleRow(settings: TailscaleSettings, status: TailscaleStatus, o
     val detail = when {
         !settings.enabled -> stringResource(R.string.tailscale_not_joined)
         state.isNotEmpty() -> state
-        else -> stringResource(R.string.tailscale_state_starting)
+        // Joined, but the node is not up right now: say so instead of pretending to start.
+        else -> stringResource(R.string.tailscale_state_stopped)
     }
     val color = when {
         !settings.enabled -> Muted
