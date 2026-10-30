@@ -617,7 +617,10 @@ class PocketSession(
     fun watchPane(blockId: String): Flow<TerminalFeed> = flow {
         var backoff = MIN_BACKOFF_MS
         while (true) {
-            val sid = _state.value.activeSessionId
+            // A data connection needs a ticket from the control connection: while that one is down,
+            // asking for a pane only spins. This waits for it to come back.
+            val live = _state.first { it.phase == Phase.Live }
+            val sid = live.activeSessionId
             if (sid == null) {
                 // Nothing to watch until a session is open; the connection may still be coming up.
                 delay(backoff)

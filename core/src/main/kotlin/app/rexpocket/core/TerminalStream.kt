@@ -156,18 +156,8 @@ class TerminalStream(
     /** HELLO with a fresh ticket, or RESUME where the last stream stopped. */
     private suspend fun handshake(): ByteArray {
         val token = resumeToken
-        if (token != null && received > 0) {
-            val out = ByteArray(RESUME_BYTES)
-            out[0] = OP_RESUME.toByte()
-            token.toByteArray().copyInto(out, 1)
-            for (i in 0 until 8) out[1 + TOKEN_BYTES + i] = ((received ushr (8 * i)) and 0xff).toByte()
-            return out
-        }
-        val fresh = Base64.getUrlDecoder().decode(ticket())
-        val out = ByteArray(HELLO_BYTES)
-        out[0] = OP_HELLO.toByte()
-        fresh.copyInto(out, destinationOffset = 1)
-        return out
+        if (token != null && received > 0) return resumeHandshake(token, received)
+        return helloHandshake(Base64.getUrlDecoder().decode(ticket()))
     }
 
     private fun parseWelcome(bytes: ByteArray): Welcome = when (bytes.firstOrNull()) {
@@ -231,6 +221,25 @@ class TerminalStream(
         private const val MAX_ATTEMPTS = 5
 
         private fun backoff(attempt: Int): Long = (300L * attempt).coerceAtMost(2_000L)
+
+        /** `0x01` and the 16 bytes of a ticket: asking Rex to start a new stream. */
+        internal fun helloHandshake(ticket: ByteArray): ByteArray {
+            require(ticket.size == TOKEN_BYTES) { "a ticket is $TOKEN_BYTES bytes" }
+            val out = ByteArray(HELLO_BYTES)
+            out[0] = OP_HELLO.toByte()
+            ticket.copyInto(out, destinationOffset = 1)
+            return out
+        }
+
+        /** `0x02`, the token of the stream to continue, and how far its bytes were used, little-endian. */
+        internal fun resumeHandshake(token: ByteString, received: Long): ByteArray {
+            require(token.size == TOKEN_BYTES) { "a reconnect token is $TOKEN_BYTES bytes" }
+            val out = ByteArray(RESUME_BYTES)
+            out[0] = OP_RESUME.toByte()
+            token.toByteArray().copyInto(out, 1)
+            for (i in 0 until 8) out[1 + TOKEN_BYTES + i] = ((received ushr (8 * i)) and 0xff).toByte()
+            return out
+        }
     }
 }
 

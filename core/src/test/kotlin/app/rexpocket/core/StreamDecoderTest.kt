@@ -1,5 +1,6 @@
 package app.rexpocket.core
 
+import okio.ByteString.Companion.toByteString
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -100,5 +101,28 @@ class StreamDecoderTest {
         assertEquals("before", (first.last() as TerminalFeed.Output).bytes.decodeToString())
         val second = decoder.feed("pe\":\"resize\"}\u001b\\after".toByteArray())
         assertEquals("after", (second.single() as TerminalFeed.Output).bytes.decodeToString())
+    }
+}
+
+/** The two handshakes a data connection can open with, byte for byte. */
+class HandshakeTest {
+    @Test
+    fun aHelloCarriesTheOpcodeAndTheTicket() {
+        val ticket = ByteArray(16) { it.toByte() }
+        val bytes = TerminalStream.helloHandshake(ticket)
+        assertEquals(17, bytes.size)
+        assertEquals(0x01, bytes[0].toInt())
+        assertArrayEquals(ticket, bytes.copyOfRange(1, 17))
+    }
+
+    @Test
+    fun aResumeCarriesTheTokenAndHowManyBytesWereUsed() {
+        val token = ByteArray(16) { (it + 100).toByte() }.toByteString()
+        val bytes = TerminalStream.resumeHandshake(token, received = 0x0102030405L)
+        assertEquals(25, bytes.size)
+        assertEquals(0x02, bytes[0].toInt())
+        assertArrayEquals(token.toByteArray(), bytes.copyOfRange(1, 17))
+        // Little-endian, so the low byte comes first.
+        assertArrayEquals(byteArrayOf(5, 4, 3, 2, 1, 0, 0, 0), bytes.copyOfRange(17, 25))
     }
 }

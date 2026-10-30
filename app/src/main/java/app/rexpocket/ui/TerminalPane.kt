@@ -79,9 +79,13 @@ fun TerminalPane(
         }
     }
 
+    val theme = remember { terminalTheme() }
     GhosttyTerminal(
         session = session,
         state = termState,
+        // A restored snapshot carries the desktop's default colours; the app's own are applied here,
+        // so a pane never flips from the app's paper to a white one after a reconnect.
+        theme = theme,
         // The view fills its whole canvas and draws rows scrolled above its top; Compose hosts
         // Android views without clipping, so unclipped it paints over the header and tab bar.
         modifier = modifier.clipToBounds(),

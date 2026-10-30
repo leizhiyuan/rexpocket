@@ -4,10 +4,12 @@ import android.provider.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.sagernet.libghostty.GhosttyTheme
 
 /**
  * The app's one design system. Every colour, size and radius in the UI comes from here, so a screen
@@ -84,6 +86,19 @@ val bodyLeading: TextUnit = 21.sp
 
 /** Line height for multi-line labels at [TextStyles.label], such as a dialog's hint. */
 val labelLeading: TextUnit = 17.sp
+
+/**
+ * The terminal's own paper and ink, so a pane sits on the app's surface. Every palette entry stays
+ * the program's: only the defaults a program never sets are bent to this app.
+ */
+fun terminalTheme(): GhosttyTheme = GhosttyTheme(
+    foreground = Colors.ink.toArgb(),
+    background = Colors.bg.toArgb(),
+    cursorColor = Colors.accent.toArgb(),
+    selectionBackground = Colors.line.toArgb(),
+    selectionForeground = Colors.ink.toArgb(),
+    palette = List(256) { null },
+)
 
 /**
  * Android has no media query for this: the animation scales are the platform's reduced-motion
