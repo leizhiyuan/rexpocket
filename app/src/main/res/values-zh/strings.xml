@@ -17,9 +17,27 @@
     <string name="action_cancel">取消</string>
     <string name="field_name">名称</string>
     <string name="field_address">地址</string>
-    <string name="field_port">端口</string>
-    <string name="field_plaintext">明文 ws://</string>
     <string name="field_plaintext_warning">明文模式下，任何能连上端口的人都有完整权限。</string>
+    <string name="host_address_invalid">这个地址不可用。可以填主机、主机:端口，或完整 URL。</string>
+
+    <string name="tailscale_title">Tailscale</string>
+    <string name="tailscale_not_joined">未加入</string>
+    <string name="tailscale_join">加入 tailnet</string>
+    <string name="tailscale_leave">离开 tailnet</string>
+    <string name="tailscale_no_name">这台设备</string>
+    <string name="tailscale_hostname">这台手机的节点名</string>
+    <string name="tailscale_hint">应用自己跑一个 Tailscale 节点，所以手机不用装 Tailscale、也不占手机的 VPN，就能连 host.tailnet-xxxx.ts.net 这类 tailnet 名字和地址。加入时会打开浏览器授权这个节点，登录状态留在应用里。地址是 tailnet 名字或 100.x 地址的主机，会自动走这个节点。</string>
+    <string name="tailscale_need_join">还没加入 tailnet：点这里加入，然后再回来。</string>
+    <string name="tailscale_need_join_host">这个地址在 tailnet 上：先加入 tailnet 才能连（点这里加入）。</string>
+    <string name="error_join_tailnet_first">先在 Tailscale 里加入 tailnet。</string>
+    <string name="tailscale_state_running">运行中</string>
+    <string name="tailscale_state_starting">启动中…</string>
+    <string name="tailscale_state_needs_login">需要登录</string>
+    <string name="tailscale_state_needs_approval">等待审批</string>
+    <string name="tailscale_state_stopped">已停止</string>
+    <string name="tailscale_login_hint">在浏览器里批准这个节点，然后回到应用：连接在自动重试。</string>
+    <string name="tailscale_login_copied">已复制登录链接</string>
+    <string name="tailscale_login_banner">Tailscale 需要登录：点这里打开页面，授权这个节点。</string>
 
     <string name="sessions">会话</string>
     <string name="session_new">新会话</string>
@@ -67,6 +85,7 @@
     <string name="key_ctrl">Ctrl</string>
     <string name="key_ctrl_lock">Ctrl锁</string>
     <string name="key_tab">Tab</string>
+    <string name="key_enter">⏎</string>
     <string name="key_ctrl_c">C-c</string>
     <string name="key_ctrl_d">C-d</string>
     <string name="key_ctrl_z">C-z</string>
