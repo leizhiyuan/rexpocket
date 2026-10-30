@@ -498,7 +498,9 @@ private fun HomeScreen(
         )
         Spacer(Modifier.height(22.dp))
         TailscaleRow(tailscale, tailscaleStatus, onOpen = onTailscale)
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(18.dp))
+        Text(stringResource(R.string.home_hosts), color = Muted, fontSize = 12.sp)
+        Spacer(Modifier.height(8.dp))
         if (hosts.isEmpty()) {
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp),
@@ -516,29 +518,19 @@ private fun HomeScreen(
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
                 items(hosts, key = { it.id }) { host ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card)
-                            .clickable { onOpen(host) }.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(Modifier.size(10.dp).clip(CircleShape).background(Accent))
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(host.label, color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Medium)
-                            Text(
-                                listOfNotNull(
-                                    "${host.host}:${host.port}",
-                                    stringResource(
-                                        if (host.plaintext) R.string.host_transport_plain else R.string.host_transport_tls,
-                                    ),
-                                    stringResource(R.string.tailscale_title).takeIf { host.viaTailscale },
-                                ).joinToString(" · "),
-                                color = Muted,
-                                fontSize = 13.sp,
-                            )
-                        }
-                        Text(stringResource(R.string.action_edit), color = Accent, modifier = Modifier.clickable { editing = host }.padding(8.dp))
-                    }
+                    EntryCard(
+                        title = host.label,
+                        detail = listOfNotNull(
+                            "${host.host}:${host.port}",
+                            stringResource(
+                                if (host.plaintext) R.string.host_transport_plain else R.string.host_transport_tls,
+                            ),
+                            stringResource(R.string.tailscale_title).takeIf { host.viaTailscale },
+                        ).joinToString(" · "),
+                        trailing = stringResource(R.string.action_edit),
+                        onOpen = { onOpen(host) },
+                        onTrailing = { editing = host },
+                    )
                 }
             }
         }
@@ -593,23 +585,60 @@ private fun TailscaleRow(settings: TailscaleSettings, status: TailscaleStatus, o
         joined -> Accent
         else -> Amber
     }
+    // A strip, not a card: this is the state of the phone's own node, not one of the hosts below.
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Card).clickable(onClick = onOpen)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            .border(1.dp, Line, RoundedCornerShape(10.dp))
+            .clickable(onClick = onOpen).padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(if (joined) Accent else if (settings.enabled) Amber else Muted))
-        Spacer(Modifier.width(12.dp))
+        Box(Modifier.size(7.dp).clip(CircleShape).background(if (joined) Accent else if (settings.enabled) Amber else Muted))
+        Spacer(Modifier.width(10.dp))
+        Text(stringResource(R.string.tailscale_title), color = Muted, fontSize = 12.sp, letterSpacing = 0.5.sp)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            settings.hostname.ifBlank { status.networkName }.ifBlank { stringResource(R.string.tailscale_no_name) },
+            color = if (joined) Ink else Muted,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(detail, color = color, fontSize = 12.sp)
+    }
+}
+
+/**
+ * One row of a list, whether it lists hosts or sessions: the whole card opens the thing, and the
+ * label on the right only becomes its own target when it does something else, such as editing.
+ */
+@Composable
+private fun EntryCard(
+    title: String,
+    detail: String,
+    trailing: String,
+    onOpen: () -> Unit,
+    onTrailing: (() -> Unit)? = null,
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Card).clickable(onClick = onOpen)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.tailscale_title), color = Ink, fontSize = 15.sp)
-            Text(
-                settings.hostname.ifBlank { status.networkName }.ifBlank { stringResource(R.string.tailscale_no_name) },
-                color = Muted,
-                fontSize = 12.sp,
-                maxLines = 1,
-            )
+            Text(title, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(2.dp))
+            // A tailnet address is long; two lines keep it readable instead of cut in the middle.
+            Text(detail, color = Muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        Text(detail, color = color, fontSize = 13.sp)
+        Spacer(Modifier.width(12.dp))
+        Text(
+            trailing,
+            color = Accent,
+            fontSize = 13.sp,
+            modifier = (if (onTrailing != null) Modifier.clickable(onClick = onTrailing) else Modifier)
+                .padding(horizontal = 6.dp, vertical = 6.dp),
+        )
     }
 }
 
@@ -888,25 +917,16 @@ private fun PickerScreen(
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f, fill = false)) {
                 items(state.sessions, key = { it.id }) { session ->
                     val windows = state.views[session.id]?.windows?.size
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Card)
-                            .clickable { onOpen(session.id) }.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(session.label, color = Ink, fontSize = 16.sp)
-                            Text(
-                                if (windows == null) {
-                                    stringResource(R.string.session_tap_to_enter)
-                                } else {
-                                    stringResource(R.string.session_window_count, windows)
-                                },
-                                color = Muted,
-                                fontSize = 12.sp,
-                            )
-                        }
-                        Text(stringResource(R.string.session_enter), color = Accent)
-                    }
+                    EntryCard(
+                        title = session.label,
+                        detail = if (windows == null) {
+                            stringResource(R.string.session_tap_to_enter)
+                        } else {
+                            stringResource(R.string.session_window_count, windows)
+                        },
+                        trailing = stringResource(R.string.session_enter),
+                        onOpen = { onOpen(session.id) },
+                    )
                 }
             }
         }

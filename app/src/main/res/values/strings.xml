@@ -4,7 +4,7 @@
 
     <string name="home_tagline">REXPOCKET</string>
     <string name="home_title">Your Rex, in your pocket</string>
-    <string name="home_subtitle">Connect to Rex on your own computer. Plain port 7297, no third party.</string>
+    <string name="home_subtitle">Connect to Rex on your own computer: over your network, or through the built-in Tailscale node.</string>
     <string name="home_no_hosts">No hosts yet</string>
     <string name="home_no_hosts_body">Open it on your computer only on a network you trust:\nrex server start --extra-listen :7297 --allow-anonymous\nThen add the address here. A plaintext connection has full access to that Rex.</string>
     <string name="host_transport_plain">plain</string>
@@ -40,6 +40,7 @@
     <string name="tailscale_login_banner">Tailscale needs a login: tap to open the page and authorize this node.</string>
 
     <string name="sessions">Sessions</string>
+    <string name="home_hosts">Hosts</string>
     <string name="session_new">New session</string>
     <string name="session_enter">Enter</string>
     <string name="session_tap_to_enter">Tap to enter</string>

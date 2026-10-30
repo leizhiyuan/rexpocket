@@ -28,7 +28,7 @@ The phone and the computer must share a network, or sit inside your own VPN / Ta
 
 ## On the phone
 
-1. Add a host: name, IP or domain, port `7297`, plaintext on.
+1. Add a host: a name and an address. `9.134.131.226` is port 7297 over plaintext, `host:7300` picks the port, and a `.ts.net` name or a `100.x` address goes through Tailscale on 443 with TLS; the line under the field shows what the app made of it.
 2. Tapping a host always lands on the session list. Opening a session goes back to the pane the phone showed there last time. The first time, or when that pane is gone, it shows the tab and pane Rex has focused, the same place the desktop is on.
 3. Session → tab → pane. Rex calls a tab a window. Under the header, the tab bar lists the session's tabs: tap one to switch, and Rex brings back the pane that tab last had focused. A tab holding several panes shows their count, and below it a pane strip lists them by number. The phone draws only one pane at a time, so a desktop split shows up as chips here rather than side by side. `+` on either row adds a tab or a pane. Long-press a tab or pane chip for a sheet to rename or close it; closing asks first.
 4. Terminal: drag down to read scrollback, and the arrow at the bottom right returns to following the output. Pinch to change the font size, long-press to select and then tap `Copy` in the toolbar.

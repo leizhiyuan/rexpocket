@@ -4,7 +4,7 @@
 
     <string name="home_tagline">REXPOCKET</string>
     <string name="home_title">你的 Rex，在口袋里</string>
-    <string name="home_subtitle">连到你自己电脑上的 Rex。明文端口 7297，不经过别的服务器。</string>
+    <string name="home_subtitle">连到你自己电脑上的 Rex：局域网直连，或走应用内置的 Tailscale，不占手机 VPN。</string>
     <string name="home_no_hosts">还没有主机</string>
     <string name="home_no_hosts_body">在电脑上只对信任的网络开放：\nrex server start --extra-listen :7297 --allow-anonymous\n然后把 IP 加到这里。明文连接拥有这台 Rex 的全部权限。</string>
     <string name="host_transport_plain">明文</string>
@@ -40,6 +40,7 @@
     <string name="tailscale_login_banner">Tailscale 需要登录：点这里打开页面，授权这个节点。</string>
 
     <string name="sessions">会话</string>
+    <string name="home_hosts">主机</string>
     <string name="session_new">新会话</string>
     <string name="session_enter">进入</string>
     <string name="session_tap_to_enter">点按进入</string>
