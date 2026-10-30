@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -555,7 +557,9 @@ class PocketSession(
                 }
             }
             "session_destroyed" -> dropSession(sid)
-            "block_closed", "window_closed", "window_created", "active_window_changed" -> refreshView(sid)
+            // Which client owns a pane decides its size, so a change here redraws it as owned or not.
+            "block_owner_changed", "block_closed", "window_closed", "window_created", "active_window_changed" ->
+                refreshView(sid)
         }
     }
 
@@ -631,6 +635,7 @@ class PocketSession(
                 ensureOwned(sid, blockId)
                 coroutineScope {
                     launch { sizeLoop(sid, blockId) }
+                    launch { ownershipLoop(sid, blockId) }
                     val stream = TerminalStream(endpoint, { RexClient.defaultHttp(socksPort) }) { ticket(sid, blockId) }
                     try {
                         stream.feeds().collect { emit(it) }
@@ -708,6 +713,11 @@ class PocketSession(
                 JSONObject().put("session_id", previousSession).put("block_ids", JSONArray().put(previous)),
             )
         }
+        takePane(sid, block)
+    }
+
+    /** Takes the pane, after which Rex applies this phone's size to it instead of the old owner's. */
+    private suspend fun takePane(sid: String, block: String) {
         rpc(
             "session.own_block",
             JSONObject()
@@ -717,8 +727,41 @@ class PocketSession(
         )
         ownedBlock = block
         ownedSession = sid
+        // The new owner has to ask for its size again; Rex does not carry the old one over.
         lastResize = null
     }
+
+    /**
+     * Keeps the pane on this phone. The desktop takes a pane back when its own window is focused, and
+     * a pane owned elsewhere keeps the desktop's size: the phone would then stream a screen wider
+     * than itself, with the right-hand side cut off, and its own resize requests would never apply.
+     * So a pane that changed owner is taken again, backing off when the desktop keeps taking it.
+     */
+    private suspend fun ownershipLoop(sid: String, blockId: String) {
+        var wait = 0L
+        while (true) {
+            // Nothing to keep while nobody is looking; this asks Rex a question every few seconds.
+            active.first { it }
+            // The owner of a terminal is asked of the terminal itself: the view of a session does not
+            // always follow an owner change, and a stale answer here means a pane that stays clipped.
+            val mine = _state.value.clientId
+            val owner = ownerOnServer(sid, blockId)
+            if (owner == null || mine == null || owner == mine) {
+                wait = 0L
+            } else {
+                delay(wait)
+                wait = if (wait == 0L) FIRST_TAKE_BACK_MS else (wait * 2).coerceAtMost(TAKE_BACK_MAX_MS)
+                runCatching { takePane(sid, blockId) }
+            }
+            delay(OWNERSHIP_CHECK_MS)
+        }
+    }
+
+    /** The owner of [blockId] according to Rex, or null when the terminal will not say. */
+    private suspend fun ownerOnServer(sid: String, blockId: String): String? = runCatching {
+        rpc("com.superlogical.terminal.size", JSONObject().put("session_id", sid).put("block_id", blockId))
+            .optNullableString("owner")
+    }.getOrNull()
 
     private suspend fun disownQuietly() {
         val block = ownedBlock ?: return
@@ -797,6 +840,14 @@ class PocketSession(
 private const val MIN_BACKOFF_MS = 400L
 
 private const val MAX_BACKOFF_MS = 8_000L
+
+/** How long to wait before taking a pane back the first time, and the longest wait after retakes. */
+private const val FIRST_TAKE_BACK_MS = 1_000L
+
+private const val TAKE_BACK_MAX_MS = 30_000L
+
+/** How often a watched pane asks Rex who owns it, so it can take itself back when the desk does. */
+private const val OWNERSHIP_CHECK_MS = 3_000L
 
 /** Wait before the screen tries its pane again, after the connection or the stream let go. */
 private const val PANE_RETRY_MAX_MS = 5_000L

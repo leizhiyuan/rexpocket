@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -227,6 +228,66 @@ class PocketSessionTest {
         }
     }
 
+    /**
+     * The desktop takes a pane back when its window is focused. A pane owned elsewhere keeps the
+     * desktop's size, so the phone streams a screen wider than itself with its right side cut off;
+     * the phone has to take it back and ask for its own size again.
+     */
+    @Test
+    fun aPaneTakenByAnotherClientIsTakenBack() {
+        val endpoint = testEndpoint()
+        assumeTrue(
+            "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
+            portOpen(endpoint.host, endpoint.port),
+        )
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(endpoint)
+            val desktop = RexClient()
+            var sessionId: String? = null
+            try {
+                session.start(scope, preferredSessionId = null)
+                withTimeout(15_000) { session.awaitReady() }
+                session.setSize(52, 21, 8, 16)
+                session.createShell("rexpocket-test-owner-" + System.currentTimeMillis())
+                sessionId = session.state.value.activeSessionId!!
+                val blockId = awaitOwnedFocus(session)
+
+                val watched = StringBuilder()
+                val watcher = collectPane(scope, session, blockId, watched)
+                try {
+                    val mine = session.state.value.clientId
+                    // Watching the pane takes it first; only then can the desktop take it away.
+                    withTimeout(15_000) { while (ownerOnServer(endpoint, sessionId!!, blockId) != mine) delay(100) }
+                    // The desktop focuses the pane and takes it, as Rex does while someone is at the desk.
+                    desktop.connect(endpoint)
+                    desktop.call("session.attach", JSONObject().put("session_id", sessionId))
+                    desktop.call(
+                        "session.own_block",
+                        JSONObject()
+                            .put("session_id", sessionId)
+                            .put("block_ids", JSONArray().put(blockId))
+                            .put("mode", "take"),
+                    )
+                    // Ask Rex, not the session's cached view: the view can lag behind an owner change.
+                    val back = withTimeoutOrNull(20_000) {
+                        while (ownerOnServer(endpoint, sessionId!!, blockId) != mine) delay(100)
+                        true
+                    } ?: false
+                    val last = ownerOnServer(endpoint, sessionId!!, blockId)
+                    assertTrue("the pane stayed with $last", back)
+                } finally {
+                    watcher.cancel()
+                    desktop.close()
+                }
+            } finally {
+                session.stop()
+                scope.cancel()
+                sessionId?.let { destroyQuietly(endpoint, it) }
+            }
+        }
+    }
+
     /** Moving to another session must hand the pane left behind back to the desktop. */
     @Test
     fun switchingSessionsReleasesThePreviousPane() {
@@ -261,6 +322,21 @@ class PocketSessionTest {
                 created.forEach { destroyQuietly(endpoint, it) }
             }
         }
+    }
+}
+
+/** The owner of a pane according to Rex, read with a fresh connection. */
+private suspend fun ownerOnServer(endpoint: Endpoint, sessionId: String, blockId: String): String? {
+    val probe = RexClient()
+    try {
+        probe.connect(endpoint)
+        probe.call("session.attach", JSONObject().put("session_id", sessionId))
+        return probe.call(
+            "com.superlogical.terminal.size",
+            JSONObject().put("session_id", sessionId).put("block_id", blockId),
+        ).optNullableString("owner")
+    } finally {
+        probe.close()
     }
 }
 
