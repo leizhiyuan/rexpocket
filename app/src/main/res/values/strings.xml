@@ -78,6 +78,8 @@
     <string name="menu_close_pane">Close pane</string>
     <string name="menu_kill_session">End session</string>
 
+    <string name="pane_reading">Reading the screen…</string>
+    <string name="pane_no_picture">No picture yet</string>
     <string name="composer_hint">Type, then send to the terminal</string>
     <string name="composer_send">Send</string>
     <string name="composer_send_hint">Tap: send and press Enter. Long press: send an Enter alone.</string>

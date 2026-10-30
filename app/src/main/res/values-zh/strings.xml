@@ -78,6 +78,8 @@
     <string name="menu_close_pane">关闭窗格</string>
     <string name="menu_kill_session">结束会话</string>
 
+    <string name="pane_reading">正在读取画面…</string>
+    <string name="pane_no_picture">画面还没有来</string>
     <string name="composer_hint">输入后发送到终端</string>
     <string name="composer_send">发送</string>
     <string name="composer_send_hint">点按：发送并回车。长按：只发一个回车。</string>
