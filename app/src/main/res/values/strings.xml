@@ -2,8 +2,6 @@
 <resources>
     <string name="app_name">RexPocket</string>
 
-    <string name="home_tagline">REXPOCKET</string>
-    <string name="home_title">Your Rex, in your pocket</string>
     <string name="home_subtitle">Connect to Rex on your own computer: over your network, or through the built-in Tailscale node.</string>
     <string name="home_no_hosts">No hosts yet</string>
     <string name="home_no_hosts_body">Open it on your computer only on a network you trust:\nrex server start --extra-listen :7297 --allow-anonymous\nThen add the address here. A plaintext connection has full access to that Rex.</string>
@@ -34,6 +32,7 @@
     <string name="tailscale_state_starting">Starting…</string>
     <string name="tailscale_state_needs_login">Login needed</string>
     <string name="tailscale_state_needs_approval">Waiting for approval</string>
+    <string name="tailscale_state_failed">Failed to start</string>
     <string name="tailscale_state_stopped">Stopped</string>
     <string name="tailscale_login_hint">Approve this node in the browser, then come back: the connection is retrying.</string>
     <string name="tailscale_login_copied">Login link copied</string>
@@ -43,6 +42,8 @@
     <string name="home_hosts">Hosts</string>
     <string name="session_new">New session</string>
     <string name="session_enter">Enter</string>
+    <string name="session_opening">Opening…</string>
+    <string name="session_creating">Creating…</string>
     <string name="session_window_count">%1$d tabs</string>
     <string name="session_none_live">This Rex has no sessions yet.</string>
     <string name="session_loading">Reading sessions…</string>
@@ -77,6 +78,8 @@
     <string name="menu_close_pane">Close pane</string>
     <string name="menu_kill_session">End session</string>
 
+    <string name="pane_reading">Reading the screen…</string>
+    <string name="pane_no_picture">No picture yet</string>
     <string name="composer_hint">Type, then send to the terminal</string>
     <string name="composer_send">Send</string>
     <string name="composer_send_hint">Tap: send and press Enter. Long press: send an Enter alone.</string>
@@ -113,5 +116,17 @@
     <string name="toast_clipboard_empty">Clipboard is empty</string>
     <string name="toast_select_text">Long-press the screen to select text</string>
     <string name="toast_copied">Copied</string>
+    <string name="problem_unreachable">Cannot reach %1$s. Check that Rex is running and the phone is on its network.</string>
+    <string name="problem_timed_out">%1$s took the connection but did not answer.</string>
+    <string name="problem_dropped">The connection dropped. Reconnecting…</string>
+    <string name="problem_not_ready">Not connected yet. Try again in a moment.</string>
+    <string name="problem_tailnet">Tailscale could not start: %1$s</string>
+    <string name="problem_rejected">Rex refused: %1$s</string>
+    <string name="action_retry_now">Retry now</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="confirm_delete_host">Delete %1$s?</string>
+    <string name="confirm_delete_host_body">Only the saved address goes; the sessions on that Rex stay.</string>
+    <string name="action_back">Back</string>
+    <string name="action_more">More actions</string>
     <string name="error_operation_failed">Operation failed</string>
 </resources>

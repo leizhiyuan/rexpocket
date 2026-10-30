@@ -6,7 +6,7 @@
 
 手机上的 Rex 客户端。交互参照 [Moshi](https://getmoshi.app/docs/rex)：主机列表、会话选择、终端顶部的标签页和窗格、底栏特殊键。只连你自己的 Rex，不经过第三方。
 
-屏幕内容用服务器文档里的 `com.superlogical.terminal.format`（`vt`）重放，空闲时大约每 180ms 拉一次，有输入后的一小段时间里每 30ms 拉一次。pi 这类全屏程序把滑动变成滚轮事件，滚动后的画面要靠这个轮询带回来，所以输入后要拉得更勤。转储是整个回滚加屏幕的线性重放，所以渲染交给 [libghostty-vt](https://github.com/sagernet/libghostty-android)：第一次到达时先 `RIS` 再整份回放，之后的刷新只把新增的尾部喂进去，这样打字或输出时原生滚动位置不会被顶回底部。正在查看的窗格会被 `session.own_block` 占住，尺寸跟手机走；离开会话或断开后会 `disown`，桌面端可以拿回尺寸。
+屏幕内容由 Rex 推过来。Rex 通过 `/api/data`（`rex.data.terminal.v1`）提供某个窗格：流一开始是整个终端的 `GHOSTSNP` 快照——回滚、颜色、光标，以及程序停在一半的那个转义序列——之后按到达顺序推它的输出，所以不再轮询，静止的窗格不花任何代价。[libghostty-vt](https://github.com/sagernet/libghostty-android) 恢复这个快照，再把之后的内容按顺序喂进去；连接断开会从断点续传，Rex 无法续传时重新开一条流并给一份新的快照。正在查看的窗格会被 `session.own_block` 占住，尺寸跟手机走；离开会话或断开后会 `disown`，桌面端可以拿回尺寸。
 
 发送一行是「写文字」再加一次独立的回车按键，不把换行拼进粘贴内容里。pi 这类全屏 TUI 会把粘贴内容里的换行当成自己输入框的换行，所以拼在一起只换行不提交。
 
@@ -60,6 +60,9 @@ rex server start --extra-listen :7297 --allow-anonymous
 ./gradlew :core:test :app:assembleDebug
 ```
 
-`app/libs/libbox.aar` 已随仓库提供（见 [Tailscale](#tailscale)），不需要单独构建。
+`app/libs/libbox.aar` 已随仓库提供（见 [Tailscale](#tailscale)）。终端需要能恢复 `GHOSTSNP` 快照的
+`libghostty-android`，已发布的那个 alpha 做不到，所以 `app/build.gradle.kts` 用的是 `0.1.0-SNAPSHOT`，
+从本地 Maven 仓库解析：先在 [libghostty-android](https://github.com/sagernet/libghostty-android)
+里执行 `./gradlew publishToMavenLocal`。
 
 调试包在 `app/build/outputs/apk/debug/app-debug.apk`。

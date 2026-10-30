@@ -6,7 +6,7 @@
 
 A Rex client for your phone. The interaction follows [Moshi](https://getmoshi.app/docs/rex): a host list, session picker, tabs and panes in the terminal header, and a toolbar of special keys. It only talks to your own Rex, never through a third party.
 
-The screen is replayed from the server's `com.superlogical.terminal.format` (`vt`) dump, polled roughly every 180 ms while idle and every 30 ms for a moment after input, so a swipe in a full-screen program such as pi, which turns into wheel reports, comes back quickly. That dump is a linear replay of the whole scrollback plus the screen, so rendering is handed to [libghostty-vt](https://github.com/sagernet/libghostty-android): the first dump resets with `RIS` and replays in full, and later polls feed only the appended tail, so the native scroll position is not yanked back to the bottom while you type or read. The pane you are viewing is held with `session.own_block` and sized to the phone; leaving the session or disconnecting `disown`s it so the desktop can take the size back.
+The screen is pushed. Rex serves a pane over `/api/data` (`rex.data.terminal.v1`): the stream opens with a `GHOSTSNP` snapshot of the whole terminal - scrollback, colours, cursor and the escape sequence the program is in the middle of - and then carries its output as it comes, so nothing is polled and an idle pane costs nothing. [libghostty-vt](https://github.com/sagernet/libghostty-android) restores the snapshot and is fed the rest in order; a dropped connection resumes where it stopped, and when Rex cannot resume it, the stream starts over with a fresh snapshot. The pane you are viewing is held with `session.own_block` and sized to the phone; leaving the session or disconnecting `disown`s it so the desktop can take the size back.
 
 Sending a line means writing the text and then pressing Enter as a separate key event. Full-screen TUIs such as pi read a newline inside pasted text as a line break in their own input box, so a newline bundled with the text only breaks the line instead of submitting it.
 
@@ -60,6 +60,10 @@ Requires Android SDK 36 and JDK 17.
 ./gradlew :core:test :app:assembleDebug
 ```
 
-`app/libs/libbox.aar` ships with the repository (see [Tailscale](#tailscale)), so a plain checkout builds without any extra toolchain.
+`app/libs/libbox.aar` ships with the repository (see [Tailscale](#tailscale)). The terminal needs a
+`libghostty-android` build that can restore a `GHOSTSNP` snapshot, which the published alpha cannot,
+so `app/build.gradle.kts` asks for `0.1.0-SNAPSHOT` and resolves it from the local Maven repository:
+install that build with `./gradlew publishToMavenLocal` in
+[libghostty-android](https://github.com/sagernet/libghostty-android) first.
 
 The debug APK lands in `app/build/outputs/apk/debug/app-debug.apk`.
