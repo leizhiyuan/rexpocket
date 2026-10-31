@@ -10,8 +10,6 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        // A locally published libghostty-android snapshot, for testing a change to the library.
-        mavenLocal()
         google()
         maven { url = uri("https://maven.aliyun.com/repository/public") }
         mavenCentral()

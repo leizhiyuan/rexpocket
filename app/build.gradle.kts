@@ -67,10 +67,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    // 0.1.0-SNAPSHOT from mavenLocal: the released alpha cannot restore a GHOSTSNP snapshot, which
-    // is what Rex sends at the start of a terminal data stream.
-    implementation("io.github.sagernet:libghostty-android:0.1.0-SNAPSHOT")
-    implementation("io.github.sagernet:libghostty-android-compose-legacy:0.1.0-SNAPSHOT")
+    // Restores the GHOSTSNP snapshot Rex opens a terminal stream with.
+    implementation("io.github.sagernet:libghostty-android:0.1.0-alpha02")
+    implementation("io.github.sagernet:libghostty-android-compose-legacy:0.1.0-alpha02")
     // Built from sing-box 1.14.4 with the Tailscale endpoint, see tools/build-libbox.sh.
     implementation(files("libs/libbox.aar"))
 }
