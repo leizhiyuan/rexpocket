@@ -13,8 +13,8 @@ android {
         applicationId = "me.leaver.rexpocket"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.0.6"
+        versionCode = 8
+        versionName = "0.0.7"
 
         // libbox is built for arm64 only, so the APK must not claim the other ABIs either.
         ndk.abiFilters += "arm64-v8a"
