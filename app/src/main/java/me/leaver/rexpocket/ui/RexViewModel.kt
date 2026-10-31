@@ -15,6 +15,7 @@ import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.Problem
+import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.Trouble
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.Flow
@@ -30,6 +31,7 @@ import me.leaver.rexpocket.net.TailscaleConfig
 import me.leaver.rexpocket.net.TailscaleStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CoroutineScope
@@ -69,6 +71,25 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     val hosts = MutableStateFlow(store.list())
     val tailscale = MutableStateFlow(store.tailscale())
     val tailscaleStatus: StateFlow<TailscaleStatus> = tailscaleBox.status
+
+    /**
+     * How the open tailnet host is reached right now: direct, through a peer relay, or through a
+     * DERP server. Null for a host on the phone's own network, and while it has not been measured.
+     */
+    private val _tailnetPath = MutableStateFlow<TailnetPath?>(null)
+    val tailnetPath: StateFlow<TailnetPath?> = _tailnetPath
+    private var pathJob: Job? = null
+
+    /** Measures the path to the open host; a no-op unless that host goes through the tailnet. */
+    fun probeTailnetPath() {
+        val target = host?.takeIf { it.viaTailscale } ?: return
+        pathJob?.cancel()
+        pathJob = viewModelScope.launch {
+            val path = withContext(Dispatchers.IO) { tailscaleBox.probePath(target.host) }
+            _tailnetPath.value = path
+            if (BuildConfig.DEBUG) Log.i(CONN_TAG, "tailnet path to ${target.host}: $path")
+        }
+    }
     val route = MutableStateFlow<Route>(Route.Home)
     private val _pocket = MutableStateFlow(PocketState())
     val pocket: StateFlow<PocketState> = _pocket
@@ -259,6 +280,13 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                 if (phase == Phase.Live && active == null && route.value == Route.Term) route.value = Route.Picker
             }
         }
+        // Measured once the connection is up, which is when Tailscale has had a chance to find a
+        // direct path; earlier it would almost always report the DERP fallback it starts on.
+        launch {
+            s.state.first { it.phase == Phase.Live }
+            delay(PATH_SETTLE_MS)
+            probeTailnetPath()
+        }
         if (resumeTo != null) {
             launch {
                 s.state.first { it.phase == Phase.Live && it.sessions.isNotEmpty() }
@@ -399,6 +427,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     private fun disconnectQuiet() {
         connectJob?.cancel()
         connectJob = null
+        pathJob?.cancel()
+        _tailnetPath.value = null
         // A tap waiting for the old connection must not open anything on the next one.
         sessionReady.cancel()
         sessionReady = CompletableDeferred()
@@ -420,6 +450,9 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
  * round trip with a time limit, so nothing here outlives the process by more than that.
  */
 private val teardown = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+/** How long after a connection goes live the path is measured: Tailscale needs a moment to go direct. */
+private const val PATH_SETTLE_MS = 3_000L
 
 /** How long a connection waits for the tailnet node to come up before dialing anyway. */
 internal const val NODE_READY_MS = 30_000L

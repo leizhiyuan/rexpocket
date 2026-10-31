@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketState
+import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.Trouble
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.net.TailscaleStatus
@@ -50,6 +51,8 @@ internal fun PickerScreen(
     onTailscale: () -> Unit,
     onBack: () -> Unit,
     onRetry: () -> Unit,
+    tailnetPath: TailnetPath?,
+    onProbePath: () -> Unit,
     opening: Opening?,
     onOpen: (String) -> Unit,
     onCreate: (String?) -> Unit,
@@ -65,6 +68,8 @@ internal fun PickerScreen(
                 Text(phaseText(state), color = if (state.phase == Phase.Live) Colors.accent else Colors.amber, fontSize = TextStyles.label)
             }
         }
+        // Which way the tailnet carries this host: the one number that explains a slow picture.
+        if (tailnetPath != null) TailnetPathLine(tailnetPath, onProbePath)
         // A retry that fails and succeeds again within a second is noise; a real failure stays.
         val problem = rememberSettledProblem(state.phase, state.problem)
         if (problem != null && problem.trouble != Trouble.TailnetNotJoined) {
@@ -143,4 +148,28 @@ internal fun PickerScreen(
             fontWeight = FontWeight.SemiBold,
         )
     }
+}
+
+/**
+ * One line under the host's name: how the phone reaches it through the tailnet. Direct is the fast
+ * case; a relay is slower, and a DERP relay far away, behind a proxy, is what makes a picture take
+ * seconds. Tapping it measures again.
+ */
+@Composable
+private fun TailnetPathLine(path: TailnetPath, onProbe: () -> Unit) {
+    val ms = path.latencyMs?.let { " · ${it.toInt()} ms" }.orEmpty()
+    val (text, color) = when (path) {
+        is TailnetPath.Direct -> stringResource(R.string.tailnet_path_direct) + ms to Colors.accent
+        is TailnetPath.PeerRelay -> stringResource(R.string.tailnet_path_peer_relay) + ms to Colors.amber
+        is TailnetPath.Derp ->
+            stringResource(R.string.tailnet_path_derp, path.regionCode.ifBlank { path.regionId.toString() }) + ms to Colors.amber
+        is TailnetPath.Unreachable -> stringResource(R.string.tailnet_path_unreachable, path.reason) to Colors.danger
+    }
+    Text(
+        text,
+        color = color,
+        fontSize = TextStyles.label,
+        modifier = Modifier.padding(top = Space.xs).clip(RoundedCornerShape(Radius.chip))
+            .clickable(onClick = onProbe).padding(vertical = Space.xs),
+    )
 }

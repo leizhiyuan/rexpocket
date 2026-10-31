@@ -10,6 +10,7 @@ import android.os.Build
 import android.util.Log
 import android.system.OsConstants
 import me.leaver.rexpocket.BuildConfig
+import me.leaver.rexpocket.core.TailnetPath
 import io.nekohasekai.libbox.BridgeOptions
 import io.nekohasekai.libbox.BridgeSession
 import io.nekohasekai.libbox.CommandClient
@@ -79,6 +80,12 @@ const val LOG_TAG = "RexPocketTS"
  * why this composes with whatever VPN the phone already uses.
  */
 class TailscaleBox(private val context: Context) {
+    /**
+     * Whether the node's own sockets skip a VPN on the phone and use the network under it. On by
+     * default: a proxy VPN turns every direct path into a DERP relay. Takes effect on the next start.
+     */
+    @Volatile var bypassVpn: Boolean = true
+
     private val _status = MutableStateFlow(TailscaleStatus())
     /** Live node state, so the home screen can say whether it still needs a login. */
     val status: StateFlow<TailscaleStatus> = _status
@@ -165,6 +172,7 @@ class TailscaleBox(private val context: Context) {
                     while (endpoints.hasNext()) {
                         val endpoint = endpoints.next()
                         if (endpoint.endpointTag != ENDPOINT_TAG) continue
+                        peers = tailnetAddresses(endpoint)
                         val next = TailscaleStatus(
                             backendState = endpoint.backendState.orEmpty(),
                             text = endpoint.stateText.orEmpty(),
@@ -183,6 +191,70 @@ class TailscaleBox(private val context: Context) {
             subscription = handle
         }.onFailure {
             _status.value = _status.value.copy(text = it.message.orEmpty())
+        }
+    }
+
+    /** Each peer's MagicDNS name, without the trailing dot, to its first tailnet address. */
+    @Volatile private var peers: Map<String, String> = emptyMap()
+
+    private fun tailnetAddresses(endpoint: io.nekohasekai.libbox.TailscaleEndpointStatus): Map<String, String> {
+        val found = HashMap<String, String>()
+        val groups = endpoint.userGroups()
+        while (groups.hasNext()) {
+            val list = groups.next().peers()
+            while (list.hasNext()) {
+                val peer = list.next()
+                val ips = peer.tailscaleIPs()
+                val first = if (ips.hasNext()) ips.next() else continue
+                found[peer.dnsName.trimEnd('.').lowercase()] = first
+                found[peer.hostName.lowercase()] = first
+            }
+        }
+        return found
+    }
+
+    /**
+     * How this phone's node reaches [host], from a few disco pings: straight over UDP, through a
+     * peer relay, or through a DERP server. A tailnet name is looked up among the peers the node
+     * knows; a `100.x` address is pinged as it is. Blocking: call from an IO dispatcher.
+     */
+    fun probePath(host: String, pings: Int = PROBE_PINGS): TailnetPath {
+        val client = commandClient ?: return TailnetPath.Unreachable("the node is not running")
+        val ip = host.trim().trimEnd('.').lowercase().let { name ->
+            peers[name] ?: peers[name.substringBefore('.')] ?: name.takeIf { it.first().isDigit() || ':' in it }
+        } ?: return TailnetPath.Unreachable("$host is not a peer of this tailnet")
+        val results = java.util.concurrent.LinkedBlockingQueue<TailnetPath>()
+        val session = runCatching {
+            client.startTailscalePing(ENDPOINT_TAG, ip, object : io.nekohasekai.libbox.TailscalePingHandler {
+                override fun onError(message: String) {
+                    results.put(TailnetPath.Unreachable(message))
+                }
+
+                override fun onPingResult(result: io.nekohasekai.libbox.TailscalePingResult) {
+                    results.put(
+                        TailnetPath.from(
+                            result.latencyMs,
+                            result.endpoint,
+                            result.peerRelay,
+                            result.derpRegionID,
+                            result.derpRegionCode,
+                            result.error,
+                        ),
+                    )
+                }
+            })
+        }.getOrElse { return TailnetPath.Unreachable(it.message ?: "ping failed") }
+        try {
+            // The first ping often still goes through DERP while the direct path is being set up;
+            // the last one says where the traffic settled.
+            var last: TailnetPath = TailnetPath.Unreachable("no answer")
+            repeat(pings) {
+                last = results.poll(PROBE_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) ?: return last
+                if (last is TailnetPath.Direct) return last
+            }
+            return last
+        } finally {
+            runCatching { session.close() }
         }
     }
 
@@ -387,10 +459,60 @@ class TailscaleBox(private val context: Context) {
 
         override fun localDNSTransport(): LocalDNSTransport = LocalDns
 
-        /** The box is not a VPN, so it must not bind sockets to an interface of ours. */
-        override fun usePlatformAutoDetectInterfaceControl(): Boolean = false
+        /**
+         * Every socket the node opens - TCP to the control plane and to DERP, and the UDP it punches
+         * holes with - is handed here before it connects. With [bypassVpn], the UDP ones are bound to
+         * the phone's underlying network, so a VPN on the phone (a proxy, typically) does not carry
+         * them; the TCP ones keep the default route, because where tailscale.com is blocked, the
+         * proxy is what reaches the control plane and DERP at all.
+         *
+         * That matters for direct paths: a hole punched through a proxy opens on the proxy's
+         * address, not the phone's, so the peer can never reach it and every packet falls back to a
+         * DERP relay - which, through a proxy to a server abroad, is the slow path. Android lets an
+         * app leave a VPN this way only when the VPN allows it ("bypassable"); otherwise binding
+         * fails and the socket keeps the default route.
+         */
+        override fun usePlatformAutoDetectInterfaceControl(): Boolean = true
 
-        override fun autoDetectInterfaceControl(fd: Int) = Unit
+        override fun autoDetectInterfaceControl(fd: Int) {
+            if (!bypassVpn) return
+            if (!isUdp(fd)) return
+            val network = underlyingNetwork() ?: return
+            val bound = runCatching {
+                android.os.ParcelFileDescriptor.fromFd(fd).use { pfd -> network.bindSocket(pfd.fileDescriptor) }
+            }
+            if (bound.isFailure && BuildConfig.DEBUG) {
+                Log.d(LOG_TAG, "a UDP socket stays in the VPN: ${bound.exceptionOrNull()?.message}")
+            }
+        }
+
+        /**
+         * Whether [fd] is a datagram socket. libbox hands over only the descriptor, and Android's
+         * public API reads no SO_TYPE, but it can set a socket option: TCP_NODELAY exists only on a
+         * TCP socket, so setting it on a UDP socket fails. On a TCP socket it is what Go sets
+         * anyway, so asking changes nothing.
+         */
+        private fun isUdp(fd: Int): Boolean = runCatching {
+            android.os.ParcelFileDescriptor.fromFd(fd).use { pfd ->
+                runCatching {
+                    android.system.Os.setsockoptInt(pfd.fileDescriptor, OsConstants.IPPROTO_TCP, OsConstants.TCP_NODELAY, 1)
+                }.isFailure
+            }
+        }.getOrDefault(false)
+
+        /** The network under any VPN: the one with internet and no VPN transport, preferring the default. */
+        @Suppress("DEPRECATION") // allNetworks lists networks a callback has not reported yet.
+        private fun underlyingNetwork(): Network? {
+            val manager = connectivity ?: return null
+            fun usable(network: Network): Boolean {
+                val caps = manager.getNetworkCapabilities(network) ?: return false
+                return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+            }
+            val active = manager.activeNetwork
+            if (active != null && usable(active)) return active
+            return manager.allNetworks.firstOrNull(::usable)
+        }
 
         override fun openTun(options: TunOptions): Int =
             throw UnsupportedOperationException("this build has no tun inbound")
@@ -635,6 +757,12 @@ class TailscaleBox(private val context: Context) {
         private const val RCODE_NXDOMAIN = 3
         private const val DEFAULT_MTU = 1500
         private const val FIRST_PORT = 10800
+
+        /** Pings in one probe: the direct path usually takes a second or two to be found. */
+        private const val PROBE_PINGS = 5
+
+        /** How long one ping may take; a DERP hop from behind a proxy can be well over a second. */
+        private const val PROBE_WAIT_MS = 4_000L
 
         @Volatile private var setupDone = false
     }

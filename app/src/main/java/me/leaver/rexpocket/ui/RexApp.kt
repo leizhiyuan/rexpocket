@@ -29,6 +29,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val tailscaleStatus by model.tailscaleStatus.collectAsState()
     val tailnetError by model.tailnetError.collectAsState()
     val opening by model.opening.collectAsState()
+    val tailnetPath by model.tailnetPath.collectAsState()
     val context = LocalContext.current
     var tailscaleOpen by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { model.restore() }
@@ -63,6 +64,8 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                 onTailscale = { tailscaleOpen = true },
                 onBack = model::disconnect,
                 onRetry = model::retryNow,
+                tailnetPath = tailnetPath,
+                onProbePath = model::probeTailnetPath,
                 onOpen = model::openSession,
                 opening = opening,
                 onCreate = model::createSession,

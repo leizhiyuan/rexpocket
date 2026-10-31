@@ -32,6 +32,10 @@
     <string name="tailscale_state_starting">启动中…</string>
     <string name="tailscale_state_needs_login">需要登录</string>
     <string name="tailscale_state_needs_approval">等待审批</string>
+    <string name="tailnet_path_direct">Tailscale：直连</string>
+    <string name="tailnet_path_peer_relay">Tailscale：经 peer relay 中转</string>
+    <string name="tailnet_path_derp">Tailscale：经 DERP %1$s 中转</string>
+    <string name="tailnet_path_unreachable">Tailscale：无路径（%1$s）</string>
     <string name="tailscale_state_failed">启动失败</string>
     <string name="tailscale_state_stopped">已停止</string>
     <string name="tailscale_login_hint">在浏览器里批准这个节点，然后回到应用：连接在自动重试。</string>
