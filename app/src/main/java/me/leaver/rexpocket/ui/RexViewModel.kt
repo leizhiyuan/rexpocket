@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import me.leaver.rexpocket.core.Endpoint
+import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
 import me.leaver.rexpocket.core.PocketState
@@ -60,7 +61,6 @@ sealed interface Opening {
 /** One pane of the session the user opened, offered before the terminal appears. */
 sealed interface Route {
     data object Home : Route
-    data object Picker : Route
     data object Term : Route
 }
 
@@ -179,7 +179,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         host = target
         store.setLastHost(target.id)
         val previousSession = store.lastSession(target.id)
-        route.value = Route.Picker
+        route.value = Route.Home
         val settings = store.tailscale()
         if (target.viaTailscale && !settings.enabled) {
             // The host is saved either way; without a joined node there is no route to it.
@@ -273,7 +273,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         // back to the list rather than an empty terminal.
         launch {
             s.state.map { it.phase to it.activeSessionId }.distinctUntilChanged().collect { (phase, active) ->
-                if (phase == Phase.Live && active == null && route.value == Route.Term) route.value = Route.Picker
+                if (phase == Phase.Live && active == null && route.value == Route.Term) route.value = Route.Home
             }
         }
         // Measured once the connection is up, which is when Tailscale has had a chance to find a
@@ -333,6 +333,42 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun openSession(id: String) = enterSession(Opening.Existing(id)) { openSession(id, rememberedPane(id)) }
 
+    /**
+     * Opens a session on [target] from the home list, connecting to that host first when it is not
+     * the one on screen. The row and the terminal both say *Opening* while it waits.
+     */
+    fun openSessionOn(target: SavedHost, id: String) {
+        if (host?.id != target.id) connect(target)
+        openSession(id)
+    }
+
+    /** Makes a session on [target], connecting to it first when it is not the host on screen. */
+    fun createSessionOn(target: SavedHost) {
+        if (host?.id != target.id) connect(target)
+        createSession()
+    }
+
+    /** Opens one tab of [target]'s session, connecting to the host first when it is not on screen. */
+    fun openTabOn(target: SavedHost, sessionId: String, windowId: String) {
+        if (host?.id != target.id) connect(target)
+        enterSession(Opening.Existing(sessionId)) {
+            openSession(sessionId, rememberedPane(sessionId))
+            focusWindow(windowId)
+        }
+    }
+
+    /** Adds a tab to [target]'s session and shows it; connects to the host first when needed. */
+    fun newTabOn(target: SavedHost, sessionId: String) {
+        if (host?.id != target.id) connect(target)
+        enterSession(Opening.Existing(sessionId)) {
+            openSession(sessionId, rememberedPane(sessionId))
+            newWindow()
+        }
+    }
+
+    /** The sessions this host had last time, for a host that is not the one on screen. */
+    fun cachedSessions(hostId: String): List<ListedSession> = store.cachedSessions(hostId)
+
     /** Creates a shell session and shows it once Rex has made it, never the session before it. */
     fun createSession(label: String? = null) = enterSession(Opening.New) { createShell(label) }
 
@@ -343,6 +379,9 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun enterSession(what: Opening, open: suspend PocketSession.() -> Unit) {
         if (_opening.value != null) return
+        // A host that cannot be dialed at all (a tailnet host with no joined node) fails before a
+        // connection exists; waiting for one would leave the row saying *Opening* forever.
+        if (_pocket.value.phase == Phase.Failed) return
         val waiting = sessionReady
         _opening.value = what
         viewModelScope.launch {
@@ -397,8 +436,9 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         route.value = Route.Home
     }
 
-    fun showPicker() {
-        route.value = Route.Picker
+    /** Back from the terminal: the host list stays connected so its live sessions are still there. */
+    fun showHome() {
+        route.value = Route.Home
     }
 
     fun setFont(scale: Float) {

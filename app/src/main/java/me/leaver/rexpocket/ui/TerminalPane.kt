@@ -117,7 +117,7 @@ fun TerminalPane(
         }
     }
 
-    val theme = remember { terminalTheme() }
+    val theme = remember(Colors.isDark) { terminalTheme() }
     Box(modifier) {
         GhosttyTerminal(
             session = session,

@@ -2,12 +2,10 @@
 <resources>
     <string name="app_name">RexPocket</string>
 
-    <string name="home_subtitle">Connect to Rex on your own computer: over your network, or through the built-in Tailscale node.</string>
     <string name="home_no_hosts">No hosts yet</string>
     <string name="home_no_hosts_body">Open it on your computer only on a network you trust:\nrex server start --extra-listen :7297 --allow-anonymous\nThen add the address here. A plaintext connection has full access to that Rex.</string>
     <string name="host_transport_plain">plain</string>
     <string name="host_transport_tls">TLS</string>
-    <string name="action_edit">Edit</string>
     <string name="action_add_host">Add host</string>
     <string name="action_edit_host">Edit host</string>
     <string name="action_save">Save</string>
@@ -22,10 +20,8 @@
     <string name="tailscale_not_joined">Not joined</string>
     <string name="tailscale_join">Join tailnet</string>
     <string name="tailscale_leave">Leave tailnet</string>
-    <string name="tailscale_no_name">this device</string>
     <string name="tailscale_hostname">Node name for this phone</string>
     <string name="tailscale_hint">The app runs its own Tailscale node, so this phone can reach tailnet names such as host.tailnet-xxxx.ts.net without the Tailscale app and without taking over the phone\'s VPN. Joining opens the Tailscale page in a browser to authorize the node once; the login stays in the app. A host whose address is a tailnet name or a 100.x address is dialed through the node automatically.</string>
-    <string name="tailscale_need_join">Not in a tailnet yet: tap to join, then come back.</string>
     <string name="tailscale_need_join_host">This address is on a tailnet: join the tailnet to reach it (tap here).</string>
     <string name="error_join_tailnet_first">Join a tailnet in Tailscale first.</string>
     <string name="tailscale_state_running">Running</string>
@@ -40,20 +36,14 @@
     <string name="tailscale_state_stopped">Stopped</string>
     <string name="tailscale_login_hint">Approve this node in the browser, then come back: the connection is retrying.</string>
     <string name="tailscale_login_copied">Login link copied</string>
-    <string name="tailscale_login_banner">Tailscale needs a login: tap to open the page and authorize this node.</string>
 
     <string name="sessions">Sessions</string>
-    <string name="home_hosts">Hosts</string>
     <string name="session_new">New session</string>
-    <string name="session_enter">Enter</string>
     <string name="session_opening">Opening…</string>
-    <string name="session_creating">Creating…</string>
     <plurals name="session_window_count">
         <item quantity="one">%1$d tab</item>
         <item quantity="other">%1$d tabs</item>
     </plurals>
-    <string name="session_none_live">This Rex has no sessions yet.</string>
-    <string name="session_loading">Reading sessions…</string>
 
     <string name="status_idle">Disconnected</string>
     <string name="status_connecting">Connecting to %1$s</string>
@@ -64,7 +54,6 @@
 
     <string name="header_stop">Stop</string>
     <string name="header_sessions">Sessions</string>
-    <string name="header_hosts">Hosts</string>
     <string name="level_session">Session</string>
     <string name="level_tab">Tab</string>
     <string name="level_pane">Pane</string>
@@ -130,6 +119,26 @@
     <string name="confirm_delete_host">Delete %1$s?</string>
     <string name="confirm_delete_host_body">Only the saved address goes; the sessions on that Rex stay.</string>
     <string name="action_back">Back</string>
+    <string name="action_disconnect">Disconnect</string>
+    <string name="action_search">Search</string>
+    <string name="settings">Settings</string>
+    <string name="settings_source">Source on GitHub</string>
+    <string name="settings_credits">Rex by Superlogical. Ghostty and libghostty-android by their authors. Icons from Material Symbols.</string>
+    <string name="search_hint">Search hosts, sessions and tabs</string>
+    <string name="search_none">Nothing matches</string>
+    <string name="session_cached">Cached</string>
+    <string name="session_tap_open">Tap to open</string>
+    <string name="host_not_connected">Not connected</string>
+    <plurals name="session_count">
+        <item quantity="one">%1$d session</item>
+        <item quantity="other">%1$d sessions</item>
+    </plurals>
+    <string name="keys">Keys</string>
+    <string name="action_enter">Enter</string>
+    <string name="session_open_to_load">Open to see tabs</string>
+    <string name="no_tabs">No tabs</string>
+    <string name="action_show_active">Show active only</string>
+    <string name="no_activity">Nothing is running right now</string>
     <string name="action_more">More actions</string>
     <string name="action_take_over">Take over</string>
     <string name="action_release">Release</string>
@@ -142,4 +151,11 @@
     </plurals>
     <string name="key_keyboard">Keyboard</string>
     <string name="error_operation_failed">Operation failed</string>
+    <string name="state_folded">Folded</string>
+    <string name="filter_on">On</string>
+    <string name="filter_off">Off</string>
+    <string name="action_clear">Clear</string>
+    <string name="state_selected">Selected</string>
+    <string name="holder_phone">On this phone</string>
+    <string name="holder_desk">On the desktop</string>
 </resources>

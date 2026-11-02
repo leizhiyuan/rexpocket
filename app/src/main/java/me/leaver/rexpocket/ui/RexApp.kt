@@ -42,60 +42,59 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
         if (authUrl.isBlank()) return@LaunchedEffect
         openLink(context, authUrl)
     }
-    Box(Modifier.fillMaxSize().background(Colors.bg)) {
-        when (route) {
-            Route.Home -> HomeScreen(
-                hosts = hosts,
-                tailscale = tailscale,
-                tailscaleStatus = tailscaleStatus,
-                tailnetError = tailnetError,
-                onSave = model::saveHost,
-                onDelete = model::deleteHost,
-                onOpen = model::connect,
-                onTailscale = { tailscaleOpen = true },
-            )
-            Route.Picker -> PickerScreen(
-                hostLabel = model.host?.label ?: "Rex",
-                state = pocket,
-                tailscaleStatus = tailscaleStatus,
-                tailscaleEnabled = tailscale.enabled,
-                onTailscale = { tailscaleOpen = true },
-                onBack = model::disconnect,
-                onRetry = model::retryNow,
-                tailnetPath = tailnetPath,
-                onProbePath = model::probeTailnetPath,
-                onOpen = model::openSession,
-                opening = opening,
-                onCreate = model::createSession,
-            )
-            Route.Term -> TermScreen(
-                state = pocket,
-                fontScale = font,
-                onFont = model::setFont,
-                onBack = model::showPicker,
-                onHosts = model::disconnect,
-                onOpenSession = model::openSession,
-                watchPane = model::watchPane,
-                onRetry = model::retryNow,
-                onDismissNotice = model::dismissNotice,
-                onAct = model::act,
+    RexTheme {
+        Box(Modifier.fillMaxSize().background(Colors.bg)) {
+            when (route) {
+                Route.Home -> HomeScreen(
+                    hosts = hosts,
+                    connected = model.host,
+                    state = pocket,
+                    tailscale = tailscale,
+                    tailscaleStatus = tailscaleStatus,
+                    tailnetError = tailnetError,
+                    tailnetPath = tailnetPath,
+                    opening = opening,
+                    cachedSessions = model::cachedSessions,
+                    onConnect = { model.connect(it) },
+                    onOpenSession = model::openSessionOn,
+                    onOpenTab = model::openTabOn,
+                    onNewSession = model::createSessionOn,
+                    onNewTab = model::newTabOn,
+                    onDisconnect = model::disconnect,
+                    onRetry = model::retryNow,
+                    onProbePath = model::probeTailnetPath,
+                    onSave = model::saveHost,
+                    onDelete = model::deleteHost,
+                    onTailscale = { tailscaleOpen = true },
+                )
+                Route.Term -> TermScreen(
+                    state = pocket,
+                    fontScale = font,
+                    onFont = model::setFont,
+                    onBack = model::showHome,
+                    onOpenSession = model::openSession,
+                    watchPane = model::watchPane,
+                    onRetry = model::retryNow,
+                    onDismissNotice = model::dismissNotice,
+                    onAct = model::act,
+                )
+            }
+        }
+        if (tailscaleOpen) {
+            TailscaleDialog(
+                initial = tailscale,
+                status = tailscaleStatus,
+                error = tailnetError,
+                onDismiss = { tailscaleOpen = false },
+                onJoin = { name ->
+                    model.joinTailnet(name)
+                    tailscaleOpen = false
+                },
+                onLeave = {
+                    model.leaveTailnet()
+                    tailscaleOpen = false
+                },
             )
         }
-    }
-    if (tailscaleOpen) {
-        TailscaleDialog(
-            initial = tailscale,
-            status = tailscaleStatus,
-            error = tailnetError,
-            onDismiss = { tailscaleOpen = false },
-            onJoin = { name ->
-                model.joinTailnet(name)
-                tailscaleOpen = false
-            },
-            onLeave = {
-                model.leaveTailnet()
-                tailscaleOpen = false
-            },
-        )
     }
 }

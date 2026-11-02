@@ -10,15 +10,15 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+
+
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.sizeIn
+
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -32,21 +32,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+
+
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
+
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.TextUnit
+
+
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.Problem
@@ -57,69 +57,6 @@ import me.leaver.rexpocket.R
 import kotlinx.coroutines.delay
 
 // Pieces several screens use: colour aliases, list rows, fields, header buttons, error text.
-
-/**
- * One row of a list, whether it lists hosts or sessions: the whole card opens the thing, and the
- * label on the right only becomes its own target when it does something else, such as editing.
- */
-@Composable
-internal fun EntryCard(
-    title: String,
-    detail: String,
-    tags: List<String>,
-    trailing: String,
-    onOpen: () -> Unit,
-    onTrailing: (() -> Unit)? = null,
-) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Colors.surface).clickable(onClick = onOpen)
-            .padding(horizontal = Space.l, vertical = Space.m + 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = Colors.ink, fontSize = TextStyles.body, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (detail.isNotBlank()) {
-                Spacer(Modifier.height(2.dp))
-                // An address is a figure, so it is set in the mono face; everything else stays body.
-                Text(
-                    detail,
-                    color = Colors.muted,
-                    fontSize = TextStyles.label,
-                    fontFamily = FontFamily.Monospace,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (tags.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    tags.forEach { Tag(it) }
-                }
-            }
-        }
-        Spacer(Modifier.width(Space.m))
-        Text(
-            trailing,
-            color = Colors.accent,
-            fontSize = TextStyles.label,
-            fontWeight = FontWeight.Medium,
-            modifier = (if (onTrailing != null) Modifier.clickable(onClick = onTrailing) else Modifier)
-                .padding(horizontal = Space.s - 2.dp, vertical = Space.s - 2.dp),
-        )
-    }
-}
-
-/** A one-word fact about a row: plaintext, TLS, Tailscale. A soft plate, not a bordered chip. */
-@Composable
-internal fun Tag(text: String) {
-    Text(
-        text,
-        color = Colors.muted,
-        fontSize = TextStyles.label,
-        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Colors.key)
-            .padding(horizontal = 7.dp, vertical = 2.dp),
-    )
-}
 
 /** The one action at the foot of a screen: full width, in the action colour, on the paper. */
 @Composable
@@ -204,29 +141,6 @@ internal fun problemText(problem: Problem, endpoint: String): String = when (pro
     Trouble.Tailnet -> stringResource(R.string.problem_tailnet, problem.detail.orEmpty())
     Trouble.Rejected -> stringResource(R.string.problem_rejected, problem.detail.orEmpty())
     Trouble.Other -> problem.detail ?: stringResource(R.string.error_operation_failed)
-}
-
-/** The smallest area a tap target takes, as Android's accessibility guidance asks. */
-internal val MIN_TOUCH = 48.dp
-
-/** A text button in a header: at least 48dp to hit, and [spoken] read out when the label is a glyph. */
-@Composable
-internal fun HeaderButton(
-    label: String,
-    color: Color = Colors.accent,
-    spoken: String? = null,
-    size: TextUnit = TextStyles.body,
-    onClick: () -> Unit,
-) {
-    Box(
-        Modifier.sizeIn(minWidth = MIN_TOUCH, minHeight = MIN_TOUCH)
-            .clickable(role = Role.Button, onClick = onClick)
-            .then(if (spoken != null) Modifier.semantics { contentDescription = spoken } else Modifier)
-            .padding(horizontal = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, color = color, fontSize = size)
-    }
 }
 
 @Composable

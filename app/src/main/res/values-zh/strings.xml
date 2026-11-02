@@ -2,12 +2,10 @@
 <resources>
     <string name="app_name">RexPocket</string>
 
-    <string name="home_subtitle">连到你自己电脑上的 Rex：局域网直连，或走应用内置的 Tailscale，不占手机 VPN。</string>
     <string name="home_no_hosts">还没有主机</string>
     <string name="home_no_hosts_body">在电脑上只对信任的网络开放：\nrex server start --extra-listen :7297 --allow-anonymous\n然后把 IP 加到这里。明文连接拥有这台 Rex 的全部权限。</string>
     <string name="host_transport_plain">明文</string>
     <string name="host_transport_tls">TLS</string>
-    <string name="action_edit">编辑</string>
     <string name="action_add_host">添加主机</string>
     <string name="action_edit_host">编辑主机</string>
     <string name="action_save">保存</string>
@@ -22,10 +20,8 @@
     <string name="tailscale_not_joined">未加入</string>
     <string name="tailscale_join">加入 tailnet</string>
     <string name="tailscale_leave">离开 tailnet</string>
-    <string name="tailscale_no_name">这台设备</string>
     <string name="tailscale_hostname">这台手机的节点名</string>
     <string name="tailscale_hint">应用自己跑一个 Tailscale 节点，所以手机不用装 Tailscale、也不占手机的 VPN，就能连 host.tailnet-xxxx.ts.net 这类 tailnet 名字和地址。加入时会打开浏览器授权这个节点，登录状态留在应用里。地址是 tailnet 名字或 100.x 地址的主机，会自动走这个节点。</string>
-    <string name="tailscale_need_join">还没加入 tailnet：点这里加入，然后再回来。</string>
     <string name="tailscale_need_join_host">这个地址在 tailnet 上：先加入 tailnet 才能连（点这里加入）。</string>
     <string name="error_join_tailnet_first">先在 Tailscale 里加入 tailnet。</string>
     <string name="tailscale_state_running">运行中</string>
@@ -40,19 +36,13 @@
     <string name="tailscale_state_stopped">已停止</string>
     <string name="tailscale_login_hint">在浏览器里批准这个节点，然后回到应用：连接在自动重试。</string>
     <string name="tailscale_login_copied">已复制登录链接</string>
-    <string name="tailscale_login_banner">Tailscale 需要登录：点这里打开页面，授权这个节点。</string>
 
     <string name="sessions">会话</string>
-    <string name="home_hosts">主机</string>
     <string name="session_new">新会话</string>
-    <string name="session_enter">进入</string>
     <string name="session_opening">正在打开…</string>
-    <string name="session_creating">正在创建…</string>
     <plurals name="session_window_count">
         <item quantity="other">%1$d 个标签页</item>
     </plurals>
-    <string name="session_none_live">这台 Rex 上还没有会话。</string>
-    <string name="session_loading">正在读取会话…</string>
 
     <string name="status_idle">未连接</string>
     <string name="status_connecting">正在连接 %1$s</string>
@@ -63,7 +53,6 @@
 
     <string name="header_stop">停</string>
     <string name="header_sessions">会话</string>
-    <string name="header_hosts">主机</string>
     <string name="level_session">会话</string>
     <string name="level_tab">标签页</string>
     <string name="level_pane">窗格</string>
@@ -129,6 +118,25 @@
     <string name="confirm_delete_host">删除 %1$s？</string>
     <string name="confirm_delete_host_body">只删掉保存的地址，那台 Rex 上的会话不受影响。</string>
     <string name="action_back">返回</string>
+    <string name="action_disconnect">断开连接</string>
+    <string name="action_search">搜索</string>
+    <string name="settings">设置</string>
+    <string name="settings_source">GitHub 源码</string>
+    <string name="settings_credits">Rex 由 Superlogical 开发，Ghostty 与 libghostty-android 归各自的作者。图标来自 Material Symbols。</string>
+    <string name="search_hint">搜索主机、会话和标签页</string>
+    <string name="search_none">没有匹配项</string>
+    <string name="session_cached">已缓存</string>
+    <string name="session_tap_open">点按打开</string>
+    <string name="host_not_connected">未连接</string>
+    <plurals name="session_count">
+        <item quantity="other">%1$d 个会话</item>
+    </plurals>
+    <string name="keys">按键</string>
+    <string name="action_enter">回车</string>
+    <string name="session_open_to_load">打开以查看标签页</string>
+    <string name="no_tabs">没有标签页</string>
+    <string name="action_show_active">只看有活动的</string>
+    <string name="no_activity">现在没有正在运行的任务</string>
     <string name="action_more">更多操作</string>
     <string name="action_take_over">接管</string>
     <string name="action_release">交还</string>
@@ -140,4 +148,11 @@
     </plurals>
     <string name="key_keyboard">键盘</string>
     <string name="error_operation_failed">操作失败</string>
+    <string name="state_folded">已折叠</string>
+    <string name="filter_on">开</string>
+    <string name="filter_off">关</string>
+    <string name="action_clear">清除</string>
+    <string name="state_selected">已选中</string>
+    <string name="holder_phone">在这台手机上</string>
+    <string name="holder_desk">在桌面端</string>
 </resources>

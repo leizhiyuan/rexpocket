@@ -516,6 +516,17 @@ class PocketSession(
             )
         }
         preferred = active
+        // The home lists every session's tabs, so the views of the sessions not selected are fetched
+        // once the connection is up. session.view neither attaches nor moves the desktop's focus.
+        loadSessionViews(sessions.map { it.id }, skip = active)
+    }
+
+    /** Fetches the views of [ids], so their tabs can be named before the session is opened. */
+    private suspend fun loadSessionViews(ids: List<String>, skip: String? = null) {
+        for (id in ids) {
+            if (id == skip) continue
+            runCatching { refreshView(id) }
+        }
     }
 
     private suspend fun onEvent(event: JSONObject) {
@@ -525,6 +536,7 @@ class PocketSession(
                 val id = session.optNullableString("session_id") ?: return
                 val label = session.optNullableString("label") ?: shortId(id)
                 _state.update { it.copy(sessions = mergeSession(it.sessions, ListedSession(id, label))) }
+                runCatching { refreshView(id) }
             }
             "session_destroyed" -> {
                 val id = event.optJSONObject("payload")?.optNullableString("session_id")
@@ -581,7 +593,10 @@ class PocketSession(
 
     private suspend fun refreshSessionList() {
         val payload = rpc("session.list", null)
-        _state.update { it.copy(sessions = parseSessions(payload.optJSONArray("sessions"))) }
+        val sessions = parseSessions(payload.optJSONArray("sessions"))
+        _state.update { it.copy(sessions = sessions) }
+        val known = _state.value.views.keys
+        loadSessionViews(sessions.map { it.id }.filter { it !in known }, skip = _state.value.activeSessionId)
     }
 
     private suspend fun refreshView(sid: String) {
@@ -884,24 +899,28 @@ class PocketSession(
     private suspend fun statusLoop() {
         while (true) {
             active.first { it }
-            val view = _state.value.view
+            val state = _state.value
+            val view = state.view
             if (view != null) {
-                // Only the shown tab's panes are drawn with their program: the pane strip names
-                // them, and the header says what the shown one is doing.
+                // Every pane of the shown session is asked, so the home can put activity on each of
+                // its tabs; the other sessions cost one question each, for their focused pane.
                 val next = LinkedHashMap<String, ProgramRecord>()
-                for (block in view.activeWindow()?.blocks.orEmpty()) {
-                    if (block.creator != null && block.creator != "com.superlogical.terminal") continue
-                    try {
-                        val payload = rpc(
-                            "com.superlogical.terminal.program_status",
-                            JSONObject().put("session_id", view.sessionId).put("block_id", block.id).put("args", JSONObject()),
-                        )
-                        summarizeStatus(parseProgramRecords(payload))?.let { next[block.id] = it }
-                    } catch (_: Exception) {
+                for ((sid, other) in state.views) {
+                    val blocks = if (sid == view.sessionId) other.windows.flatMap { it.blocks } else listOfNotNull(other.focusedBlock())
+                    for (block in blocks) {
+                        if (block.creator != null && block.creator != "com.superlogical.terminal") continue
+                        try {
+                            val payload = rpc(
+                                "com.superlogical.terminal.program_status",
+                                JSONObject().put("session_id", sid).put("block_id", block.id).put("args", JSONObject()),
+                            )
+                            summarizeStatus(parseProgramRecords(payload))?.let { next[block.id] = it }
+                        } catch (_: Exception) {
+                        }
                     }
                 }
                 val focused = view.focusedBlock()?.id
-                var pwd: String? = _state.value.pwd
+                var pwd: String? = state.pwd
                 if (focused != null) {
                     try {
                         val payload = rpc(
