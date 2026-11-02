@@ -53,6 +53,8 @@ private data class Palette(
     val danger: Color,
     val badge: Color,
     val badgeInk: Color,
+    val tile: Color,
+    val tileInk: Color,
     val scrim: Color,
 )
 
@@ -76,6 +78,8 @@ private val Light = Palette(
     danger = Color(0xFFC7162B),
     badge = Color(0xFF1C1C1E),
     badgeInk = Color(0xFF30D158),
+    tile = Color(0xFFF2F0EB),
+    tileInk = Color(0xFF1C1C1E),
     scrim = Color(0x40000000),
 )
 
@@ -99,6 +103,8 @@ private val Dark = Palette(
     danger = Color(0xFFFF453A),
     badge = Color(0xFF2C2C2E),
     badgeInk = Color(0xFF30D158),
+    tile = Color(0xFFE9E7E2),
+    tileInk = Color(0xFF1C1C1E),
     scrim = Color(0x99000000),
 )
 
@@ -165,6 +171,15 @@ object Colors {
 
     /** The glyph on [badge]. */
     val badgeInk: Color get() = palette.badgeInk
+
+    /**
+     * The light plate behind a program's mark - an agent, an editor - as the desktop's sidebar draws
+     * it; a shell keeps the dark [badge]. Light in both appearances, so a mark reads the same.
+     */
+    val tile: Color get() = palette.tile
+
+    /** A program's mark on [tile]. */
+    val tileInk: Color get() = palette.tileInk
 
     /** Behind a sheet. */
     val scrim: Color get() = palette.scrim

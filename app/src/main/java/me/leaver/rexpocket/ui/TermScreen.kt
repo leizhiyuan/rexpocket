@@ -65,6 +65,8 @@ import me.leaver.rexpocket.core.BlockInfo
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
 import me.leaver.rexpocket.core.PocketState
+import me.leaver.rexpocket.core.ProgramMark
+import me.leaver.rexpocket.core.programMark
 import me.leaver.rexpocket.core.ProgramRecord
 import me.leaver.rexpocket.core.SessionView
 import me.leaver.rexpocket.core.TerminalFeed
@@ -228,6 +230,7 @@ internal fun TermScreen(
                     tab = tab,
                     focused = focused,
                     status = state.blockStatus,
+                    programs = state.programs,
                     onSelect = { block -> onAct { focusBlock(block.id) } },
                 )
             }
@@ -318,7 +321,7 @@ internal fun TermScreen(
             Group(stringResource(R.string.level_tab)) {
                 SheetItem(stringResource(R.string.menu_new_tab), icon = R.drawable.ic_add) { onAct { newWindow() } }
                 if (view != null && tab != null) {
-                    val title = tabTitle(view, tab)
+                    val title = tabTitle(view, tab, state)
                     SheetItem(stringResource(R.string.menu_rename_tab), icon = R.drawable.ic_edit) { rename = Rename(Level.Tab, tab.id, tab.label) }
                     SheetItem(stringResource(R.string.menu_close_tab), Colors.danger, icon = R.drawable.ic_close) { confirm = Confirm(Level.Tab, tab.id, title) }
                 }
@@ -345,7 +348,7 @@ internal fun TermScreen(
                 Group(label = stringResource(R.string.group_tabs), icons = false) {
                     view.windows.forEach { window ->
                         SheetItem(
-                            label = tabTitle(view, window),
+                            label = tabTitle(view, window, state),
                             detail = window.blocks.size.takeIf { it > 1 }?.let { pluralStringResource(R.plurals.pane_count, it, it) },
                             marked = window.id == tab?.id,
                         ) {
@@ -357,7 +360,7 @@ internal fun TermScreen(
                     Group(label = stringResource(R.string.group_panes), icons = false) {
                         panes.forEachIndexed { index, block ->
                             SheetItem(
-                                label = "${index + 1}  ${paneTitle(block, state.blockStatus[block.id])}",
+                                label = "${index + 1}  ${paneTitle(block, state.blockStatus[block.id], state.programs[block.id])}",
                                 detail = state.blockStatus[block.id]?.let { statusWord(it) },
                                 marked = block.id == focused?.id,
                             ) {
@@ -377,7 +380,7 @@ internal fun TermScreen(
             // The tab may close on the desktop while its sheet is open; then the sheet goes too.
             val window = view?.windows?.firstOrNull { it.id == open.windowId }
             if (view != null && window != null) {
-                val title = tabTitle(view, window)
+                val title = tabTitle(view, window, state)
                 ActionSheet(onDismiss = { sheet = null }, title = title) {
                     Group {
                         SheetItem(stringResource(R.string.menu_rename_tab), icon = R.drawable.ic_edit) { rename = Rename(Level.Tab, window.id, window.label) }
@@ -390,7 +393,7 @@ internal fun TermScreen(
             val block = tab?.blocks?.firstOrNull { it.id == open.blockId }
             if (tab != null && block != null) {
                 val number = tab.blocks.indexOf(block) + 1
-                ActionSheet(onDismiss = { sheet = null }, title = "$number  ${paneTitle(block, state.blockStatus[block.id])}") {
+                ActionSheet(onDismiss = { sheet = null }, title = "$number  ${paneTitle(block, state.blockStatus[block.id], state.programs[block.id])}") {
                     Group {
                         SheetItem(stringResource(R.string.menu_rename_pane), icon = R.drawable.ic_edit) { rename = Rename(Level.Pane, block.id, block.label) }
                         SheetItem(stringResource(R.string.menu_close_pane), Colors.danger, icon = R.drawable.ic_close) { confirm = Confirm(Level.Pane, block.id, block.label) }
@@ -496,7 +499,7 @@ private fun SessionTopBar(
 ) {
     val title = when {
         view == null -> state.endpointLabel.ifBlank { stringResource(R.string.app_name) }
-        tab != null -> tabTitle(view, tab)
+        tab != null -> tabTitle(view, tab, state)
         else -> view.label
     }
     val path = state.pwd?.takeIf { it.isNotBlank() }?.let { shortPath(it) }
@@ -512,7 +515,7 @@ private fun SessionTopBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box {
-                TerminalTile(size = 36.dp)
+                ProgramTile(tab?.focusedBlock()?.id?.let { state.programs[it] }, size = 36.dp)
                 // The dot the reference puts on an app icon: this pane is the desk's right now.
                 if (state.phase == Phase.Live && !state.owning) {
                     Dot(Colors.accent, 8.dp, Modifier.align(Alignment.TopEnd).offset(4.dp, (-4).dp), ring = Colors.terminal)
@@ -555,15 +558,17 @@ private fun SessionTopBar(
 }
 
 /**
- * The panes of the shown tab, in one floating pill under the pane: a segment per pane with its
- * number and name, the one on screen on a soft plate in the action colour. Tapping a segment goes
- * there; a horizontal swipe on the pane does the same. Each segment is a full 48 dp target.
+ * The panes of the shown tab, in one floating pill under the pane, as the reference draws them: a
+ * segment per pane with the tile of what runs in it and its name, the one on screen on a soft plate
+ * in the action colour. Tapping a segment goes there; a horizontal swipe on the pane does the same.
+ * Each segment is a full 48 dp target.
  */
 @Composable
 private fun PaneBar(
     tab: WindowInfo?,
     focused: BlockInfo?,
     status: Map<String, ProgramRecord>,
+    programs: Map<String, String>,
     onSelect: (BlockInfo) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -588,19 +593,13 @@ private fun PaneBar(
                 Row(
                     Modifier.fillMaxHeight().clip(RoundedCornerShape(50))
                         .then(if (on) Modifier.background(Colors.keyOn) else Modifier)
-                        .padding(horizontal = 12.dp),
+                        .padding(start = 6.dp, end = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    ProgramTile(programs[block.id], size = 24.dp)
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        "${index + 1}",
-                        color = if (on) Colors.accent else Colors.muted,
-                        fontSize = TextStyles.label,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        paneTitle(block, record),
+                        paneTitle(block, record, programs[block.id]),
                         color = if (on) Colors.accent else Colors.ink,
                         fontSize = TextStyles.subhead,
                         fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
@@ -671,16 +670,29 @@ private fun FloatingDock(
     }
 }
 
-/** Rex names an unlabeled window "Window " plus an id tail; the tab's position reads better. */
+/**
+ * A tab's name, as the desktop's sidebar writes it. A tab someone named keeps its name; one left at
+ * Rex's generated "Window" label takes the title its focused pane's program set, such as
+ * `π - rexpocket`, then the program's own name, and only then its position.
+ */
 @Composable
-internal fun tabTitle(view: SessionView, window: WindowInfo): String {
-    val number = view.windows.indexOf(window) + 1
-    return if (GENERATED_WINDOW_LABEL.matches(window.label)) stringResource(R.string.tab_number, number) else window.label
+internal fun tabTitle(view: SessionView, window: WindowInfo, state: PocketState? = null): String {
+    if (!GENERATED_WINDOW_LABEL.matches(window.label)) return window.label
+    val pane = window.focusedBlock()?.id
+    val named = pane?.let { state?.titles?.get(it) }
+    if (named != null) return named
+    val program = pane?.let { state?.programs?.get(it) }
+    if (program != null && programMark(program) != ProgramMark.Shell) return program
+    return stringResource(R.string.tab_number, view.windows.indexOf(window) + 1)
 }
 
+/** What a tab's tile shows: the program in its focused pane. */
+internal fun tabProgram(window: WindowInfo, state: PocketState): String? =
+    window.focusedBlock()?.id?.let { state.programs[it] }
+
 /** A pane left at the default "shell" label is named after the program running in it. */
-internal fun paneTitle(block: BlockInfo, status: ProgramRecord?): String {
-    val app = status?.app?.takeIf { it.isNotBlank() }
+internal fun paneTitle(block: BlockInfo, status: ProgramRecord?, program: String? = null): String {
+    val app = status?.app?.takeIf { it.isNotBlank() } ?: program
     return if (block.label == "shell" && app != null) app else block.label
 }
 

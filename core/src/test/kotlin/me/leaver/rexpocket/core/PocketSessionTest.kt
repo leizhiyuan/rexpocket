@@ -418,6 +418,180 @@ class PocketSessionTest {
         }
     }
 
+    /**
+     * A program's status and the shell's directory come with Rex's events. Over a slow tailnet every
+     * call costs a round trip, so an idle pane must not keep asking for them.
+     */
+    @Test
+    fun statusAndDirectoryFollowEventsWithoutPolling() {
+        val endpoint = testEndpoint()
+        assumeTrue(
+            "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
+            portOpen(endpoint.host, endpoint.port),
+        )
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val calls = java.util.concurrent.ConcurrentLinkedQueue<String>()
+            val session = PocketSession(endpoint, trace = { line ->
+                if (line.startsWith("rpc ")) calls += line.removePrefix("rpc ").substringBefore(' ')
+            })
+            var sessionId: String? = null
+            try {
+                session.start(scope, preferredSessionId = null)
+                withTimeout(15_000) { session.awaitReady() }
+                session.setSize(80, 24, 8, 16)
+                session.createShell("rexpocket-test-events-" + System.currentTimeMillis())
+                sessionId = session.state.value.activeSessionId
+                val block = awaitOwnedFocus(session)
+                // The first read of each pane is allowed; after that the screen only listens.
+                delay(1_500)
+                calls.clear()
+                delay(4_000)
+                val polls = calls.filter { it == "com.superlogical.terminal.program_status" || it == "com.superlogical.terminal.pwd" }
+                assertTrue("an idle pane was polled: $polls", polls.isEmpty())
+
+                session.sendText("printf '\\033]7501;state=working\\007'; cd /tmp\n")
+                withTimeout(5_000) { while (session.state.value.blockStatus[block]?.state != "working") delay(50) }
+                withTimeout(5_000) { while (session.state.value.pwd?.trimEnd('/')?.endsWith("tmp") != true) delay(50) }
+
+                // What runs in front and the title it sets come the same way, with no polling.
+                // A program, not the shell, sets the title: only that one is shown.
+                session.sendText("python3 -c \"import sys,time; sys.stdout.write(chr(27)+']0;agent-title'+chr(7)); sys.stdout.flush(); time.sleep(3)\"\n")
+                withTimeout(5_000) { while (session.state.value.programs[block]?.startsWith("python") != true) delay(50) }
+                withTimeout(5_000) { while (session.state.value.titles[block] != "agent-title") delay(50) }
+                val asked = calls.filter { it == "com.superlogical.terminal.process" || it == "com.superlogical.terminal.title" }
+                assertTrue("the program or title was polled: $asked", asked.isEmpty())
+            } finally {
+                session.stop()
+                scope.cancel()
+                sessionId?.let { destroyQuietly(endpoint, it) }
+            }
+        }
+    }
+
+    /**
+     * Rex has one active tab per session, shared by every client. The phone keeps its own place:
+     * moving between tabs on the phone must not move the desktop, and the desktop moving must not
+     * move the phone. Otherwise each follows the other onto the same pane and they trade it back
+     * and forth, resizing it each time.
+     */
+    @Test
+    fun thePhoneAndTheDesktopMoveBetweenTabsIndependently() {
+        val endpoint = testEndpoint()
+        assumeTrue(
+            "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
+            portOpen(endpoint.host, endpoint.port),
+        )
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(endpoint)
+            val desktop = RexClient()
+            var sessionId: String? = null
+            try {
+                session.start(scope, preferredSessionId = null)
+                withTimeout(15_000) { session.awaitReady() }
+                session.setSize(80, 24, 8, 16)
+                session.createShell("rexpocket-test-tabs-" + System.currentTimeMillis())
+                val sid = session.state.value.activeSessionId!!
+                sessionId = sid
+                val first = session.state.value.view!!.activeWindowId!!
+                session.newWindow()
+                val second = withTimeout(10_000) {
+                    while (true) {
+                        val shown = session.state.value.view?.activeWindowId
+                        if (shown != null && shown != first) return@withTimeout shown
+                        delay(50)
+                    }
+                    error("unreachable")
+                }
+
+                desktop.connect(endpoint)
+                desktop.call("session.attach", JSONObject().put("session_id", sid))
+                fun desktopTab() = runBlocking {
+                    desktop.call("session.view", JSONObject().put("session_id", sid)).optNullableString("active_window_id")
+                }
+                // A new tab made on the phone is shown on the phone only.
+                assertEquals(first, desktopTab())
+
+                desktop.call("session.focus_window", JSONObject().put("session_id", sid).put("window_id", second))
+                session.focusWindow(first)
+                assertEquals("the phone's tab switch moved the desktop", second, desktopTab())
+                assertEquals(first, session.state.value.view?.activeWindowId)
+
+                // The desktop walks its tabs; the phone stays where it is once the views settle.
+                desktop.call("session.focus_window", JSONObject().put("session_id", sid).put("window_id", first))
+                desktop.call("session.focus_window", JSONObject().put("session_id", sid).put("window_id", second))
+                delay(1_500)
+                assertEquals("the desktop's tab switch moved the phone", first, session.state.value.view?.activeWindowId)
+            } finally {
+                desktop.close()
+                session.stop()
+                scope.cancel()
+                sessionId?.let { destroyQuietly(endpoint, it) }
+            }
+        }
+    }
+
+    /**
+     * The phone on one tab and the desktop on another each keep their own pane: neither takes the
+     * other's, so neither is resized under it. This is the case that used to trade a pane every few
+     * seconds.
+     */
+    @Test
+    fun thePhoneAndTheDesktopOnDifferentTabsKeepTheirOwnPanes() {
+        val endpoint = testEndpoint()
+        assumeTrue(
+            "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
+            portOpen(endpoint.host, endpoint.port),
+        )
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(endpoint)
+            val desktop = RexClient()
+            var sessionId: String? = null
+            try {
+                session.start(scope, preferredSessionId = null)
+                withTimeout(15_000) { session.awaitReady() }
+                session.setSize(52, 21, 8, 16)
+                session.createShell("rexpocket-test-two-tabs-" + System.currentTimeMillis())
+                val sid = session.state.value.activeSessionId!!
+                sessionId = sid
+                val phonePane = session.state.value.view!!.focusedBlock()!!.id
+                session.newWindow()
+                session.focusBlock(phonePane)
+                val deskPane = session.state.value.view!!.allBlocks().first { it.id != phonePane }.id
+
+                val seen = StringBuilder()
+                val watcher = collectPane(scope, session, phonePane, seen)
+                try {
+                    val mine = session.state.value.clientId
+                    withTimeout(15_000) { while (ownerOnServer(endpoint, sid, phonePane) != mine) delay(100) }
+                    // The desktop shows its own tab and takes that tab's pane, as Rex.app does.
+                    desktop.connect(endpoint)
+                    desktop.call("session.attach", JSONObject().put("session_id", sid))
+                    desktop.call("session.focus_block", JSONObject().put("session_id", sid).put("block_id", deskPane))
+                    desktop.call(
+                        "session.own_block",
+                        JSONObject().put("session_id", sid).put("block_ids", JSONArray().put(deskPane)).put("mode", "take"),
+                    )
+                    val desk = desktop.welcome!!.clientId
+                    // Several of the phone's ownership checks later, each still holds its own.
+                    delay(7_000)
+                    assertEquals("the phone lost its pane", mine, ownerOnServer(endpoint, sid, phonePane))
+                    assertEquals("the phone took the desktop's pane", desk, ownerOnServer(endpoint, sid, deskPane))
+                    assertEquals(phonePane, session.state.value.view?.focusedBlock()?.id)
+                } finally {
+                    watcher.cancel()
+                    desktop.close()
+                }
+            } finally {
+                session.stop()
+                scope.cancel()
+                sessionId?.let { destroyQuietly(endpoint, it) }
+            }
+        }
+    }
+
     /** Moving to another session must hand the pane left behind back to the desktop. */
     @Test
     fun switchingSessionsReleasesThePreviousPane() {

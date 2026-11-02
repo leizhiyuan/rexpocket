@@ -239,6 +239,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                 cachedSessions = cached,
                 // The terminal stream takes the same route as the control connection.
                 socksPort = socksPort,
+                trace = { if (BuildConfig.DEBUG) Log.i(CONN_TAG, it) },
             )
             session = s
             sessionReady.complete(s)
@@ -351,10 +352,9 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     /** Opens one tab of [target]'s session, connecting to the host first when it is not on screen. */
     fun openTabOn(target: SavedHost, sessionId: String, windowId: String) {
         if (host?.id != target.id) connect(target)
-        enterSession(Opening.Existing(sessionId)) {
-            openSession(sessionId, rememberedPane(sessionId))
-            focusWindow(windowId)
-        }
+        // One open on the chosen tab, rather than opening the session and then switching tabs: each
+        // step is a round trip, and the second one used to flash the session's other tab first.
+        enterSession(Opening.Existing(sessionId)) { openSession(sessionId, rememberedPane(sessionId), windowId) }
     }
 
     /** Adds a tab to [target]'s session and shows it; connects to the host first when needed. */
@@ -378,21 +378,25 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
      * dropped; the terminal only appears for the session that was asked for.
      */
     private fun enterSession(what: Opening, open: suspend PocketSession.() -> Unit) {
+        if (BuildConfig.DEBUG) Log.i(CONN_TAG, "open $what (busy=${_opening.value}, phase=${_pocket.value.phase})")
         if (_opening.value != null) return
         // A host that cannot be dialed at all (a tailnet host with no joined node) fails before a
         // connection exists; waiting for one would leave the row saying *Opening* forever.
         if (_pocket.value.phase == Phase.Failed) return
         val waiting = sessionReady
         _opening.value = what
+        val tappedAt = SystemClock.elapsedRealtime()
         viewModelScope.launch {
             try {
                 val s = waiting.await()
                 s.awaitReady()
                 s.open()
+                if (BuildConfig.DEBUG) Log.i(CONN_TAG, "opened $what after ${SystemClock.elapsedRealtime() - tappedAt}ms")
                 if (session === s) route.value = Route.Term
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (BuildConfig.DEBUG) Log.i(CONN_TAG, "open $what failed: ${e.javaClass.simpleName}: ${e.message}")
                 session?.note(e.toProblem())
             } finally {
                 if (_opening.value == what) _opening.value = null

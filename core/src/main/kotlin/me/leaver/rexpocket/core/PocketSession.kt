@@ -1,6 +1,7 @@
 package me.leaver.rexpocket.core
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -46,8 +47,14 @@ data class PocketState(
     val activeSessionId: String? = null,
     val view: SessionView? = null,
     val views: Map<String, SessionView> = emptyMap(),
+    /** What each pane's program says it is doing, summarized; kept current by Rex's events. */
     val blockStatus: Map<String, ProgramRecord> = emptyMap(),
+    /** The shown pane's working directory. */
     val pwd: String? = null,
+    /** What each pane runs, by name - an agent such as `pi`, an editor, or a shell. */
+    val programs: Map<String, String> = emptyMap(),
+    /** The title each pane's program set, such as `π - rexpocket`; absent until one is set. */
+    val titles: Map<String, String> = emptyMap(),
     /** True while Rex has the shown pane at this phone's size: this phone is the one controlling it. */
     val owning: Boolean = false,
     /** True after the pane was handed back to the desktop, so taking it again has to be asked for. */
@@ -65,12 +72,13 @@ class PocketSession(
     cachedSessions: List<ListedSession> = emptyList(),
     /** The app's own Tailscale inbound, when a terminal stream has to go through it like the control one. */
     private val socksPort: Int = 0,
+    /** Diagnostics for the terminal stream and the calls a pane waits on; silent by default. */
+    private val trace: (String) -> Unit = {},
     private val clientFactory: () -> RexClient = { RexClient() },
 ) {
     private val _state = MutableStateFlow(PocketState(sessions = cachedSessions))
     val state: StateFlow<PocketState> = _state
 
-    private val callMutex = Mutex()
     private val clientRef = AtomicReference<RexClient?>(null)
     private val sizeRef = AtomicReference(TermSize(80, 24, 8, 16))
     private var ownedBlock: String? = null
@@ -85,6 +93,31 @@ class PocketSession(
 
     /** Serializes owning and disowning, so a release cannot be undone by a take that is in flight. */
     private val ownership = Mutex()
+
+    /**
+     * Each pane's status records and directory as Rex last reported them. Rex sends a change as an
+     * event, so a pane is read once and then followed; [statusRead] remembers which ones were.
+     */
+    private val statusRecords = java.util.concurrent.ConcurrentHashMap<String, Map<String, ProgramRecord>>()
+    private val pwds = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val foregrounds = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val titleOf = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val statusRead: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /**
+     * The pane the phone shows in each session. Rex has one active tab and pane per session for all
+     * its clients, so following Rex's choice made the phone jump wherever the desktop went, and the
+     * desktop jump wherever the phone went - each then took the pane the other was on. The phone's
+     * place is its own; Rex's focus is left to the desktop.
+     */
+    private val places = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** Panes Rex reported on while a read of them was in flight; that read is older and must not win. */
+    private val reportedDuringRead: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** Wakes the status reader when a pane it has not read yet comes into view. */
+    private val statusWake = Channel<Unit>(Channel.CONFLATED)
+
     private var lastResize: TermSize? = null
     private var preferred: String? = null
     private var reconnectToken: String? = null
@@ -95,7 +128,7 @@ class PocketSession(
      * Every keystroke, paste and typed text, in the order it was typed. Rex runs `client.key` and
      * `block.event` in order but `terminal.write` whenever it arrives, so two writes sent without
      * waiting can swap places. One sender drains this queue and waits for each reply, which keeps
-     * the order, and it does not take [callMutex], so input never waits behind the screen poll.
+     * the order, and nothing else waits on it, so input never queues behind another call.
      */
     private val input = Channel<InputCall>(Channel.UNLIMITED)
 
@@ -204,10 +237,11 @@ class PocketSession(
 
     /**
      * Opens a session on [rememberedBlock], the pane the phone showed there last time, when it
-     * still exists; otherwise on the pane Rex has focused. The pane is focused before the view is
-     * published, so the terminal never shows another pane first.
+     * still exists; otherwise on the pane Rex has focused. With [windowId] it opens on that tab
+     * instead, on its remembered or focused pane. The pane is focused before the view is published,
+     * so the terminal never shows another pane first, and one focus call moves the tab and the pane.
      */
-    suspend fun openSession(sessionId: String, rememberedBlock: String? = null) {
+    suspend fun openSession(sessionId: String, rememberedBlock: String? = null, windowId: String? = null) {
         preferred = sessionId
         // The pane left behind goes back to the desktop, or it stays at the phone's size.
         if (ownedSession != sessionId) disownQuietly()
@@ -215,18 +249,20 @@ class PocketSession(
         _state.update { it.copy(owning = false, released = false) }
         val payload = rpc("session.attach", JSONObject().put("session_id", sessionId))
         var view = parseView(payload.getJSONObject("view"))
-        val pane = view.paneToShow(rememberedBlock)
-        if (pane != null && pane.id != view.focusedBlock()?.id) {
-            val focused = rpc("session.focus_block", JSONObject().put("session_id", sessionId).put("block_id", pane.id))
-            view = view.showingPane(pane.id, focused.optLong("revision", -1)) ?: view
-        }
+        // The phone's own place: the asked-for tab, else where it was last time. Rex's focus is not
+        // moved, so opening a tab here leaves the desktop on whatever it is showing.
+        val pane = view.paneToShow(rememberedBlock ?: places[sessionId], windowId)
+        if (pane != null) places[sessionId] = pane.id
+        view = view.placedAt(places[sessionId])
         // applyView only replaces the shown view when this session is already active.
         // Opening another session has to force it, or the old view stays on screen.
         applyView(view)
+        val shownPwd = view.focusedBlock()?.id?.let { pwds[it] }
         _state.update {
             it.copy(
                 activeSessionId = sessionId,
                 view = view,
+                pwd = shownPwd,
                 views = if (view.sessionId.isEmpty()) it.views else it.views + (view.sessionId to view),
                 sessions = mergeSession(it.sessions, ListedSession(sessionId, view.label)),
             )
@@ -254,12 +290,14 @@ class PocketSession(
         openSession(id)
     }
 
+    /** Makes a tab and shows it on the phone; the desktop stays on the tab it has. */
     suspend fun newWindow() {
         val sid = requireSession()
-        rpc(
+        val made = rpc(
             "session.new_window",
             JSONObject()
                 .put("session_id", sid)
+                .put("focus", false)
                 .put(
                     "layout",
                     JSONObject().put(
@@ -268,6 +306,10 @@ class PocketSession(
                     ),
                 ),
         )
+        val block = made.optJSONArray("block_ids")?.optString(0)?.takeIf { it.isNotEmpty() } ?: return
+        places[sid] = block
+        // The view event that announces the tab may already have come; this one surely has it.
+        refreshView(sid)
     }
 
     suspend fun split(vertical: Boolean) {
@@ -278,7 +320,7 @@ class PocketSession(
             .put("direction", if (vertical) "vertical" else "horizontal")
             .put("side", "after")
             .put("ratio", 0.5)
-            .put("focus", true)
+            .put("focus", false)
             .put(
                 "layout",
                 JSONObject().put(
@@ -287,25 +329,30 @@ class PocketSession(
                 ),
             )
         if (anchor != null) body.put("anchor_id", anchor)
-        rpc("session.new_split", body)
+        val made = rpc("session.new_split", body)
+        // The new pane is shown here; the desktop keeps the focus it has.
+        val block = made.optJSONArray("block_ids")?.optString(0)?.takeIf { it.isNotEmpty() } ?: return
+        places[sid] = block
+        refreshView(sid)
     }
 
     /**
-     * Shows a pane. Rex makes the pane's window the active one as part of the same call, so this
-     * also switches tabs. The local view follows at once, so the header, the tab bar and the
-     * terminal move together instead of waiting for the view event.
+     * Shows a pane, and so its tab, on the phone. Rex's focus is the desktop's and is not touched:
+     * moving it made the desktop follow the phone onto the same pane, and the two then took that
+     * pane from each other, resizing it every time.
      */
     suspend fun focusBlock(blockId: String) {
         val sid = requireSession()
-        val payload = rpc("session.focus_block", JSONObject().put("session_id", sid).put("block_id", blockId))
-        showLocally { it.showingPane(blockId, payload.optLong("revision", -1)) }
+        places[sid] = blockId
+        showLocally { it.placedAt(blockId) }
     }
 
-    /** Shows a tab. Rex brings back the pane that tab last had focused. */
+    /** Shows a tab on the phone, on the pane the phone last showed there or the tab's own focus. */
     suspend fun focusWindow(windowId: String) {
         val sid = requireSession()
-        val payload = rpc("session.focus_window", JSONObject().put("session_id", sid).put("window_id", windowId))
-        showLocally { it.showingTab(windowId, payload.optLong("revision", -1)) }
+        val view = _state.value.view ?: return
+        val pane = view.paneToShow(places[sid], windowId) ?: return
+        focusBlock(pane.id)
     }
 
     /** Closes a pane, the shown one by default. Closing a tab's last pane closes the tab. */
@@ -458,6 +505,8 @@ class PocketSession(
         try {
             val welcome = client.connect(endpoint, reconnectToken)
             reconnectToken = welcome.reconnectToken
+            // Events sent while the connection was down are lost, so every pane is read again.
+            statusRead.clear()
             _state.update { it.copy(clientId = welcome.clientId, resumed = welcome.resumed) }
             coroutineScope {
                 launch {
@@ -475,6 +524,7 @@ class PocketSession(
                 if (!ready.isCompleted) ready.complete(Unit)
                 _state.update { it.copy(phase = Phase.Live, problem = null) }
                 launch { inputLoop(client) }
+                launch { loadSessionViews(_state.value.sessions.map { it.id }, skip = _state.value.activeSessionId) }
                 launch { statusLoop() }
                 val cause = client.awaitClosed()
                 throw ConnectionDroppedException(cause?.message ?: "Control connection dropped", cause)
@@ -499,13 +549,15 @@ class PocketSession(
     }
 
     private suspend fun bootstrap() {
-        val body = JSONObject().put("event_scope", "session")
+        // 'all' adds block events - a program's status, the shell's directory - which the screen
+        // would otherwise have to poll for, one round trip each.
+        val body = JSONObject().put("event_scope", "all")
         val preferredId = preferred
         if (!preferredId.isNullOrBlank()) body.put("preferred_session_id", preferredId)
         val payload = rpc("session.bootstrap", body)
         val sessions = parseSessions(payload.optJSONObject("attach_all")?.optJSONArray("sessions"))
         val selected = payload.optJSONObject("selected_session")
-        val view = selected?.optJSONObject("view")?.let { parseView(it) }
+        val view = selected?.optJSONObject("view")?.let { parseView(it) }?.let { it.placedAt(places[it.sessionId]) }
         val active = view?.sessionId ?: selected?.optJSONObject("session")?.optNullableString("session_id")
         _state.update {
             it.copy(
@@ -516,16 +568,18 @@ class PocketSession(
             )
         }
         preferred = active
-        // The home lists every session's tabs, so the views of the sessions not selected are fetched
-        // once the connection is up. session.view neither attaches nor moves the desktop's focus.
-        loadSessionViews(sessions.map { it.id }, skip = active)
     }
 
-    /** Fetches the views of [ids], so their tabs can be named before the session is opened. */
-    private suspend fun loadSessionViews(ids: List<String>, skip: String? = null) {
+    /**
+     * Fetches the views of [ids], so the home can name their tabs before they are opened. They are
+     * asked for together and after the connection is live: one at a time in front of it, a tailnet
+     * with a second of round trip held the whole app at *Connecting* for a second per session.
+     * session.view neither attaches nor moves the desktop's focus.
+     */
+    private suspend fun loadSessionViews(ids: List<String>, skip: String? = null) = coroutineScope {
         for (id in ids) {
             if (id == skip) continue
-            runCatching { refreshView(id) }
+            launch { runCatching { refreshView(id) } }
         }
     }
 
@@ -572,9 +626,59 @@ class PocketSession(
                 }
             }
             "session_destroyed" -> dropSession(sid)
+            "block_event" -> onBlockEvent(payload)
             // Which client owns a pane decides its size, so a change here redraws it as owned or not.
             "block_owner_changed", "block_closed", "window_closed", "window_created", "active_window_changed" ->
                 refreshView(sid)
+        }
+    }
+
+    /** A pane's own news: a program's status, or the directory its shell moved to. */
+    private fun onBlockEvent(event: JSONObject) {
+        val block = event.optNullableString("block_id") ?: return
+        val body = event.optJSONObject("payload") ?: return
+        when (event.optString("name")) {
+            "program_status_changed" -> {
+                statusRecords.compute(block) { _, old -> applyStatusEvent(old.orEmpty(), body) }
+                reportedDuringRead += block
+                publishStatus()
+            }
+            "pwd_changed" -> {
+                val pwd = body.optNullableString("pwd") ?: return
+                pwds[block] = pwd.removePrefix("file://")
+                reportedDuringRead += block
+                publishStatus()
+            }
+            "process_changed" -> {
+                val program = foregroundProgram(body)
+                if (program == null) foregrounds -= block else foregrounds[block] = program
+                reportedDuringRead += block
+                publishStatus()
+            }
+            "title_changed" -> {
+                val title = programTitle(body)
+                if (title == null) titleOf -= block else titleOf[block] = title
+                reportedDuringRead += block
+                publishStatus()
+            }
+        }
+    }
+
+    private fun publishStatus() {
+        _state.update { st ->
+            val summary = LinkedHashMap<String, ProgramRecord>()
+            for ((block, records) in statusRecords) summarizeStatus(records.values.toList())?.let { summary[block] = it }
+            // A program that reported itself names the pane; otherwise the foreground process does.
+            val programs = LinkedHashMap<String, String>()
+            for (block in statusRecords.keys + foregrounds.keys) {
+                paneProgram(summary[block], foregrounds[block])?.let { programs[block] = it }
+            }
+            st.copy(
+                blockStatus = summary,
+                pwd = st.view?.focusedBlock()?.id?.let { pwds[it] },
+                programs = programs,
+                titles = HashMap(titleOf),
+            )
         }
     }
 
@@ -611,12 +715,19 @@ class PocketSession(
     private fun showLocally(change: (SessionView) -> SessionView?) {
         _state.update { st ->
             val next = st.view?.let(change) ?: return@update st
-            st.copy(view = next, views = st.views + (next.sessionId to next))
+            // The directory belongs to the pane on screen, so it moves with the focus.
+            val pwd = next.focusedBlock()?.id?.let { pwds[it] }
+            st.copy(view = next, views = st.views + (next.sessionId to next), pwd = pwd)
         }
     }
 
-    private fun applyView(view: SessionView) {
-        if (view.sessionId.isEmpty()) return
+    private fun applyView(fromRex: SessionView) {
+        if (fromRex.sessionId.isEmpty()) return
+        if (fromRex.allBlocks().any { it.id !in statusRead }) statusWake.trySend(Unit)
+        // A pane the phone was on that has closed gives the place back to Rex's choice.
+        val place = places[fromRex.sessionId]
+        if (place != null && fromRex.allBlocks().none { it.id == place }) places.remove(fromRex.sessionId)
+        val view = fromRex.placedAt(places[fromRex.sessionId])
         _state.update {
             val known = it.views[view.sessionId]?.revision ?: -1
             if (view.revision < known) return@update it
@@ -650,18 +761,22 @@ class PocketSession(
                 continue
             }
             try {
-                // A pane is taken on sight, unless the user handed this one back: then it stays the
-                // desktop's until they ask for it again - including every time it is shown again.
-                if (blockId in releasedBlocks) {
-                    if (_state.value.owning || !_state.value.released) markReleased()
-                } else {
-                    if (_state.value.released) _state.update { it.copy(released = false) }
-                    ensureOwned(sid, blockId)
-                }
                 coroutineScope {
-                    launch { sizeLoop(sid, blockId) }
-                    launch { ownershipLoop(sid, blockId) }
-                    val stream = TerminalStream(endpoint, { RexClient.defaultHttp(socksPort) }) { ticket(sid, blockId) }
+                    // The picture is what the person is waiting for, so its stream is asked for at
+                    // once; taking the pane and sizing it run beside it rather than in front of it.
+                    launch {
+                        // A pane is taken on sight, unless the user handed this one back: then it
+                        // stays the desktop's until they ask for it again - every time it is shown.
+                        if (blockId in releasedBlocks) {
+                            if (_state.value.owning || !_state.value.released) markReleased()
+                        } else {
+                            if (_state.value.released) _state.update { it.copy(released = false) }
+                            ensureOwned(sid, blockId)
+                        }
+                        launch { sizeLoop(sid, blockId) }
+                        ownershipLoop(sid, blockId)
+                    }
+                    val stream = TerminalStream(endpoint, { RexClient.defaultHttp(socksPort) }, trace) { ticket(sid, blockId) }
                     try {
                         stream.feeds().collect { emit(it) }
                     } finally {
@@ -669,8 +784,10 @@ class PocketSession(
                     }
                 }
             } catch (e: CancellationException) {
+                trace("pane $blockId: no longer watched")
                 throw e
             } catch (e: RexCallException) {
+                trace("pane $blockId: ${e.code} ${e.message}")
                 // The pane or its session is gone; watching it again cannot help.
                 if (e.code == "not_found" || e.code == "session_not_found") {
                     note(e.toProblem())
@@ -678,6 +795,7 @@ class PocketSession(
                 }
                 note(e.toProblem())
             } catch (e: Exception) {
+                trace("pane $blockId: ${e.javaClass.simpleName}: ${e.message}")
                 note(e.toProblem())
             }
             delay(backoff)
@@ -844,6 +962,10 @@ class PocketSession(
      */
     private suspend fun ownershipLoop(sid: String, blockId: String) {
         var wait = 0L
+        // When the phone last took the pane back. The wait only starts over once the pane has stayed
+        // here a while: resetting it on every retake let the desk and the phone trade the pane every
+        // few seconds, each trade a resize and a redraw over the tunnel.
+        var tookAt = 0L
         while (true) {
             // Nothing to keep while nobody is looking; this asks Rex a question every few seconds.
             active.first { it }
@@ -863,13 +985,14 @@ class PocketSession(
                 if (_state.value.owning != owning) _state.update { it.copy(owning = owning) }
             }
             if (owner == null || mine == null || owner == mine) {
-                wait = 0L
+                if (System.nanoTime() - tookAt > TAKE_BACK_CALM_MS * 1_000_000) wait = 0L
             } else {
                 delay(wait)
                 wait = if (wait == 0L) FIRST_TAKE_BACK_MS else (wait * 2).coerceAtMost(TAKE_BACK_MAX_MS)
                 // The user may have released it during the wait; takePaneLocked checks again under
                 // the lock, which also covers a release that lands while own_block is in flight.
                 if (blockId !in releasedBlocks) runCatching { takePane(sid, blockId) }
+                tookAt = System.nanoTime()
             }
             delay(OWNERSHIP_CHECK_MS)
         }
@@ -896,50 +1019,84 @@ class PocketSession(
         ownedSession = null
     }
 
+    /**
+     * Reads each pane's status and directory once, the first time it is in a known view; after that
+     * Rex's events keep them current. Over a slow tailnet every call is a round trip, so polling
+     * them used to fill the one control connection and push the user's own calls back by seconds.
+     */
     private suspend fun statusLoop() {
         while (true) {
             active.first { it }
             val state = _state.value
-            val view = state.view
-            if (view != null) {
-                // Every pane of the shown session is asked, so the home can put activity on each of
-                // its tabs; the other sessions cost one question each, for their focused pane.
-                val next = LinkedHashMap<String, ProgramRecord>()
-                for ((sid, other) in state.views) {
-                    val blocks = if (sid == view.sessionId) other.windows.flatMap { it.blocks } else listOfNotNull(other.focusedBlock())
-                    for (block in blocks) {
-                        if (block.creator != null && block.creator != "com.superlogical.terminal") continue
-                        try {
-                            val payload = rpc(
-                                "com.superlogical.terminal.program_status",
-                                JSONObject().put("session_id", sid).put("block_id", block.id).put("args", JSONObject()),
-                            )
-                            summarizeStatus(parseProgramRecords(payload))?.let { next[block.id] = it }
-                        } catch (_: Exception) {
-                        }
+            val shown = state.view?.sessionId
+            // The shown session first: those are the panes a person is about to look at.
+            val order = state.views.entries.sortedBy { if (it.key == shown) 0 else 1 }
+            var read = false
+            for ((sid, view) in order) {
+                for (block in view.allBlocks()) {
+                    if (block.id in statusRead) continue
+                    if (block.creator != null && block.creator != "com.superlogical.terminal") {
+                        statusRead += block.id
+                        continue
                     }
+                    readStatus(sid, block.id)
+                    read = true
                 }
-                val focused = view.focusedBlock()?.id
-                var pwd: String? = state.pwd
-                if (focused != null) {
-                    try {
-                        val payload = rpc(
-                            "com.superlogical.terminal.pwd",
-                            JSONObject().put("session_id", view.sessionId).put("block_id", focused).put("args", JSONObject()),
-                        )
-                        pwd = payload.optNullableString("pwd")?.removePrefix("file://")
-                    } catch (_: Exception) {
-                    }
-                }
-                _state.update { it.copy(blockStatus = next, pwd = pwd) }
             }
-            delay(1_500)
+            if (read) publishStatus()
+            // New panes appear with a view; the wait ends early when one does.
+            withTimeoutOrNull(STATUS_IDLE_MS) { statusWake.receive() }
         }
     }
 
+    /**
+     * One pane's first read: what its program reports, where its shell is, what runs in front and
+     * what title it set. The four are asked together; after this, events keep each of them current.
+     */
+    private suspend fun readStatus(sid: String, block: String) {
+        reportedDuringRead -= block
+        fun args() = JSONObject().put("session_id", sid).put("block_id", block).put("args", JSONObject())
+        try {
+            coroutineScope {
+                val status = async { rpc("com.superlogical.terminal.program_status", args()) }
+                val pwd = async { rpc("com.superlogical.terminal.pwd", args()) }
+                val process = async { runCatching { rpc("com.superlogical.terminal.process", args()) }.getOrNull() }
+                val title = async { runCatching { rpc("com.superlogical.terminal.title", args()) }.getOrNull() }
+                val records = parseProgramRecords(status.await()).associateBy { it.id }
+                val dir = pwd.await().optNullableString("pwd")?.removePrefix("file://")
+                val program = process.await()?.let { foregroundProgram(it) }
+                val named = title.await()?.let { programTitle(it) }
+                // An event that landed while this was in flight is newer than the answer; it wins.
+                if (block !in reportedDuringRead) {
+                    statusRecords[block] = records
+                    if (dir != null) pwds[block] = dir
+                    if (program != null) foregrounds[block] = program
+                    if (named != null) titleOf[block] = named
+                }
+            }
+            statusRead += block
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Left unread, so the next sweep asks again; sweeps are a wake or half a minute apart.
+        }
+    }
+
+    /**
+     * One call on the control connection. Calls are not queued behind each other: Rex runs them
+     * side by side and matches each answer to its request, so over a tailnet with a second of round
+     * trip, a pane opening no longer waits for whatever else the app was asking. A caller that
+     * depends on an earlier answer awaits it, as every sequence here does; only typed input has an
+     * order Rex must keep, and it has its own queue.
+     */
     private suspend fun rpc(method: String, payload: JSONObject?): JSONObject {
         val client = clientRef.get() ?: throw NotReadyException("Not connected yet")
-        return callMutex.withLock { client.call(method, payload) }
+        val sent = System.nanoTime()
+        try {
+            return client.call(method, payload)
+        } finally {
+            trace("rpc $method took ${(System.nanoTime() - sent) / 1_000_000}ms")
+        }
     }
 
     private fun requireSession(): String =
@@ -967,6 +1124,12 @@ private const val MAX_BACKOFF_MS = 8_000L
 private const val FIRST_TAKE_BACK_MS = 1_000L
 
 private const val TAKE_BACK_MAX_MS = 30_000L
+
+/** How long the phone has to keep a retaken pane before the next retake is immediate again. */
+private const val TAKE_BACK_CALM_MS = 60_000L
+
+/** Longest wait between the status reader's sweeps; a new pane in a view ends it sooner. */
+private const val STATUS_IDLE_MS = 30_000L
 
 /** How often a watched pane asks Rex who owns it, so it can take itself back when the desk does. */
 private const val OWNERSHIP_CHECK_MS = 3_000L

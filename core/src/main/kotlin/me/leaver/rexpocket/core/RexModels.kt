@@ -78,32 +78,31 @@ data class SessionView(
 
     /**
      * The pane to show when this session is opened: the one the phone showed last time, if it
-     * still exists, otherwise the one Rex has focused, which is where the desktop is.
+     * still exists, otherwise the one Rex has focused, which is where the desktop is. Asked for a
+     * tab, [windowId], it is a pane of that tab: the remembered one if it is there, else the tab's
+     * own focus. Choosing the pane up front lets one focus call switch the tab and the pane.
      */
-    fun paneToShow(remembered: String?): BlockInfo? =
-        remembered?.let { id -> allBlocks().firstOrNull { it.id == id } } ?: focusedBlock()
-
-    /**
-     * This view after Rex accepted focus on [blockId]: its tab becomes active and the pane is
-     * focused there. [revision] is what the call returned; the view never goes backwards. Null
-     * when the pane is not in any tab.
-     */
-    fun showingPane(blockId: String, revision: Long): SessionView? {
-        val window = windows.firstOrNull { w -> w.blocks.any { it.id == blockId } } ?: return null
-        return copy(
-            revision = maxOf(this.revision, revision),
-            activeWindowId = window.id,
-            windows = windows.map { if (it.id == window.id) it.copy(focusedBlockId = blockId) else it },
-        )
-    }
-
-    /** This view after Rex made [windowId] active; that tab keeps the pane it last had focused. */
-    fun showingTab(windowId: String, revision: Long): SessionView? {
-        if (windows.none { it.id == windowId }) return null
-        return copy(revision = maxOf(this.revision, revision), activeWindowId = windowId)
+    fun paneToShow(remembered: String?, windowId: String? = null): BlockInfo? {
+        val tab = windowId?.let { id -> windows.firstOrNull { it.id == id } }
+        if (tab != null) return remembered?.let { id -> tab.blocks.firstOrNull { it.id == id } } ?: tab.focusedBlock()
+        return remembered?.let { id -> allBlocks().firstOrNull { it.id == id } } ?: focusedBlock()
     }
 
     fun allBlocks(): List<BlockInfo> = windows.flatMap { it.blocks }
+
+    /**
+     * This view as the phone shows it, on its own [place] - the pane it chose - rather than on the
+     * tab and pane Rex has active, which is the desktop's: Rex keeps one active tab per session for
+     * every client. Kept while the pane exists; once it closes, Rex's choice is used again.
+     */
+    fun placedAt(place: String?): SessionView {
+        if (place == null) return this
+        val window = windows.firstOrNull { w -> w.blocks.any { it.id == place } } ?: return this
+        return copy(
+            activeWindowId = window.id,
+            windows = windows.map { if (it.id == window.id) it.copy(focusedBlockId = place) else it },
+        )
+    }
 }
 
 data class ProgramRecord(
@@ -186,18 +185,88 @@ fun parseProgramRecords(obj: JSONObject): List<ProgramRecord> {
     return buildList {
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
-            add(
-                ProgramRecord(
-                    id = o.optNullableString("id") ?: "",
-                    state = o.optNullableString("state") ?: "idle",
-                    kind = o.optNullableString("kind"),
-                    app = o.optNullableString("effective_app") ?: o.optNullableString("app"),
-                    title = o.optNullableString("title"),
-                    msg = o.optNullableString("msg"),
-                    progress = if (o.has("progress") && !o.isNull("progress")) o.optInt("progress") else null,
-                ),
-            )
+            add(parseProgramRecord(o, o.optNullableString("id") ?: ""))
         }
+    }
+}
+
+private fun parseProgramRecord(o: JSONObject, id: String) = ProgramRecord(
+    id = id,
+    state = o.optNullableString("state") ?: "idle",
+    kind = o.optNullableString("kind"),
+    app = o.optNullableString("effective_app") ?: o.optNullableString("app"),
+    title = o.optNullableString("title"),
+    msg = o.optNullableString("msg"),
+    progress = if (o.has("progress") && !o.isNull("progress")) o.optInt("progress") else null,
+)
+
+/**
+ * A pane's status records, keyed by record id, after Rex's `program_status_changed` [event]: each
+ * report replaces its record, and an event without one clears it.
+ */
+fun applyStatusEvent(records: Map<String, ProgramRecord>, event: JSONObject): Map<String, ProgramRecord> {
+    val id = event.optNullableString("id") ?: ""
+    val record = event.optJSONObject("record") ?: return records - id
+    return records + (id to parseProgramRecord(record, id))
+}
+
+/**
+ * The program in a terminal's foreground, from Rex's `process` answer or `process_changed` event.
+ * The name it was started by comes first: an agent written for node runs as `node` but is started
+ * as `pi`, and that is the name a person knows it by. A login shell's leading dash is dropped.
+ */
+fun foregroundProgram(process: JSONObject): String? {
+    val fg = process.optJSONObject("foreground") ?: return null
+    val started = fg.optNullableString("argv0")?.removePrefix("-")?.substringAfterLast('/')
+    return started?.takeIf { it.isNotBlank() } ?: fg.optNullableString("name")?.takeIf { it.isNotBlank() }
+}
+
+/**
+ * The title a program set, from Rex's `title` answer or `title_changed` event, or null when it is
+ * not one to show. A shell writes the command it is about to run, or `user@host:dir`, into the
+ * title; that is noise, and Rex says who set it, so only a title from a program other than a shell
+ * is kept - `π - rexpocket` from pi, not `( exec -a claude … )` from zsh.
+ */
+fun programTitle(answer: JSONObject): String? {
+    val title = answer.optNullableString("title")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val owner = answer.optJSONObject("owner")?.optNullableString("name")
+    return if (programMark(owner) == ProgramMark.Shell) null else title
+}
+
+/** What a pane runs: the app a program said it is, else the foreground process. */
+fun paneProgram(status: ProgramRecord?, foreground: String?): String? =
+    status?.app?.takeIf { it.isNotBlank() } ?: foreground
+
+/**
+ * The marks the app draws for a pane. A program the app knows gets its own; a shell, or nothing at
+ * all, gets the terminal prompt; anything else gets its initial on the tile.
+ */
+enum class ProgramMark { Shell, Pi, Claude, Codex, Gemini, Cursor, OpenCode, Copilot, Vim, Emacs, Docker, Node, Python, Git, Ssh, Top, Other }
+
+private val SHELLS = setOf("sh", "bash", "zsh", "fish", "nu", "nushell", "dash", "ksh", "tcsh", "csh", "login", "shell")
+
+/** The mark for a program name, matched by its leading word so `Claude Code` and `claude` agree. */
+fun programMark(program: String?): ProgramMark {
+    val name = program?.trim()?.removePrefix("-")?.substringAfterLast('/')?.lowercase()
+        ?.substringBefore(' ')?.takeIf { it.isNotEmpty() } ?: return ProgramMark.Shell
+    return when (name) {
+        in SHELLS -> ProgramMark.Shell
+        "pi" -> ProgramMark.Pi
+        "claude" -> ProgramMark.Claude
+        "codex" -> ProgramMark.Codex
+        "gemini" -> ProgramMark.Gemini
+        "cursor", "cursor-agent" -> ProgramMark.Cursor
+        "opencode" -> ProgramMark.OpenCode
+        "copilot", "gh-copilot" -> ProgramMark.Copilot
+        "vim", "nvim", "vi", "hx", "helix" -> ProgramMark.Vim
+        "emacs" -> ProgramMark.Emacs
+        "docker", "podman" -> ProgramMark.Docker
+        "node", "bun", "deno", "npm", "pnpm", "yarn" -> ProgramMark.Node
+        "python", "python3", "ipython", "uv" -> ProgramMark.Python
+        "git", "lazygit", "tig", "jj" -> ProgramMark.Git
+        "ssh", "mosh", "et" -> ProgramMark.Ssh
+        "top", "htop", "btop" -> ProgramMark.Top
+        else -> ProgramMark.Other
     }
 }
 

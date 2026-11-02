@@ -175,7 +175,7 @@ internal fun HomeScreen(
                 val labelMatch = hostMatch || session.label.lowercase().contains(q)
                 // The eye keeps the tabs that are doing something; search then narrows by name.
                 val activeTabs = if (activeOnly) tabs.filter { window -> window.blocks.any { state.activityOf(it) != null } } else tabs
-                val shownTabs = if (labelMatch || view == null) activeTabs else activeTabs.filter { tabTitle(view, it).lowercase().contains(q) }
+                val shownTabs = if (labelMatch || view == null) activeTabs else activeTabs.filter { tabTitle(view, it, state).lowercase().contains(q) }
                 if (!labelMatch && shownTabs.isEmpty()) return@mapNotNull null
                 HomeSession(session, view, shownTabs, sessionActivity)
             }
@@ -511,7 +511,8 @@ private fun TabCard(
             }
             val activity = window.blocks.firstNotNullOfOrNull { state.activityOf(it) }
             TabRow(
-                title = row.view?.let { tabTitle(it, window) } ?: window.label,
+                title = row.view?.let { tabTitle(it, window, state) } ?: window.label,
+                program = tabProgram(window, state),
                 detail = detailFor(window, activity),
                 busy = activity != null,
                 opening = opening,
@@ -528,10 +529,14 @@ private fun detailFor(window: WindowInfo, activity: ProgramRecord?): String {
     return if (word != null) "$panes · $word" else panes
 }
 
-/** One tab: the terminal tile, badged blue while a pane in it works, its name, its panes, a chevron. */
+/**
+ * One tab: the tile of what runs in it - an agent's mark, or the terminal for a shell - badged blue
+ * while a pane in it works, its name, its panes, a chevron.
+ */
 @Composable
 private fun TabRow(
     title: String,
+    program: String?,
     detail: String,
     busy: Boolean,
     opening: Boolean,
@@ -543,7 +548,7 @@ private fun TabRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
-            TerminalTile(size = TILE)
+            ProgramTile(program, size = TILE)
             if (busy) Dot(Colors.accent, 8.dp, Modifier.align(Alignment.TopEnd).offset(4.dp, (-4).dp), ring = Colors.surface)
         }
         Spacer(Modifier.width(KEY_TEXT - KEY_MARK - TILE))

@@ -27,6 +27,8 @@ import java.util.Base64
 class TerminalStream(
     private val endpoint: Endpoint,
     private val httpFactory: () -> OkHttpClient,
+    /** Diagnostics: each connection, how its handshake went and why it ended. */
+    private val trace: (String) -> Unit = {},
     private val ticket: suspend () -> String,
 ) {
     private val frames = Channel<Frame>(Channel.UNLIMITED)
@@ -41,16 +43,19 @@ class TerminalStream(
     fun feeds(): Flow<TerminalFeed> = flow {
         var attempt = 0
         while (!stopped) {
+            val openedAt = System.nanoTime()
             val socket = try {
                 open()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                trace("stream open failed after ${elapsed(openedAt)}ms: ${e.javaClass.simpleName}: ${e.message}")
                 if (++attempt > MAX_ATTEMPTS) throw e
                 delay(backoff(attempt))
                 continue
             }
             attempt = 0
+            trace("stream open after ${elapsed(openedAt)}ms (resumed at $received)")
             val decoder = StreamDecoder(socket.nonce)
             try {
                 for (frame in frames) {
@@ -67,10 +72,12 @@ class TerminalStream(
                 // The screen stopped collecting: not a failure, and not worth reconnecting.
                 throw e
             } catch (e: DroppedStream) {
+                trace("stream dropped after ${elapsed(openedAt)}ms at $received bytes: ${e.message}")
                 if (e.fatal || stopped) throw e
                 if (++attempt > MAX_ATTEMPTS) throw e
                 delay(backoff(attempt))
             } catch (e: Exception) {
+                trace("stream failed after ${elapsed(openedAt)}ms at $received bytes: ${e.javaClass.simpleName}: ${e.message}")
                 if (stopped) return@flow
                 if (++attempt > MAX_ATTEMPTS) throw e
                 delay(backoff(attempt))
@@ -180,6 +187,8 @@ class TerminalStream(
         reason.isNotBlank() -> reason
         else -> "The terminal stream closed ($code)"
     }
+
+    private fun elapsed(since: Long): Long = (System.nanoTime() - since) / 1_000_000
 
     private class Connected(val webSocket: WebSocket, val nonce: ULong)
 
