@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -12,6 +13,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -92,8 +94,8 @@ class PocketSessionTest {
     }
 
     /**
-     * Keystrokes from the terminal view, the toolbar and the composer go out through different
-     * methods. They must still reach the shell in the order they were typed.
+     * Typing, the keys in the dock and a paste go out through different methods. They must still
+     * reach the shell in the order they were typed.
      */
     @Test
     fun mixedInputArrivesInTheOrderItWasTyped() {
@@ -279,6 +281,134 @@ class PocketSessionTest {
                 } finally {
                     watcher.cancel()
                     desktop.close()
+                }
+            } finally {
+                session.stop()
+                scope.cancel()
+                sessionId?.let { destroyQuietly(endpoint, it) }
+            }
+        }
+    }
+
+    /**
+     * Releasing a pane hands it back and stops the take-back loop: the desktop keeps it, at its own
+     * size, until the phone asks for it again. A release that the loop undid a second later would
+     * mean nothing, so the pane is still the desktop's after several checks.
+     */
+    @Test
+    fun aReleasedPaneStaysWithTheDesktopUntilTakenBack() {
+        val endpoint = testEndpoint()
+        assumeTrue(
+            "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
+            portOpen(endpoint.host, endpoint.port),
+        )
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(endpoint)
+            var sessionId: String? = null
+            try {
+                session.start(scope, preferredSessionId = null)
+                withTimeout(15_000) { session.awaitReady() }
+                session.setSize(52, 21, 8, 16)
+                session.createShell("rexpocket-test-release-" + System.currentTimeMillis())
+                sessionId = session.state.value.activeSessionId!!
+                val blockId = awaitOwnedFocus(session)
+
+                val watched = StringBuilder()
+                val watcher = collectPane(scope, session, blockId, watched)
+                try {
+                    val mine = session.state.value.clientId
+                    withTimeout(15_000) { while (ownerOnServer(endpoint, sessionId!!, blockId) != mine) delay(100) }
+
+                    session.releasePane()
+                    assertTrue("the pane was not reported released", session.state.value.released)
+                    assertTrue("the pane is still reported as this phone's", !session.state.value.owning)
+                    assertDisowned(endpoint, sessionId!!, blockId)
+                    // The take-back loop runs every few seconds; one round is enough to expose a release
+                    // it undoes.
+                    delay(6_000)
+                    assertDisowned(endpoint, sessionId!!, blockId)
+                    assertTrue("released state did not survive", session.state.value.released)
+
+                    session.takeOver()
+                    withTimeout(15_000) { while (ownerOnServer(endpoint, sessionId!!, blockId) != mine) delay(100) }
+                    assertTrue("the phone did not report the pane as its own", session.state.value.owning)
+                    assertTrue("released flag stayed after taking over", !session.state.value.released)
+                } finally {
+                    watcher.cancel()
+                }
+            } finally {
+                session.stop()
+                scope.cancel()
+                sessionId?.let { destroyQuietly(endpoint, it) }
+            }
+        }
+    }
+
+    /**
+     * A release belongs to the pane, not to the moment it was made: moving to another pane and
+     * coming back must not take it from the desktop, or the button would only hold until the next
+     * tab switch. Another pane is still taken on sight.
+     */
+    @Test
+    fun aReleasedPaneStaysReleasedWhenItIsShownAgain() {
+        val endpoint = testEndpoint()
+        assumeTrue(
+            "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
+            portOpen(endpoint.host, endpoint.port),
+        )
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(endpoint)
+            var sessionId: String? = null
+            try {
+                session.start(scope, preferredSessionId = null)
+                withTimeout(15_000) { session.awaitReady() }
+                session.setSize(52, 21, 8, 16)
+                session.createShell("rexpocket-test-sticky-release-" + System.currentTimeMillis())
+                sessionId = session.state.value.activeSessionId!!
+                val mine = session.state.value.clientId
+                val blockA = awaitOwnedFocus(session)
+
+                val firstWatch = collectPane(scope, session, blockA, StringBuilder())
+                try {
+                    withTimeout(15_000) { while (ownerOnServer(endpoint, sessionId!!, blockA) != mine) delay(100) }
+                } finally {
+                    firstWatch.cancel()
+                }
+                session.releasePane()
+                assertDisowned(endpoint, sessionId!!, blockA)
+
+                // A second pane is taken as usual, so the release is per pane and not a global switch.
+                session.split(vertical = false)
+                val blockB = withTimeout(10_000) {
+                    while (true) {
+                        val focused = session.state.value.view?.focusedBlock()?.id
+                        if (focused != null && focused != blockA) return@withTimeout focused
+                        delay(50)
+                    }
+                    error("unreachable")
+                }
+                val secondWatch = collectPane(scope, session, blockB!!, StringBuilder())
+                try {
+                    withTimeout(15_000) { while (ownerOnServer(endpoint, sessionId!!, blockB) != mine) delay(100) }
+                    assertFalse("showing another pane should not be released", session.state.value.released)
+                } finally {
+                    secondWatch.cancel()
+                }
+
+                // Back to the released pane: it is still the desktop's, and the button says so.
+                session.focusBlock(blockA)
+                val thirdWatch = collectPane(scope, session, blockA, StringBuilder())
+                try {
+                    withTimeout(5_000) { session.state.first { it.released } }
+                    // Longer than the take-back loop's first wait, which is what a forgotten
+                    // release would be undone by.
+                    delay(4_000)
+                    assertDisowned(endpoint, sessionId!!, blockA)
+                    assertTrue("the released flag did not survive the switch", session.state.value.released)
+                } finally {
+                    thirdWatch.cancel()
                 }
             } finally {
                 session.stop()

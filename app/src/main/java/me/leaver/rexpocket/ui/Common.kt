@@ -77,9 +77,9 @@ internal fun EntryCard(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = Colors.ink, fontSize = TextStyles.body, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, color = Colors.ink, fontSize = TextStyles.body, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (detail.isNotBlank()) {
-                Spacer(Modifier.height(Space.xs))
+                Spacer(Modifier.height(2.dp))
                 // An address is a figure, so it is set in the mono face; everything else stays body.
                 Text(
                     detail,
@@ -91,8 +91,8 @@ internal fun EntryCard(
                 )
             }
             if (tags.isNotEmpty()) {
-                Spacer(Modifier.height(Space.s))
-                Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     tags.forEach { Tag(it) }
                 }
             }
@@ -102,22 +102,41 @@ internal fun EntryCard(
             trailing,
             color = Colors.accent,
             fontSize = TextStyles.label,
+            fontWeight = FontWeight.Medium,
             modifier = (if (onTrailing != null) Modifier.clickable(onClick = onTrailing) else Modifier)
                 .padding(horizontal = Space.s - 2.dp, vertical = Space.s - 2.dp),
         )
     }
 }
 
-/** A one-word fact about a row: plaintext, TLS, Tailscale. A hairline, not a coloured pill. */
+/** A one-word fact about a row: plaintext, TLS, Tailscale. A soft plate, not a bordered chip. */
 @Composable
 internal fun Tag(text: String) {
     Text(
         text,
         color = Colors.muted,
         fontSize = TextStyles.label,
-        modifier = Modifier.clip(RoundedCornerShape(Space.xs)).border(1.dp, Colors.line, RoundedCornerShape(Space.xs))
-            .padding(horizontal = Space.s - 2.dp, vertical = 2.dp),
+        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Colors.key)
+            .padding(horizontal = 7.dp, vertical = 2.dp),
     )
+}
+
+/** The one action at the foot of a screen: full width, in the action colour, on the paper. */
+@Composable
+internal fun PrimaryButton(label: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    Box(
+        modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(Radius.card))
+            .background(if (enabled) Colors.accent else Colors.line)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (enabled) Colors.onAccent else Colors.muted,
+            fontSize = TextStyles.body,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
 }
 
 @Composable
@@ -147,7 +166,8 @@ internal fun Field(hint: String, value: String, autoFocus: Boolean = false, onCh
             textStyle = TextStyle(color = Colors.ink, fontSize = TextStyles.body),
             cursorBrush = SolidColor(Colors.accent),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp).border(1.dp, Colors.line, RoundedCornerShape(8.dp)).padding(10.dp)
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp).border(1.dp, Colors.line, RoundedCornerShape(Radius.chip))
+                .padding(horizontal = 12.dp, vertical = 12.dp)
                 .focusRequester(focus),
         )
     }

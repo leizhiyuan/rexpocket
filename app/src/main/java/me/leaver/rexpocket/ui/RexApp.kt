@@ -1,7 +1,5 @@
 package me.leaver.rexpocket.ui
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -72,10 +70,10 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
             )
             Route.Term -> TermScreen(
                 state = pocket,
-                composerDrafts = model.drafts,
                 fontScale = font,
                 onFont = model::setFont,
                 onBack = model::showPicker,
+                onHosts = model::disconnect,
                 onOpenSession = model::openSession,
                 watchPane = model::watchPane,
                 onRetry = model::retryNow,

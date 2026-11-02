@@ -48,7 +48,10 @@
     <string name="session_enter">Enter</string>
     <string name="session_opening">Opening…</string>
     <string name="session_creating">Creating…</string>
-    <string name="session_window_count">%1$d tabs</string>
+    <plurals name="session_window_count">
+        <item quantity="one">%1$d tab</item>
+        <item quantity="other">%1$d tabs</item>
+    </plurals>
     <string name="session_none_live">This Rex has no sessions yet.</string>
     <string name="session_loading">Reading sessions…</string>
 
@@ -61,6 +64,7 @@
 
     <string name="header_stop">Stop</string>
     <string name="header_sessions">Sessions</string>
+    <string name="header_hosts">Hosts</string>
     <string name="level_session">Session</string>
     <string name="level_tab">Tab</string>
     <string name="level_pane">Pane</string>
@@ -84,14 +88,9 @@
 
     <string name="pane_reading">Reading the screen…</string>
     <string name="pane_no_picture">No picture yet</string>
-    <string name="composer_hint">Type, then send to the terminal</string>
-    <string name="composer_send">Send</string>
-    <string name="composer_send_hint">Tap: send and press Enter. Long press: send an Enter alone.</string>
-
-    <string name="key_escape">Esc</string>
-    <string name="key_ctrl">Ctrl</string>
-    <string name="key_ctrl_lock">CtrlLock</string>
-    <string name="key_tab">Tab</string>
+    <string name="key_escape">esc</string>
+    <string name="key_ctrl">ctrl</string>
+    <string name="key_tab">tab</string>
     <string name="key_enter">⏎</string>
     <string name="key_ctrl_c">C-c</string>
     <string name="key_ctrl_d">C-d</string>
@@ -132,5 +131,15 @@
     <string name="confirm_delete_host_body">Only the saved address goes; the sessions on that Rex stay.</string>
     <string name="action_back">Back</string>
     <string name="action_more">More actions</string>
+    <string name="action_take_over">Take over</string>
+    <string name="action_release">Release</string>
+    <string name="menu_navigate">Tabs and panes</string>
+    <string name="group_tabs">Tabs</string>
+    <string name="group_panes">Panes</string>
+    <plurals name="pane_count">
+        <item quantity="one">%1$d pane</item>
+        <item quantity="other">%1$d panes</item>
+    </plurals>
+    <string name="key_keyboard">Keyboard</string>
     <string name="error_operation_failed">Operation failed</string>
 </resources>

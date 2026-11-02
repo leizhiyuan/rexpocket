@@ -1,10 +1,10 @@
 package me.leaver.rexpocket.ui
 
-import android.content.Context
 import android.util.Log
 import android.os.Handler
 import android.os.SystemClock
 import android.os.Looper
+import android.view.MotionEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -31,6 +31,7 @@ import me.leaver.rexpocket.BuildConfig
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.TerminalFeed
 import io.github.sagernet.libghostty.GhosttyTerminalSession
+import io.github.sagernet.libghostty.GhosttyTerminalView
 import io.github.sagernet.libghostty.compose.GhosttyTerminal
 import io.github.sagernet.libghostty.compose.rememberGhosttyTerminalState
 import kotlinx.coroutines.CancellationException
@@ -39,6 +40,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import kotlin.math.abs
 
 /**
  * Terminal surface backed by libghostty-vt.
@@ -57,6 +59,10 @@ fun TerminalPane(
     onResize: (columns: Int, rows: Int, cellWidthPx: Int, cellHeightPx: Int) -> Unit,
     modifier: Modifier = Modifier,
     onSession: (GhosttyTerminalSession?) -> Unit = {},
+    /** The Android view itself, for raising and dropping the IME from the key row. */
+    onView: (GhosttyTerminalView?) -> Unit = {},
+    /** A horizontal swipe across the pane: forward means towards the next pane. */
+    onSwipe: ((forward: Boolean) -> Unit)? = null,
     onError: (Exception) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -67,6 +73,8 @@ fun TerminalPane(
     var attempt by remember(blockId) { mutableStateOf(0) }
     val currentInput = rememberUpdatedState(onInput)
     val currentResize = rememberUpdatedState(onResize)
+    val currentSwipe = rememberUpdatedState(onSwipe)
+    val currentView = rememberUpdatedState(onView)
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
 
     LaunchedEffect(blockId, attempt) {
@@ -121,16 +129,39 @@ fun TerminalPane(
             // Android views without clipping, so unclipped it paints over the header and tab bar.
             modifier = Modifier.fillMaxSize().clipToBounds(),
             fontSizeSp = 12f * fontScale,
-            // The composer owns the IME; the view must not grab it on attach.
+            // The keyboard is raised by a tap on the pane, not by the app attaching it.
             focusOnAttach = false,
             onFontSizeChanged = { onFont(it / 12f) },
             configure = { view ->
-                // The app has its own composer and toolbar: the view renders and handles selection,
-                // while every keystroke goes through the composer so focus never moves away from it.
-                view.showImeOnTap = false
-                view.isFocusable = false
-                view.isFocusableInTouchMode = false
+                // Typing goes straight into the pane, as it does on the desktop: tapping the
+                // terminal raises the keyboard and every committed character is sent as input.
+                view.showImeOnTap = true
+                view.isFocusable = true
+                view.isFocusableInTouchMode = true
                 view.urlDetectionEnabled = false
+                // A horizontal swipe moves between the panes of a split, which is what the dots
+                // under the card promise. The view keeps its vertical scrolling and selection: the
+                // listener only reads the gesture and lets the event through.
+                val threshold = 72f * view.resources.displayMetrics.density
+                var downX = 0f
+                var downY = 0f
+                view.setOnTouchListener { _, event ->
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> {
+                            downX = event.x
+                            downY = event.y
+                        }
+                        MotionEvent.ACTION_UP -> {
+                            val dx = event.x - downX
+                            val dy = event.y - downY
+                            if (abs(dx) > threshold && abs(dx) > abs(dy) * 1.5f) {
+                                currentSwipe.value?.invoke(dx < 0)
+                            }
+                        }
+                    }
+                    false
+                }
+                currentView.value(view)
             },
         )
         // Until the first snapshot there is nothing to draw; a black rectangle with no words looks
@@ -142,6 +173,7 @@ fun TerminalPane(
         onDispose {
             input.flush()
             onSession(null)
+            onView(null)
             session?.let { s ->
                 s.transport = null
                 s.close()

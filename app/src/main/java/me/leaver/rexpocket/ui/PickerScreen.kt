@@ -1,16 +1,14 @@
 package me.leaver.rexpocket.ui
 
-import android.content.Intent
-import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -28,11 +26,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.TailnetPath
@@ -65,7 +64,7 @@ internal fun PickerScreen(
             HeaderButton("‹", spoken = stringResource(R.string.action_back), size = TextStyles.display, onClick = onBack)
             Column(Modifier.weight(1f)) {
                 Text(hostLabel, color = Colors.ink, fontSize = TextStyles.title, fontWeight = FontWeight.SemiBold)
-                Text(phaseText(state), color = if (state.phase == Phase.Live) Colors.accent else Colors.amber, fontSize = TextStyles.label)
+                Text(phaseText(state), color = if (state.phase == Phase.Live) Colors.ok else Colors.amber, fontSize = TextStyles.label)
             }
         }
         // Which way the tailnet carries this host: the one number that explains a slow picture.
@@ -125,7 +124,7 @@ internal fun PickerScreen(
                     EntryCard(
                         title = session.label,
                         // No filler under the name: the count when it is known, nothing when it is not.
-                        detail = windows?.let { stringResource(R.string.session_window_count, it) }.orEmpty(),
+                        detail = windows?.let { pluralStringResource(R.plurals.session_window_count, it, it) }.orEmpty(),
                         tags = emptyList(),
                         // A tap before the connection is up waits for it; the row says so.
                         trailing = stringResource(
@@ -137,16 +136,11 @@ internal fun PickerScreen(
             }
         }
         Spacer(Modifier.weight(1f))
-        Text(
+        PrimaryButton(
             stringResource(if (opening == Opening.New) R.string.session_creating else R.string.session_new),
-            color = Colors.onAccent,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 18.dp)
-                .clip(RoundedCornerShape(Radius.card)).background(Colors.accent)
-                .clickable(enabled = opening == null) { onCreate(null) }
-                .padding(vertical = 14.dp),
-            fontWeight = FontWeight.SemiBold,
-        )
+            modifier = Modifier.navigationBarsPadding().padding(bottom = 18.dp),
+            enabled = opening == null,
+        ) { onCreate(null) }
     }
 }
 
@@ -159,7 +153,7 @@ internal fun PickerScreen(
 private fun TailnetPathLine(path: TailnetPath, onProbe: () -> Unit) {
     val ms = path.latencyMs?.let { " · ${it.toInt()} ms" }.orEmpty()
     val (text, color) = when (path) {
-        is TailnetPath.Direct -> stringResource(R.string.tailnet_path_direct) + ms to Colors.accent
+        is TailnetPath.Direct -> stringResource(R.string.tailnet_path_direct) + ms to Colors.ok
         is TailnetPath.PeerRelay -> stringResource(R.string.tailnet_path_peer_relay) + ms to Colors.amber
         is TailnetPath.Derp ->
             stringResource(R.string.tailnet_path_derp, path.regionCode.ifBlank { path.regionId.toString() }) + ms to Colors.amber

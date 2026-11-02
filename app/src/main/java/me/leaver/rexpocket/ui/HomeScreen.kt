@@ -36,10 +36,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+
 import me.leaver.rexpocket.core.HostAddress
 import me.leaver.rexpocket.core.HostAddressParser
 import me.leaver.rexpocket.data.HostStore
@@ -75,8 +75,8 @@ internal fun HomeScreen(
         Text(
             stringResource(R.string.home_subtitle),
             color = Colors.muted,
-            fontSize = TextStyles.body,
-            lineHeight = bodyLeading,
+            fontSize = TextStyles.label,
+            lineHeight = labelLeading,
         )
         Spacer(Modifier.height(Space.xl))
         TailscaleRow(tailscale, tailscaleStatus, tailnetError, onOpen = onTailscale)
@@ -115,16 +115,7 @@ internal fun HomeScreen(
             }
         }
         if (hosts.isEmpty()) Spacer(Modifier.weight(1f))
-        Text(
-            stringResource(R.string.action_add_host),
-            color = Colors.onAccent,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 18.dp)
-                .clip(RoundedCornerShape(Radius.card)).background(Colors.accent).clickable { creating = true }
-                .padding(vertical = 14.dp),
-            fontWeight = FontWeight.SemiBold,
-            fontSize = TextStyles.body,
-        )
+        PrimaryButton(stringResource(R.string.action_add_host), modifier = Modifier.navigationBarsPadding().padding(bottom = 18.dp)) { creating = true }
     }
     if (creating || editing != null) {
         HostDialog(
@@ -170,8 +161,8 @@ internal fun TailscaleRow(
     // The phone's own node is not a destination, so it carries no card: it is a line of state that
     // opens the node's settings, and it sits on the paper instead of above it.
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.chip)).clickable(onClick = onOpen)
-            .padding(horizontal = Space.s, vertical = Space.s),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Colors.surface)
+            .clickable(onClick = onOpen).padding(horizontal = Space.l, vertical = Space.m),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -181,6 +172,7 @@ internal fun TailscaleRow(
                 settings.hostname.ifBlank { status.networkName }.ifBlank { stringResource(R.string.tailscale_no_name) },
                 color = Colors.ink,
                 fontSize = TextStyles.body,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -189,7 +181,7 @@ internal fun TailscaleRow(
             detail,
             color = when {
                 error != null -> Colors.danger
-                joined -> Colors.accent
+                joined -> Colors.ok
                 settings.enabled -> Colors.amber
                 else -> Colors.muted
             },

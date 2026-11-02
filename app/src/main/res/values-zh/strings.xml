@@ -48,7 +48,9 @@
     <string name="session_enter">进入</string>
     <string name="session_opening">正在打开…</string>
     <string name="session_creating">正在创建…</string>
-    <string name="session_window_count">%1$d 个标签页</string>
+    <plurals name="session_window_count">
+        <item quantity="other">%1$d 个标签页</item>
+    </plurals>
     <string name="session_none_live">这台 Rex 上还没有会话。</string>
     <string name="session_loading">正在读取会话…</string>
 
@@ -61,6 +63,7 @@
 
     <string name="header_stop">停</string>
     <string name="header_sessions">会话</string>
+    <string name="header_hosts">主机</string>
     <string name="level_session">会话</string>
     <string name="level_tab">标签页</string>
     <string name="level_pane">窗格</string>
@@ -84,14 +87,9 @@
 
     <string name="pane_reading">正在读取画面…</string>
     <string name="pane_no_picture">画面还没有来</string>
-    <string name="composer_hint">输入后发送到终端</string>
-    <string name="composer_send">发送</string>
-    <string name="composer_send_hint">点按：发送并回车。长按：只发一个回车。</string>
-
-    <string name="key_escape">Esc</string>
-    <string name="key_ctrl">Ctrl</string>
-    <string name="key_ctrl_lock">Ctrl锁</string>
-    <string name="key_tab">Tab</string>
+    <string name="key_escape">esc</string>
+    <string name="key_ctrl">ctrl</string>
+    <string name="key_tab">tab</string>
     <string name="key_enter">⏎</string>
     <string name="key_ctrl_c">C-c</string>
     <string name="key_ctrl_d">C-d</string>
@@ -132,5 +130,14 @@
     <string name="confirm_delete_host_body">只删掉保存的地址，那台 Rex 上的会话不受影响。</string>
     <string name="action_back">返回</string>
     <string name="action_more">更多操作</string>
+    <string name="action_take_over">接管</string>
+    <string name="action_release">交还</string>
+    <string name="menu_navigate">标签与窗格</string>
+    <string name="group_tabs">标签页</string>
+    <string name="group_panes">窗格</string>
+    <plurals name="pane_count">
+        <item quantity="other">%1$d 个窗格</item>
+    </plurals>
+    <string name="key_keyboard">键盘</string>
     <string name="error_operation_failed">操作失败</string>
 </resources>

@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -56,7 +57,7 @@ internal fun SessionSheet(
                 SheetItem(
                     label = session.label,
                     color = if (active) Colors.accent else Colors.ink,
-                    detail = tabs?.let { stringResource(R.string.session_window_count, it) },
+                    detail = tabs?.let { pluralStringResource(R.plurals.session_window_count, it, it) },
                     marked = active,
                 ) { onOpen(session.id) }
             }
@@ -95,7 +96,7 @@ internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, content: 
         contentColor = Colors.ink,
         scrimColor = Colors.scrim,
         dragHandle = {
-            Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 36.dp, height = 4.dp).clip(CircleShape).background(Colors.line))
+            Box(Modifier.padding(top = 10.dp, bottom = 4.dp).size(width = 36.dp, height = 5.dp).clip(CircleShape).background(Colors.line))
         },
     ) {
         Column(
@@ -109,7 +110,7 @@ internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, content: 
                     fontSize = TextStyles.title,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
-                    modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp),
+                    modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 6.dp),
                 )
             }
             rows.content()

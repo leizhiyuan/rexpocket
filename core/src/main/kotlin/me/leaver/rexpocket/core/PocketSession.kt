@@ -48,12 +48,16 @@ data class PocketState(
     val views: Map<String, SessionView> = emptyMap(),
     val blockStatus: Map<String, ProgramRecord> = emptyMap(),
     val pwd: String? = null,
+    /** True while Rex has the shown pane at this phone's size: this phone is the one controlling it. */
+    val owning: Boolean = false,
+    /** True after the pane was handed back to the desktop, so taking it again has to be asked for. */
+    val released: Boolean = false,
 )
 
 /**
  * Phone-side session: bootstrap, sidebar model, and a polled VT screen.
- * Owning the focused block makes Rex use this client's size, the same way
- * Moshi takes the pane while it is on screen. Leaving disowns it.
+ * Owning the focused block makes Rex use this client's size, the same way a
+ * phone client takes the pane while it is on screen. Leaving disowns it.
  */
 class PocketSession(
     private val endpoint: Endpoint,
@@ -72,6 +76,15 @@ class PocketSession(
     private var ownedBlock: String? = null
     /** Session [ownedBlock] lives in; it can differ from the active one right after a switch. */
     private var ownedSession: String? = null
+    /**
+     * The panes the user handed back to the desktop. A release belongs to the pane, not to the
+     * screen: showing that pane again, in this session or another one, must not take it back. Only
+     * Take over, closing the pane or the connection ends it.
+     */
+    private val releasedBlocks: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** Serializes owning and disowning, so a release cannot be undone by a take that is in flight. */
+    private val ownership = Mutex()
     private var lastResize: TermSize? = null
     private var preferred: String? = null
     private var reconnectToken: String? = null
@@ -168,6 +181,7 @@ class PocketSession(
     suspend fun stop() {
         val job = runner
         runner = null
+        releasedBlocks.clear()
         job?.cancel()
         // Clearing clientRef first would skip the disown, so the join comes first.
         if (job != null) withTimeoutOrNull(4_000) { job.join() }
@@ -197,6 +211,8 @@ class PocketSession(
         preferred = sessionId
         // The pane left behind goes back to the desktop, or it stays at the phone's size.
         if (ownedSession != sessionId) disownQuietly()
+        // Released panes stay released across sessions; only the shown pane's state is reset here.
+        _state.update { it.copy(owning = false, released = false) }
         val payload = rpc("session.attach", JSONObject().put("session_id", sessionId))
         var view = parseView(payload.getJSONObject("view"))
         val pane = view.paneToShow(rememberedBlock)
@@ -362,19 +378,6 @@ class PocketSession(
     fun writeBytes(data: ByteArray) {
         if (data.isEmpty()) return
         input(write(String(data, Charsets.UTF_8)))
-    }
-
-    /**
-     * Typing a line means writing the text and then pressing Enter as a separate key event.
-     * Full-screen UIs such as pi read a newline inside pasted text as a line break in their
-     * own input box instead of accepting it, so the newline cannot ride along with the text.
-     */
-    suspend fun submitLine(text: String) {
-        if (text.isNotEmpty()) {
-            sendText(text)
-            delay(40)
-        }
-        sendKey("enter")
     }
 
     suspend fun paste(text: String) {
@@ -632,7 +635,14 @@ class PocketSession(
                 continue
             }
             try {
-                ensureOwned(sid, blockId)
+                // A pane is taken on sight, unless the user handed this one back: then it stays the
+                // desktop's until they ask for it again - including every time it is shown again.
+                if (blockId in releasedBlocks) {
+                    if (_state.value.owning || !_state.value.released) markReleased()
+                } else {
+                    if (_state.value.released) _state.update { it.copy(released = false) }
+                    ensureOwned(sid, blockId)
+                }
                 coroutineScope {
                     launch { sizeLoop(sid, blockId) }
                     launch { ownershipLoop(sid, blockId) }
@@ -660,10 +670,16 @@ class PocketSession(
         }
     }
 
-    /** Applies the phone's size to the pane whenever it changes. */
+    /** Applies the phone's size to the pane whenever it changes, while this phone owns it. */
     private suspend fun sizeLoop(sid: String, blockId: String) {
         while (true) {
             val size = sizeRef.get()
+            // A released pane is the desktop's, at the desktop's size. Sending ours would resize it
+            // behind the user's back, which is the one thing release promises not to do.
+            if (blockId in releasedBlocks) {
+                delay(RELEASE_WAIT_MS)
+                continue
+            }
             if (lastResize != size) {
                 try {
                     rpc(
@@ -704,20 +720,41 @@ class PocketSession(
     }
 
     private suspend fun ensureOwned(sid: String, block: String) {
-        if (ownedBlock == block && ownedSession == sid) return
-        val previous = ownedBlock
-        val previousSession = ownedSession ?: sid
-        if (previous != null && previous != block) {
-            rpc(
-                "session.disown_block",
-                JSONObject().put("session_id", previousSession).put("block_ids", JSONArray().put(previous)),
-            )
+        ownership.withLock {
+            if (block in releasedBlocks) {
+                markReleased()
+                return@withLock
+            }
+            if (ownedBlock == block && ownedSession == sid) {
+                markOwned()
+                return@withLock
+            }
+            // The pane left behind goes back to the desktop before the new one is taken.
+            val previous = ownedBlock
+            val previousSession = ownedSession
+            if (previous != null && previous != block) {
+                rpc(
+                    "session.disown_block",
+                    JSONObject().put("session_id", previousSession ?: sid).put("block_ids", JSONArray().put(previous)),
+                )
+                ownedBlock = null
+                ownedSession = null
+            }
+            takePaneLocked(sid, block)
         }
-        takePane(sid, block)
     }
 
     /** Takes the pane, after which Rex applies this phone's size to it instead of the old owner's. */
     private suspend fun takePane(sid: String, block: String) {
+        ownership.withLock { takePaneLocked(sid, block) }
+    }
+
+    /** Caller holds [ownership]. */
+    private suspend fun takePaneLocked(sid: String, block: String) {
+        if (block in releasedBlocks) {
+            markReleased()
+            return
+        }
         rpc(
             "session.own_block",
             JSONObject()
@@ -725,10 +762,63 @@ class PocketSession(
                 .put("block_ids", JSONArray().put(block))
                 .put("mode", "take"),
         )
+        // A release can land while own_block is on its way; it wins, so the pane goes straight back.
+        if (block in releasedBlocks) {
+            rpc(
+                "session.disown_block",
+                JSONObject().put("session_id", sid).put("block_ids", JSONArray().put(block)),
+            )
+            ownedBlock = null
+            ownedSession = null
+            lastResize = null
+            markReleased()
+            return
+        }
         ownedBlock = block
         ownedSession = sid
         // The new owner has to ask for its size again; Rex does not carry the old one over.
         lastResize = null
+        markOwned()
+    }
+
+    /**
+     * Hands the shown pane back to the desktop, and stops taking it back: the desktop then gives it
+     * its own size and keyboard. The stream stays open, so the phone keeps showing the pane. The
+     * release outlives this screen; it belongs to the pane until Take over.
+     */
+    suspend fun releasePane() {
+        val sid = ownedSession ?: requireSession()
+        val block = ownedBlock ?: requireBlock().second
+        // Marked before the lock, so an own_block already in flight sees it and gives the pane back.
+        releasedBlocks.add(block)
+        markReleased()
+        ownership.withLock {
+            rpc(
+                "session.disown_block",
+                JSONObject().put("session_id", sid).put("block_ids", JSONArray().put(block)),
+            )
+            if (ownedBlock == block) {
+                ownedBlock = null
+                ownedSession = null
+            }
+            lastResize = null
+            markReleased()
+        }
+    }
+
+    /** Takes a released pane back, and starts keeping it at this phone's size again. */
+    suspend fun takeOver() {
+        val (sid, block) = requireBlock()
+        releasedBlocks.remove(block)
+        takePane(sid, block)
+    }
+
+    private fun markOwned() {
+        _state.update { it.copy(owning = true, released = false) }
+    }
+
+    private fun markReleased() {
+        _state.update { it.copy(owning = false, released = true) }
     }
 
     /**
@@ -744,14 +834,27 @@ class PocketSession(
             active.first { it }
             // The owner of a terminal is asked of the terminal itself: the view of a session does not
             // always follow an owner change, and a stale answer here means a pane that stays clipped.
+            // A released pane is the desktop's on purpose; the loop still watches, so the button
+            // can say who holds it, but it never takes it back on its own.
+            if (blockId in releasedBlocks) {
+                if (_state.value.owning || !_state.value.released) markReleased()
+                delay(OWNERSHIP_CHECK_MS)
+                continue
+            }
             val mine = _state.value.clientId
             val owner = ownerOnServer(sid, blockId)
+            if (owner != null && mine != null) {
+                val owning = owner == mine
+                if (_state.value.owning != owning) _state.update { it.copy(owning = owning) }
+            }
             if (owner == null || mine == null || owner == mine) {
                 wait = 0L
             } else {
                 delay(wait)
                 wait = if (wait == 0L) FIRST_TAKE_BACK_MS else (wait * 2).coerceAtMost(TAKE_BACK_MAX_MS)
-                runCatching { takePane(sid, blockId) }
+                // The user may have released it during the wait; takePaneLocked checks again under
+                // the lock, which also covers a release that lands while own_block is in flight.
+                if (blockId !in releasedBlocks) runCatching { takePane(sid, blockId) }
             }
             delay(OWNERSHIP_CHECK_MS)
         }
@@ -848,6 +951,9 @@ private const val TAKE_BACK_MAX_MS = 30_000L
 
 /** How often a watched pane asks Rex who owns it, so it can take itself back when the desk does. */
 private const val OWNERSHIP_CHECK_MS = 3_000L
+
+/** How often a released pane looks again at whether it may resume sizing itself. */
+private const val RELEASE_WAIT_MS = 250L
 
 /** Wait before the screen tries its pane again, after the connection or the stream let go. */
 private const val PANE_RETRY_MAX_MS = 5_000L

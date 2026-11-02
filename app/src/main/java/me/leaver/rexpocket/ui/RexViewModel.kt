@@ -9,7 +9,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import me.leaver.rexpocket.core.ComposerDrafts
 import me.leaver.rexpocket.core.Endpoint
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
@@ -105,9 +104,6 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     private var tailnetJob: Job? = null
     private val _tailnetError = MutableStateFlow<String?>(null)
     val tailnetError: StateFlow<String?> = _tailnetError
-
-    /** What the composer holds per pane, and the lines sent; kept for as long as the app runs. */
-    val drafts = ComposerDrafts()
 
     /** The session being opened or created from the list, shown as busy until it is on screen. */
     private val _opening = MutableStateFlow<Opening?>(null)
