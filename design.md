@@ -1,11 +1,3 @@
-<!-- Hallmark v4.1.0 · redesign of me.leaver.rexpocket · the Rex phone app it follows, on Android's
-     own grid, icons and touch targets · 2026-11-02 -->
-<!-- Critique: the app had a list of hosts, then a second list of sessions, then a terminal with a
-     tab bar above it and a permanent key row below it. It is now one list - hosts, the sessions
-     under them, and each session's tabs - and a terminal with only its floating chrome: a round
-     back, the tile, the tab, a pane bar and one dock. It follows the phone's light and dark
-     appearance. -->
-
 # RexPocket design system
 
 Every colour, font size and corner radius on screen comes from
@@ -43,6 +35,8 @@ never a control edge. The terminal is the paper you sit on; the tile is the one 
 | `danger` | `#C7162B` | `#FF453A` | failure, removal, a Stop key |
 | `badge` | `#1C1C1E` | `#2C2C2E` | the terminal tile |
 | `badgeInk` | `#30D158` | `#30D158` | the prompt on the tile |
+| `tile` | `#F2F0EB` | `#E9E7E2` | the plate behind a program's mark |
+| `tileInk` | `#1C1C1E` | `#1C1C1E` | a program's mark |
 
 Contrast, light then dark, on `surface`/`bg`: ink 17.0/15.3 and 15.9/18.9, muted 6.1/5.5 and
 6.6/6.9, accent 5.4/4.8 and 5.6/6.4, ok 5.4/4.9 and 8.4/9.9, amber 5.1/4.5 and 13.4/15.9, danger
@@ -77,16 +71,20 @@ centre line.
 - A host is a 64 dp section line: a 24 dp monitor, its name at title size with the connection's
   dot, and a line that says what it is doing and how many sessions it has. The line folds the
   section, or connects the host when it is not the one open; the vertical `more` opens its menu.
-- A session is a quiet group label under the host, as the reference writes it: its name in
+- A session is a quiet group label under the host: its name in
   `muted` subhead, a blue dot while something in it works, its tab count or *Cached*, then a
   `add_circle` that makes a tab and the fold, a chevron that turns from down to right. A session
   whose tabs are not loaded opens (and loads) instead of folding.
-- Its tabs are one card of 64 dp rows: the 36 dp terminal tile - badged with a ringed blue dot
-  while a pane in it works - the tab's name, its pane count and what a working pane is doing, and
-  a chevron; hairlines from the title's keyline. Tapping a tab attaches the session and focuses it.
+- Its tabs are one card of 64 dp rows: the 36 dp program tile of its focused pane - badged with a
+  ringed blue dot while a pane in it works - the tab's name, its pane count and what a working pane
+  is doing, and a chevron; hairlines from the title's keyline. Tapping a tab attaches the session
+  and shows that tab.
+- A tab someone named keeps its name. One left at Rex's generated label takes the title its
+  program set (`π - rexpocket`), then the program's name, then its position. A title a shell writes
+  - its next command, `user@host:dir` - is never used.
 - The page starts at the top with the list; there is no large title. Opening a tab keeps the
   connection when you come back, so the live tabs are still there.
-- Two floating controls, as in the reference, 56 dp high on the page margin: a bottom-left pill with
+- Two floating controls, 56 dp high on the page margin: a bottom-left pill with
   settings and the eye, and a bottom-right search circle. The eye keeps only the sessions and tabs
   with activity right now - a pane whose program is working or waiting, from Rex's program status;
   while it is on, the eye is filled and sits on an `keyOn` plate. Search opens the platform's search
@@ -101,14 +99,14 @@ Three floating layers, no bars:
 The whole screen is the terminal's paper; nothing sits on a band of a second grey.
 
 1. **The top bar.** 64 dp: a 40 dp round back arrow on a `key` plate, then one title block - the
-   36 dp tile (a ringed accent dot while the desk holds the pane), the tab name with the directory
+   36 dp program tile of the shown pane (a ringed accent dot while the desk holds the pane), the tab name with the directory
    it is in, and the session under it with its state dot and a chevron - then the vertical `more`
    on the same plate. The title block opens the session's tabs and panes, with the session list at
    its top; `more` is the menu: Release / Take over first, with who holds the pane now, then pane,
    tab and session actions, each with its icon.
 2. **The pane.** Full width, 10 dp of inset for its text. On a split the pane bar floats under it:
-   one pill, a 48 dp segment per pane with its number and name, the one on screen on a `keyOn`
-   plate in `accent`. Tap a segment or swipe the pane left and right.
+   one pill, a 48 dp segment per pane with its 24 dp program tile and name, the one on screen on a
+   `keyOn` plate in `accent`. Tap a segment or swipe the pane left and right.
 3. **The dock.** One floating pill - keyboard, Return, keys (the command mark) - and a 56 dp circle
    that makes a tab, both on `raised`, above the IME and the navigation bar. The keyboard button
    shows the platform's keyboard-hide mark while the IME is up. The key pad (`esc`, `ctrl`, Tab,
@@ -128,8 +126,16 @@ The whole screen is the terminal's paper; nothing sits on a band of a second gre
 - The control is a state, in the menu: Release while this phone holds the pane, Take over once the
   desk does; the tile's dot says the same thing without a word. A release belongs to the pane and
   survives tab and session switches.
+- The phone has its own place in a session. Rex's active tab and focus are the desk's: the phone
+  never moves them, and does not follow them either. It holds only the pane it shows.
 - Marks come from one set, the platform's: no font glyph stands in for an icon, and no two icons
   are drawn by hand to different weights.
+- A program's tile says what runs in a pane. A shell, or nothing reported yet, is the dark terminal
+  tile. A program the app knows - pi, Claude, Codex, Gemini, Cursor, opencode, Copilot, Vim, Emacs,
+  Docker, Node, Python, Git, ssh, top - is its mark on the light `tile` plate, drawn on a 24-unit
+  grid at one stroke weight, with at most one colour of its own. Anything else is its initial.
+  The marks are the app's drawings, never a product's logo. The name comes from what the program
+  reports, else from the foreground process's start name (`pi`, not `node`).
 - Everything tappable is at least 48 dp, and says what it does to a screen reader.
 - Typing is the pane's. There is no composer: a tap raises the keyboard, the dock's `Enter` sends
   Enter, the key pad sends the rest.
