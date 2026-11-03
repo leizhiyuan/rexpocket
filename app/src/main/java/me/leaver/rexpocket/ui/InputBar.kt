@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -42,7 +41,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.leaver.rexpocket.R
-import me.leaver.rexpocket.core.PocketSession
 
 // The key row under the terminal: the keys a phone keyboard does not have, at the foot of the dock.
 
@@ -51,18 +49,20 @@ import me.leaver.rexpocket.core.PocketSession
  * scrolls when there are more keys than width; the keyboard key waits outside the scroll, so it is
  * always in the same place. This is the same arrangement a desk terminal gives you: the pane keeps
  * the screen, the keys keep the bottom.
+ *
+ * The keys are ordered by how often a thumb wants them, so the first screenful - esc, the stop key
+ * and the arrows - is the one an agent asks for most: back out, stop it, walk its menu. Return
+ * already sits on the dock below, so the row does not repeat it.
  */
 @Composable
 internal fun KeyDock(
     ctrl: Boolean,
     locked: Boolean,
-    dpad: Boolean,
     stopping: Boolean,
     onCtrl: () -> Unit,
     onKey: (code: String, mods: String, codepoint: Int) -> Unit,
     onPaste: () -> Unit,
     onCopy: () -> Unit,
-    onDpad: () -> Unit,
 ) {
     val scroll = rememberScrollState()
     Row(
@@ -77,6 +77,20 @@ internal fun KeyDock(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Key(stringResource(R.string.key_escape)) { onKey("escape", "", 0) }
+            // While a program works or waits for an answer, this is the key that stops it, so it is
+            // named after what it does then rather than after the chord it sends.
+            Key(
+                stringResource(if (stopping) R.string.header_stop else R.string.key_ctrl_c),
+                color = if (stopping) Colors.danger else Colors.ink,
+            ) { onKey("key_c", "ctrl", 99) }
+            Key(stringResource(R.string.key_left), icon = R.drawable.ic_arrow_left) { onKey("arrow_left", "", 0) }
+            Key(stringResource(R.string.key_up), icon = R.drawable.ic_arrow_up) { onKey("arrow_up", "", 0) }
+            Key(stringResource(R.string.key_down), icon = R.drawable.ic_arrow_down) { onKey("arrow_down", "", 0) }
+            Key(stringResource(R.string.key_right), icon = R.drawable.ic_arrow_right) { onKey("arrow_right", "", 0) }
+            Key(stringResource(R.string.key_tab), icon = R.drawable.ic_tab_key) { onKey("tab", "", 0) }
+            Key(stringResource(R.string.key_paste), icon = R.drawable.ic_paste) { onPaste() }
+            // A slash opens pi's command menu; the arrows then walk it.
+            Key("/") { onKey("slash", "", '/'.code) }
             Key(
                 stringResource(R.string.key_ctrl),
                 color = when {
@@ -91,31 +105,10 @@ internal fun KeyDock(
                 },
                 onClick = onCtrl,
             )
-            Key(stringResource(R.string.key_tab), icon = R.drawable.ic_tab_key) { onKey("tab", "", 0) }
-            // A slash opens pi's command menu; the arrows then walk it.
-            Key("/") { onKey("slash", "", '/'.code) }
-            Key(stringResource(R.string.key_left), icon = R.drawable.ic_arrow_left) { onKey("arrow_left", "", 0) }
-            Key(stringResource(R.string.key_up), icon = R.drawable.ic_arrow_up) { onKey("arrow_up", "", 0) }
-            Key(stringResource(R.string.key_down), icon = R.drawable.ic_arrow_down) { onKey("arrow_down", "", 0) }
-            Key(stringResource(R.string.key_right), icon = R.drawable.ic_arrow_right) { onKey("arrow_right", "", 0) }
-            // While a program works or waits for an answer, this is the key that stops it, so it is
-            // named after what it does then rather than after the chord it sends.
-            Key(
-                stringResource(if (stopping) R.string.header_stop else R.string.key_ctrl_c),
-                color = if (stopping) Colors.danger else Colors.ink,
-            ) { onKey("key_c", "ctrl", 99) }
             Key(stringResource(R.string.key_ctrl_d)) { onKey("key_d", "ctrl", 100) }
             Key(stringResource(R.string.key_ctrl_z)) { onKey("key_z", "ctrl", 122) }
             Key(stringResource(R.string.key_ctrl_l)) { onKey("key_l", "ctrl", 108) }
-            Key(stringResource(R.string.key_paste), icon = R.drawable.ic_paste) { onPaste() }
             Key(stringResource(R.string.key_copy), icon = R.drawable.ic_copy) { onCopy() }
-            Key(
-                stringResource(if (dpad) R.string.key_dpad_on else R.string.key_dpad),
-                color = if (dpad) Colors.accent else Colors.ink,
-                plate = if (dpad) Colors.keyOn else Colors.key,
-                icon = R.drawable.ic_dpad,
-                onClick = onDpad,
-            )
         }
             // The row continues under this fade, so a half-visible key reads as scrollable.
             if (scroll.canScrollForward) {
@@ -128,29 +121,7 @@ internal fun KeyDock(
     }
 }
 
-@Composable
-internal fun Dpad(onAct: (suspend PocketSession.() -> Unit) -> Unit) {
-    fun key(code: String) = onAct { sendKey(code) }
-    Column(
-        Modifier.fillMaxWidth().padding(top = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Key(stringResource(R.string.key_backspace), width = DPAD_KEY, icon = R.drawable.ic_backspace) { key("backspace") }
-            Key(stringResource(R.string.key_up), width = DPAD_KEY, icon = R.drawable.ic_arrow_up) { key("arrow_up") }
-            Key(stringResource(R.string.key_enter), width = DPAD_KEY, icon = R.drawable.ic_return) { key("enter") }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Key(stringResource(R.string.key_left), width = DPAD_KEY, icon = R.drawable.ic_arrow_left) { key("arrow_left") }
-            Key(stringResource(R.string.key_down), width = DPAD_KEY, icon = R.drawable.ic_arrow_down) { key("arrow_down") }
-            Key(stringResource(R.string.key_right), width = DPAD_KEY, icon = R.drawable.ic_arrow_right) { key("arrow_right") }
-        }
-    }
-}
-
 private val KEY_HEIGHT = 44.dp
-private val DPAD_KEY = 64.dp
 
 /**
  * One key: a soft plate in the key colour. A key that has a platform mark - an arrow, Tab, Return,

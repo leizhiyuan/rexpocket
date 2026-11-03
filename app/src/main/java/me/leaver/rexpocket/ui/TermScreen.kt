@@ -142,7 +142,6 @@ internal fun TermScreen(
     var ctrl by remember { mutableStateOf(false) }
     var ctrlLock by remember { mutableStateOf(false) }
     var lastCtrl by remember { mutableLongStateOf(0L) }
-    var dpad by remember { mutableStateOf(false) }
     var keysOpen by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf<Rename?>(null) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
@@ -236,11 +235,9 @@ internal fun TermScreen(
             }
         }
         if (keysOpen) {
-            if (dpad) Dpad(onAct)
             KeyDock(
                 ctrl = ctrl || ctrlLock,
                 locked = ctrlLock,
-                dpad = dpad,
                 stopping = status?.state == "working" || status?.state == "blocked",
                 onCtrl = {
                     val now = SystemClock.uptimeMillis()
@@ -273,7 +270,6 @@ internal fun TermScreen(
                         toast(context, context.getString(R.string.toast_copied))
                     }
                 },
-                onDpad = { dpad = !dpad },
             )
         }
         FloatingDock(

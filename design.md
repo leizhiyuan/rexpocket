@@ -109,9 +109,11 @@ The whole screen is the terminal's paper; nothing sits on a band of a second gre
    `keyOn` plate in `accent`. Tap a segment or swipe the pane left and right.
 3. **The dock.** One floating pill - keyboard, Return, keys (the command mark) - and a 56 dp circle
    that makes a tab, both on `raised`, above the IME and the navigation bar. The keyboard button
-   shows the platform's keyboard-hide mark while the IME is up. The key pad (`esc`, `ctrl`, Tab,
-   `/`, arrows, `C-c`, `C-d`, `C-z`, `C-l`, paste, copy, arrow pad) opens from the keys button into
-   the row above the pill: 44 dp keys, symbols where the platform has one, chords in monospace.
+   shows the platform's keyboard-hide mark while the IME is up. The key pad opens from the keys button into
+   the row above the pill, ordered by how often a thumb wants each key: `esc`, `C-c` (Stop while
+   the program works or waits), the four arrows, Tab, paste, `/`, `ctrl`, `C-d`, `C-z`, `C-l`,
+   copy. Return lives only on the pill. 44 dp keys, symbols where the platform has one, chords in
+   monospace.
 
 ## Rules the screens follow
 

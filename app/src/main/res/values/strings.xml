@@ -80,16 +80,12 @@
     <string name="key_escape">esc</string>
     <string name="key_ctrl">ctrl</string>
     <string name="key_tab">tab</string>
-    <string name="key_enter">⏎</string>
     <string name="key_ctrl_c">C-c</string>
     <string name="key_ctrl_d">C-d</string>
     <string name="key_ctrl_z">C-z</string>
     <string name="key_ctrl_l">C-l</string>
     <string name="key_paste">Paste</string>
     <string name="key_copy">Copy</string>
-    <string name="key_dpad">Arrows</string>
-    <string name="key_dpad_on">Arrows on</string>
-    <string name="key_backspace">⌫</string>
     <string name="key_up">↑</string>
     <string name="key_down">↓</string>
     <string name="key_left">←</string>

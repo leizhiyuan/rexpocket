@@ -79,16 +79,12 @@
     <string name="key_escape">esc</string>
     <string name="key_ctrl">ctrl</string>
     <string name="key_tab">tab</string>
-    <string name="key_enter">⏎</string>
     <string name="key_ctrl_c">C-c</string>
     <string name="key_ctrl_d">C-d</string>
     <string name="key_ctrl_z">C-z</string>
     <string name="key_ctrl_l">C-l</string>
     <string name="key_paste">粘贴</string>
     <string name="key_copy">复制</string>
-    <string name="key_dpad">方向</string>
-    <string name="key_dpad_on">方向开</string>
-    <string name="key_backspace">⌫</string>
     <string name="key_up">↑</string>
     <string name="key_down">↓</string>
     <string name="key_left">←</string>
