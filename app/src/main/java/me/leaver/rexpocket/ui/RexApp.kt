@@ -28,6 +28,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val tailnetError by model.tailnetError.collectAsState()
     val opening by model.opening.collectAsState()
     val tailnetPath by model.tailnetPath.collectAsState()
+    val alerts by model.alerts.collectAsState()
     val context = LocalContext.current
     var tailscaleOpen by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { model.restore() }
@@ -66,6 +67,8 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onSave = model::saveHost,
                     onDelete = model::deleteHost,
                     onTailscale = { tailscaleOpen = true },
+                    alerts = alerts,
+                    onAlerts = model::setAlerts,
                 )
                 Route.Term -> TermScreen(
                     state = pocket,

@@ -52,7 +52,6 @@
     <string name="status_reconnecting">Reconnecting…</string>
     <string name="status_failed">Failed</string>
 
-    <string name="header_stop">Stop</string>
     <string name="header_sessions">Sessions</string>
     <string name="level_session">Session</string>
     <string name="level_tab">Tab</string>
@@ -81,9 +80,6 @@
     <string name="key_ctrl">ctrl</string>
     <string name="key_tab">tab</string>
     <string name="key_ctrl_c">C-c</string>
-    <string name="key_ctrl_d">C-d</string>
-    <string name="key_ctrl_z">C-z</string>
-    <string name="key_ctrl_l">C-l</string>
     <string name="key_paste">Paste</string>
     <string name="key_copy">Copy</string>
     <string name="key_up">↑</string>
@@ -154,4 +150,25 @@
     <string name="state_selected">Selected</string>
     <string name="holder_phone">On this phone</string>
     <string name="holder_desk">On the desktop</string>
+    <string name="key_shift">shift</string>
+    <string name="key_alt">alt</string>
+    <string name="key_ctrl_chords">Control shortcuts</string>
+    <string name="mod_off">Off</string>
+    <string name="mod_once">On for the next key</string>
+    <string name="mod_locked">On until tapped again</string>
+    <string name="link_open">Open link</string>
+    <string name="link_copy">Copy link</string>
+    <string name="link_share">Share link</string>
+    <string name="toast_link_copied">No app can open this link; it is on the clipboard</string>
+    <string name="alerts_title">Background alerts</string>
+    <string name="alerts_on">On</string>
+    <string name="alerts_off">Off</string>
+    <string name="alerts_blocked">Notifications are off for RexPocket</string>
+    <string name="alerts_channel_watch">Watching in the background</string>
+    <string name="alerts_channel_watch_body">The quiet notification that keeps RexPocket connected while it is in the background.</string>
+    <string name="alerts_channel_attention">Needs you</string>
+    <string name="alerts_channel_attention_body">A program is waiting for approval, an answer or a login, or has failed.</string>
+    <string name="alerts_watching">Watching %1$s for programs that need you</string>
+    <string name="alerts_stop">Stop</string>
+    <string name="alerts_failed">failed</string>
 </resources>

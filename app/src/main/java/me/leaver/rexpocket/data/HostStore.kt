@@ -127,6 +127,13 @@ class HostStore(context: Context) {
             .apply()
     }
 
+    /** Whether the app watches the open host in the background and alerts when a program needs you. */
+    fun alerts(): Boolean = prefs.getBoolean(KEY_ALERTS, false)
+
+    fun setAlerts(on: Boolean) {
+        prefs.edit().putBoolean(KEY_ALERTS, on).apply()
+    }
+
     fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)
 
     fun setFontScale(scale: Float) {
@@ -153,6 +160,7 @@ class HostStore(context: Context) {
         private const val KEY_HOSTS = "hosts"
         private const val KEY_LAST_HOST = "last_host"
         private const val KEY_FONT = "font_scale"
+        private const val KEY_ALERTS = "background_alerts"
         private const val KEY_TAILSCALE_ENABLED = "tailscale_enabled"
         private const val KEY_TAILSCALE_HOSTNAME = "tailscale_hostname"
         fun newId(): String = UUID.randomUUID().toString()

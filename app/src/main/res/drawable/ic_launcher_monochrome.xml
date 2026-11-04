@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed-icon layer: the sleeve, its cuff open as a ring, the moon showing inside. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:name="mark"
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.9"
+        android:scaleY="0.9"
+        android:translateX="-2.5"
+        android:translateY="1.0">
+        <path
+            android:pathData="M-4,38C14,35 34,32 50,30C58,29 64,29 68,29C76,32 80,39 80,47C80,56 76,63 71,66C69,75 61,84 48,84C35,84 27,76 25,65C24,57 19,51 -4,51ZM57.18,49.24A12.70,18.00 -12 1,0 82.02,43.96A12.70,18.00 -12 1,0 57.18,49.24Z"
+            android:fillColor="#FFFFFFFF"
+            android:fillType="evenOdd" />
+        <path
+            android:pathData="M58.12,48.10A10.10,15.60 -12 1,0 77.88,43.90A10.10,15.60 -12 1,0 58.12,48.10ZM70.32,36.13A4.08,4.08 0 1,0 74.29,41.83A3.48,3.48 0 0,1 70.32,36.13Z"
+            android:fillColor="#FFFFFFFF"
+            android:fillType="evenOdd" />
+    </group>
+</vector>

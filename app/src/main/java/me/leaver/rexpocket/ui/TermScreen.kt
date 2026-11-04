@@ -35,7 +35,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,6 +61,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.BlockInfo
+import me.leaver.rexpocket.core.KeyModifiers
+import me.leaver.rexpocket.core.KeyPress
+import me.leaver.rexpocket.core.keyPressFor
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
 import me.leaver.rexpocket.core.PocketState
@@ -139,9 +141,8 @@ internal fun TermScreen(
     val context = LocalContext.current
     val ime = LocalSoftwareKeyboardController.current
     var sheet by remember { mutableStateOf<Sheet?>(null) }
-    var ctrl by remember { mutableStateOf(false) }
-    var ctrlLock by remember { mutableStateOf(false) }
-    var lastCtrl by remember { mutableLongStateOf(0L) }
+    var mods by remember { mutableStateOf(KeyModifiers()) }
+    var link by remember { mutableStateOf<String?>(null) }
     var keysOpen by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf<Rename?>(null) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
@@ -152,6 +153,25 @@ internal fun TermScreen(
     val focused = view?.focusedBlock()
     val status = focused?.let { state.blockStatus[it.id] }
     val panes = tab?.blocks.orEmpty()
+
+    /** Sends a key with the modifiers the key row holds; the ones on for one key are then used up. */
+    fun press(key: KeyPress, own: String = "") {
+        val e = mods.event(key, own)
+        onAct { sendKey(e.code, mods = e.mods, text = e.text, codepoint = e.codepoint, consumedMods = e.consumedMods) }
+        mods = mods.consume()
+    }
+
+    /**
+     * A character from the phone keyboard while a modifier is on becomes that key with the modifier,
+     * so C-r or Alt-b can be typed with the keyboard's letters. True when it was taken here.
+     */
+    fun typed(bytes: ByteArray, flushFirst: () -> Unit): Boolean {
+        if (!mods.any) return false
+        val key = keyPressFor(String(bytes, Charsets.UTF_8)) ?: return false
+        flushFirst()
+        press(key)
+        return true
+    }
 
     // Typing goes straight to the terminal, as it does on the desktop: the keyboard key raises the
     // IME for the pane, and the key row stays above it. There is no composer between them.
@@ -206,6 +226,8 @@ internal fun TermScreen(
                     fontScale = fontScale,
                     onFont = onFont,
                     onInput = { bytes -> onAct { writeBytes(bytes) } },
+                    onTyped = ::typed,
+                    onLink = { link = it },
                     onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
                     onSession = { termSession = it },
                     onView = { termView = it },
@@ -236,27 +258,10 @@ internal fun TermScreen(
         }
         if (keysOpen) {
             KeyDock(
-                ctrl = ctrl || ctrlLock,
-                locked = ctrlLock,
-                stopping = status?.state == "working" || status?.state == "blocked",
-                onCtrl = {
-                    val now = SystemClock.uptimeMillis()
-                    if (now - lastCtrl < 320) {
-                        ctrlLock = !ctrlLock
-                        ctrl = ctrlLock
-                    } else if (ctrlLock) {
-                        ctrlLock = false
-                        ctrl = false
-                    } else {
-                        ctrl = !ctrl
-                    }
-                    lastCtrl = now
-                },
-                onKey = { code, mods, cp ->
-                    val useMods = if ((ctrl || ctrlLock) && mods.isEmpty()) "ctrl" else mods
-                    onAct { sendKey(code, mods = useMods, codepoint = cp) }
-                    if (!ctrlLock) ctrl = false
-                },
+                mods = mods,
+                busy = status?.state == "working" || status?.state == "blocked",
+                onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
+                onKey = { key, own -> press(key, own) },
                 onPaste = {
                     val text = clipboard(context)
                     if (text.isNullOrEmpty()) toast(context, context.getString(R.string.toast_clipboard_empty)) else onAct { paste(text) }
@@ -275,7 +280,8 @@ internal fun TermScreen(
         FloatingDock(
             keysOpen = keysOpen,
             onKeyboard = { toggleKeyboard() },
-            onEnter = { onAct { sendKey("enter") } },
+            // Return takes the key row's modifiers too: shift-Return is a new line in an agent's prompt.
+            onEnter = { press(KeyPress("enter", 0)) },
             onKeys = { keysOpen = !keysOpen },
             onNewTab = { onAct { newWindow() } },
         )
@@ -397,6 +403,19 @@ internal fun TermScreen(
                 }
             }
         }
+    }
+
+    link?.let { url ->
+        LinkSheet(
+            url = url,
+            onDismiss = { link = null },
+            onOpen = { openLink(context, url, copied = R.string.toast_link_copied) },
+            onCopy = {
+                clipboardSet(context, url)
+                toast(context, context.getString(R.string.toast_copied))
+            },
+            onShare = { shareText(context, url) },
+        )
     }
 
     rename?.let { target ->
@@ -694,17 +713,20 @@ internal fun paneTitle(block: BlockInfo, status: ProgramRecord?, program: String
 
 /** What the program in the pane is doing, in the app's words; null when Rex has not said. */
 @Composable
-internal fun statusWord(status: ProgramRecord): String? = when (status.state) {
-    "working" -> stringResource(R.string.state_running)
+internal fun statusWord(status: ProgramRecord): String? = statusWordRes(status)?.let { stringResource(it) }
+
+/** [statusWord] as a resource, for the alerts, which are written outside a screen. */
+internal fun statusWordRes(status: ProgramRecord): Int? = when (status.state) {
+    "working" -> R.string.state_running
     "blocked" -> when (status.kind) {
-        "permission" -> stringResource(R.string.state_waiting_approval)
-        "question" -> stringResource(R.string.state_waiting_answer)
-        "auth" -> stringResource(R.string.state_waiting_login)
-        else -> stringResource(R.string.state_waiting_you)
+        "permission" -> R.string.state_waiting_approval
+        "question" -> R.string.state_waiting_answer
+        "auth" -> R.string.state_waiting_login
+        else -> R.string.state_waiting_you
     }
-    "done" -> stringResource(R.string.state_done)
-    "error" -> stringResource(R.string.state_failed)
-    "idle" -> stringResource(R.string.state_idle)
+    "done" -> R.string.state_done
+    "error" -> R.string.state_failed
+    "idle" -> R.string.state_idle
     else -> null
 }
 

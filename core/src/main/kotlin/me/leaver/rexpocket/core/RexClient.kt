@@ -59,6 +59,12 @@ class RexClient(
 
     suspend fun call(method: String, payload: JSONObject? = null, timeoutMs: Long = 20_000): JSONObject {
         val ws = socket ?: throw IllegalStateException("Not connected to Rex")
+        // Rex closes a connection whose first message is not the hello, so nothing else goes out
+        // before its welcome. A connection that never opens fails this call the way it failed.
+        if (!opened.isCompleted) {
+            withTimeoutOrNull(timeoutMs) { opened.await() }
+                ?: throw RexTimeoutException("$method got no answer within ${timeoutMs / 1000}s")
+        }
         val id = ids.incrementAndGet().toString()
         val waiter = CompletableDeferred<JSONObject>()
         pending[id] = waiter
@@ -92,6 +98,8 @@ class RexClient(
      */
     fun send(method: String, payload: JSONObject? = null): Boolean {
         val ws = socket ?: return false
+        // Ahead of the welcome this would be sent before the hello, which ends the connection.
+        if (!opened.isCompleted || opened.isCancelled) return false
         val id = ids.incrementAndGet().toString()
         val msg = JSONObject().put("type", "request").put("id", id).put("method", method)
         if (payload != null) msg.put("payload", payload)

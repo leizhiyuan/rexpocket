@@ -51,7 +51,6 @@
     <string name="status_reconnecting">重新连接…</string>
     <string name="status_failed">连接失败</string>
 
-    <string name="header_stop">停</string>
     <string name="header_sessions">会话</string>
     <string name="level_session">会话</string>
     <string name="level_tab">标签页</string>
@@ -80,9 +79,6 @@
     <string name="key_ctrl">ctrl</string>
     <string name="key_tab">tab</string>
     <string name="key_ctrl_c">C-c</string>
-    <string name="key_ctrl_d">C-d</string>
-    <string name="key_ctrl_z">C-z</string>
-    <string name="key_ctrl_l">C-l</string>
     <string name="key_paste">粘贴</string>
     <string name="key_copy">复制</string>
     <string name="key_up">↑</string>
@@ -151,4 +147,25 @@
     <string name="state_selected">已选中</string>
     <string name="holder_phone">在这台手机上</string>
     <string name="holder_desk">在桌面端</string>
+    <string name="key_shift">shift</string>
+    <string name="key_alt">alt</string>
+    <string name="key_ctrl_chords">Ctrl 快捷键</string>
+    <string name="mod_off">关</string>
+    <string name="mod_once">对下一个键生效</string>
+    <string name="mod_locked">保持开启，再点一次关闭</string>
+    <string name="link_open">打开链接</string>
+    <string name="link_copy">复制链接</string>
+    <string name="link_share">分享链接</string>
+    <string name="toast_link_copied">没有应用能打开这个链接，已复制到剪贴板</string>
+    <string name="alerts_title">后台提醒</string>
+    <string name="alerts_on">已开启</string>
+    <string name="alerts_off">已关闭</string>
+    <string name="alerts_blocked">RexPocket 的通知已被关闭</string>
+    <string name="alerts_channel_watch">后台监听</string>
+    <string name="alerts_channel_watch_body">RexPocket 在后台保持连接时显示的静默通知。</string>
+    <string name="alerts_channel_attention">需要你处理</string>
+    <string name="alerts_channel_attention_body">程序在等你批准、回答或登录，或者出错了。</string>
+    <string name="alerts_watching">正在监听 %1$s 上需要你处理的程序</string>
+    <string name="alerts_stop">停止</string>
+    <string name="alerts_failed">出错了</string>
 </resources>

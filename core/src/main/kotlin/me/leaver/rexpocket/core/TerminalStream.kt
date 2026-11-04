@@ -3,7 +3,10 @@ package me.leaver.rexpocket.core
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import okhttp3.OkHttpClient
@@ -31,34 +34,57 @@ class TerminalStream(
     private val trace: (String) -> Unit = {},
     private val ticket: suspend () -> String,
 ) {
-    private val frames = Channel<Frame>(Channel.UNLIMITED)
-
     /** Stream bytes handed over so far: what a RESUME tells Rex it does not need again. */
     @Volatile private var received = 0L
     @Volatile private var resumeToken: ByteString? = null
     @Volatile private var active: WebSocket? = null
     @Volatile private var stopped = false
 
+    /** Wakes a wait between attempts, and cuts an attempt short; see [retryNow]. */
+    private val wake = Channel<Unit>(Channel.CONFLATED)
+
+    /**
+     * Starts the next attempt now. An attempt still trying to open is abandoned: it was started
+     * when the network may have been cut, and a dial that went nowhere waits out its whole timeout.
+     * A stream that is flowing is left alone.
+     */
+    fun retryNow() {
+        wake.trySend(Unit)
+    }
+
     /** The pane's bytes in order, for as long as this flow is collected. */
     fun feeds(): Flow<TerminalFeed> = flow {
         var attempt = 0
         while (!stopped) {
             val openedAt = System.nanoTime()
+            // Anything left from an earlier wake belongs to an attempt that has ended.
+            wake.tryReceive()
             val socket = try {
-                open()
+                coroutineScope {
+                    val opening = async { open() }
+                    val woken = launch { wake.receive(); opening.cancel(Retried()) }
+                    try {
+                        opening.await()
+                    } finally {
+                        woken.cancel()
+                    }
+                }
+            } catch (e: Retried) {
+                trace("stream open abandoned after ${elapsed(openedAt)}ms: trying again now")
+                continue
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 trace("stream open failed after ${elapsed(openedAt)}ms: ${e.javaClass.simpleName}: ${e.message}")
                 if (++attempt > MAX_ATTEMPTS) throw e
-                delay(backoff(attempt))
+                pause(backoff(attempt))
                 continue
             }
             attempt = 0
             trace("stream open after ${elapsed(openedAt)}ms (resumed at $received)")
             val decoder = StreamDecoder(socket.nonce)
             try {
-                for (frame in frames) {
+                for (frame in socket.frames) {
                     when (frame) {
                         is Frame.Bytes -> {
                             received += frame.bytes.size
@@ -75,12 +101,12 @@ class TerminalStream(
                 trace("stream dropped after ${elapsed(openedAt)}ms at $received bytes: ${e.message}")
                 if (e.fatal || stopped) throw e
                 if (++attempt > MAX_ATTEMPTS) throw e
-                delay(backoff(attempt))
+                pause(backoff(attempt))
             } catch (e: Exception) {
                 trace("stream failed after ${elapsed(openedAt)}ms at $received bytes: ${e.javaClass.simpleName}: ${e.message}")
                 if (stopped) return@flow
                 if (++attempt > MAX_ATTEMPTS) throw e
-                delay(backoff(attempt))
+                pause(backoff(attempt))
             } finally {
                 // A deliberate stop ends the stream; a drop keeps it waiting for a resume.
                 if (stopped) socket.webSocket.close(CLOSE_NORMAL, "bye") else socket.webSocket.cancel()
@@ -94,15 +120,26 @@ class TerminalStream(
         active?.close(CLOSE_NORMAL, "bye")
     }
 
+    /** Waits [ms] between attempts, or until [retryNow]. */
+    private suspend fun pause(ms: Long) {
+        withTimeoutOrNull(ms) { wake.receive() }
+    }
+
+    /** An attempt given up for a fresh one, not a failure of the stream. */
+    private class Retried : CancellationException("retrying now")
+
     /** Opens one connection and waits for its WELCOME. */
     private suspend fun open(): Connected {
         val hello = handshake()
         val welcome = CompletableDeferred<Connected>()
+        // Each connection gets its own: a socket that failed still reports its close afterwards,
+        // and the next connection must not take that close for its own.
+        val frames = Channel<Frame>(Channel.UNLIMITED)
         val request = Request.Builder()
             .url(endpoint.ws("/api/data"))
             .header("Sec-WebSocket-Protocol", PROTOCOL)
             .build()
-        val ws = httpFactory().newWebSocket(request, listener(hello, welcome))
+        val ws = httpFactory().newWebSocket(request, listener(hello, welcome, frames))
         active = ws
         try {
             return welcome.await()
@@ -118,7 +155,11 @@ class TerminalStream(
         }
     }
 
-    private fun listener(hello: ByteArray, welcome: CompletableDeferred<Connected>) = object : WebSocketListener() {
+    private fun listener(
+        hello: ByteArray,
+        welcome: CompletableDeferred<Connected>,
+        frames: Channel<Frame>,
+    ) = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             webSocket.send(ByteString.of(*hello))
         }
@@ -128,7 +169,7 @@ class TerminalStream(
                 when (val answer = parseWelcome(bytes.toByteArray())) {
                     is Welcome.Ok -> {
                         resumeToken = answer.token
-                        welcome.complete(Connected(webSocket, answer.nonce))
+                        welcome.complete(Connected(webSocket, answer.nonce, frames))
                     }
                     is Welcome.Rejected -> welcome.completeExceptionally(
                         DroppedStream(
@@ -190,7 +231,7 @@ class TerminalStream(
 
     private fun elapsed(since: Long): Long = (System.nanoTime() - since) / 1_000_000
 
-    private class Connected(val webSocket: WebSocket, val nonce: ULong)
+    private class Connected(val webSocket: WebSocket, val nonce: ULong, val frames: Channel<Frame>)
 
     private sealed interface Frame {
         class Bytes(val bytes: ByteArray) : Frame

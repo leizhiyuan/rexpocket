@@ -158,17 +158,23 @@ internal fun clipboard(context: Context): String? {
 }
 
 /** Opens a link in the browser; a phone without one gets the link on the clipboard instead. */
-internal fun openLink(context: Context, url: String) {
+internal fun openLink(context: Context, url: String, copied: Int = R.string.tailscale_login_copied) {
     val opened = runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }.isSuccess
     if (!opened) {
         clipboardSet(context, url)
-        toast(context, context.getString(R.string.tailscale_login_copied))
+        toast(context, context.getString(copied))
     }
 }
 
 internal fun clipboardSet(context: Context, text: String) {
     val clip = context.getSystemService(ClipboardManager::class.java) ?: return
     clip.setPrimaryClip(ClipData.newPlainText("rex", text))
+}
+
+/** Offers [text] to another app through the platform's share sheet. */
+internal fun shareText(context: Context, text: String) {
+    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+    context.startActivity(Intent.createChooser(send, null))
 }
 
 internal fun toast(context: Context, text: String) {

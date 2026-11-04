@@ -22,8 +22,14 @@ through a Tailscale node built into the app.
   the whole terminal first, then its output as it comes. Colours, scrollback and full-screen
   programs are exactly as on the desk.
 - **Made for the phone.** Typing goes straight into the pane. A floating dock holds the keyboard,
-  Return and a key pad with `esc`, `ctrl`, Tab, arrows, `C-c` and paste. A split shows one pane at
-  a time, with a bar to move between them.
+  Return and a key row: `esc`, `C-c`, arrows that repeat while held, Tab, `shift` / `ctrl` /
+  `alt` for the next key (from the row or the phone keyboard), paste, `/` and copy. Hold `ctrl`
+  for `C-c` `C-d` `C-z` `C-r` `C-l` `C-a` `C-e` `C-w` `C-j`. A split shows one pane at a time,
+  with a bar to move between them.
+- **Links.** Long-press a link a program printed, or one it set as a hyperlink, to open, copy or
+  share it.
+- **Background alerts.** Optional: the app stays connected while it is away and notifies you when a
+  program waits for approval, an answer or a login, or fails. Tap the alert to open that pane.
 - **Works beside the desk.** The phone holds only the pane it shows and sizes it to the phone; the
   desktop keeps its own tab. **Release** hands a pane back to the desk until you **Take over**.
 - **Your tailnet, without the Tailscale app.** The app runs its own Tailscale node, so a host is
@@ -60,12 +66,18 @@ at its MagicDNS name. Nothing has to be opened on the router.
    host's menu starts a new session.
 4. **In the terminal:**
    - Tap the pane to type. Drag to scroll back, pinch to change the font size, long-press to
-     select.
+     select, or long-press a link to open it.
+   - The command key opens the key row. Tap `shift`, `ctrl` or `alt` for the next key, twice to
+     keep it on: `shift` then Return is a new line in an agent's prompt. Hold `ctrl` and slide to a
+     chord.
    - Tap the title for the session's tabs and panes, and the list of sessions.
    - Swipe left or right, or use the bar under the pane, to move between the panes of a split.
    - The menu holds Release / Take over, splitting, renaming and closing.
 5. **On the home screen,** the eye keeps only the tabs with a program working or waiting, and
    search filters hosts, sessions and tabs.
+6. **Background alerts:** Settings › Background alerts, and allow notifications. A quiet
+   notification shows while the app watches; its **Stop** turns alerts off. The app does not start
+   on its own after a reboot, and Android's battery saving can delay an alert.
 
 ## How it works
 

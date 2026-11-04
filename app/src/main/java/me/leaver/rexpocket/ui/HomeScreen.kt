@@ -1,5 +1,12 @@
 package me.leaver.rexpocket.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import me.leaver.rexpocket.alerts.Alerts
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -132,7 +139,25 @@ internal fun HomeScreen(
     onSave: (SavedHost) -> Unit,
     onDelete: (String) -> Unit,
     onTailscale: () -> Unit,
+    alerts: Boolean,
+    onAlerts: (Boolean) -> Unit,
 ) {
+    val context = LocalContext.current
+    // Android 13 asks for notifications at run time; alerts come on once the person allows them.
+    // The request lives here, not in the settings sheet: the sheet is gone before the answer comes.
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) onAlerts(true) else toast(context, context.getString(R.string.alerts_blocked))
+    }
+    val toggleAlerts = {
+        when {
+            alerts -> onAlerts(false)
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED ->
+                ask.launch(Manifest.permission.POST_NOTIFICATIONS)
+            !Alerts.allowed(context) -> toast(context, context.getString(R.string.alerts_blocked))
+            else -> onAlerts(true)
+        }
+    }
     var editing by remember { mutableStateOf<SavedHost?>(null) }
     var creating by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
@@ -339,6 +364,8 @@ internal fun HomeScreen(
                 settings = false
                 creating = true
             },
+            alerts = alerts,
+            onAlerts = toggleAlerts,
         )
     }
 }
@@ -678,6 +705,8 @@ private fun SettingsSheet(
     onDismiss: () -> Unit,
     onTailscale: () -> Unit,
     onAddHost: () -> Unit,
+    alerts: Boolean,
+    onAlerts: () -> Unit,
 ) {
     val context = LocalContext.current
     val joined = tailscale.enabled && tailscaleStatus.backendState == "Running"
@@ -696,6 +725,12 @@ private fun SettingsSheet(
             )
         }
         Group {
+            SheetItem(
+                label = stringResource(R.string.alerts_title),
+                icon = R.drawable.ic_notifications,
+                detail = stringResource(if (alerts) R.string.alerts_on else R.string.alerts_off),
+                onClick = onAlerts,
+            )
             SheetItem(stringResource(R.string.action_add_host), icon = R.drawable.ic_add, onClick = onAddHost)
             SheetItem(stringResource(R.string.settings_source), icon = R.drawable.ic_open_in_new) { openLink(context, SOURCE_URL) }
         }

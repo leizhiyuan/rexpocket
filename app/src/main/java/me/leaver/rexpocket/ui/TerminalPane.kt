@@ -32,6 +32,8 @@ import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.TerminalFeed
 import io.github.sagernet.libghostty.GhosttyTerminalSession
 import io.github.sagernet.libghostty.GhosttyTerminalView
+import io.github.sagernet.libghostty.GhosttyUiHandler
+import android.content.Context
 import io.github.sagernet.libghostty.compose.GhosttyTerminal
 import io.github.sagernet.libghostty.compose.rememberGhosttyTerminalState
 import kotlinx.coroutines.CancellationException
@@ -58,6 +60,14 @@ fun TerminalPane(
     onInput: (ByteArray) -> Unit,
     onResize: (columns: Int, rows: Int, cellWidthPx: Int, cellHeightPx: Int) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Offered what the keyboard typed before it is sent; true when the screen sent it itself, as a
+     * key with the key row's modifiers. It calls the second argument first, which sends what is
+     * still batched, so the key keeps its place among what was typed before it.
+     */
+    onTyped: (ByteArray, () -> Unit) -> Boolean = { _, _ -> false },
+    /** A link the user long-pressed in the pane: a hyperlink the program set, or a URL in its text. */
+    onLink: (String) -> Unit = {},
     onSession: (GhosttyTerminalSession?) -> Unit = {},
     /** The Android view itself, for raising and dropping the IME from the key row. */
     onView: (GhosttyTerminalView?) -> Unit = {},
@@ -72,6 +82,8 @@ fun TerminalPane(
     // Collected again from the top when the user asks for the picture again.
     var attempt by remember(blockId) { mutableStateOf(0) }
     val currentInput = rememberUpdatedState(onInput)
+    val currentTyped = rememberUpdatedState(onTyped)
+    val currentLink = rememberUpdatedState(onLink)
     val currentResize = rememberUpdatedState(onResize)
     val currentSwipe = rememberUpdatedState(onSwipe)
     val currentView = rememberUpdatedState(onView)
@@ -97,7 +109,7 @@ fun TerminalPane(
                             if (BuildConfig.DEBUG) Log.w(CONN_TAG, "pane $blockId: the snapshot did not restore")
                             return@collect
                         }
-                        bind(restored, input, currentResize)
+                        bind(restored, input, currentTyped, currentResize)
                         // The old emulator goes only after the new one is ready, so nothing flashes.
                         val previous = session
                         session = restored
@@ -138,7 +150,14 @@ fun TerminalPane(
                 view.showImeOnTap = true
                 view.isFocusable = true
                 view.isFocusableInTouchMode = true
-                view.urlDetectionEnabled = false
+                // A long press on a link offers it instead of selecting its text: agents print the
+                // pull requests and sign-in pages they want you to open.
+                view.urlDetectionEnabled = true
+                view.uiHandler = object : GhosttyUiHandler {
+                    override fun showLinkMenu(context: Context, url: String, openLink: () -> Unit, copyUrl: () -> Unit) {
+                        currentLink.value(url)
+                    }
+                }
                 // A horizontal swipe moves between the panes of a split, which is what the dots
                 // under the card promise. The view keeps its vertical scrolling and selection: the
                 // listener only reads the gesture and lets the event through.
@@ -187,10 +206,12 @@ fun TerminalPane(
 private fun bind(
     session: GhosttyTerminalSession,
     input: InputBatcher,
+    typed: androidx.compose.runtime.State<(ByteArray, () -> Unit) -> Boolean>,
     resize: androidx.compose.runtime.State<(Int, Int, Int, Int) -> Unit>,
 ) {
     session.transport = object : GhosttyTerminalSession.Transport {
         override fun sendInput(data: ByteArray) {
+            if (typed.value(data, input::flush)) return
             // A swipe over a full-screen TUI turns into one mouse-wheel report per row, and each
             // report used to be its own round trip. Batching keeps the gesture attached to the finger.
             input.post(data)

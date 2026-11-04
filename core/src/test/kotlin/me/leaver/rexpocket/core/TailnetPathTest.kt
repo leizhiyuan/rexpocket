@@ -5,6 +5,17 @@ import org.junit.Test
 
 class TailnetPathTest {
     @Test
+    fun aNameIsKnownOnlyOnceTheNetmapListsIt() {
+        assertEquals(null, peerFor("my-mac.tail1234.ts.net", emptyMap()))
+        val peers = mapOf("my-mac.tail1234.ts.net" to "100.64.0.2", "my-mac" to "100.64.0.2")
+        assertEquals("100.64.0.2", peerFor("My-Mac.tail1234.ts.net.", peers))
+        assertEquals("100.64.0.2", peerFor("my-mac", peers))
+        // An address needs no netmap.
+        assertEquals("100.64.0.9", peerFor("100.64.0.9", emptyMap()))
+        assertEquals(null, peerFor("", peers))
+    }
+
+    @Test
     fun anEndpointMeansADirectPath() {
         assertEquals(
             TailnetPath.Direct("192.168.31.66:61511", 4.2),

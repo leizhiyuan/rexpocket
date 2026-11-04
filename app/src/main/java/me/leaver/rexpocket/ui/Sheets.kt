@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 import me.leaver.rexpocket.core.PocketState
+import me.leaver.rexpocket.core.isWebLink
 import me.leaver.rexpocket.R
 import kotlinx.coroutines.launch
 
@@ -65,6 +66,21 @@ internal fun SessionSheet(
             }
         }
         Group { SheetItem(stringResource(R.string.session_new), Colors.accent, icon = R.drawable.ic_add, onClick = onCreate) }
+    }
+}
+
+/**
+ * A link long-pressed in the pane: open it, copy it or share it. Only a web link can be opened; any
+ * other address a program printed is still there to copy, but is not handed to another app.
+ */
+@Composable
+internal fun LinkSheet(url: String, onDismiss: () -> Unit, onOpen: () -> Unit, onCopy: () -> Unit, onShare: () -> Unit) {
+    ActionSheet(onDismiss = onDismiss, title = url) {
+        Group {
+            if (isWebLink(url)) SheetItem(stringResource(R.string.link_open), Colors.accent, icon = R.drawable.ic_open_in_new, onClick = onOpen)
+            SheetItem(stringResource(R.string.link_copy), icon = R.drawable.ic_copy, onClick = onCopy)
+            if (isWebLink(url)) SheetItem(stringResource(R.string.link_share), icon = R.drawable.ic_share, onClick = onShare)
+        }
     }
 }
 

@@ -59,6 +59,13 @@ grid, one weight, one corner, so a back arrow, a chevron and a keyboard read as 
 is 24 dp in a 48 dp target, 20 dp on a key. The only drawn mark is the terminal tile's prompt,
 which has no symbol. Each icon control speaks its action; a toggle also speaks its state.
 
+The launcher icon is 袖里乾坤 from *Journey to the West*: a wide sleeve whose cuff holds a whole
+world - a moonlit night over two ranges of hills - the way the phone carries a desk's sessions.
+It is an adaptive icon of three vector layers in `res/drawable`: a night-sky background, the sleeve,
+and a one-tint monochrome layer for themed icons. The cuff, the part that has to read, sits inside
+the 66 dp safe circle; the arm runs off the left edge, as a sleeve does. Silk `#FBF5E8`, cinnabar
+`#C0392B` on the cuff, gilt `#D9B46A`, sky `#0A1027` - the icon's own palette, not the screens'.
+
 ## The home
 
 There is no second screen between a host, its sessions and their tabs.
@@ -110,10 +117,15 @@ The whole screen is the terminal's paper; nothing sits on a band of a second gre
 3. **The dock.** One floating pill - keyboard, Return, keys (the command mark) - and a 56 dp circle
    that makes a tab, both on `raised`, above the IME and the navigation bar. The keyboard button
    shows the platform's keyboard-hide mark while the IME is up. The key pad opens from the keys button into
-   the row above the pill, ordered by how often a thumb wants each key: `esc`, `C-c` (Stop while
-   the program works or waits), the four arrows, Tab, paste, `/`, `ctrl`, `C-d`, `C-z`, `C-l`,
-   copy. Return lives only on the pill. 44 dp keys, symbols where the platform has one, chords in
-   monospace.
+   the row above the pill, ordered by how often a thumb wants each key: `esc`, `C-c` (red while
+   the program works or waits, never renamed), the four arrows, Tab, `shift`, `ctrl`, `alt`,
+   paste, `/`, copy. Return lives only on the pill. 44 dp keys, symbols where the platform has one,
+   chords in monospace. The arrows repeat while held. A modifier is on for the next key on a
+   `keyOn` plate in `accent`, and held on an `accent` plate; it also applies to a character from
+   the phone keyboard and to Return. Holding `ctrl` raises a 3 x 3 grid of chords on `raised` over
+   it; sliding lights one in `accent` and lifting sends it, lifting off the grid sends nothing.
+4. **A link.** A long press on a link in the pane opens a sheet titled with it: Open, Copy, Share.
+   Only an http or https link can be opened or shared.
 
 ## Rules the screens follow
 

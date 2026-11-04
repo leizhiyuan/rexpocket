@@ -10,6 +10,7 @@ import android.os.Build
 import android.util.Log
 import android.system.OsConstants
 import me.leaver.rexpocket.BuildConfig
+import me.leaver.rexpocket.core.peerFor
 import me.leaver.rexpocket.core.TailnetPath
 import io.nekohasekai.libbox.BridgeOptions
 import io.nekohasekai.libbox.BridgeSession
@@ -44,6 +45,8 @@ import io.nekohasekai.libbox.TailscaleStatusUpdate
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONArray
 import org.json.JSONObject
@@ -196,6 +199,23 @@ class TailscaleBox(private val context: Context) {
 
     /** Each peer's MagicDNS name, without the trailing dot, to its first tailnet address. */
     @Volatile private var peers: Map<String, String> = emptyMap()
+        set(value) {
+            field = value
+            _peerNames.value = value.keys
+        }
+
+    private val _peerNames = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * Whether the node can route to [host] yet: a `100.x` address always, a MagicDNS name once the
+     * netmap lists that peer. The node reports Running before its first netmap arrives, and a name
+     * dialed in that gap fails in its DNS, which reaches the app as a SOCKS "general failure".
+     */
+    fun knows(host: String): Boolean = peerFor(host, peers) != null
+
+    /** Waits until [knows] says yes, for at most [timeoutMs]; true when it did. */
+    suspend fun awaitPeer(host: String, timeoutMs: Long): Boolean =
+        withTimeoutOrNull(timeoutMs) { _peerNames.first { peerFor(host, peers) != null } } != null
 
     private fun tailnetAddresses(endpoint: io.nekohasekai.libbox.TailscaleEndpointStatus): Map<String, String> {
         val found = HashMap<String, String>()
@@ -220,9 +240,7 @@ class TailscaleBox(private val context: Context) {
      */
     fun probePath(host: String, pings: Int = PROBE_PINGS): TailnetPath {
         val client = commandClient ?: return TailnetPath.Unreachable("the node is not running")
-        val ip = host.trim().trimEnd('.').lowercase().let { name ->
-            peers[name] ?: peers[name.substringBefore('.')] ?: name.takeIf { it.first().isDigit() || ':' in it }
-        } ?: return TailnetPath.Unreachable("$host is not a peer of this tailnet")
+        val ip = peerFor(host, peers) ?: return TailnetPath.Unreachable("$host is not a peer of this tailnet")
         val results = java.util.concurrent.LinkedBlockingQueue<TailnetPath>()
         val session = runCatching {
             client.startTailscalePing(ENDPOINT_TAG, ip, object : io.nekohasekai.libbox.TailscalePingHandler {
@@ -256,6 +274,16 @@ class TailscaleBox(private val context: Context) {
         } finally {
             runCatching { session.close() }
         }
+    }
+
+    /**
+     * Tells the node its network may have changed under it: it drops connections that went stale
+     * and finds its paths again, at once instead of when its own timers notice. Android cuts an
+     * app's sockets soon after it leaves the screen, so this runs when the app comes back.
+     */
+    fun resetNetwork() {
+        val current = server ?: return
+        runCatching { current.resetNetwork() }.onFailure { Log.w(LOG_TAG, "network reset failed: ${it.message}") }
     }
 
     @Synchronized

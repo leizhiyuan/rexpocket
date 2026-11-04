@@ -10,6 +10,11 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import me.leaver.rexpocket.core.Endpoint
+import me.leaver.rexpocket.core.AttentionLedger
+import me.leaver.rexpocket.R
+import me.leaver.rexpocket.alerts.Alert
+import me.leaver.rexpocket.alerts.AlertTarget
+import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
@@ -93,6 +98,10 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     private val _pocket = MutableStateFlow(PocketState())
     val pocket: StateFlow<PocketState> = _pocket
     val fontScale = MutableStateFlow(store.fontScale())
+
+    /** Background alerts: on, the app stays connected while it is away and says when a program needs you. */
+    val alerts: StateFlow<Boolean> = Alerts.enabled.also { it.value = store.alerts() }
+    private val attention = AttentionLedger()
     var host: SavedHost? = null
         private set
 
@@ -117,8 +126,30 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { session?.reconnectNow() }
     }.also { it.start() }
 
+    init {
+        // The watch notification's Stop turns alerts off from outside the app; the setting follows.
+        viewModelScope.launch {
+            Alerts.enabled.collect { on ->
+                store.setAlerts(on)
+                session?.setWatching(on)
+                if (!on) Alerts.unwatch(app)
+            }
+        }
+    }
+
+    /**
+     * Turns background alerts on or off. Called from the settings screen, which is on screen: Android
+     * only lets an app start its foreground service while the person can see it.
+     */
+    fun setAlerts(on: Boolean) {
+        Alerts.enabled.value = on
+        val open = host
+        if (on && open != null) Alerts.watch(getApplication(), open.label)
+    }
+
     override fun onCleared() {
         network.stop()
+        Alerts.unwatch(getApplication())
         // The pane goes back to the desktop's size; viewModelScope is already cancelled here.
         disconnectQuiet()
         tailscaleBox.stopAsync()
@@ -201,6 +232,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             endpointLabel = "${target.host}:${target.port}",
             sessions = cached,
         )
+        if (Alerts.enabled.value) Alerts.watch(getApplication(), target.label)
         connectJob = viewModelScope.launch {
             // A host on the phone's own network is dialed directly, and the tailnet node stays as it
             // is: the home screen says the phone is in a tailnet, so that must not depend on which
@@ -224,10 +256,16 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 // The node reports Running only once its WireGuard session is up; dialing before
                 // that just gets a SOCKS failure, which looks like a broken tunnel.
-                withTimeoutOrNull(NODE_READY_MS) {
+                val settled = withTimeoutOrNull(NODE_READY_MS) {
                     tailscaleBox.status.first {
                         it.backendState in setOf("Running", "NeedsLogin", "NeedsMachineAuth", "Stopped")
                     }
+                }
+                // Running comes before the first netmap, and a MagicDNS name dialed before the
+                // netmap lists that peer fails in the node's DNS: that was the SOCKS error the first
+                // open showed for a moment. Waiting for the peer costs nothing once it is known.
+                if (settled?.backendState == "Running" && !tailscaleBox.awaitPeer(target.host, PEER_READY_MS)) {
+                    if (BuildConfig.DEBUG) Log.i(CONN_TAG, "${target.host} is not in the netmap yet; dialing anyway")
                 }
                 port
             } else {
@@ -244,6 +282,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             session = s
             sessionReady.complete(s)
             s.setActive(foreground)
+            s.setWatching(Alerts.enabled.value)
             sessionJob = s.start(viewModelScope, previousSession)
             watch = viewModelScope.launch { follow(s, target.id, if (resume) previousSession else null) }
         }
@@ -291,6 +330,44 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         if (BuildConfig.DEBUG) launch { logConnection(s) }
+        launch { raiseAlerts(s, hostId) }
+    }
+
+    /**
+     * Turns the panes' status into alerts. Every change is noted, so a request already on screen is
+     * not news later; only one that arrives while the app is away is raised. An alert goes once its
+     * pane stops waiting, or once the person opens that pane.
+     */
+    private suspend fun raiseAlerts(s: PocketSession, hostId: String) {
+        val app = getApplication<Application>()
+        combine(s.state, route) { st, r -> st to r }.collect { (st, r) ->
+            val changes = attention.observe(st.blockStatus)
+            changes.settled.forEach { Alerts.settle(app, it) }
+            if (r == Route.Term && foreground) shownPane(st)?.let { (_, block) -> Alerts.settle(app, block) }
+            if (foreground || !Alerts.enabled.value) return@collect
+            for (block in changes.raised) alertFor(app, st, hostId, block)?.let { Alerts.raise(app, it) }
+        }
+    }
+
+    private fun alertFor(app: Application, st: PocketState, hostId: String, block: String): Alert? {
+        val record = st.blockStatus[block] ?: return null
+        val view = st.views.values.firstOrNull { v -> v.allBlocks().any { it.id == block } } ?: return null
+        val info = view.allBlocks().first { it.id == block }
+        val name = paneTitle(info, record, st.programs[block])
+        val state = statusWordRes(record)?.let { app.getString(it) } ?: app.getString(R.string.alerts_failed)
+        val text = record.msg?.takeIf { it.isNotBlank() }?.let { "$state: $it" } ?: state
+        return Alert(AlertTarget(hostId, view.sessionId, block), "$name · ${view.label}", text, host?.label.orEmpty())
+    }
+
+    /** Set once an alert has opened a pane, so the start-up resume does not replace it. */
+    private var openedFromAlert = false
+
+    /** Opens the pane an alert names, connecting to its host first when another one is open. */
+    fun openAlert(target: AlertTarget) {
+        val saved = store.find(target.hostId) ?: return
+        openedFromAlert = true
+        if (host?.id != saved.id || session == null) connect(saved)
+        enterSession(Opening.Existing(target.sessionId)) { openSession(target.sessionId, target.blockId) }
     }
 
     private fun shownPane(st: PocketState): Pair<String, String>? {
@@ -412,7 +489,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         // A phone that has joined a tailnet keeps the node up: the Tailscale row is the honest
         // answer to "am I in the tailnet", and a host on a tailnet can then be dialed at once.
         if (tailscale.value.enabled) startTailnet(tailscale.value)
-        if (route.value != Route.Home || session != null) return
+        if (openedFromAlert || route.value != Route.Home || session != null) return
         val target = store.lastHost()?.let { store.find(it) } ?: return
         connect(target, resume = true)
     }
@@ -428,14 +505,21 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         session?.dismissNotice(id)
     }
 
-    /** Polling a screen nobody sees only drains the battery; the connection itself stays up. */
+    /**
+     * Polling a screen nobody sees only drains the battery. Coming back, the node is told to find its
+     * paths again and the session checks its connection, because Android may have cut both while
+     * the app was away.
+     */
     fun setForeground(visible: Boolean) {
+        val returning = visible && !foreground
         foreground = visible
+        if (returning && host?.viaTailscale == true) viewModelScope.launch(Dispatchers.IO) { tailscaleBox.resetNetwork() }
         session?.setActive(visible)
     }
 
     fun disconnect() {
         disconnectQuiet()
+        Alerts.unwatch(getApplication())
         store.setLastHost(null)
         route.value = Route.Home
     }
@@ -496,6 +580,9 @@ private const val PATH_SETTLE_MS = 3_000L
 
 /** How long a connection waits for the tailnet node to come up before dialing anyway. */
 internal const val NODE_READY_MS = 30_000L
+
+/** How long a running node may take to list the host as a peer before it is dialed anyway. */
+private const val PEER_READY_MS = 10_000L
 
 /** Connection diagnostics: `adb logcat -s RexPocketConn`. */
 internal const val CONN_TAG = "RexPocketConn"

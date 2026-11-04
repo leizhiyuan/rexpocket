@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -123,6 +124,10 @@ class PocketSession(
     private var reconnectToken: String? = null
     private val ready = CompletableDeferred<Unit>()
     private var runner: Job? = null
+    @Volatile private var runnerScope: CoroutineScope? = null
+
+    /** The pane streams being watched now, so coming back can hurry the ones that are redialing. */
+    private val streams: MutableSet<TerminalStream> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /**
      * Every keystroke, paste and typed text, in the order it was typed. Rex runs `client.key` and
@@ -143,8 +148,16 @@ class PocketSession(
     /** False while nobody can see the screen; the polls wait instead of reading it. */
     private val active = MutableStateFlow(true)
 
+    /**
+     * True while background alerts want each pane's status kept current. The status reader then
+     * also runs with the screen off - it reads a pane once, after which Rex's events keep it - and
+     * the loops that take and size panes still wait for someone to look.
+     */
+    private val watching = MutableStateFlow(false)
+
     fun start(scope: CoroutineScope, preferredSessionId: String? = null): Job {
         preferred = preferredSessionId
+        runnerScope = scope
         val job = scope.launch {
             var backoff = MIN_BACKOFF_MS
             while (isActive) {
@@ -154,6 +167,7 @@ class PocketSession(
                     throw e
                 } catch (e: Exception) {
                     if (!isActive) break
+                    trace("connection ended: " + generateSequence(e as Throwable) { it.cause }.joinToString(" <- ") { "${it.javaClass.simpleName}: ${it.message}" })
                     // A connection that was up starts over from the shortest wait.
                     if (_state.value.phase == Phase.Live) backoff = MIN_BACKOFF_MS
                     _state.update {
@@ -177,10 +191,41 @@ class PocketSession(
 
     /**
      * Pauses the screen and status polls while the app is in the background, and reads the screen
-     * at once when it comes back. The connection stays open, so coming back needs no reconnect.
+     * at once when it comes back.
+     *
+     * Android cuts an app's network soon after it leaves the screen unless a foreground service
+     * holds it, so the sockets are often dead on return - and a connection that died quietly looks
+     * open until OkHttp's ping notices, half a minute later. Coming back therefore skips any
+     * backoff, and checks a connection that still claims to be live with one quick call, replacing
+     * it at once when that goes unanswered. That is the wait a pane used to sit through.
      */
     fun setActive(visible: Boolean) {
+        val wasVisible = active.value
         active.value = visible
+        if (!visible || wasVisible) return
+        // A pane stream that is redialing may be stuck on a dial made while the network was cut.
+        streams.forEach { it.retryNow() }
+        if (_state.value.phase != Phase.Live) {
+            // A dial in flight was made while the network may have been cut; start a fresh one.
+            if (_state.value.phase == Phase.Connecting || _state.value.phase == Phase.Reconnecting) {
+                clientRef.get()?.close()
+            }
+            retry.trySend(Unit)
+            return
+        }
+        val client = clientRef.get() ?: return
+        val scope = runnerScope ?: return
+        scope.launch {
+            val alive = runCatching { client.call("session.list", null, timeoutMs = LIVENESS_MS) }.isSuccess
+            if (!alive && clientRef.get() === client) {
+                trace("control connection did not answer after the app came back; reconnecting")
+                reconnectNow()
+            }
+        }
+    }
+
+    fun setWatching(on: Boolean) {
+        watching.value = on
     }
 
     /** Skips the rest of the wait before the next connection attempt. Nothing to skip while live. */
@@ -427,6 +472,9 @@ class PocketSession(
         input(write(String(data, Charsets.UTF_8)))
     }
 
+    /** [writeBytes], with a way to wait until Rex has the bytes; for tests. */
+    internal fun writeBytesAwaitable(data: ByteArray): CompletableDeferred<Unit> = input(write(String(data, Charsets.UTF_8)))
+
     suspend fun paste(text: String) {
         if (text.isEmpty()) return
         val (sid, block) = requireBlock()
@@ -441,7 +489,13 @@ class PocketSession(
         ).await()
     }
 
-    suspend fun sendKey(code: String, mods: String = "", text: String = "", codepoint: Int = text.firstCodePoint()) {
+    suspend fun sendKey(
+        code: String,
+        mods: String = "",
+        text: String = "",
+        codepoint: Int = text.firstCodePoint(),
+        consumedMods: String = "",
+    ) {
         val (sid, block) = requireBlock()
         input(
             InputCall(
@@ -454,7 +508,7 @@ class PocketSession(
                         JSONObject()
                             .put("key", code)
                             .put("mods", mods)
-                            .put("consumed_mods", "")
+                            .put("consumed_mods", consumedMods)
                             .put("text", text)
                             .put("unshifted_codepoint", codepoint)
                             .put("composing", false)
@@ -467,7 +521,7 @@ class PocketSession(
     private fun write(text: String): InputCall {
         val (sid, block) = requireBlock()
         return InputCall(
-            "com.superlogical.terminal.write",
+            WRITE_METHOD,
             JSONObject().put("session_id", sid).put("block_id", block).put("args", JSONObject().put("data", text)),
         )
     }
@@ -479,20 +533,54 @@ class PocketSession(
         return call.done
     }
 
-    /** Sends queued input one call at a time, each after the reply to the one before. */
+    /**
+     * Sends queued input one call at a time, each after the reply to the one before. Writes to the
+     * same pane that queued up while the last call was out go together as one write: a swipe over a
+     * full-screen program makes a report per row, and one round trip each held a fling for seconds
+     * over a tailnet. The bytes keep their order, so this changes nothing the program sees.
+     */
     private suspend fun inputLoop(client: RexClient) {
-        for (call in input) {
+        var held: InputCall? = null
+        while (true) {
+            val first = held ?: input.receive()
+            held = null
+            val batch = arrayListOf(first)
+            if (first.isWrite()) {
+                while (true) {
+                    val next = input.tryReceive().getOrNull() ?: break
+                    if (next.isWrite() && next.target() == first.target() && batch.dataLength() < MAX_WRITE_BATCH) {
+                        batch += next
+                    } else {
+                        // A key or a paste, or another pane: it goes after this batch, in its turn.
+                        held = next
+                        break
+                    }
+                }
+            }
+            val payload = if (batch.size == 1) first.payload else first.withData(batch.joinToString("") { it.data() })
             try {
-                client.call(call.method, call.payload)
-                call.done.complete(Unit)
+                client.call(first.method, payload)
+                batch.forEach { it.done.complete(Unit) }
             } catch (e: CancellationException) {
-                call.done.completeExceptionally(e)
+                batch.forEach { it.done.completeExceptionally(e) }
+                held?.done?.completeExceptionally(e)
                 throw e
             } catch (e: Exception) {
-                call.done.completeExceptionally(e)
+                batch.forEach { it.done.completeExceptionally(e) }
             }
         }
     }
+
+    private fun InputCall.isWrite() = method == WRITE_METHOD
+
+    private fun InputCall.target() = payload.optString("session_id") to payload.optString("block_id")
+
+    private fun InputCall.data(): String = payload.optJSONObject("args")?.optString("data").orEmpty()
+
+    private fun InputCall.withData(data: String): JSONObject =
+        JSONObject(payload.toString()).put("args", JSONObject().put("data", data))
+
+    private fun List<InputCall>.dataLength() = sumOf { it.data().length }
 
     private suspend fun runConnection() {
         val client = clientFactory()
@@ -777,9 +865,11 @@ class PocketSession(
                         ownershipLoop(sid, blockId)
                     }
                     val stream = TerminalStream(endpoint, { RexClient.defaultHttp(socksPort) }, trace) { ticket(sid, blockId) }
+                    streams += stream
                     try {
                         stream.feeds().collect { emit(it) }
                     } finally {
+                        streams -= stream
                         stream.close()
                     }
                 }
@@ -1026,7 +1116,7 @@ class PocketSession(
      */
     private suspend fun statusLoop() {
         while (true) {
-            active.first { it }
+            combine(active, watching) { visible, watched -> visible || watched }.first { it }
             val state = _state.value
             val shown = state.view?.sessionId
             // The shown session first: those are the panes a person is about to look at.
@@ -1139,6 +1229,21 @@ private const val RELEASE_WAIT_MS = 250L
 
 /** Wait before the screen tries its pane again, after the connection or the stream let go. */
 private const val PANE_RETRY_MAX_MS = 5_000L
+
+/**
+ * How long a call may take when the app comes back before its connection counts as dead. A tailnet
+ * relay abroad answers in well under a second, so this leaves room for a slow path but not for the
+ * half-minute a dead socket takes to be noticed otherwise.
+ */
+private const val LIVENESS_MS = 4_000L
+
+private const val WRITE_METHOD = "com.superlogical.terminal.write"
+
+/**
+ * Most characters one combined write carries. Rex takes a control message of up to 64 KiB, and a
+ * character can take a few bytes of UTF-8 and JSON escaping, so this stays well under it.
+ */
+private const val MAX_WRITE_BATCH = 8_000
 
 private fun String.firstCodePoint(): Int =
     if (isEmpty()) 0 else codePointAt(0)

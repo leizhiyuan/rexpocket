@@ -9,11 +9,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.Base64
+import java.util.concurrent.atomic.AtomicInteger
 
 /** The terminal stream against a real Rex: a snapshot of the pane, then its output as it comes. */
 class TerminalStreamTest {
@@ -79,6 +82,91 @@ class TerminalStreamTest {
                 withTimeout(10_000) {
                     while (!synchronized(output) { output.contains(token) }) delay(50)
                 }
+            } finally {
+                sessionId?.let {
+                    runCatching {
+                        control.call("session.attach", JSONObject().put("session_id", it))
+                        control.call("session.destroy", JSONObject().put("session_id", it))
+                    }
+                }
+                control.close()
+                scope.cancel()
+            }
+        }
+    }
+
+    /**
+     * A connection that failed leaves its own close behind. The next connection must not take that
+     * close for its own, or every reconnect cancels the one after it and the pane never shows.
+     */
+    @Test
+    fun aFailedConnectionDoesNotEndTheNextOne() {
+        val endpoint = Endpoint(
+            System.getenv("REX_TEST_HOST")?.takeIf { it.isNotBlank() } ?: "127.0.0.1",
+            System.getenv("REX_TEST_PORT")?.toIntOrNull() ?: 7297,
+            plaintext = true,
+        )
+        assumeTrue("rex on ${endpoint.host}:${endpoint.port}", portOpen(endpoint.host, endpoint.port))
+        runBlocking {
+            val control = RexClient()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            var sessionId: String? = null
+            try {
+                control.connect(endpoint)
+                control.call("session.bootstrap", JSONObject().put("event_scope", "session"))
+                val created = control.call(
+                    "session.create",
+                    JSONObject().put("label", "rexpocket-stale-" + System.currentTimeMillis()).put(
+                        "initial_windows",
+                        org.json.JSONArray().put(
+                            JSONObject().put("layout", JSONObject().put("block", JSONObject().put("flavor", "com.superlogical.terminal.shell"))),
+                        ),
+                    ),
+                )
+                sessionId = created.getString("session_id")
+                val view = parseView(control.call("session.attach", JSONObject().put("session_id", sessionId)).getJSONObject("view"))
+                val block = view.focusedBlock()!!.id
+
+                val tickets = AtomicInteger()
+                val drops = AtomicInteger()
+                val trace: (String) -> Unit = {
+                    if (it.startsWith("stream dropped") || it.startsWith("stream failed")) drops.incrementAndGet()
+                }
+                val stream = TerminalStream(endpoint, { RexClient.defaultHttp() }, trace) {
+                    // The first ticket is one Rex never issued, so that connection is refused.
+                    if (tickets.getAndIncrement() == 0) {
+                        Base64.getUrlEncoder().encodeToString(ByteArray(16) { 7 })
+                    } else {
+                        control.call(
+                            "data.connect",
+                            JSONObject()
+                                .put("session_id", sessionId)
+                                .put("block_id", block)
+                                .put("data_ref_id", "terminal")
+                                .put("subprotocol", TerminalStream.PROTOCOL),
+                        ).getString("ticket")
+                    }
+                }
+                val output = StringBuilder()
+                scope.launch {
+                    stream.feeds().collect { feed ->
+                        if (feed is TerminalFeed.Output) synchronized(output) { output.append(feed.bytes.decodeToString()) }
+                    }
+                }
+                withTimeout(10_000) { while (tickets.get() < 2) delay(50) }
+                delay(1_500)
+                val token = "stale-ok-" + System.nanoTime()
+                control.call(
+                    "com.superlogical.terminal.write",
+                    JSONObject().put("session_id", sessionId).put("block_id", block)
+                        .put("args", JSONObject().put("data", "printf '$token\\n'\n")),
+                )
+                withTimeout(10_000) {
+                    while (!synchronized(output) { output.contains(token) }) delay(50)
+                }
+                assertEquals("the stream kept reconnecting", 0, drops.get())
+                assertEquals("tickets asked for", 2, tickets.get())
+                stream.close()
             } finally {
                 sessionId?.let {
                     runCatching {

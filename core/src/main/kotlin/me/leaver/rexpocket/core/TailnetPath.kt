@@ -1,6 +1,15 @@
 package me.leaver.rexpocket.core
 
 /**
+ * The tailnet address of [host] among [peers] - each peer's MagicDNS name and host name to its
+ * address - or null while the node does not know it. A literal address is its own.
+ */
+fun peerFor(host: String, peers: Map<String, String>): String? =
+    host.trim().trimEnd('.').lowercase().takeIf { it.isNotEmpty() }?.let { name ->
+        peers[name] ?: peers[name.substringBefore('.')] ?: name.takeIf { it.first().isDigit() || ':' in it }
+    }
+
+/**
  * How this phone's tailnet traffic reaches a peer, as a disco ping saw it. Tailscale tries for a
  * direct UDP path first; when NAT or a firewall stands in the way it falls back to a relay - a peer
  * relay inside the tailnet, or a DERP server run by Tailscale - and every packet takes that detour.
