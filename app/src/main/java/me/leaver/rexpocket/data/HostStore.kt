@@ -136,6 +136,12 @@ class HostStore(context: Context) {
 
     fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)
 
+    fun downloadedFont(): Boolean = prefs.getBoolean("downloaded_font", false)
+
+    fun setDownloadedFont(selected: Boolean) {
+        prefs.edit().putBoolean("downloaded_font", selected).apply()
+    }
+
     fun setFontScale(scale: Float) {
         prefs.edit().putFloat(KEY_FONT, scale.coerceIn(0.7f, 1.8f)).apply()
     }

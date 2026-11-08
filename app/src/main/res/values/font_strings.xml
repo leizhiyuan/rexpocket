@@ -1,0 +1,12 @@
+<resources>
+    <string name="terminal_font_title">Terminal font</string>
+    <string name="terminal_font_hint">Choose the font used for terminal output. If characters appear too far apart, try JetBrains Mono.</string>
+    <string name="terminal_font_system">System monospace</string>
+    <string name="terminal_font_system_detail">Uses your device’s font</string>
+    <string name="terminal_font_download">Download once · about 1 MB · GitHub</string>
+    <string name="terminal_font_saved">Downloaded · available offline</string>
+    <string name="terminal_font_loading">Loading saved fonts…</string>
+    <string name="terminal_font_downloading">Downloading… %1$d%%</string>
+    <string name="terminal_font_failed">Could not download or load the font. Your font has not changed. Tap JetBrains Mono to retry.</string>
+    <string name="terminal_font_credit">JetBrains Mono · SIL Open Font License 1.1</string>
+</resources>

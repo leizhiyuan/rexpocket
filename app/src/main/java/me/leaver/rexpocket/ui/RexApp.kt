@@ -23,6 +23,9 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val hosts by model.hosts.collectAsState()
     val pocket by model.pocket.collectAsState()
     val font by model.fontScale.collectAsState()
+    val terminalTypeface by model.terminalTypeface.collectAsState()
+    val terminalFont by model.terminalFont.collectAsState()
+    var fontSettingsOpen by remember { mutableStateOf(false) }
     val tailscale by model.tailscale.collectAsState()
     val tailscaleStatus by model.tailscaleStatus.collectAsState()
     val tailnetError by model.tailnetError.collectAsState()
@@ -69,10 +72,12 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onTailscale = { tailscaleOpen = true },
                     alerts = alerts,
                     onAlerts = model::setAlerts,
+                    onFontSettings = { fontSettingsOpen = true },
                 )
                 Route.Term -> TermScreen(
                     state = pocket,
                     fontScale = font,
+                    terminalTypeface = terminalTypeface,
                     onFont = model::setFont,
                     onBack = model::showHome,
                     onOpenSession = model::openSession,
@@ -82,6 +87,9 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onAct = model::act,
                 )
             }
+        }
+        if (fontSettingsOpen) {
+            FontSettingsDialog(terminalFont, model::selectTerminalFont) { fontSettingsOpen = false }
         }
         if (tailscaleOpen) {
             TailscaleDialog(
