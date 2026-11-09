@@ -134,6 +134,7 @@ internal sealed interface Sheet {
 internal fun TermScreen(
     state: PocketState,
     fontScale: Float,
+    terminalTypeface: android.graphics.Typeface,
     onFont: (Float) -> Unit,
     onBack: () -> Unit,
     onOpenSession: (String) -> Unit,
@@ -236,6 +237,7 @@ internal fun TermScreen(
                     blockId = shown.orEmpty(),
                     feeds = watchPane,
                     fontScale = fontScale,
+                    terminalTypeface = terminalTypeface,
                     onFont = onFont,
                     onInput = { bytes -> onAct { writeBytes(bytes) } },
                     onTyped = ::typed,

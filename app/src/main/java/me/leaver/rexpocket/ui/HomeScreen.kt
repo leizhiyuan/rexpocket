@@ -141,6 +141,7 @@ internal fun HomeScreen(
     onTailscale: () -> Unit,
     alerts: Boolean,
     onAlerts: (Boolean) -> Unit,
+    onFontSettings: () -> Unit,
 ) {
     val context = LocalContext.current
     // Android 13 asks for notifications at run time; alerts come on once the person allows them.
@@ -366,6 +367,7 @@ internal fun HomeScreen(
             },
             alerts = alerts,
             onAlerts = toggleAlerts,
+            onFontSettings = onFontSettings,
         )
     }
 }
@@ -707,6 +709,7 @@ private fun SettingsSheet(
     onAddHost: () -> Unit,
     alerts: Boolean,
     onAlerts: () -> Unit,
+    onFontSettings: () -> Unit,
 ) {
     val context = LocalContext.current
     val joined = tailscale.enabled && tailscaleStatus.backendState == "Running"
@@ -732,6 +735,7 @@ private fun SettingsSheet(
                 onClick = onAlerts,
             )
             SheetItem(stringResource(R.string.action_add_host), icon = R.drawable.ic_add, onClick = onAddHost)
+            SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
             SheetItem(stringResource(R.string.settings_source), icon = R.drawable.ic_open_in_new) { openLink(context, SOURCE_URL) }
         }
         Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {

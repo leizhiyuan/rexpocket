@@ -56,6 +56,7 @@ fun TerminalPane(
     blockId: String,
     feeds: (String) -> Flow<TerminalFeed>,
     fontScale: Float,
+    terminalTypeface: android.graphics.Typeface,
     onFont: (Float) -> Unit,
     onInput: (ByteArray) -> Unit,
     onResize: (columns: Int, rows: Int, cellWidthPx: Int, cellHeightPx: Int) -> Unit,
@@ -137,6 +138,7 @@ fun TerminalPane(
             // A restored snapshot carries the desktop's default colours; the app's own are applied here,
             // so a pane never flips from the app's paper to a white one after a reconnect.
             theme = theme,
+            typeface = terminalTypeface,
             // The view fills its whole canvas and draws rows scrolled above its top; Compose hosts
             // Android views without clipping, so unclipped it paints over the header and tab bar.
             modifier = Modifier.fillMaxSize().clipToBounds(),
