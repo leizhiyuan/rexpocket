@@ -28,6 +28,9 @@ through a Tailscale node built into the app.
   with a bar to move between them.
 - **Links.** Long-press a link a program printed, or one it set as a hyperlink, to open, copy or
   share it.
+- **Files and images.** Pick any file on the phone and send it to the pane you are looking at.
+  Rex stores it on the computer and types its path itself, so a screenshot can go straight into an
+  agent's prompt.
 - **Background alerts.** Optional: the app stays connected while it is away and notifies you when a
   program waits for approval, an answer or a login, or fails. Tap the alert to open that pane.
 - **Works beside the desk.** The phone holds only the pane it shows and sizes it to the phone; the

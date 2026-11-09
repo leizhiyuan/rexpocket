@@ -2,6 +2,7 @@ package me.leaver.rexpocket.ui
 
 import android.app.Application
 import android.graphics.Typeface
+import android.net.Uri
 import android.util.Log
 import me.leaver.rexpocket.BuildConfig
 import android.os.SystemClock
@@ -12,6 +13,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import me.leaver.rexpocket.core.Endpoint
 import me.leaver.rexpocket.core.AttentionLedger
+import me.leaver.rexpocket.core.FileUpload
+import me.leaver.rexpocket.core.UploadPhase
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.alerts.Alert
 import me.leaver.rexpocket.alerts.AlertTarget
@@ -134,6 +137,14 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    /** The file going to the shown pane right now, if any: the terminal shows it in a pill. */
+    private val _upload = MutableStateFlow<UploadStatus?>(null)
+    val upload: StateFlow<UploadStatus?> = _upload
+    private var uploadJob: Job? = null
+    private var uploadFile: File? = null
+    private var uploadSession: String? = null
+    private var uploadBlock: String? = null
 
     /** Background alerts: on, the app stays connected while it is away and says when a program needs you. */
     val alerts: StateFlow<Boolean> = Alerts.enabled.also { it.value = store.alerts() }
@@ -323,6 +334,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             val s = PocketSession(
                 Endpoint(target.host, target.port, target.plaintext),
                 clientFactory = { RexClient.forSocksPort(socksPort) },
+                // Uploads reserve a file on their own revision-11 connection, over the same route.
+                uploadClientFactory = { RexClient.forSocksPort(socksPort, FileUpload.API_REVISION) },
                 cachedSessions = cached,
                 // The terminal stream takes the same route as the control connection.
                 socksPort = socksPort,
@@ -584,6 +597,103 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         store.setFontScale(next)
     }
 
+    /**
+     * Sends a file or image the picker returned to the pane shown when it was picked. The copy in
+     * the cache is what is sent, so the picker's stream closing later cannot shorten the upload;
+     * it is deleted once the pill is dismissed.
+     */
+    fun attachUpload(uri: Uri) {
+        val s = session ?: return
+        if (_upload.value?.running == true) return
+        // The pane on screen now is the one the file is for, even if staging or the picker outlives it.
+        val sessionId = _pocket.value.activeSessionId ?: return
+        val blockId = _pocket.value.view?.focusedBlock()?.id ?: return
+        val name = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "file"
+        uploadJob?.cancel()
+        // A failure or an earlier sent file is done with; its staged copy goes too.
+        clearUpload()
+        _upload.value = UploadStatus(name, UploadPhase.Preparing)
+        uploadJob = viewModelScope.launch {
+            val staged = try {
+                stageUpload(getApplication(), uri)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _upload.value = UploadStatus(name, UploadPhase.Failed, error = e.message ?: "Could not read this file")
+                return@launch
+            }
+            uploadFile = staged.file
+            runUpload(s, staged.file, staged.name, sessionId, blockId)
+        }
+    }
+
+    /** Sends again after a failure that did not reach the half-close; never after an uncertain one. */
+    fun retryUpload() {
+        val s = session ?: return
+        val file = uploadFile ?: return
+        val name = _upload.value?.name ?: return
+        if (_upload.value?.phase != UploadPhase.Failed) return
+        if (_upload.value?.retryable != true) return
+        val sessionId = uploadSession ?: return
+        val blockId = uploadBlock ?: return
+        uploadJob = viewModelScope.launch { runUpload(s, file, name, sessionId, blockId) }
+    }
+
+    /** Stops the upload. Past the half-close Rex may already have the file, so that is unsure. */
+    fun cancelUpload() {
+        val current = _upload.value ?: return
+        if (!current.running) {
+            clearUpload()
+            return
+        }
+        uploadJob?.cancel()
+        uploadJob = null
+        if (current.phase == UploadPhase.Finishing) {
+            _upload.value = current.copy(phase = UploadPhase.Uncertain)
+        } else {
+            clearUpload()
+        }
+    }
+
+    fun dismissUpload() {
+        if (_upload.value?.running == true) cancelUpload() else clearUpload()
+    }
+
+    private suspend fun runUpload(
+        s: PocketSession,
+        file: File,
+        name: String,
+        sessionId: String,
+        blockId: String,
+    ) {
+        uploadSession = sessionId
+        uploadBlock = blockId
+        _upload.value = UploadStatus(name, UploadPhase.Preparing)
+        try {
+            s.upload(file, name, sessionId, blockId).collect { progress ->
+                _upload.value = UploadStatus(name, progress.phase, progress.sent, progress.total, progress.error, retryable = true)
+                if (progress.phase == UploadPhase.Done) {
+                    delay(UPLOAD_DONE_MS)
+                    if (_upload.value?.phase == UploadPhase.Done) clearUpload()
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _upload.value = UploadStatus(name, UploadPhase.Failed, error = e.message ?: "Upload failed", retryable = uploadFile != null)
+        }
+    }
+
+    private fun clearUpload() {
+        val file = uploadFile
+        uploadFile = null
+        uploadJob = null
+        uploadSession = null
+        uploadBlock = null
+        _upload.value = null
+        if (file != null) teardown.launch(Dispatchers.IO) { file.delete() }
+    }
+
     fun act(block: suspend PocketSession.() -> Unit) {
         val s = session ?: return
         viewModelScope.launch {
@@ -608,6 +718,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         _opening.value = null
         watch?.cancel()
         watch = null
+        uploadJob?.cancel()
+        clearUpload()
         val closing = session
         session = null
         sessionJob?.cancel()
@@ -626,6 +738,9 @@ private val teardown = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
 /** How long after a connection goes live the path is measured: Tailscale needs a moment to go direct. */
 private const val PATH_SETTLE_MS = 3_000L
+
+/** How long a sent file stays on screen as green before the pill clears itself. */
+private const val UPLOAD_DONE_MS = 1_500L
 
 /** How long a connection waits for the tailnet node to come up before dialing anyway. */
 internal const val NODE_READY_MS = 30_000L

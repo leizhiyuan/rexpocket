@@ -32,6 +32,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val opening by model.opening.collectAsState()
     val tailnetPath by model.tailnetPath.collectAsState()
     val alerts by model.alerts.collectAsState()
+    val upload by model.upload.collectAsState()
     val context = LocalContext.current
     var tailscaleOpen by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { model.restore() }
@@ -85,6 +86,11 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onRetry = model::retryNow,
                     onDismissNotice = model::dismissNotice,
                     onAct = model::act,
+                    upload = upload,
+                    onAttach = model::attachUpload,
+                    onCancelUpload = model::cancelUpload,
+                    onDismissUpload = model::dismissUpload,
+                    onRetryUpload = model::retryUpload,
                 )
             }
         }

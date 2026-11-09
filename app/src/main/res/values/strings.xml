@@ -82,6 +82,16 @@
     <string name="key_ctrl_c">C-c</string>
     <string name="key_paste">Paste</string>
     <string name="key_copy">Copy</string>
+    <string name="upload_attach">Send a file</string>
+    <string name="upload_preparing">Preparing %1$s</string>
+    <string name="upload_sending">Sending %1$s · %2$d%%</string>
+    <string name="upload_finishing">Finishing %1$s</string>
+    <string name="upload_done">Sent %1$s</string>
+    <string name="upload_failed">Could not send %1$s</string>
+    <string name="upload_canceled">Upload canceled</string>
+    <string name="upload_uncertain">Upload unconfirmed. Rex may already have put the file in the pane; check it before sending again.</string>
+    <string name="upload_need_update">Update the Rex server to enable uploads (API revision 11 or newer).</string>
+    <string name="action_retry">Retry</string>
     <string name="key_up">↑</string>
     <string name="key_down">↓</string>
     <string name="key_left">←</string>
