@@ -25,6 +25,8 @@ import java.util.concurrent.atomic.AtomicLong
 class RexClient(
     private val http: OkHttpClient = defaultHttp(),
     private val connectTimeoutMs: Long = 12_000,
+    /** The API revision asked for in the hello; Rex answers the highest it knows up to this one. */
+    private val apiRevision: Int = 7,
 ) {
     private val ids = AtomicLong(0)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JSONObject>>()
@@ -118,7 +120,7 @@ class RexClient(
         override fun onOpen(webSocket: WebSocket, response: Response) {
             val hello = JSONObject()
                 .put("type", "hello")
-                .put("api_revision", 7)
+                .put("api_revision", apiRevision)
                 .put("api_min_revision", 0)
                 .put(
                     "client",
@@ -212,6 +214,7 @@ class RexClient(
             .build()
 
         /** A client whose sockets go through the app's own Tailscale inbound on [socksPort]. */
-        fun forSocksPort(socksPort: Int): RexClient = RexClient(defaultHttp(socksPort))
+        fun forSocksPort(socksPort: Int, apiRevision: Int = 7): RexClient =
+            RexClient(defaultHttp(socksPort), apiRevision = apiRevision)
     }
 }

@@ -114,8 +114,9 @@ The whole screen is the terminal's paper; nothing sits on a band of a second gre
 2. **The pane.** Full width, 10 dp of inset for its text. On a split the pane bar floats under it:
    one pill, a 48 dp segment per pane with its 24 dp program tile and name, the one on screen on a
    `keyOn` plate in `accent`. Tap a segment or swipe the pane left and right.
-3. **The dock.** One floating pill - keyboard, Return, keys (the command mark) - and a 56 dp circle
-   that makes a tab, both on `raised`, above the IME and the navigation bar. The keyboard button
+3. **The dock.** One floating pill - keyboard, Return, keys (the command mark), attach (the
+   paperclip) - and a 56 dp circle that makes a tab, both on `raised`, above the IME and the
+   navigation bar. The keyboard button
    shows the platform's keyboard-hide mark while the IME is up. The key pad opens from the keys button into
    the row above the pill, ordered by how often a thumb wants each key: `esc`, `C-c` (red while
    the program works or waits, never renamed), the four arrows, Tab, `shift`, `ctrl`, `alt`,
@@ -124,6 +125,10 @@ The whole screen is the terminal's paper; nothing sits on a band of a second gre
    `keyOn` plate in `accent`, and held on an `accent` plate; it also applies to a character from
    the phone keyboard and to Return. Holding `ctrl` raises a 3 x 3 grid of chords on `raised` over
    it; sliding lights one in `accent` and lifting sends it, lifting off the grid sends nothing.
+   The attach key opens the platform's file picker; while a file is on its way, one pill above the
+   dock says what it is doing, how far it got and the one control that fits - Cancel while it runs,
+   Retry after a failure, Dismiss when it is done or unconfirmed. A sent file turns green and goes
+   by itself; an unconfirmed one stays until dismissed, because Rex may already have the file.
 4. **A link.** A long press on a link in the pane opens a sheet titled with it: Open, Copy, Share.
    Only an http or https link can be opened or shared.
 

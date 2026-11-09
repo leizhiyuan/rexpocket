@@ -3,6 +3,8 @@ package me.leaver.rexpocket.ui
 import android.os.SystemClock
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -59,6 +61,7 @@ import io.github.sagernet.libghostty.GhosttyTerminalSession
 import io.github.sagernet.libghostty.GhosttyTerminalView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlin.math.roundToInt
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.BlockInfo
 import me.leaver.rexpocket.core.KeyModifiers
@@ -72,6 +75,7 @@ import me.leaver.rexpocket.core.programMark
 import me.leaver.rexpocket.core.ProgramRecord
 import me.leaver.rexpocket.core.SessionView
 import me.leaver.rexpocket.core.TerminalFeed
+import me.leaver.rexpocket.core.UploadPhase
 import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.core.toProblem
 
@@ -137,9 +141,17 @@ internal fun TermScreen(
     onRetry: () -> Unit,
     onDismissNotice: (Long) -> Unit,
     onAct: (suspend PocketSession.() -> Unit) -> Unit,
+    upload: UploadStatus?,
+    onAttach: (android.net.Uri) -> Unit,
+    onCancelUpload: () -> Unit,
+    onDismissUpload: () -> Unit,
+    onRetryUpload: () -> Unit,
 ) {
     val context = LocalContext.current
     val ime = LocalSoftwareKeyboardController.current
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) onAttach(uri)
+    }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     var mods by remember { mutableStateOf(KeyModifiers()) }
     var link by remember { mutableStateOf<String?>(null) }
@@ -256,6 +268,14 @@ internal fun TermScreen(
                 )
             }
         }
+        upload?.let {
+            UploadPill(
+                status = it,
+                onCancel = onCancelUpload,
+                onDismiss = onDismissUpload,
+                onRetry = onRetryUpload,
+            )
+        }
         if (keysOpen) {
             KeyDock(
                 mods = mods,
@@ -283,6 +303,8 @@ internal fun TermScreen(
             // Return takes the key row's modifiers too: shift-Return is a new line in an agent's prompt.
             onEnter = { press(KeyPress("enter", 0)) },
             onKeys = { keysOpen = !keysOpen },
+            onAttach = { filePicker.launch("*/*") },
+            attachEnabled = upload?.running != true,
             onNewTab = { onAct { newWindow() } },
         )
     }
@@ -633,9 +655,81 @@ private fun PaneBar(
 }
 
 /**
+ * One file's way to the desktop: what it is doing, how far it has got, and the one control that
+ * makes sense there - stop it while it runs, retry a failure that inserted nothing, dismiss the
+ * rest. An unconfirmed finish says so and offers no retry, because Rex may already have the file.
+ */
+@Composable
+private fun UploadPill(
+    status: UploadStatus,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    val done = status.phase == UploadPhase.Done
+    val failed = status.phase == UploadPhase.Failed || status.phase == UploadPhase.Uncertain || status.phase == UploadPhase.Unsupported
+    val tint = when {
+        done -> Colors.ok
+        failed -> Colors.danger
+        else -> Colors.ink
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp)
+            .floating(RoundedCornerShape(Radius.card)).padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                uploadText(status),
+                color = tint,
+                fontSize = TextStyles.subhead,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (status.phase == UploadPhase.Failed) {
+                Text(
+                    status.error.orEmpty(),
+                    color = Colors.muted,
+                    fontSize = TextStyles.label,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        when {
+            status.phase == UploadPhase.Failed -> {
+                if (status.retryable) {
+                    TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry), color = Colors.accent, fontSize = TextStyles.label) }
+                }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_dismiss), color = Colors.muted, fontSize = TextStyles.label) }
+            }
+            failed -> TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_dismiss), color = Colors.muted, fontSize = TextStyles.label)
+            }
+            done -> Unit
+            else -> TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.action_cancel), color = Colors.muted, fontSize = TextStyles.label)
+            }
+        }
+    }
+}
+
+@Composable
+private fun uploadText(status: UploadStatus): String = when (status.phase) {
+    UploadPhase.Preparing -> stringResource(R.string.upload_preparing, status.name)
+    UploadPhase.Sending -> stringResource(R.string.upload_sending, status.name, (status.progress * 100).roundToInt())
+    UploadPhase.Finishing -> stringResource(R.string.upload_finishing, status.name)
+    UploadPhase.Done -> stringResource(R.string.upload_done, status.name)
+    UploadPhase.Unsupported -> stringResource(R.string.upload_need_update)
+    UploadPhase.Uncertain -> stringResource(R.string.upload_uncertain)
+    UploadPhase.Failed -> stringResource(R.string.upload_failed, status.name)
+    UploadPhase.Canceled -> stringResource(R.string.upload_canceled)
+}
+
+/**
  * The foot of the terminal, as the reference lays it out: the pane bar when the tab is split, then
- * one floating pill - keyboard, Enter, the special keys - and the circle that makes a tab. All of it
- * is 56 dp, the same height as the home's floating controls, on the page margin.
+ * one floating pill - keyboard, Enter, the special keys, the attach key - and the circle that makes
+ * a tab. All of it is 56 dp, the same height as the home's floating controls, on the page margin.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -644,6 +738,8 @@ private fun FloatingDock(
     onKeyboard: () -> Unit,
     onEnter: () -> Unit,
     onKeys: () -> Unit,
+    onAttach: () -> Unit,
+    attachEnabled: Boolean,
     onNewTab: () -> Unit,
 ) {
     val imeUp = WindowInsets.isImeVisible
@@ -672,6 +768,15 @@ private fun FloatingDock(
                 plate = if (keysOpen) Colors.keyOn else null,
                 size = 48.dp,
                 iconSize = 24.dp,
+            )
+            RoundButton(
+                R.drawable.ic_attach_file,
+                stringResource(R.string.upload_attach),
+                onAttach,
+                tint = if (attachEnabled) Colors.ink else Colors.muted,
+                size = 48.dp,
+                iconSize = 24.dp,
+                enabled = attachEnabled,
             )
         }
         RoundButton(

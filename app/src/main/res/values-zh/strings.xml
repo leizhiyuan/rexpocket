@@ -81,6 +81,16 @@
     <string name="key_ctrl_c">C-c</string>
     <string name="key_paste">粘贴</string>
     <string name="key_copy">复制</string>
+    <string name="upload_attach">发送文件</string>
+    <string name="upload_preparing">正在准备 %1$s</string>
+    <string name="upload_sending">正在发送 %1$s · %2$d%%</string>
+    <string name="upload_finishing">正在完成 %1$s</string>
+    <string name="upload_done">已发送 %1$s</string>
+    <string name="upload_failed">无法发送 %1$s</string>
+    <string name="upload_canceled">已取消发送</string>
+    <string name="upload_uncertain">发送结果未确认。Rex 可能已经把文件放进窗格，请先查看再重新发送。</string>
+    <string name="upload_need_update">请更新 Rex 服务端以启用文件发送（API revision 11 或更新）。</string>
+    <string name="action_retry">重试</string>
     <string name="key_up">↑</string>
     <string name="key_down">↓</string>
     <string name="key_left">←</string>

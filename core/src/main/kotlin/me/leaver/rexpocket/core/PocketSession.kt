@@ -9,6 +9,9 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +30,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
 enum class Phase { Idle, Connecting, Live, Reconnecting, Failed }
@@ -75,6 +79,8 @@ class PocketSession(
     private val socksPort: Int = 0,
     /** Diagnostics for the terminal stream and the calls a pane waits on; silent by default. */
     private val trace: (String) -> Unit = {},
+    /** Uploads speak API revision 11 on their own connection, so the live one keeps its contract. */
+    private val uploadClientFactory: () -> RexClient = { RexClient(apiRevision = FileUpload.API_REVISION) },
     private val clientFactory: () -> RexClient = { RexClient() },
 ) {
     private val _state = MutableStateFlow(PocketState(sessions = cachedSessions))
@@ -474,6 +480,32 @@ class PocketSession(
 
     /** [writeBytes], with a way to wait until Rex has the bytes; for tests. */
     internal fun writeBytesAwaitable(data: ByteArray): CompletableDeferred<Unit> = input(write(String(data, Charsets.UTF_8)))
+
+    /**
+     * Sends [file] to a pane with Rex's native upload. [sessionId] and [blockId] fix the target when
+     * the file is picked, so moving around the app while it is staged or sent cannot deliver it
+     * somewhere else. The flow reports every phase and ends with the final one; cancelling it
+     * stops the upload, and a stop after the half-close is reported as [UploadPhase.Uncertain]
+     * rather than retried.
+     */
+    fun upload(
+        file: File,
+        name: String,
+        sessionId: String? = null,
+        blockId: String? = null,
+    ): Flow<UploadProgress> = channelFlow {
+        val sid = sessionId ?: requireSession()
+        val block = blockId
+            ?: _state.value.view?.focusedBlock()?.id
+            ?: throw NotReadyException("No terminal in this window")
+        val uploader = FileUpload(
+            endpoint,
+            { RexClient.defaultHttp(socksPort) },
+            uploadClientFactory,
+            trace,
+        )
+        uploader.upload(sid, block, file, name) { trySend(it) }
+    }.flowOn(Dispatchers.IO)
 
     suspend fun paste(text: String) {
         if (text.isEmpty()) return
