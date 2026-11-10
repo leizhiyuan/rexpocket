@@ -74,7 +74,9 @@ class RexClient(
         if (payload != null) msg.put("payload", payload)
         if (!ws.send(msg.toString())) {
             pending.remove(id)
-            throw IllegalStateException("Control connection closed")
+            // A connection that went away under a call is a drop, which the app says in its own
+            // words; a socket that never opened is the failure that kept it from opening.
+            throw closedError("The connection went away before the request was sent", null)
         }
         try {
             val response = withTimeoutOrNull(timeoutMs) { waiter.await() }
