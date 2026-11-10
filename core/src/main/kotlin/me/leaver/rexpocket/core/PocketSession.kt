@@ -136,6 +136,13 @@ class PocketSession(
     private val streams: MutableSet<TerminalStream> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /**
+     * True while the control connection in use has told Rex which session this client is on, which
+     * is what a data ticket and every pane call need. A pane that starts before that is refused,
+     * and then waits out its backoff while the person looks at an empty pane.
+     */
+    private val attached = MutableStateFlow(false)
+
+    /**
      * Every keystroke, paste and typed text, in the order it was typed. Rex runs `client.key` and
      * `block.event` in order but `terminal.write` whenever it arrives, so two writes sent without
      * waiting can swap places. One sender drains this queue and waits for each reply, which keeps
@@ -643,6 +650,10 @@ class PocketSession(
                 bootstrap()
                 if (!ready.isCompleted) ready.complete(Unit)
                 _state.update { it.copy(phase = Phase.Live, problem = null) }
+                // bootstrap is what attaches this connection to its session; only after it are pane
+                // calls taken. Panes that came back meanwhile start watching at once.
+                attached.value = true
+                streams.forEach { it.retryNow() }
                 launch { inputLoop(client) }
                 launch { loadSessionViews(_state.value.sessions.map { it.id }, skip = _state.value.activeSessionId) }
                 launch { statusLoop() }
@@ -650,6 +661,7 @@ class PocketSession(
                 throw ConnectionDroppedException(cause?.message ?: "Control connection dropped", cause)
             }
         } finally {
+            attached.value = false
             withContext(NonCancellable) {
                 try {
                     disownQuietly()
@@ -884,6 +896,10 @@ class PocketSession(
                 coroutineScope {
                     // The picture is what the person is waiting for, so its stream is asked for at
                     // once; taking the pane and sizing it run beside it rather than in front of it.
+                    // All three wait for the connection to be attached, though: that is what a
+                    // ticket and a pane call need, and a refusal here costs the stream its whole
+                    // retry cycle - the wait a pane used to sit through after the app came back.
+                    attached.first { it }
                     launch {
                         // A pane is taken on sight, unless the user handed this one back: then it
                         // stays the desktop's until they ask for it again - every time it is shown.
@@ -961,8 +977,13 @@ class PocketSession(
         }
     }
 
-    /** A one-time ticket for a new stream on this pane. */
+    /**
+     * A one-time ticket for a new stream on this pane, once the connection has attached: asked for
+     * before that, Rex refuses it, and the stream then waits out its backoff while the pane stays
+     * empty - the wait a pane used to sit through after the app came back.
+     */
     private suspend fun ticket(sid: String, blockId: String): String {
+        attached.first { it }
         val payload = rpc(
             "data.connect",
             JSONObject()

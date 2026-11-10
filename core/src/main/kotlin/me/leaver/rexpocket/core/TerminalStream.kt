@@ -87,6 +87,9 @@ class TerminalStream(
                 for (frame in socket.frames) {
                     when (frame) {
                         is Frame.Bytes -> {
+                            // A stream that carries bytes is a stream that worked: what failed
+                            // before it must not count against how often this one may start over.
+                            attempt = 0
                             received += frame.bytes.size
                             for (feed in decoder.feed(frame.bytes)) emit(feed)
                         }
