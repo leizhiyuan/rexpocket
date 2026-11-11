@@ -74,6 +74,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     alerts = alerts,
                     onAlerts = model::setAlerts,
                     onFontSettings = { fontSettingsOpen = true },
+                    onDiagnosticsReport = { limit -> model.diagnosticReport(limit) },
                 )
                 Route.Term -> TermScreen(
                     state = pocket,

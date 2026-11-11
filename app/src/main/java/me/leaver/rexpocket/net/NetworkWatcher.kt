@@ -3,6 +3,7 @@ package me.leaver.rexpocket.net
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
+import me.leaver.rexpocket.diagnostics.Diagnostics
 
 /**
  * Calls [onChange] when the phone's default network becomes a different one: Wi-Fi to mobile data,
@@ -18,12 +19,14 @@ class NetworkWatcher(context: Context, private val onChange: () -> Unit) {
         override fun onAvailable(network: Network) {
             val previous = current
             current = network
+            Diagnostics.event(TAG, "network available (was ${previous != null})")
             if (started && previous != network) onChange()
             started = true
         }
 
         override fun onLost(network: Network) {
             if (current == network) current = null
+            Diagnostics.event(TAG, "network lost")
         }
     }
 
@@ -35,5 +38,9 @@ class NetworkWatcher(context: Context, private val onChange: () -> Unit) {
         runCatching { connectivity?.unregisterNetworkCallback(callback) }
         started = false
         current = null
+    }
+
+    private companion object {
+        const val TAG = "RexPocketNet"
     }
 }
