@@ -1098,17 +1098,14 @@ class PocketSession(
     }
 
     /**
-     * Keeps the pane on this phone. The desktop takes a pane back when its own window is focused, and
-     * a pane owned elsewhere keeps the desktop's size: the phone would then stream a screen wider
-     * than itself, with the right-hand side cut off, and its own resize requests would never apply.
-     * So a pane that changed owner is taken again, backing off when the desktop keeps taking it.
+     * Keeps the pane's ownership honest. A pane the phone has not got yet is taken. A pane the phone
+     * had and the desktop then took is left to the desktop: the desktop takes a pane when its own
+     * window is focused, and taking it back made the two trade it every few seconds, each trade a
+     * resize that left the program's prompt half drawn. The phone then shows the desktop's screen,
+     * like a released pane, and Take over asks for it again.
      */
     private suspend fun ownershipLoop(sid: String, blockId: String) {
         var wait = 0L
-        // When the phone last took the pane back. The wait only starts over once the pane has stayed
-        // here a while: resetting it on every retake let the desk and the phone trade the pane every
-        // few seconds, each trade a resize and a redraw over the tunnel.
-        var tookAt = 0L
         while (true) {
             // Nothing to keep while nobody is looking; this asks Rex a question every few seconds.
             active.first { it }
@@ -1122,22 +1119,35 @@ class PocketSession(
                 continue
             }
             val mine = _state.value.clientId
+            val hadIt = _state.value.owning
             val owner = ownerOnServer(sid, blockId)
             if (owner != null && mine != null) {
                 val owning = owner == mine
                 if (_state.value.owning != owning) _state.update { it.copy(owning = owning) }
             }
             if (owner == null || mine == null || owner == mine) {
-                if (System.nanoTime() - tookAt > TAKE_BACK_CALM_MS * 1_000_000) wait = 0L
+                wait = 0L
+            } else if (hadIt) {
+                yieldToDesktop(blockId)
             } else {
                 delay(wait)
                 wait = if (wait == 0L) FIRST_TAKE_BACK_MS else (wait * 2).coerceAtMost(TAKE_BACK_MAX_MS)
-                // The user may have released it during the wait; takePaneLocked checks again under
-                // the lock, which also covers a release that lands while own_block is in flight.
                 if (blockId !in releasedBlocks) runCatching { takePane(sid, blockId) }
-                tookAt = System.nanoTime()
             }
             delay(OWNERSHIP_CHECK_MS)
+        }
+    }
+
+    /** The desktop took [blockId] from this phone: it stays there until the phone asks for it. */
+    private suspend fun yieldToDesktop(blockId: String) {
+        ownership.withLock {
+            releasedBlocks.add(blockId)
+            if (ownedBlock == blockId) {
+                ownedBlock = null
+                ownedSession = null
+            }
+            lastResize = null
+            markReleased()
         }
     }
 
@@ -1263,13 +1273,10 @@ private const val MIN_BACKOFF_MS = 400L
 
 private const val MAX_BACKOFF_MS = 8_000L
 
-/** How long to wait before taking a pane back the first time, and the longest wait after retakes. */
+/** How long to wait before taking a pane the first time, and the longest wait after retries. */
 private const val FIRST_TAKE_BACK_MS = 1_000L
 
 private const val TAKE_BACK_MAX_MS = 30_000L
-
-/** How long the phone has to keep a retaken pane before the next retake is immediate again. */
-private const val TAKE_BACK_CALM_MS = 60_000L
 
 /** Longest wait between the status reader's sweeps; a new pane in a view ends it sooner. */
 private const val STATUS_IDLE_MS = 30_000L

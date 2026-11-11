@@ -80,7 +80,6 @@
     <string name="key_tab">tab</string>
     <string name="key_ctrl_c">C-c</string>
     <string name="key_paste">粘贴</string>
-    <string name="key_copy">复制</string>
     <string name="upload_attach">发送文件</string>
     <string name="upload_preparing">正在准备 %1$s</string>
     <string name="upload_sending">正在发送 %1$s · %2$d%%</string>
@@ -107,7 +106,6 @@
     <string name="state_idle">空闲</string>
 
     <string name="toast_clipboard_empty">剪贴板是空的</string>
-    <string name="toast_select_text">长按屏幕选中文字</string>
     <string name="toast_copied">已复制</string>
     <string name="problem_unreachable">连不上 %1$s。确认 Rex 在运行，手机和它在同一网络。</string>
     <string name="problem_timed_out">%1$s 接受了连接，但没有响应。</string>
@@ -147,7 +145,6 @@
     <plurals name="session_count">
         <item quantity="other">%1$d 个会话</item>
     </plurals>
-    <string name="keys">按键</string>
     <string name="action_enter">回车</string>
     <string name="session_open_to_load">打开以查看标签页</string>
     <string name="no_tabs">没有标签页</string>
@@ -169,10 +166,7 @@
     <string name="filter_off">关</string>
     <string name="action_clear">清除</string>
     <string name="state_selected">已选中</string>
-    <string name="holder_phone">在这台手机上</string>
-    <string name="holder_desk">在桌面端</string>
-    <string name="key_shift">shift</string>
-    <string name="key_alt">alt</string>
+    <string name="holder_phone">本机</string>
     <string name="key_ctrl_chords">Ctrl 快捷键</string>
     <string name="mod_off">关</string>
     <string name="mod_once">对下一个键生效</string>
