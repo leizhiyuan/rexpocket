@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
-import io.github.sagernet.libghostty.GhosttyTheme
+import me.leaver.rexpocket.terminal.TerminalTheme
 
 /**
  * The app's one design system, in the two appearances the phone has: light grouped paper and the
@@ -276,11 +276,9 @@ val labelLeading: TextUnit = 18.sp
  * The terminal's own paper and ink, for the appearance in use: white paper in the day, the page at
  * night. Every palette entry stays the program's; only the defaults a program never sets bend.
  */
-fun terminalTheme(): GhosttyTheme = GhosttyTheme(
+internal fun terminalTheme(): TerminalTheme = TerminalTheme(
     foreground = Colors.ink.toArgb(),
     background = Colors.terminal.toArgb(),
-    cursorColor = Colors.accent.toArgb(),
-    selectionBackground = Colors.line.toArgb(),
-    selectionForeground = Colors.ink.toArgb(),
-    palette = List(256) { null },
+    cursor = Colors.accent.toArgb(),
+    selection = Colors.line.toArgb(),
 )

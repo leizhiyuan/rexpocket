@@ -10,15 +10,11 @@ On Android 10+, a custom font family supplies all four styles with the same ASCI
 
 ## Why offer a separate monospace font?
 
-RexPocket uses libghostty-android 0.1.0-alpha02. Its Compose component defaults to `Typeface.MONOSPACE`; its View measures `M` for the cell width and draws each cell at `column * cellWidth`. A device font substitution that resolves to a proportional face can therefore produce large gaps after narrow glyphs, even though ordinary UI text looks normal.
+RexPocket's terminal view measures `M` in the chosen typeface for the cell width and draws each cell at `column * cellWidth`; the default is `Typeface.MONOSPACE`. A device font substitution that resolves to a proportional face can therefore produce large gaps after narrow glyphs, even though ordinary UI text looks normal.
 
 Issue #3 reports this on a Samsung Galaxy S10 running Android 12. The reporter confirmed that the first test build, with bundled JetBrains Mono, fixed the spacing. The actual runtime system font mapping has not been captured, so the OEM substitution mechanism remains a hypothesis rather than a verified device-wide diagnosis. The downloadable font provides the same independent fixed-width font choice without including its binaries in each APK.
 
-Upstream code:
-
-- [Default typeface](https://github.com/SagerNet/libghostty-android/blob/v0.1.0-alpha02/library-compose/src/main/java/io/github/sagernet/libghostty/compose/GhosttyTerminal.kt#L22)
-- [Cell measurement](https://github.com/SagerNet/libghostty-android/blob/v0.1.0-alpha02/library/src/main/java/io/github/sagernet/libghostty/GhosttyTerminalView.kt#L1941)
-- [Cell drawing](https://github.com/SagerNet/libghostty-android/blob/v0.1.0-alpha02/library/src/main/java/io/github/sagernet/libghostty/GhosttyTerminalView.kt#L910)
+The code: `TerminalView.measureFont` (cell measurement) and `TerminalView.drawText` (cell drawing) in `app/src/main/java/me/leaver/rexpocket/terminal/`.
 
 ## Validation
 

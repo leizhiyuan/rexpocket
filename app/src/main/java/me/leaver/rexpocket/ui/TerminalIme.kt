@@ -10,23 +10,22 @@ import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
-import io.github.sagernet.libghostty.GhosttyTerminalView
+import me.leaver.rexpocket.terminal.TerminalView
 
 /**
  * The pane as the phone keyboard sees it.
  *
- * libghostty's view answers `onCreateInputConnection` with `EditorInfo.inputType = TYPE_NULL`, or -
- * when forced to take characters at all - with a visible-password variation. Gboard reads that as
+ * A terminal view that answers `onCreateInputConnection` with `EditorInfo.inputType = TYPE_NULL`, or -
+ * when forced to take characters at all - with a visible-password variation, is read by Gboard as
  * "no text here": it offers the Latin keyboard only and hides the language key, so a composing
- * keyboard such as Zhuyin, Pinyin, Cangjie or a Japanese one can never be reached. Its view class
- * is final, so the editor cannot be the view itself; this view sits under the pane and holds the
- * keyboard instead. It reports a plain text field, keeps the composing text to itself - only what
- * the IME commits goes to the program - and passes keys on to the pane the way the keyboard does on
- * a desk terminal.
+ * keyboard such as Zhuyin, Pinyin, Cangjie or a Japanese one can never be reached. So the pane does
+ * not hold the keyboard itself: this view sits under it and does. It reports a plain text field,
+ * keeps the composing text to itself - only what the IME commits goes to the program - and passes
+ * keys on to the pane the way the keyboard does on a desk terminal.
  */
 internal class TerminalImeView(context: Context) : View(context) {
     /** The pane what is typed is sent to, once the terminal has one. */
-    var pane: GhosttyTerminalView? = null
+    var pane: TerminalView? = null
 
     /** How long after [showIme] a focus change still counts as the keyboard being wanted. */
     private var requestedUntil = 0L
@@ -77,8 +76,6 @@ internal class TerminalImeView(context: Context) : View(context) {
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean = pane?.onKeyDown(keyCode, event) == true
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = pane?.onKeyUp(keyCode, event) == true
-
-    override fun onKeyPreIme(keyCode: Int, event: KeyEvent): Boolean = pane?.onKeyPreIme(keyCode, event) == true
 
     /**
      * What the keyboard says, turned into what the program reads. The composing text (`ㄨㄛˇ`, `wo3`,
@@ -173,28 +170,13 @@ internal class TerminalImeView(context: Context) : View(context) {
         pane.onKeyUp(keyCode, KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
     }
 
-    /**
-     * Shows the composing text where the pane's cursor is. The view keeps that string private and
-     * offers no setter; this is the accessor its own input connection calls, so the picture is the
-     * one it would draw with its own editor. Null if the library ever drops it, which only costs
-     * the inline preview.
-     */
+    /** Shows the composing text where the pane's cursor is: it is drawn there, and sent nowhere. */
     private fun showComposing(text: String) {
-        val pane = pane ?: return
-        val setter = composingSetter ?: return
-        runCatching { setter.invoke(null, pane, text) }
+        pane?.setComposingText(text)
     }
 
     private companion object {
         /** Enough to cross a focus change, short enough not to raise the keyboard by surprise. */
         const val IME_REQUEST_TIMEOUT_MS = 1_000L
-
-        val composingSetter: java.lang.reflect.Method? = runCatching {
-            GhosttyTerminalView::class.java.getMethod(
-                "access\$updateComposingText",
-                GhosttyTerminalView::class.java,
-                String::class.java,
-            )
-        }.getOrNull()
     }
 }

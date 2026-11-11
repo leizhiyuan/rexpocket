@@ -124,9 +124,8 @@ arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/` 
 
 - [Rex](https://rex.app)，由 [Superlogical](https://superlogical.com) 開發——多工器本身、它的 API
   和工作階段模型。
-- [libghostty-android](https://github.com/SagerNet/libghostty-android)，由
-  [SagerNet](https://github.com/SagerNet) 開發——VT 繫結和終端機檢視。
-- [Ghostty](https://ghostty.org)，由 Mitchell Hashimoto 及貢獻者開發——終端機模擬器。
+- [Ghostty](https://ghostty.org)，由 Mitchell Hashimoto 及貢獻者開發，MIT——終端機模擬器：App 建置的是它
+  官方的 libghostty-vt，授權見 `app/src/main/assets/licenses/Ghostty-MIT.txt`。
 - [Tailscale](https://github.com/tailscale/tailscale)，Tailscale Inc. 及貢獻者，BSD-3-Clause——App 內的
   Tailscale 節點就是它的 tsnet 程式庫。
 - [Material Symbols](https://github.com/google/material-design-icons)（Rounded），Google，Apache

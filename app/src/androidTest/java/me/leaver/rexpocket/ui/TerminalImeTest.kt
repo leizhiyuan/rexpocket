@@ -11,8 +11,8 @@ import android.view.inputmethod.InputConnection
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import io.github.sagernet.libghostty.GhosttyTerminalSession
-import io.github.sagernet.libghostty.GhosttyTerminalView
+import me.leaver.rexpocket.terminal.TerminalSession
+import me.leaver.rexpocket.terminal.TerminalView
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -25,31 +25,29 @@ import org.junit.runner.RunWith
 /**
  * Issue #5: a composing keyboard - Gboard's Zhuyin, or Pinyin, Cangjie, a Japanese one - has to be
  * offered by the pane at all, and what it commits has to reach the program unchanged while what it
- * is still composing stays out of it. The pane here is the real libghostty view with a real session,
+ * is still composing stays out of it. The pane here is the real terminal view with a real libghostty-vt session,
  * and the bytes it sends are what the transport would have carried to Rex.
  */
 @RunWith(AndroidJUnit4::class)
 class TerminalImeTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val sent = StringBuilder()
-    private lateinit var session: GhosttyTerminalSession
-    private lateinit var pane: GhosttyTerminalView
+    private lateinit var session: TerminalSession
+    private lateinit var pane: TerminalView
     private lateinit var keyboard: TerminalImeView
     private var connection: InputConnection? = null
 
     @Before
     fun openPane() = onMain {
-        session = GhosttyTerminalSession(context, GhosttyTerminalSession.Options())
-        session.transport = object : GhosttyTerminalSession.Transport {
+        session = requireNotNull(TerminalSession.create(80, 24)) { "libghostty-vt could not make a terminal" }
+        session.transport = object : TerminalSession.Transport {
             override fun sendInput(data: ByteArray) {
                 sent.append(String(data, Charsets.UTF_8))
             }
 
             override fun sendResize(columns: Int, rows: Int, widthPixels: Int, heightPixels: Int) = Unit
-
-            override fun close() = Unit
         }
-        pane = GhosttyTerminalView(context)
+        pane = TerminalView(context)
         pane.session = session
         keyboard = TerminalImeView(context)
         keyboard.pane = pane
@@ -57,7 +55,7 @@ class TerminalImeTest {
 
     @After
     fun closePane() = onMain {
-        session.transport = null
+        pane.session = null
         session.close()
     }
 
@@ -104,7 +102,7 @@ class TerminalImeTest {
 
     /**
      * What is being composed is drawn in the pane, at its cursor, and taken away again when the
-     * composition ends: the library keeps that string private, and its own editor used to draw it.
+     * composition ends.
      */
     @Test
     fun composingIsDrawnInThePane() {
@@ -188,7 +186,7 @@ class TerminalImeTest {
     private fun exactly(size: Int) = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY)
 
     /** The pane's own picture, at the size the test laid it out at. */
-    private fun GhosttyTerminalView.render(): Bitmap {
+    private fun TerminalView.render(): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         draw(Canvas(bitmap))
         return bitmap

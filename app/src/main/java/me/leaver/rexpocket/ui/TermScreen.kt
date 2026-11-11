@@ -57,7 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import io.github.sagernet.libghostty.GhosttyTerminalSession
+import me.leaver.rexpocket.terminal.TerminalSession
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlin.math.roundToInt
@@ -158,7 +158,7 @@ internal fun TermScreen(
     var keysOpen by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf<Rename?>(null) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
-    var termSession by remember { mutableStateOf<GhosttyTerminalSession?>(null) }
+    var termSession by remember { mutableStateOf<TerminalSession?>(null) }
     // The pane's editor: what the keyboard key raises, and what Back and the session list drop.
     var keyboard by remember { mutableStateOf<TerminalImeView?>(null) }
     val view = state.view

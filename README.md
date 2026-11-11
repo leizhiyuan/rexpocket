@@ -129,14 +129,18 @@ change.
 
 ## Build
 
-Requires JDK 17 and the Android SDK (platform 36).
+Requires JDK 17, the Android SDK (platform 36) with an NDK, and python3 with curl.
 
 ```sh
 ./gradlew :core:test :app:assembleDebug
 ```
 
 The APK lands in `app/build/outputs/apk/debug/`; `:app:assembleRelease` builds one signed with the
-debug key. Builds are arm64-v8a only. `app/libs/tailnet.aar` - the Go module in `tailnet/`, around
+debug key. Builds are arm64-v8a only. The terminal is the official libghostty-vt, built from the
+Ghostty revision pinned in [native/ghostty/source.json](native/ghostty/source.json) by
+[tools/build-ghostty.py](tools/build-ghostty.py), which Gradle runs; the first build downloads Zig
+and the Ghostty source, checked against their pinned checksums. To move to a newer Ghostty, change
+the revision and checksum there. `app/libs/tailnet.aar` - the Go module in `tailnet/`, around
 `tailscale.com` at the version its `go.mod` pins - is checked in; to build it again, run
 [tools/build-tailnet.sh](tools/build-tailnet.sh). The integration
 tests in `core` run against a Rex on `127.0.0.1:7297` (set `REX_TEST_HOST` / `REX_TEST_PORT`) and
@@ -146,9 +150,8 @@ are skipped without one.
 
 - [Rex](https://rex.app), by [Superlogical](https://superlogical.com) - the multiplexer, its API and
   its session model.
-- [libghostty-android](https://github.com/SagerNet/libghostty-android), by
-  [SagerNet](https://github.com/SagerNet) - the VT bindings and terminal view.
-- [Ghostty](https://ghostty.org), by Mitchell Hashimoto and contributors - the terminal emulator.
+- [Ghostty](https://ghostty.org), by Mitchell Hashimoto and contributors, MIT - the terminal
+  emulator: the app builds its official libghostty-vt library, license in `app/src/main/assets/licenses/Ghostty-MIT.txt`.
 - [Tailscale](https://github.com/tailscale/tailscale), by Tailscale Inc. and contributors, BSD-3-Clause -
   the tsnet library the app's Tailscale node is.
 - [Material Symbols](https://github.com/google/material-design-icons) (Rounded), by Google, Apache

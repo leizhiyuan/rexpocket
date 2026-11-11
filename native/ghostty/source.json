@@ -1,0 +1,30 @@
+{
+  "release": "vt-1.0.0",
+  "revision": "0fa3d577a5614150ff8e2c152de5fb9d5c6d2dec",
+  "source_url": "https://codeload.github.com/ghostty-org/ghostty/tar.gz/0fa3d577a5614150ff8e2c152de5fb9d5c6d2dec",
+  "source_sha256": "2f38f10edcc7498a91a4b02baf317f408c9808f637b341c22966b2c7522b95ea",
+  "zig_version": "0.17.0",
+  "zig": {
+    "aarch64-macos": {
+      "tarball": "https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz",
+      "shasum": "b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a",
+      "size": "53985220"
+    },
+    "x86_64-macos": {
+      "tarball": "https://ziglang.org/download/0.17.0/zig-x86_64-macos-0.17.0.tar.xz",
+      "shasum": "4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6",
+      "size": "59317572"
+    },
+    "aarch64-linux": {
+      "tarball": "https://ziglang.org/download/0.17.0/zig-aarch64-linux-0.17.0.tar.xz",
+      "shasum": "9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8",
+      "size": "52877280"
+    },
+    "x86_64-linux": {
+      "tarball": "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz",
+      "shasum": "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026",
+      "size": "57332648"
+    }
+  },
+  "android_api": 28
+}
