@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -155,7 +154,6 @@ internal fun TermScreen(
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     var mods by remember { mutableStateOf(KeyModifiers()) }
     var link by remember { mutableStateOf<String?>(null) }
-    var keysOpen by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf<Rename?>(null) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     var termSession by remember { mutableStateOf<TerminalSession?>(null) }
@@ -224,6 +222,7 @@ internal fun TermScreen(
             status = status,
             onBack = onBack,
             onNavigate = { if (view != null) sheet = Sheet.Navigator },
+            onHolder = { if (state.owning) onAct { releasePane() } else onAct { takeOver() } },
             onMore = { sheet = Sheet.Actions },
         )
         TermBanner(state, onRetry = onRetry, onDismiss = onDismissNotice)
@@ -277,36 +276,18 @@ internal fun TermScreen(
                 onRetry = onRetryUpload,
             )
         }
-        if (keysOpen) {
-            KeyDock(
-                mods = mods,
-                busy = status?.state == "working" || status?.state == "blocked",
-                onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
-                onKey = { key, own -> press(key, own) },
-                onPaste = {
-                    val text = clipboard(context)
-                    if (text.isNullOrEmpty()) toast(context, context.getString(R.string.toast_clipboard_empty)) else onAct { paste(text) }
-                },
-                onCopy = {
-                    val text = termSession?.selectionText().orEmpty()
-                    if (text.isBlank()) {
-                        toast(context, context.getString(R.string.toast_select_text))
-                    } else {
-                        clipboardSet(context, text)
-                        toast(context, context.getString(R.string.toast_copied))
-                    }
-                },
-            )
-        }
-        FloatingDock(
-            keysOpen = keysOpen,
+        KeyBar(
+            mods = mods,
+            busy = status?.state == "working" || status?.state == "blocked",
+            imeUp = imeShown(),
+            onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
+            onKey = { key, own -> press(key, own) },
+            onNewLine = { press(KeyPress("enter", 0), "shift") },
+            onPaste = {
+                val text = clipboard(context)
+                if (text.isNullOrEmpty()) toast(context, context.getString(R.string.toast_clipboard_empty)) else onAct { paste(text) }
+            },
             onKeyboard = { toggleKeyboard() },
-            // Return takes the key row's modifiers too: shift-Return is a new line in an agent's prompt.
-            onEnter = { press(KeyPress("enter", 0)) },
-            onKeys = { keysOpen = !keysOpen },
-            onAttach = { filePicker.launch("*/*") },
-            attachEnabled = upload?.running != true,
-            onNewTab = { onAct { newWindow() } },
         )
     }
 
@@ -319,20 +300,6 @@ internal fun TermScreen(
             onCreate = { onAct { createShell(null) } },
         )
         Sheet.Actions -> ActionSheet(onDismiss = { sheet = null }) {
-            // The control the reference folds into the menu: which device holds this pane. The
-            // detail says who holds it now, so the action never has to be guessed from its name.
-            if (state.phase == Phase.Live) {
-                Group {
-                    SheetItem(
-                        stringResource(if (state.owning) R.string.action_release else R.string.action_take_over),
-                        Colors.accent,
-                        detail = stringResource(if (state.owning) R.string.holder_phone else R.string.holder_desk),
-                        icon = R.drawable.ic_swap,
-                    ) {
-                        if (state.owning) onAct { releasePane() } else onAct { takeOver() }
-                    }
-                }
-            }
             Group(stringResource(R.string.level_pane)) {
                 SheetItem(stringResource(R.string.menu_split_right), icon = R.drawable.ic_split_right) { onAct { split(vertical = false) } }
                 SheetItem(stringResource(R.string.menu_split_below), icon = R.drawable.ic_split_below) { onAct { split(vertical = true) } }
@@ -341,6 +308,11 @@ internal fun TermScreen(
                     SheetItem(stringResource(R.string.menu_close_pane), Colors.danger, icon = R.drawable.ic_close) {
                         confirm = Confirm(Level.Pane, focused.id, focused.label)
                     }
+                }
+            }
+            if (upload?.running != true) {
+                Group {
+                    SheetItem(stringResource(R.string.upload_attach), icon = R.drawable.ic_attach_file) { filePicker.launch("*/*") }
                 }
             }
             Group(stringResource(R.string.level_tab)) {
@@ -533,6 +505,7 @@ private fun SessionTopBar(
     status: ProgramRecord?,
     onBack: () -> Unit,
     onNavigate: () -> Unit,
+    onHolder: () -> Unit,
     onMore: () -> Unit,
 ) {
     val title = when {
@@ -552,13 +525,7 @@ private fun SessionTopBar(
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box {
-                ProgramTile(tab?.focusedBlock()?.id?.let { state.programs[it] }, size = 36.dp)
-                // The dot the reference puts on an app icon: this pane is the desk's right now.
-                if (state.phase == Phase.Live && !state.owning) {
-                    Dot(Colors.accent, 8.dp, Modifier.align(Alignment.TopEnd).offset(4.dp, (-4).dp), ring = Colors.terminal)
-                }
-            }
+            ProgramTile(tab?.focusedBlock()?.id?.let { state.programs[it] }, size = 36.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.Bottom) {
@@ -591,7 +558,37 @@ private fun SessionTopBar(
                 }
             }
         }
+        if (state.phase == Phase.Live) {
+            HolderChip(state.owning, onHolder)
+            Spacer(Modifier.width(4.dp))
+        }
         RoundButton(R.drawable.ic_more, stringResource(R.string.action_more), onMore, plate = Colors.key, size = 40.dp)
+    }
+}
+
+/**
+ * Who holds the pane, and the one tap that changes it. While the desk holds it the chip is the
+ * action colour and says "Take over"; while this phone does it is quiet and says so, and tapping
+ * it hands the pane back. The pane has the holder's size, so this is what decides how it looks.
+ */
+@Composable
+private fun HolderChip(owning: Boolean, onClick: () -> Unit) {
+    val label = stringResource(if (owning) R.string.holder_phone else R.string.action_take_over)
+    val action = stringResource(if (owning) R.string.action_release else R.string.action_take_over)
+    Box(
+        Modifier.height(40.dp).clip(RoundedCornerShape(50))
+            .background(if (owning) Colors.key else Colors.accent)
+            .clickable(role = Role.Button, onClickLabel = action, onClick = onClick)
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (owning) Colors.muted else Colors.onAccent,
+            fontSize = TextStyles.label,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
     }
 }
 
@@ -732,64 +729,10 @@ private fun uploadText(status: UploadStatus): String = when (status.phase) {
  * one floating pill - keyboard, Enter, the special keys, the attach key - and the circle that makes
  * a tab. All of it is 56 dp, the same height as the home's floating controls, on the page margin.
  */
+/** Whether the phone keyboard is up, which decides which way the keyboard key points. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FloatingDock(
-    keysOpen: Boolean,
-    onKeyboard: () -> Unit,
-    onEnter: () -> Unit,
-    onKeys: () -> Unit,
-    onAttach: () -> Unit,
-    attachEnabled: Boolean,
-    onNewTab: () -> Unit,
-) {
-    val imeUp = WindowInsets.isImeVisible
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            Modifier.floating(RoundedCornerShape(50)).padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            RoundButton(
-                if (imeUp) R.drawable.ic_keyboard_hide else R.drawable.ic_keyboard,
-                stringResource(R.string.key_keyboard),
-                onKeyboard,
-                size = 48.dp,
-                iconSize = 24.dp,
-            )
-            RoundButton(R.drawable.ic_return, stringResource(R.string.action_enter), onEnter, size = 48.dp, iconSize = 24.dp)
-            RoundButton(
-                R.drawable.ic_command,
-                stringResource(R.string.keys),
-                onKeys,
-                tint = if (keysOpen) Colors.accent else Colors.ink,
-                plate = if (keysOpen) Colors.keyOn else null,
-                size = 48.dp,
-                iconSize = 24.dp,
-            )
-            RoundButton(
-                R.drawable.ic_attach_file,
-                stringResource(R.string.upload_attach),
-                onAttach,
-                tint = if (attachEnabled) Colors.ink else Colors.muted,
-                size = 48.dp,
-                iconSize = 24.dp,
-                enabled = attachEnabled,
-            )
-        }
-        RoundButton(
-            R.drawable.ic_add,
-            stringResource(R.string.menu_new_tab),
-            onNewTab,
-            modifier = Modifier.floating(),
-            size = 56.dp,
-            iconSize = 24.dp,
-        )
-    }
-}
+private fun imeShown(): Boolean = WindowInsets.isImeVisible
 
 /**
  * A tab's name, as the desktop's sidebar writes it. A tab someone named keeps its name; one left at

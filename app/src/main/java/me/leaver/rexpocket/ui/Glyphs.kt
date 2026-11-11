@@ -4,7 +4,8 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -44,6 +45,7 @@ internal fun Glyph(@DrawableRes id: Int, tint: Color, modifier: Modifier = Modif
  * A round control: a [plate] of [size], the icon in it, and a touch target of at least 48 dp
  * however small the plate is drawn. Without a plate it is the platform's plain icon button.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun RoundButton(
     @DrawableRes icon: Int,
@@ -55,11 +57,12 @@ internal fun RoundButton(
     size: Dp = 40.dp,
     iconSize: Dp = 22.dp,
     enabled: Boolean = true,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Box(
         modifier.minimumInteractiveComponentSize().size(size).clip(CircleShape)
             .then(if (plate != null) Modifier.background(plate) else Modifier)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .combinedClickable(enabled = enabled, role = Role.Button, onLongClick = onLongClick, onClick = onClick)
             .semantics { contentDescription = spoken },
         contentAlignment = Alignment.Center,
     ) {

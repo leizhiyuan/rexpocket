@@ -1,11 +1,18 @@
 package me.leaver.rexpocket.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,8 +22,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,7 +38,6 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
@@ -73,90 +77,106 @@ import kotlin.math.abs
 // The key row under the terminal: the keys a phone keyboard does not have, at the foot of the dock.
 
 /**
- * The keys that steer the program in the pane, in one row where a thumb already rests. The row
- * scrolls when there are more keys than width; the keyboard key waits outside the scroll, so it is
- * always in the same place. This is the same arrangement a desk terminal gives you: the pane keeps
- * the screen, the keys keep the bottom.
+ * The bar under the terminal, one row as on a desk terminal. Every key is the same size: the
+ * first screenful is seven keys and the edge of the next, so a key is as large as the width allows,
+ * and the rest of the row scrolls into view. The keyboard key stays pinned at the end, outside the scroll.
  *
- * The keys are ordered by how often a thumb wants them, so the first screenful - esc, C-c and the
- * arrows - is the one an agent asks for most: back out, interrupt, walk its menu. Return already
- * sits on the dock below, so the row does not repeat it. The arrows repeat while held; holding
- * `ctrl` opens the other control chords. `shift`, `ctrl` and `alt` apply to the next key, from this
- * row or from the phone keyboard; a quick second tap keeps one on.
+ * The first screenful is what an agent asks for most: back out, interrupt, walk its menu, accept.
+ * C-c is a key of its own, red while the program works or waits. Then tab, `ctrl` - held, it opens
+ * the other control chords - paste and a slash for pi's command menu. `ctrl` applies to the next
+ * key, from this row or from the phone keyboard; a quick second tap keeps it on. Return held is
+ * shift-Return: a new line in an agent's prompt.
  */
 @Composable
-internal fun KeyDock(
+internal fun KeyBar(
     mods: KeyModifiers,
     /** True while the program in the pane works or waits: C-c is then the key that stops it. */
     busy: Boolean,
+    imeUp: Boolean,
     onMod: (Mod) -> Unit,
     onKey: (key: KeyPress, own: String) -> Unit,
+    onNewLine: () -> Unit,
     onPaste: () -> Unit,
-    onCopy: () -> Unit,
+    onKeyboard: () -> Unit,
 ) {
+    val haptics = LocalHapticFeedback.current
     val scroll = rememberScrollState()
-    Row(
-        Modifier.fillMaxWidth().padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Bounded, or the fade inside would take the whole screen's height and starve the pane.
-        Box(Modifier.weight(1f).height(KEY_HEIGHT)) {
+    Column(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Colors.edge))
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(scroll).padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Key(stringResource(R.string.key_escape)) { onKey(KeyPress("escape", 0), "") }
-            // Always named for the chord it sends; red says the program would take it as a stop.
-            Key(stringResource(R.string.key_ctrl_c), color = if (busy) Colors.danger else Colors.ink) {
-                onKey(KeyPress("key_c", 'c'.code, text = "c"), "ctrl")
+            BoxWithConstraints(Modifier.weight(1f).height(KEY_HEIGHT)) {
+                // Seven whole keys and a sliver of the eighth, so the row says it goes on.
+                val key = Modifier.width((maxWidth - KEY_GAP * KEYS_WHOLE) / (KEYS_WHOLE + KEY_PEEK))
+                Row(
+                    Modifier.fillMaxSize().horizontalScroll(scroll),
+                    horizontalArrangement = Arrangement.spacedBy(KEY_GAP),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Key(stringResource(R.string.key_escape), key) { onKey(KeyPress("escape", 0), "") }
+                    // Always named for the chord it sends; red says the program would take it as a stop.
+                    Key(stringResource(R.string.key_ctrl_c), key, color = if (busy) Colors.danger else Colors.ink) {
+                        onKey(KeyPress("key_c", 'c'.code, text = "c"), "ctrl")
+                    }
+                    Key(stringResource(R.string.key_left), key, icon = R.drawable.ic_arrow_left, repeat = true) { onKey(KeyPress("arrow_left", 0), "") }
+                    Key(stringResource(R.string.key_up), key, icon = R.drawable.ic_arrow_up, repeat = true) { onKey(KeyPress("arrow_up", 0), "") }
+                    Key(stringResource(R.string.key_down), key, icon = R.drawable.ic_arrow_down, repeat = true) { onKey(KeyPress("arrow_down", 0), "") }
+                    Key(stringResource(R.string.key_right), key, icon = R.drawable.ic_arrow_right, repeat = true) { onKey(KeyPress("arrow_right", 0), "") }
+                    Key(
+                        stringResource(R.string.action_enter),
+                        key,
+                        icon = R.drawable.ic_return,
+                        onLongClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onNewLine()
+                        },
+                    ) { onKey(KeyPress("enter", 0), "") }
+                    Key(stringResource(R.string.key_tab), key, icon = R.drawable.ic_tab_key) { onKey(KeyPress("tab", 0), "") }
+                    CtrlKey(mods[Mod.Ctrl], key, onTap = { onMod(Mod.Ctrl) }) { letter ->
+                        onKey(KeyPress("key_$letter", letter.code, text = letter.toString()), "ctrl")
+                    }
+                    Key(stringResource(R.string.key_paste), key, icon = R.drawable.ic_paste) { onPaste() }
+                    // A slash opens pi's command menu; the arrows then walk it.
+                    Key("/", key) { onKey(KeyPress("slash", '/'.code, text = "/"), "") }
+                }
+                // The row continues under this fade, so a half-hidden key reads as scrollable.
+                if (scroll.canScrollForward) {
+                    Box(
+                        Modifier.align(Alignment.CenterEnd).width(20.dp).fillMaxHeight()
+                            .background(Brush.horizontalGradient(listOf(Colors.clear, Colors.terminal))),
+                    )
+                }
             }
-            Key(stringResource(R.string.key_left), icon = R.drawable.ic_arrow_left, repeat = true) { onKey(KeyPress("arrow_left", 0), "") }
-            Key(stringResource(R.string.key_up), icon = R.drawable.ic_arrow_up, repeat = true) { onKey(KeyPress("arrow_up", 0), "") }
-            Key(stringResource(R.string.key_down), icon = R.drawable.ic_arrow_down, repeat = true) { onKey(KeyPress("arrow_down", 0), "") }
-            Key(stringResource(R.string.key_right), icon = R.drawable.ic_arrow_right, repeat = true) { onKey(KeyPress("arrow_right", 0), "") }
-            Key(stringResource(R.string.key_tab), icon = R.drawable.ic_tab_key) { onKey(KeyPress("tab", 0), "") }
-            ModKey(stringResource(R.string.key_shift), mods[Mod.Shift]) { onMod(Mod.Shift) }
-            CtrlKey(mods[Mod.Ctrl], onTap = { onMod(Mod.Ctrl) }) { letter ->
-                onKey(KeyPress("key_$letter", letter.code, text = letter.toString()), "ctrl")
-            }
-            ModKey(stringResource(R.string.key_alt), mods[Mod.Alt]) { onMod(Mod.Alt) }
-            Key(stringResource(R.string.key_paste), icon = R.drawable.ic_paste) { onPaste() }
-            // A slash opens pi's command menu; the arrows then walk it.
-            Key("/") { onKey(KeyPress("slash", '/'.code, text = "/"), "") }
-            Key(stringResource(R.string.key_copy), icon = R.drawable.ic_copy) { onCopy() }
-        }
-            // The row continues under this fade, so a half-visible key reads as scrollable.
-            if (scroll.canScrollForward) {
-                Box(
-                    Modifier.align(Alignment.CenterEnd).width(24.dp).fillMaxHeight()
-                        .background(Brush.horizontalGradient(listOf(Colors.clear, Colors.terminal))),
-                )
-            }
+            Spacer(Modifier.width(8.dp))
+            Key(
+                stringResource(R.string.key_keyboard),
+                Modifier.width(KEYBOARD_KEY_WIDTH),
+                plate = Colors.keyOn,
+                icon = if (imeUp) R.drawable.ic_keyboard_hide else R.drawable.ic_keyboard,
+            ) { onKeyboard() }
         }
     }
 }
 
 /**
- * The control chords a shell and an agent use, behind a held `ctrl`: interrupt, end of input,
- * suspend, history search, clear, line start and end, delete a word, and a newline.
+ * The control chords a shell and an agent use, behind a held `ctrl`: end of input, suspend, history
+ * search, clear, line start and end, delete a word, delete to the line start, and a newline.
+ * Interrupt is not here: C-c has a key of its own in the row.
  */
-internal val CTRL_CHORDS = listOf('c', 'd', 'z', 'r', 'l', 'a', 'e', 'w', 'j')
+internal val CTRL_CHORDS = listOf('d', 'z', 'r', 'l', 'a', 'e', 'w', 'u', 'j')
 
 private val KEY_HEIGHT = 44.dp
+private val KEY_GAP = 5.dp
+private val KEY_PAD = 2.dp
+private val KEYBOARD_KEY_WIDTH = 52.dp
 
-/** A modifier key: lit while it is on for the next key, filled while it stays on. */
-@Composable
-private fun ModKey(label: String, latch: Latch, onTap: () -> Unit) {
-    val state = modState(latch)
-    Key(
-        label,
-        color = modInk(latch),
-        plate = modPlate(latch),
-        modifier = Modifier.semantics { stateDescription = state },
-        onClick = onTap,
-    )
-}
+/** How many whole keys the first screenful of the row holds; the rest scroll in after them. */
+private const val KEYS_WHOLE = 7
+
+/** How much of the next key shows at the edge, as a fraction of a key. */
+private const val KEY_PEEK = 0.35f
 
 @Composable
 private fun modState(latch: Latch): String = stringResource(
@@ -184,7 +204,7 @@ private fun modPlate(latch: Latch): Color = when (latch) {
  * control chords; sliding onto one and lifting sends it, lifting anywhere else sends nothing.
  */
 @Composable
-private fun CtrlKey(latch: Latch, onTap: () -> Unit, onChord: (Char) -> Unit) {
+private fun CtrlKey(latch: Latch, modifier: Modifier, onTap: () -> Unit, onChord: (Char) -> Unit) {
     var open by remember { mutableStateOf(false) }
     var pressed by remember { mutableStateOf(false) }
     var highlighted by remember { mutableIntStateOf(-1) }
@@ -240,7 +260,7 @@ private fun CtrlKey(latch: Latch, onTap: () -> Unit, onChord: (Char) -> Unit) {
     }
 
     Box(
-        Modifier.height(KEY_HEIGHT).widthIn(min = 48.dp)
+        modifier.height(KEY_HEIGHT)
             .onGloballyPositioned { anchor = it.boundsInWindow() }
             .clip(RoundedCornerShape(Radius.chip))
             .background(if (pressed || open) Colors.keyOn else modPlate(latch))
@@ -302,7 +322,7 @@ private fun CtrlKey(latch: Latch, onTap: () -> Unit, onChord: (Char) -> Unit) {
                     }
                 }
             }
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = KEY_PAD),
         contentAlignment = Alignment.Center,
     ) {
         KeyText(label, modInk(latch))
@@ -400,15 +420,16 @@ private const val REPEAT_MS = 65L
  * paste - shows the mark and speaks its [label]; a chord such as C-c is written out in monospace,
  * since that is how a terminal user reads it. A [repeat] key sends again while it is held.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun Key(
     label: String,
     modifier: Modifier = Modifier,
     color: Color = Colors.ink,
     plate: Color = Colors.key,
-    width: Dp = 48.dp,
     icon: Int? = null,
     repeat: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     var pressed by remember { mutableStateOf(false) }
@@ -418,14 +439,14 @@ internal fun Key(
             .semantics { role = Role.Button; onClick { send(); true } }
             .repeating(send) { pressed = it }
     } else {
-        Modifier.clickable(role = Role.Button, onClick = onClick)
+        Modifier.combinedClickable(role = Role.Button, onLongClick = onLongClick, onClick = onClick)
     }
     Box(
-        modifier.height(KEY_HEIGHT).widthIn(min = width).clip(RoundedCornerShape(Radius.chip))
+        modifier.height(KEY_HEIGHT).clip(RoundedCornerShape(Radius.chip))
             .background(if (pressed) Colors.keyOn else plate)
             .then(press)
             .then(if (icon != null) Modifier.semantics { contentDescription = label } else Modifier)
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = KEY_PAD),
         contentAlignment = Alignment.Center,
     ) {
         if (icon != null) Glyph(icon, color, size = 20.dp) else KeyText(label, color)
@@ -437,7 +458,7 @@ private fun KeyText(label: String, color: Color) {
     Text(
         label,
         color = color,
-        fontSize = TextStyles.subhead,
+        fontSize = TextStyles.label,
         fontFamily = FontFamily.Monospace,
         fontWeight = FontWeight.Medium,
         maxLines = 1,

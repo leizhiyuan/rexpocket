@@ -81,7 +81,6 @@
     <string name="key_tab">tab</string>
     <string name="key_ctrl_c">C-c</string>
     <string name="key_paste">Paste</string>
-    <string name="key_copy">Copy</string>
     <string name="upload_attach">Send a file</string>
     <string name="upload_preparing">Preparing %1$s</string>
     <string name="upload_sending">Sending %1$s · %2$d%%</string>
@@ -108,7 +107,6 @@
     <string name="state_idle">idle</string>
 
     <string name="toast_clipboard_empty">Clipboard is empty</string>
-    <string name="toast_select_text">Long-press the screen to select text</string>
     <string name="toast_copied">Copied</string>
     <string name="problem_unreachable">Cannot reach %1$s. Check that Rex is running and the phone is on its network.</string>
     <string name="problem_timed_out">%1$s took the connection but did not answer.</string>
@@ -149,7 +147,6 @@
         <item quantity="one">%1$d session</item>
         <item quantity="other">%1$d sessions</item>
     </plurals>
-    <string name="keys">Keys</string>
     <string name="action_enter">Enter</string>
     <string name="session_open_to_load">Open to see tabs</string>
     <string name="no_tabs">No tabs</string>
@@ -172,10 +169,7 @@
     <string name="filter_off">Off</string>
     <string name="action_clear">Clear</string>
     <string name="state_selected">Selected</string>
-    <string name="holder_phone">On this phone</string>
-    <string name="holder_desk">On the desktop</string>
-    <string name="key_shift">shift</string>
-    <string name="key_alt">alt</string>
+    <string name="holder_phone">This phone</string>
     <string name="key_ctrl_chords">Control shortcuts</string>
     <string name="mod_off">Off</string>
     <string name="mod_once">On for the next key</string>

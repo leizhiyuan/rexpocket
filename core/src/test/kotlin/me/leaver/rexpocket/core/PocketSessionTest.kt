@@ -231,12 +231,12 @@ class PocketSessionTest {
     }
 
     /**
-     * The desktop takes a pane back when its window is focused. A pane owned elsewhere keeps the
-     * desktop's size, so the phone streams a screen wider than itself with its right side cut off;
-     * the phone has to take it back and ask for its own size again.
+     * The desktop takes a pane when its window is focused. The phone must not take it back: the two
+     * trading it every few seconds resized the program each time and left its prompt half drawn. The
+     * pane stays with the desktop and is reported released, until the phone takes it over.
      */
     @Test
-    fun aPaneTakenByAnotherClientIsTakenBack() {
+    fun aPaneTakenByTheDesktopStaysWithIt() {
         val endpoint = testEndpoint()
         assumeTrue(
             "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
@@ -271,13 +271,17 @@ class PocketSessionTest {
                             .put("block_ids", JSONArray().put(blockId))
                             .put("mode", "take"),
                     )
+                    val desk = desktop.welcome!!.clientId
+                    withTimeout(10_000) { while (!session.state.value.released) delay(100) }
+                    assertTrue("the pane is still reported as this phone's", !session.state.value.owning)
+                    // Several of the phone's ownership checks later, the desktop still holds it.
+                    delay(7_000)
                     // Ask Rex, not the session's cached view: the view can lag behind an owner change.
-                    val back = withTimeoutOrNull(20_000) {
-                        while (ownerOnServer(endpoint, sessionId!!, blockId) != mine) delay(100)
-                        true
-                    } ?: false
-                    val last = ownerOnServer(endpoint, sessionId!!, blockId)
-                    assertTrue("the pane stayed with $last", back)
+                    assertEquals("the phone took the pane back", desk, ownerOnServer(endpoint, sessionId!!, blockId))
+                    // Taking over is the phone's own request, and it works.
+                    session.takeOver()
+                    assertEquals(mine, ownerOnServer(endpoint, sessionId!!, blockId))
+                    assertTrue("the pane is not reported as this phone's", session.state.value.owning)
                 } finally {
                     watcher.cancel()
                     desktop.close()
