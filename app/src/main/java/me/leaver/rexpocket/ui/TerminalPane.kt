@@ -1,6 +1,5 @@
 package me.leaver.rexpocket.ui
 
-import android.util.Log
 import android.os.Handler
 import android.os.SystemClock
 import android.os.Looper
@@ -28,9 +27,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
-import me.leaver.rexpocket.BuildConfig
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.TerminalFeed
+import me.leaver.rexpocket.diagnostics.Diagnostics
 import io.github.sagernet.libghostty.GhosttyTerminalSession
 import io.github.sagernet.libghostty.GhosttyUiHandler
 import android.content.Context
@@ -94,20 +93,18 @@ internal fun TerminalPane(
         // How long a picture takes to arrive is the number that says whether the tunnel under it is
         // good enough, so it is logged with the snapshot's size.
         val askedAt = SystemClock.elapsedRealtime()
+        val stream = StreamMeter(blockId)
         // The stream reports its own failures; anything that still escapes must not take the app down.
         try {
             feeds(blockId).collect { feed ->
                 when (feed) {
                     is TerminalFeed.Snapshot -> {
-                        if (BuildConfig.DEBUG) {
-                            val waited = SystemClock.elapsedRealtime() - askedAt
-                            Log.i(CONN_TAG, "pane $blockId: ${feed.bytes.size} bytes after ${waited}ms")
-                        }
+                        Diagnostics.event(CONN_TAG, "pane $blockId: ${feed.bytes.size} bytes after ${SystemClock.elapsedRealtime() - askedAt}ms")
                         val restored = withContext(Dispatchers.Default) {
                             GhosttyTerminalSession.restore(context, feed.bytes)
                         }
                         if (restored == null) {
-                            if (BuildConfig.DEBUG) Log.w(CONN_TAG, "pane $blockId: the snapshot did not restore")
+                            Diagnostics.event(CONN_TAG, "pane $blockId: the snapshot did not restore")
                             return@collect
                         }
                         bind(restored, input, currentTyped, currentResize)
@@ -120,6 +117,7 @@ internal fun TerminalPane(
                     is TerminalFeed.Output -> {
                         // One reader, in order: a second coroutine would interleave the bytes.
                         withContext(Dispatchers.Default) { session?.feedOutput(feed.bytes) }
+                        stream.add(feed.bytes.size)
                     }
                 }
             }
@@ -231,6 +229,7 @@ private fun bind(
         }
 
         override fun sendResize(columns: Int, rows: Int, widthPixels: Int, heightPixels: Int) {
+            Diagnostics.event(CONN_TAG, "resize to ${columns}x$rows")
             resize.value(columns, rows, widthPixels, heightPixels)
         }
 
@@ -275,6 +274,33 @@ private fun WaitingForPane(blockId: String, onRetry: () -> Unit, modifier: Modif
  * enough not to call a slow picture a missing one.
  */
 private const val PANE_WAIT_MS = 12_000L
+
+/**
+ * One line a second about what a pane's stream carried, not one per chunk: a busy program sends
+ * dozens a second, and the shape - bursts, and the gaps between them - is what a report about a
+ * stalled or slow pane needs.
+ */
+private class StreamMeter(private val blockId: String) {
+    private var windowStart = 0L
+    private var chunks = 0
+    private var bytes = 0L
+
+    fun add(size: Int) {
+        val now = SystemClock.elapsedRealtime()
+        if (windowStart == 0L) windowStart = now
+        chunks++
+        bytes += size
+        if (now - windowStart < WINDOW_MS) return
+        Diagnostics.event(CONN_TAG, "pane $blockId: $chunks chunks, ${bytes / 1024} KB in ${now - windowStart}ms")
+        windowStart = now
+        chunks = 0
+        bytes = 0
+    }
+
+    private companion object {
+        const val WINDOW_MS = 1_000L
+    }
+}
 
 /**
  * Coalesces terminal input produced in quick succession (wheel reports from a swipe, fast

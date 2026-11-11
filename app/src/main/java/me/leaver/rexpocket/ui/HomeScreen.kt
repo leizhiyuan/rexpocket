@@ -82,6 +82,7 @@ import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.SavedHost
 import me.leaver.rexpocket.data.TailscaleSettings
+import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.net.TailscaleStatus
 
 // The hosts, each with its sessions under it and their tabs under those: one list to search, one
@@ -142,6 +143,8 @@ internal fun HomeScreen(
     alerts: Boolean,
     onAlerts: (Boolean) -> Unit,
     onFontSettings: () -> Unit,
+    /** Builds the diagnostics report when the person asks for one, kept to [limit] characters. */
+    onDiagnosticsReport: (limit: Int) -> String,
 ) {
     val context = LocalContext.current
     // Android 13 asks for notifications at run time; alerts come on once the person allows them.
@@ -162,6 +165,8 @@ internal fun HomeScreen(
     var editing by remember { mutableStateOf<SavedHost?>(null) }
     var creating by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
+    var diagnostics by remember { mutableStateOf(false) }
+    var recording by remember { mutableStateOf(Diagnostics.capture(context) != null) }
     var menuHost by remember { mutableStateOf<SavedHost?>(null) }
     var searchOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -368,6 +373,19 @@ internal fun HomeScreen(
             alerts = alerts,
             onAlerts = toggleAlerts,
             onFontSettings = onFontSettings,
+            recording = recording,
+            onDiagnostics = {
+                settings = false
+                diagnostics = true
+            },
+        )
+    }
+
+    if (diagnostics) {
+        DiagnosticsSheet(
+            onDismiss = { diagnostics = false },
+            report = onDiagnosticsReport,
+            onRecordingChanged = { recording = it },
         )
     }
 }
@@ -710,6 +728,8 @@ private fun SettingsSheet(
     alerts: Boolean,
     onAlerts: () -> Unit,
     onFontSettings: () -> Unit,
+    recording: Boolean,
+    onDiagnostics: () -> Unit,
 ) {
     val context = LocalContext.current
     val joined = tailscale.enabled && tailscaleStatus.backendState == "Running"
@@ -736,6 +756,12 @@ private fun SettingsSheet(
             )
             SheetItem(stringResource(R.string.action_add_host), icon = R.drawable.ic_add, onClick = onAddHost)
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
+            SheetItem(
+                label = stringResource(R.string.diagnostics),
+                detail = stringResource(if (recording) R.string.diagnostics_state_on else R.string.diagnostics_state_off),
+                icon = R.drawable.ic_attach_file,
+                onClick = onDiagnostics,
+            )
             SheetItem(stringResource(R.string.settings_source), icon = R.drawable.ic_open_in_new) { openLink(context, SOURCE_URL) }
         }
         Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {

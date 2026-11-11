@@ -37,6 +37,8 @@ import me.leaver.rexpocket.data.TerminalFontState
 import me.leaver.rexpocket.data.downloadedTypeface
 import me.leaver.rexpocket.data.SavedHost
 import me.leaver.rexpocket.data.TailscaleSettings
+import me.leaver.rexpocket.core.ReportedFact
+import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.net.NetworkWatcher
 import me.leaver.rexpocket.net.TailscaleBox
 import me.leaver.rexpocket.net.TailscaleConfig
@@ -99,7 +101,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         pathJob = viewModelScope.launch {
             val path = withContext(Dispatchers.IO) { tailscaleBox.probePath(target.host) }
             _tailnetPath.value = path
-            if (BuildConfig.DEBUG) Log.i(CONN_TAG, "tailnet path to ${target.host}: $path")
+            Diagnostics.event(CONN_TAG, "tailnet path to ${target.host}: $path")
         }
     }
     val route = MutableStateFlow<Route>(Route.Home)
@@ -190,10 +192,26 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         // The watch notification's Stop turns alerts off from outside the app; the setting follows.
         viewModelScope.launch {
             Alerts.enabled.collect { on ->
+                Diagnostics.event(CONN_TAG, "alerts ${if (on) "on" else "off"}")
                 store.setAlerts(on)
                 session?.setWatching(on)
                 if (!on) Alerts.unwatch(app)
             }
+        }
+        // The report a bug report needs follows the connection: which phase it reached, and why it
+        // stopped. Recorded here rather than at each call, so no path can forget to say so.
+        viewModelScope.launch {
+            pocket.map { it.phase to it.problem }.distinctUntilChanged().collect { (phase, problem) ->
+                Diagnostics.event(CONN_TAG, "phase $phase" + (problem?.let { " · ${it.describe()}" } ?: ""))
+            }
+            // An action that failed while the connection was fine: the pane could not be renamed, a
+            // file did not go - the sort of thing that is invisible in a report otherwise.
+            pocket.mapNotNull { it.notice }.distinctUntilChanged().collect { notice ->
+                Diagnostics.event(CONN_TAG, "action failed: ${notice.problem.describe()}")
+            }
+            upload.map { it?.let { file -> "${file.phase} ${file.sent}/${file.total}" } }
+                .distinctUntilChanged()
+                .collect { state -> Diagnostics.event(CONN_TAG, "upload ${state ?: "done"}") }
         }
     }
 
@@ -222,6 +240,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
      * at the Tailscale row; a node that is already logged in just comes back up.
      */
     fun joinTailnet(hostname: String) {
+        Diagnostics.event(CONN_TAG, "joining the tailnet as ${hostname.trim().ifBlank { "default" }}")
         store.setTailscale(TailscaleSettings(enabled = true, hostname = hostname.trim()))
         val next = store.tailscale()
         val changed = next != tailscale.value
@@ -244,6 +263,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Leaves the tailnet: the node stops and its login stays in the app for the next join. */
     fun leaveTailnet() {
+        Diagnostics.event(CONN_TAG, "leaving the tailnet")
         // The name is kept: rejoining later should not ask for it again.
         store.setTailscale(TailscaleSettings(enabled = false, hostname = tailscale.value.hostname))
         tailscale.value = store.tailscale()
@@ -274,6 +294,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         val settings = store.tailscale()
         if (target.viaTailscale && !settings.enabled) {
             // The host is saved either way; without a joined node there is no route to it.
+            Diagnostics.event(CONN_TAG, "${target.label}: the tailnet is not joined")
             _pocket.value = PocketState(
                 phase = Phase.Failed,
                 endpointLabel = "${target.host}:${target.port}",
@@ -282,9 +303,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val viaTailscale = target.viaTailscale
-        if (BuildConfig.DEBUG) {
-            Log.i(CONN_TAG, "connect ${target.host}:${target.port} tailnet=$viaTailscale plaintext=${target.plaintext}")
-        }
+        Diagnostics.event(CONN_TAG, "connect ${target.host}:${target.port} tailnet=$viaTailscale plaintext=${target.plaintext} resume=$resume")
         // Draw the list the host had last time straight away; the live one replaces it below.
         val cached = if (resume) emptyList() else store.cachedSessions(target.id)
         _pocket.value = PocketState(
@@ -325,7 +344,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                 // netmap lists that peer fails in the node's DNS: that was the SOCKS error the first
                 // open showed for a moment. Waiting for the peer costs nothing once it is known.
                 if (settled?.backendState == "Running" && !tailscaleBox.awaitPeer(target.host, PEER_READY_MS)) {
-                    if (BuildConfig.DEBUG) Log.i(CONN_TAG, "${target.host} is not in the netmap yet; dialing anyway")
+                    Diagnostics.event(CONN_TAG, "${target.host} is not in the netmap yet; dialing anyway")
                 }
                 port
             } else {
@@ -560,6 +579,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     fun watchPane(blockId: String): Flow<TerminalFeed> = session?.watchPane(blockId) ?: emptyFlow()
 
     fun retryNow() {
+        Diagnostics.event(CONN_TAG, "retry asked for")
         session?.retryNow()
     }
 
@@ -579,7 +599,87 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         session?.setActive(visible)
     }
 
+    /**
+     * The report the diagnostics sheet hands out: the phone, the hosts it knows, what the
+     * connection was doing, and the log of how it got there. The addresses and the names the person
+     * gave their hosts are replaced on the way out, and tab titles and terminal contents never
+     * enter it at all.
+     */
+    fun diagnosticReport(limit: Int = Int.MAX_VALUE): String {
+        val state = pocket.value
+        val open = host
+        val facts = buildList {
+            add(
+                ReportedFact(
+                    "connection",
+                    buildString {
+                        append(if (open == null) "idle" else if (open.viaTailscale) "tailnet" else "local")
+                        append(" · ").append(state.phase)
+                        if (state.resumed) append(" · resumed")
+                        if (state.owning) append(" · owns the pane")
+                    },
+                ),
+            )
+            add(ReportedFact("route", route.value.toString().lowercase()))
+            state.problem?.let { add(ReportedFact("problem", it.describe())) }
+            state.notice?.let { add(ReportedFact("notice", it.problem.describe())) }
+            add(ReportedFact("sessions", "${state.sessions.size} listed · ${state.views.size} open"))
+            state.view?.let { session ->
+                val tab = session.activeWindow()
+                add(ReportedFact("tabs", "${session.windows.size} in the session · ${tab?.blocks?.size ?: 0} panes in the shown one"))
+            }
+            state.programs.values.toSortedSet().takeIf { it.isNotEmpty() }?.let {
+                add(ReportedFact("programs", it.joinToString(", ")))
+            }
+            for (known in hosts.value) {
+                add(
+                    ReportedFact(
+                        "host",
+                        buildString {
+                            append(known.label).append(" · ").append(known.host).append(':').append(known.port)
+                            append(if (known.plaintext) " · plaintext" else " · tls")
+                            append(if (known.viaTailscale) " · tailnet" else " · local")
+                            append(if (known.id == open?.id) " · connected" else "")
+                        },
+                    ),
+                )
+            }
+            val node = tailscale.value
+            add(
+                ReportedFact(
+                    "tailnet",
+                    when {
+                        !node.enabled -> "off"
+                        tailnetError.value != null -> "failed · ${tailnetError.value}"
+                        else -> "${tailscaleStatus.value.backendState.ifBlank { "starting" }} · node ${node.hostname.ifBlank { "default" }}"
+                    },
+                ),
+            )
+            tailnetPath.value?.let { add(ReportedFact("tailnet path", it.toString())) }
+            add(ReportedFact("alerts", if (alerts.value) "on" else "off"))
+            add(ReportedFact("foreground", if (foreground) "yes" else "no"))
+            add(ReportedFact("font", "${(fontScale.value * 100).toInt()}%"))
+            upload.value?.let { file ->
+                add(ReportedFact("upload", "${file.phase} ${file.sent}/${file.total}${file.error?.let { " · $it" }.orEmpty()}"))
+            }
+        }
+        // What identifies the phone's networks, and nothing about the bug.
+        val secrets = buildList {
+            for (known in hosts.value) {
+                add(known.label)
+                add(known.host)
+            }
+            open?.let {
+                add(it.label)
+                add(it.host)
+            }
+            add(tailscale.value.hostname)
+        }
+        return Diagnostics.report(getApplication(), facts, secrets, limit)
+    }
+
     fun disconnect() {
+        Diagnostics.event(CONN_TAG, "disconnect")
         disconnectQuiet()
         Alerts.unwatch(getApplication())
         store.setLastHost(null)
@@ -747,6 +847,9 @@ internal const val NODE_READY_MS = 30_000L
 
 /** How long a running node may take to list the host as a peer before it is dialed anyway. */
 private const val PEER_READY_MS = 10_000L
+
+/** What a failure says in the report: its kind, then whatever the exception carried. */
+private fun Problem.describe(): String = trouble.toString() + (detail?.let { ": $it" } ?: "")
 
 /** Connection diagnostics: `adb logcat -s RexPocketConn`. */
 internal const val CONN_TAG = "RexPocketConn"

@@ -11,6 +11,7 @@ import android.util.Log
 import android.system.OsConstants
 import me.leaver.rexpocket.BuildConfig
 import me.leaver.rexpocket.core.peerFor
+import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.core.TailnetPath
 import io.nekohasekai.libbox.BridgeOptions
 import io.nekohasekai.libbox.BridgeSession
@@ -114,19 +115,19 @@ class TailscaleBox(private val context: Context) {
         // way, for good. It holds caches only - the tailnet login is in tailscale/tailscaled.state -
         // so dropping it and trying once more is safe, and beats a node that never comes back.
         if (!e.message.orEmpty().contains("cache-file") || !deleteCacheFile()) throw e
-        Log.w(LOG_TAG, "dropped a locked cache file, starting the node again")
+        Diagnostics.event(LOG_TAG, "dropped a locked cache file, starting the node again")
         startService(config)
     }
 
     private fun startService(config: TailscaleConfig): Int {
         running?.let {
             if (it == config && server != null) {
-                Log.i(LOG_TAG, "reusing the node on port $port (hostname=${config.hostname.ifBlank { "default" }})")
+                Diagnostics.event(LOG_TAG, "reusing the node on port $port (hostname=${config.hostname.ifBlank { "default" }})")
                 return port
             }
-            Log.i(LOG_TAG, "restarting the node: config changed (hostname=${config.hostname.ifBlank { "default" }})")
+            Diagnostics.event(LOG_TAG, "restarting the node: config changed (hostname=${config.hostname.ifBlank { "default" }})")
         }
-        Log.i(LOG_TAG, "starting the node (hostname=${config.hostname.ifBlank { "default" }})")
+        Diagnostics.event(LOG_TAG, "starting the node (hostname=${config.hostname.ifBlank { "default" }})")
         stopLocked()
         setupLibbox()
         val listenPort = try {
@@ -183,7 +184,7 @@ class TailscaleBox(private val context: Context) {
                             networkName = endpoint.networkName.orEmpty(),
                         )
                         if (next != _status.value) {
-                            Log.i(LOG_TAG, "node state ${next.backendState} ${next.text}".trim())
+                            Diagnostics.event(LOG_TAG, "node state ${next.backendState} ${next.text}".trim())
                         }
                         _status.value = next
                         return
@@ -283,13 +284,13 @@ class TailscaleBox(private val context: Context) {
      */
     fun resetNetwork() {
         val current = server ?: return
-        runCatching { current.resetNetwork() }.onFailure { Log.w(LOG_TAG, "network reset failed: ${it.message}") }
+        runCatching { current.resetNetwork() }.onFailure { Diagnostics.event(LOG_TAG, "network reset failed: ${it.message}") }
     }
 
     @Synchronized
     fun stop() {
-        if (server != null) Log.i(LOG_TAG, "stopping the node on port $port")
-        runCatching { stopLocked() }.onFailure { Log.w(LOG_TAG, "stop failed: ${it.message}") }
+        if (server != null) Diagnostics.event(LOG_TAG, "stopping the node on port $port")
+        runCatching { stopLocked() }.onFailure { Diagnostics.event(LOG_TAG, "stop failed: ${it.message}") }
     }
 
     /**
@@ -298,7 +299,7 @@ class TailscaleBox(private val context: Context) {
      */
     fun stopAsync() {
         Thread({
-            runCatching { stop() }.onFailure { Log.w(LOG_TAG, "stop failed: ${it.message}") }
+            runCatching { stop() }.onFailure { Diagnostics.event(LOG_TAG, "stop failed: ${it.message}") }
         }, "tailscale-stop").start()
     }
 
