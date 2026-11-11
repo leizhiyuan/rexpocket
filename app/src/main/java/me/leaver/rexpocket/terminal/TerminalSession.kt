@@ -137,6 +137,16 @@ internal class TerminalSession private constructor(private var handle: Long) {
     fun encodeClick(column: Int, row: Int, cellWidthPx: Int, cellHeightPx: Int): ByteArray =
         withHandle { GhosttyVt.nativeClick(it, column, row, cellWidthPx, cellHeightPx) } ?: EMPTY
 
+    /** The pixels of a stored Kitty image, or null when there is none or they have not all arrived. */
+    fun imagePixels(imageId: Int): ImagePixels? {
+        val words = withHandle { GhosttyVt.nativeImage(it, imageId) } ?: return null
+        if (words.size < 2) return null
+        val width = words[0]
+        val height = words[1]
+        if (width <= 0 || height <= 0 || words.size != 2 + width * height) return null
+        return ImagePixels(width, height, words.copyOfRange(2, words.size))
+    }
+
     /** The link a program attached to a cell with OSC 8, if any. */
     fun hyperlinkAt(column: Int, row: Int): String? =
         withHandle { GhosttyVt.nativeHyperlinkAt(it, column, row) }?.toString(Charsets.UTF_8)

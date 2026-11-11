@@ -8,12 +8,25 @@
 typedef void (*ApcFn)(void *, const uint8_t *, size_t);
 typedef void (*CellFn)(void *, uint16_t, uint16_t, const uint32_t *, size_t,
                        const uint8_t *, const uint8_t *, uint32_t, uint8_t, const uint8_t *, size_t);
+// One Kitty graphics placement on screen, as the render state works it out. Positions are cells of
+// the viewport (they can be negative for an image partly scrolled out); sizes and offsets are in the
+// terminal's own pixels, which are cell_width_px by cell_height_px a cell.
+typedef struct {
+  uint32_t image_id;
+  uint64_t generation;
+  int32_t layer, z, column, row;
+  uint32_t offset_x, offset_y, width, height;
+  uint32_t source_x, source_y, source_width, source_height;
+} RpImage;
+typedef void (*ImageFn)(void *, const RpImage *);
+
 typedef struct {
   uint16_t columns, rows, cursor_x, cursor_y;
   uint8_t cursor_visible, foreground[3], background[3];
   uint64_t scroll_total, scroll_offset, scroll_visible;
   uint8_t input_flags;
   uint8_t cursor_style;  // GhosttyRenderStateCursorVisualStyle
+  uint32_t cell_width_px, cell_height_px;  // the cell size images are measured in; 0 before one is set
 } RpFrame;
 typedef struct RpTerminal RpTerminal;
 
@@ -43,7 +56,12 @@ int rp_color(RpTerminal *t, int which, const uint8_t *rgb);
 void rp_scroll(RpTerminal *t, int32_t lines, int bottom);
 int rp_wheel(RpTerminal *t, int down, int col, int row, uint32_t cw, uint32_t ch, uint8_t *out, size_t capacity, size_t *len);
 int rp_click(RpTerminal *t, int col, int row, uint32_t cw, uint32_t ch, uint8_t *out, size_t capacity, size_t *len);
-int rp_frame(RpTerminal *t, RpFrame *frame, CellFn callback, void *userdata);
+int rp_frame(RpTerminal *t, RpFrame *frame, CellFn callback, ImageFn images, void *userdata);
+
+// The decoded pixels of a stored Kitty image, borrowed until the terminal next changes.
+// GHOSTTY_NO_VALUE when there is no such image or its pixels have not all arrived.
+int rp_image_pixels(RpTerminal *t, uint32_t image_id, uint32_t *width, uint32_t *height,
+                    GhosttyKittyImageFormat *format, const uint8_t **pixels, size_t *len);
 
 // The link under a viewport cell; *len is 0 when there is none, or the size needed on OUT_OF_SPACE.
 int rp_hyperlink(RpTerminal *t, int col, int row, uint8_t *out, size_t capacity, size_t *len);

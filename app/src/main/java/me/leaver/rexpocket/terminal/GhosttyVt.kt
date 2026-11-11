@@ -37,6 +37,38 @@ internal object GhosttyVt {
     /** What the program reads for an Android key, in its current modes; null if the key is not one it encodes. */
     @JvmStatic external fun nativeKey(handle: Long, keyCode: Int, repeat: Boolean, metaState: Int, text: String?): ByteArray?
 
+    /**
+     * A stored Kitty image as `[width, height, ARGB...]`, or null when there is no such image or its
+     * pixels have not all arrived.
+     */
+    @JvmStatic external fun nativeImage(handle: Long, imageId: Int): IntArray?
+
+    /**
+     * libghostty-vt has no PNG decoder of its own, so jni.c lends it this one, Android's, for the
+     * Kitty images programs send as PNG. Called from native code while a terminal is being written
+     * to: `[width, height, ARGB...]`, or null when the bytes are not an image it can read.
+     */
+    @JvmStatic
+    fun decodePng(png: ByteArray): IntArray? {
+        val bitmap = android.graphics.BitmapFactory.decodeByteArray(png, 0, png.size) ?: return null
+        return try {
+            val width = bitmap.width
+            val height = bitmap.height
+            // The same ceiling libghostty puts on a decoded image, checked before allocating it.
+            if (width <= 0 || height <= 0 || width.toLong() * height > MAX_IMAGE_PIXELS) return null
+            val out = IntArray(2 + width * height)
+            out[0] = width
+            out[1] = height
+            bitmap.getPixels(out, 2, width, 0, 0, width, height)
+            out
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    /** 400 MB of RGBA, libghostty's own limit for one decoded image. */
+    private const val MAX_IMAGE_PIXELS = 100L * 1024 * 1024
+
     /** The OSC 8 link on a viewport cell, UTF-8, or null. */
     @JvmStatic external fun nativeHyperlinkAt(handle: Long, column: Int, row: Int): ByteArray?
 
