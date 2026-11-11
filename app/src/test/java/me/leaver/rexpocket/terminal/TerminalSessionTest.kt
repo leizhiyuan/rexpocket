@@ -242,6 +242,55 @@ class TerminalSessionTest {
         assertFalse("a mouse report does not move the viewport", session.frameOf().atBottom)
     }
 
+    /** A Kitty graphics transmit-and-place of raw RGBA pixels, the shape `kitten icat` sends. */
+    private fun kittyImage(id: Int, width: Int, height: Int, rgba: ByteArray, extra: String = ""): String =
+        "\u001b_Ga=T,f=32,q=2,i=$id,s=$width,v=$height$extra;" + java.util.Base64.getEncoder().encodeToString(rgba) + "\u001b\\"
+
+    @Test
+    fun aKittyImageIsPlacedAtTheCursorAndItsPixelsCanBeRead() {
+        val session = terminal(10, 5)
+        // The terminal sizes images by its cells, so it needs their size in pixels first.
+        session.resize(10, 5, 8, 16)
+        val red = byteArrayOf(-1, 0, 0, -1)
+        val halfGreen = byteArrayOf(0, -1, 0, -128)
+        session.feedOutput(("\r\n" + kittyImage(7, 2, 1, red + halfGreen)).toByteArray())
+
+        val image = session.frameOf().images.single()
+        assertEquals(7, image.id)
+        assertEquals(0, image.column)
+        assertEquals(1, image.row)
+        assertEquals(2, image.width)
+        assertEquals(1, image.height)
+        assertEquals(TerminalImage.LAYER_ABOVE_TEXT, image.layer)
+        assertEquals(8, session.frameOf().cellWidthPx)
+        assertEquals(16, session.frameOf().cellHeightPx)
+        val pixels = requireNotNull(session.imagePixels(7)) { "no pixels" }
+        assertEquals(2, pixels.width)
+        assertEquals(1, pixels.height)
+        assertArrayEquals(intArrayOf(0xFFFF0000.toInt(), 0x8000FF00.toInt()), pixels.argb)
+    }
+
+    @Test
+    fun aNegativeZPutsTheImageUnderTheText() {
+        val session = terminal(10, 5)
+        session.resize(10, 5, 8, 16)
+        session.feedOutput(kittyImage(3, 1, 1, byteArrayOf(1, 2, 3, -1), ",z=-1").toByteArray())
+
+        assertEquals(TerminalImage.LAYER_BELOW_TEXT, session.frameOf().images.single().layer)
+    }
+
+    @Test
+    fun aDeletedImageLeavesTheFrame() {
+        val session = terminal(10, 5)
+        session.resize(10, 5, 8, 16)
+        session.feedOutput(kittyImage(4, 1, 1, byteArrayOf(1, 2, 3, -1)).toByteArray())
+        assertEquals(1, session.frameOf().images.size)
+
+        session.feedOutput("\u001b_Ga=d,d=I,i=4,q=2\u001b\\".toByteArray())
+        assertTrue(session.frameOf().images.isEmpty())
+        assertNull(session.imagePixels(4))
+    }
+
     @Test
     fun aClosedSessionHasNothingToShow() {
         val session = terminal(10, 3, "x")

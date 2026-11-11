@@ -3,6 +3,7 @@ package me.leaver.rexpocket.terminal
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
@@ -47,6 +48,8 @@ internal class TerminalView(context: Context) : View(context) {
                 it.selection = null
             }
             field = value
+            // Image ids belong to one emulator; a new session's image 1 is another picture.
+            dropBitmaps()
             value?.let {
                 it.onChanged = { postInvalidateOnAnimation() }
                 it.selection = { selection?.text().orEmpty() }
@@ -96,6 +99,12 @@ internal class TerminalView(context: Context) : View(context) {
     private val italic = Paint(regular)
     private val boldItalic = Paint(regular)
     private val fill = Paint()
+    private val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val imageSource = Rect()
+    private val imageTarget = RectF()
+
+    /** Decoded Kitty images, by id; a bitmap is made again only when its image's generation moves. */
+    private val bitmaps = HashMap<Int, Pair<Long, Bitmap>>()
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG)
     private val density = resources.displayMetrics.density
 
@@ -248,11 +257,64 @@ internal class TerminalView(context: Context) : View(context) {
         if (frame == null) return
         val columns = min(frame.columns, ceil(width / cellWidth).toInt())
         val rows = min(frame.rows, ceil(height / cellHeight).toInt())
+        val images = if (frame.images.isEmpty()) emptyList() else frame.images.sortedWith(compareBy({ it.layer }, { it.z }))
+        keepBitmaps(images)
+        drawImages(canvas, frame, images, TerminalImage.LAYER_BELOW_BACKGROUND)
         for (row in 0 until rows) drawBackgrounds(canvas, frame, row, columns)
+        drawImages(canvas, frame, images, TerminalImage.LAYER_BELOW_TEXT)
         for (row in 0 until rows) drawText(canvas, frame, row, columns)
+        drawImages(canvas, frame, images, TerminalImage.LAYER_ABOVE_TEXT)
         if (selection == null) drawCursor(canvas, frame)
         drawHandles(canvas)
         drawScrollbar(canvas, frame)
+    }
+
+    /**
+     * The Kitty images of one layer, in z order. Their rectangles are in the terminal's pixels; the
+     * pane's own cells can differ from those by rounding, or for the moment a desktop-sized snapshot
+     * is on screen before the resize lands, so they are scaled cell for cell. Clipped to the view: an
+     * image can start above it or run past its edge.
+     */
+    private fun drawImages(canvas: Canvas, frame: TerminalFrame, images: List<TerminalImage>, layer: Int) {
+        if (images.isEmpty() || frame.cellWidthPx <= 0 || frame.cellHeightPx <= 0) return
+        val scaleX = cellWidth / frame.cellWidthPx
+        val scaleY = cellHeight / frame.cellHeightPx
+        canvas.save()
+        canvas.clipRect(0f, 0f, width.toFloat(), height.toFloat())
+        for (image in images) {
+            if (image.layer != layer || image.width <= 0 || image.height <= 0) continue
+            val bitmap = bitmapFor(image) ?: continue
+            val sw = if (image.sourceWidth > 0) image.sourceWidth else bitmap.width
+            val sh = if (image.sourceHeight > 0) image.sourceHeight else bitmap.height
+            imageSource.set(image.sourceX, image.sourceY, image.sourceX + sw, image.sourceY + sh)
+            val left = (image.column * frame.cellWidthPx + image.offsetX) * scaleX
+            val top = (image.row * frame.cellHeightPx + image.offsetY) * scaleY
+            imageTarget.set(left, top, left + image.width * scaleX, top + image.height * scaleY)
+            canvas.drawBitmap(bitmap, imageSource, imageTarget, imagePaint)
+        }
+        canvas.restore()
+    }
+
+    private fun bitmapFor(image: TerminalImage): Bitmap? {
+        bitmaps[image.id]?.let { (generation, bitmap) -> if (generation == image.generation) return bitmap }
+        // Not here yet when the program is still sending it; the next frame asks again.
+        val pixels = session?.imagePixels(image.id) ?: return null
+        val bitmap = Bitmap.createBitmap(pixels.argb, pixels.width, pixels.height, Bitmap.Config.ARGB_8888)
+        bitmaps.put(image.id, image.generation to bitmap)?.second?.recycle()
+        return bitmap
+    }
+
+    /** Lets go of the bitmaps of images no longer on screen; a scrolled-back image is decoded again. */
+    private fun keepBitmaps(images: List<TerminalImage>) {
+        if (bitmaps.isEmpty()) return
+        val shown = images.mapTo(HashSet()) { it.id }
+        val gone = bitmaps.keys.filter { it !in shown }
+        for (id in gone) bitmaps.remove(id)?.second?.recycle()
+    }
+
+    private fun dropBitmaps() {
+        for ((_, bitmap) in bitmaps.values) bitmap.recycle()
+        bitmaps.clear()
     }
 
     private fun selected(column: Int, row: Int): Boolean {
@@ -642,6 +704,7 @@ internal class TerminalView(context: Context) : View(context) {
 
     override fun onDetachedFromWindow() {
         clearSelection()
+        dropBitmaps()
         scroller.abortAnimation()
         super.onDetachedFromWindow()
     }

@@ -19,6 +19,11 @@ internal class TerminalFrame(
     val scrollOffset: Int,
     val scrollVisible: Int,
     val inputFlags: Int,
+    /** The size of a cell in the terminal's pixels, which image positions and sizes are measured in; 0 before one is set. */
+    val cellWidthPx: Int,
+    val cellHeightPx: Int,
+    /** The Kitty images on screen, in no particular order: draw them by [TerminalImage.layer], then z. */
+    val images: List<TerminalImage>,
     val flags: IntArray,
     val fg: IntArray,
     val bg: IntArray,
@@ -88,8 +93,9 @@ internal class TerminalFrame(
         const val CURSOR_UNDERLINE = 2
         const val CURSOR_HOLLOW = 3
 
-        private const val HEADER = 12
+        private const val HEADER = 15
         private const val CELL_WORDS = 5
+        private const val IMAGE_WORDS = 15
 
         /** Reads what `nativeFrame` returned; throws if the words do not describe a whole viewport. */
         fun parse(words: IntArray): TerminalFrame {
@@ -131,6 +137,27 @@ internal class TerminalFrame(
                 used += glyphs
                 at += CELL_WORDS + glyphs
             }
+            val imageCount = words[12]
+            require(imageCount >= 0 && at + imageCount * IMAGE_WORDS <= words.size) { "frame ends inside its images" }
+            val images = List(imageCount) { n ->
+                val w = at + n * IMAGE_WORDS
+                TerminalImage(
+                    id = words[w],
+                    generation = (words[w + 1].toLong() and 0xffffffffL) or (words[w + 2].toLong() shl 32),
+                    layer = words[w + 3],
+                    z = words[w + 4],
+                    column = words[w + 5],
+                    row = words[w + 6],
+                    offsetX = words[w + 7],
+                    offsetY = words[w + 8],
+                    width = words[w + 9],
+                    height = words[w + 10],
+                    sourceX = words[w + 11],
+                    sourceY = words[w + 12],
+                    sourceWidth = words[w + 13],
+                    sourceHeight = words[w + 14],
+                )
+            }
             return TerminalFrame(
                 columns = columns,
                 rows = rows,
@@ -143,6 +170,9 @@ internal class TerminalFrame(
                 scrollOffset = words[7],
                 scrollVisible = words[8],
                 inputFlags = words[9],
+                cellWidthPx = words[13],
+                cellHeightPx = words[14],
+                images = images,
                 flags = flags,
                 fg = fg,
                 bg = bg,
