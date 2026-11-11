@@ -1,0 +1,17 @@
+<!-- The arrow stick: a ring with the four directions and the stick in the middle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:strokeColor="#FF000000"
+      android:strokeWidth="1.6"
+      android:pathData="M12,2.8a9.2,9.2 0,1 1,0 18.4a9.2,9.2 0,1 1,0 -18.4z"/>
+  <path
+      android:fillColor="#FF000000"
+      android:pathData="M12,5.3L13.9,7.9L10.1,7.9Z M12,18.7L10.1,16.1L13.9,16.1Z M5.3,12L7.9,10.1L7.9,13.9Z M18.7,12L16.1,13.9L16.1,10.1Z"/>
+  <path
+      android:fillColor="#FF000000"
+      android:pathData="M12,9.6a2.4,2.4 0,1 1,0 4.8a2.4,2.4 0,1 1,0 -4.8z"/>
+</vector>
