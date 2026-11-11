@@ -113,8 +113,8 @@ you can read it before you send it.
   applies the phone's size to it. Moving between tabs and panes is local to the phone: Rex's
   active tab stays the desktop's. When the desktop takes the shown pane, the phone takes it back,
   waiting longer each time the desk insists. A released pane stays the desk's until Take over.
-- **Tailscale.** The node is sing-box's Tailscale endpoint behind a SOCKS5 inbound on loopback;
-  only the app's own connections use it. The node's UDP is bound to the phone's Wi-Fi or mobile
+- **Tailscale.** The node is the official `tailscale.com/tsnet` library running in userspace,
+  with a SOCKS5 proxy on loopback in front of it; only the app's own connections use it. The node's UDP is bound to the phone's Wi-Fi or mobile
   network, around a proxy VPN such as Clash when the VPN allows apps to bypass it, so a direct
   path can form. The home screen shows the path to each tailnet host - direct, peer relay or
   DERP - with its round trip; tap it to measure again.
@@ -136,8 +136,9 @@ Requires JDK 17 and the Android SDK (platform 36).
 ```
 
 The APK lands in `app/build/outputs/apk/debug/`; `:app:assembleRelease` builds one signed with the
-debug key. Builds are arm64-v8a only. `app/libs/libbox.aar` (sing-box 1.14.4) is checked in; to
-build it for another ABI, run [tools/build-libbox.sh](tools/build-libbox.sh). The integration
+debug key. Builds are arm64-v8a only. `app/libs/tailnet.aar` - the Go module in `tailnet/`, around
+`tailscale.com` at the version its `go.mod` pins - is checked in; to build it again, run
+[tools/build-tailnet.sh](tools/build-tailnet.sh). The integration
 tests in `core` run against a Rex on `127.0.0.1:7297` (set `REX_TEST_HOST` / `REX_TEST_PORT`) and
 are skipped without one.
 
@@ -148,7 +149,8 @@ are skipped without one.
 - [libghostty-android](https://github.com/SagerNet/libghostty-android), by
   [SagerNet](https://github.com/SagerNet) - the VT bindings and terminal view.
 - [Ghostty](https://ghostty.org), by Mitchell Hashimoto and contributors - the terminal emulator.
-- [sing-box](https://github.com/SagerNet/sing-box) and its libbox library - the Tailscale node.
+- [Tailscale](https://github.com/tailscale/tailscale), by Tailscale Inc. and contributors, BSD-3-Clause -
+  the tsnet library the app's Tailscale node is.
 - [Material Symbols](https://github.com/google/material-design-icons) (Rounded), by Google, Apache
   License 2.0 - the interface icons. The program marks are the app's own drawings, not the
   products' logos.

@@ -16,7 +16,7 @@ android {
         versionCode = 17
         versionName = "0.0.16"
 
-        // libbox is built for arm64 only, so the APK must not claim the other ABIs either.
+        // The tailnet library is built for arm64 only, so the APK must not claim the other ABIs either.
         ndk.abiFilters += "arm64-v8a"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -42,9 +42,12 @@ android {
     }
 
     packaging {
-        // libbox is a 57 MB uncompressed arm64 library. Stored as-is it would be the whole APK,
-        // so let the installer unpack it instead of keeping it uncompressed for mmap loading.
-        jniLibs.useLegacyPackaging = true
+        // The native libraries stay uncompressed and 16 KB page-aligned in the APK, and are mapped
+        // straight from it. That is what Android 15 checks on a device with 16 KB pages: a
+        // compressed library cannot be checked at all, and a debuggable build says so at launch.
+        // The APK is larger to download (about 31 MB instead of 16 MB), smaller once installed,
+        // since nothing is unpacked beside it.
+        jniLibs.useLegacyPackaging = false
     }
 }
 
@@ -76,6 +79,6 @@ dependencies {
     // Restores the GHOSTSNP snapshot Rex opens a terminal stream with.
     implementation("io.github.sagernet:libghostty-android:0.1.0-alpha02")
     implementation("io.github.sagernet:libghostty-android-compose-legacy:0.1.0-alpha02")
-    // Built from sing-box 1.14.4 with the Tailscale endpoint, see tools/build-libbox.sh.
-    implementation(files("libs/libbox.aar"))
+    // The official tailscale.com tsnet library behind the tailnet/ Go module, see tools/build-tailnet.sh.
+    implementation(files("libs/tailnet.aar"))
 }
