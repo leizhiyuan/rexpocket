@@ -89,6 +89,8 @@ class PocketSession(
     private val clientRef = AtomicReference<RexClient?>(null)
     private val sizeRef = AtomicReference(TermSize(80, 24, 8, 16))
     private var ownedBlock: String? = null
+    /** The client this phone was when it took [ownedBlock]: each control connection is a new one. */
+    @Volatile private var ownerClient: String? = null
     /** Session [ownedBlock] lives in; it can differ from the active one right after a switch. */
     private var ownedSession: String? = null
     /**
@@ -252,6 +254,8 @@ class PocketSession(
      */
     fun reconnectNow() {
         clientRef.get()?.close()
+        // The pane streams ran on the same network, so they are as dead as the control connection.
+        streams.forEach { it.reconnectNow() }
         retry.trySend(Unit)
     }
 
@@ -968,8 +972,11 @@ class PocketSession(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    // The connection is coming back; the outer loop starts this over.
-                    return
+                    // Nothing else starts this loop again, so it must not end here. A call cut short by
+                    // a dropped connection waits for the next one, which forgets lastResize and so
+                    // sends the size again; one Rex turned down is tried again in a moment.
+                    if (attached.value) delay(RESIZE_RETRY_MS) else attached.first { it }
+                    continue
                 }
             }
             // setSize forgets lastResize; nothing else changes it, so this is the wait for a new size.
@@ -1052,6 +1059,7 @@ class PocketSession(
         }
         ownedBlock = block
         ownedSession = sid
+        ownerClient = _state.value.clientId
         // The new owner has to ask for its size again; Rex does not carry the old one over.
         lastResize = null
         markOwned()
@@ -1065,6 +1073,7 @@ class PocketSession(
     suspend fun releasePane() {
         val sid = ownedSession ?: requireSession()
         val block = ownedBlock ?: requireBlock().second
+        trace("pane $block: release asked")
         // Marked before the lock, so an own_block already in flight sees it and gives the pane back.
         releasedBlocks.add(block)
         markReleased()
@@ -1085,15 +1094,18 @@ class PocketSession(
     /** Takes a released pane back, and starts keeping it at this phone's size again. */
     suspend fun takeOver() {
         val (sid, block) = requireBlock()
+        trace("pane $block: take over asked")
         releasedBlocks.remove(block)
         takePane(sid, block)
     }
 
     private fun markOwned() {
+        trace("pane: owned")
         _state.update { it.copy(owning = true, released = false) }
     }
 
     private fun markReleased() {
+        if (!_state.value.released) trace("pane: released")
         _state.update { it.copy(owning = false, released = true) }
     }
 
@@ -1119,17 +1131,23 @@ class PocketSession(
                 continue
             }
             val mine = _state.value.clientId
+            // Only a pane this connection took can be taken from it. A new connection is a new
+            // client to Rex, which owns nothing yet: the pane it finds held by the client this phone
+            // was before is taken again, not handed to "the desktop".
             val hadIt = _state.value.owning
+            val ownedBy = ownerClient
             val owner = ownerOnServer(sid, blockId)
             if (owner != null && mine != null) {
-                val owning = owner == mine
+                val owning = owner == Owner.Client(mine)
                 if (_state.value.owning != owning) _state.update { it.copy(owning = owning) }
             }
-            if (owner == null || mine == null || owner == mine) {
+            if (owner == null || mine == null || owner == Owner.Client(mine)) {
                 wait = 0L
-            } else if (hadIt) {
+            } else if (owner is Owner.Client && hadIt && ownedBy == mine) {
+                trace("pane $blockId: taken by ${owner.id}; leaving it there")
                 yieldToDesktop(blockId)
             } else {
+                trace("pane $blockId: held by $owner (had=$hadIt by=$ownedBy, now $mine); taking it")
                 delay(wait)
                 wait = if (wait == 0L) FIRST_TAKE_BACK_MS else (wait * 2).coerceAtMost(TAKE_BACK_MAX_MS)
                 if (blockId !in releasedBlocks) runCatching { takePane(sid, blockId) }
@@ -1151,11 +1169,20 @@ class PocketSession(
         }
     }
 
-    /** The owner of [blockId] according to Rex, or null when the terminal will not say. */
-    private suspend fun ownerOnServer(sid: String, blockId: String): String? = runCatching {
-        rpc("com.superlogical.terminal.size", JSONObject().put("session_id", sid).put("block_id", blockId))
+    /**
+     * Who Rex says owns [blockId]: [Owner.Nobody] for a pane no client holds, which is what our own
+     * old connection leaves behind once Rex lets it go; null when the terminal could not be asked.
+     */
+    private suspend fun ownerOnServer(sid: String, blockId: String): Owner? = runCatching {
+        val owner = rpc("com.superlogical.terminal.size", JSONObject().put("session_id", sid).put("block_id", blockId))
             .optNullableString("owner")
+        if (owner == null) Owner.Nobody else Owner.Client(owner)
     }.getOrNull()
+
+    private sealed interface Owner {
+        data object Nobody : Owner
+        data class Client(val id: String) : Owner
+    }
 
     private suspend fun disownQuietly() {
         val block = ownedBlock ?: return
@@ -1283,6 +1310,9 @@ private const val STATUS_IDLE_MS = 30_000L
 
 /** How often a watched pane asks Rex who owns it, so it can take itself back when the desk does. */
 private const val OWNERSHIP_CHECK_MS = 3_000L
+
+/** Wait before a resize Rex turned down is sent again. */
+private const val RESIZE_RETRY_MS = 1_000L
 
 /** How often a released pane looks again at whether it may resume sizing itself. */
 private const val RELEASE_WAIT_MS = 250L

@@ -141,6 +141,85 @@ class ForegroundTest {
 }
 
 /**
+ * The pane's stream dies with the network as the control connection does, and looks just as open.
+ * Coming back, once the control connection is found dead, the stream is replaced too: otherwise
+ * the pane shows nothing new until OkHttp's ping gives up on it, half a minute or more later.
+ */
+class ForegroundStreamTest {
+    @Test
+    fun comingBackReplacesAPaneStreamThatNoLongerAnswers() = runBlocking {
+        val real = Endpoint(
+            System.getenv("REX_TEST_HOST")?.takeIf { it.isNotBlank() } ?: "127.0.0.1",
+            System.getenv("REX_TEST_PORT")?.toIntOrNull() ?: 7297,
+            plaintext = true,
+        )
+        assumeTrue("rex on ${real.host}:${real.port}", portOpen(real.host, real.port))
+        val proxy = StallingProxy(real.host, real.port)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val session = PocketSession(Endpoint("127.0.0.1", proxy.port, plaintext = true))
+        var sessionId: String? = null
+        val seen = StringBuilder()
+        try {
+            session.start(scope)
+            withTimeout(15_000) { session.awaitReady() }
+            session.createShell("rexpocket-test-stream-back-" + System.currentTimeMillis())
+            sessionId = session.state.value.activeSessionId
+            val block = withTimeout(10_000) {
+                var id: String? = null
+                while (id == null) {
+                    id = session.state.value.view?.focusedBlock()?.id
+                    if (id == null) delay(20)
+                }
+                id
+            }
+            val watcher = scope.launch {
+                session.watchPane(block).collect { feed ->
+                    if (feed is TerminalFeed.Output) synchronized(seen) { seen.append(feed.bytes.toString(Charsets.UTF_8)) }
+                }
+            }
+            try {
+                // Wait for the stream to carry output, so it is flowing when the network goes.
+                session.writeBytesAwaitable("echo ready-\$((1+1))\r".toByteArray()).await()
+                withTimeout(10_000) { while (!synchronized(seen) { "ready-2" in seen }) delay(50) }
+
+                session.setActive(false)
+                proxy.stall()
+                delay(300)
+                proxy.unstall()
+                session.setActive(true)
+                val back = System.nanoTime()
+                withTimeout(10_000) { while (session.state.value.phase != Phase.Live) delay(20) }
+                withTimeout(10_000) {
+                    while (true) {
+                        // Typed again until it lands: the first try may meet the old connection.
+                        runCatching { session.writeBytesAwaitable("echo back-\$((2+2))\r".toByteArray()).await() }
+                        if (synchronized(seen) { "back-4" in seen }) break
+                        delay(500)
+                    }
+                }
+                val ms = (System.nanoTime() - back) / 1_000_000
+                assertTrue("the pane showed new output ${ms}ms after coming back", ms < 10_000)
+            } finally {
+                watcher.cancel()
+            }
+        } finally {
+            session.stop()
+            scope.cancel()
+            sessionId?.let { id ->
+                runCatching {
+                    val probe = RexClient()
+                    probe.connect(real)
+                    probe.call("session.attach", org.json.JSONObject().put("session_id", id))
+                    probe.call("session.destroy", org.json.JSONObject().put("session_id", id))
+                    probe.close()
+                }
+            }
+            proxy.close()
+        }
+    }
+}
+
+/**
  * Rex closes a connection whose first message is not the hello, with 1002 `protocol error`. A call
  * made while the connection is still opening - the screen coming back asks who owns its pane at
  * once - went out ahead of the hello, and every such reconnect failed once before it held.

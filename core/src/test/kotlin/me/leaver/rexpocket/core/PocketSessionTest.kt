@@ -295,6 +295,65 @@ class PocketSessionTest {
     }
 
     /**
+     * A new control connection is a new client to Rex, which owns nothing yet. The pane on screen
+     * must be taken again on it and kept at the phone's size - not reported as the desktop's, which
+     * is what losing it to our own reconnect looked like, and not left at its old size because the
+     * loop that sizes it ended with the old connection.
+     */
+    @Test
+    fun aReconnectTakesThePaneAgainAndKeepsSizingIt() {
+        val endpoint = testEndpoint()
+        assumeTrue(
+            "rex plaintext listener on ${endpoint.host}:${endpoint.port} (REX_TEST_HOST/REX_TEST_PORT)",
+            portOpen(endpoint.host, endpoint.port),
+        )
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(endpoint)
+            var sessionId: String? = null
+            try {
+                session.start(scope, preferredSessionId = null)
+                withTimeout(15_000) { session.awaitReady() }
+                session.setSize(52, 21, 8, 16)
+                session.createShell("rexpocket-test-reconnect-" + System.currentTimeMillis())
+                val sid = session.state.value.activeSessionId!!
+                sessionId = sid
+                val blockId = awaitOwnedFocus(session)
+                val watcher = collectPane(scope, session, blockId, StringBuilder())
+                try {
+                    withTimeout(15_000) { while (columnsOnServer(endpoint, sid, blockId) != 52) delay(100) }
+                    val before = session.state.value.clientId
+
+                    session.reconnectNow()
+                    withTimeout(10_000) {
+                        while (session.state.value.phase != Phase.Live || session.state.value.clientId == null) delay(50)
+                    }
+                    // Several ownership checks on the new connection.
+                    delay(7_000)
+                    val mine = session.state.value.clientId
+                    assertEquals("the new connection does not hold the pane (was $before)", mine, ownerOnServer(endpoint, sid, blockId))
+                    assertTrue("the pane is reported released", !session.state.value.released)
+                    assertTrue("the pane is not reported as this phone's", session.state.value.owning)
+
+                    // The phone's size still reaches the pane: the keyboard coming up, say.
+                    session.setSize(60, 21, 8, 16)
+                    val sized = withTimeoutOrNull(5_000) {
+                        while (columnsOnServer(endpoint, sid, blockId) != 60) delay(100)
+                        true
+                    } ?: false
+                    assertTrue("the pane stayed at ${columnsOnServer(endpoint, sid, blockId)} columns", sized)
+                } finally {
+                    watcher.cancel()
+                }
+            } finally {
+                session.stop()
+                scope.cancel()
+                sessionId?.let { destroyQuietly(endpoint, it) }
+            }
+        }
+    }
+
+    /**
      * Releasing a pane hands it back and stops the take-back loop: the desktop keeps it, at its own
      * size, until the phone asks for it again. A release that the loop undid a second later would
      * mean nothing, so the pane is still the desktop's after several checks.
@@ -643,6 +702,21 @@ private suspend fun ownerOnServer(endpoint: Endpoint, sessionId: String, blockId
             "com.superlogical.terminal.size",
             JSONObject().put("session_id", sessionId).put("block_id", blockId),
         ).optNullableString("owner")
+    } finally {
+        probe.close()
+    }
+}
+
+/** The pane's width according to Rex, read with a fresh connection. */
+private suspend fun columnsOnServer(endpoint: Endpoint, sessionId: String, blockId: String): Int {
+    val probe = RexClient()
+    try {
+        probe.connect(endpoint)
+        probe.call("session.attach", JSONObject().put("session_id", sessionId))
+        return probe.call(
+            "com.superlogical.terminal.size",
+            JSONObject().put("session_id", sessionId).put("block_id", blockId),
+        ).optInt("columns", -1)
     } finally {
         probe.close()
     }

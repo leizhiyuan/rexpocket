@@ -52,6 +52,16 @@ class TerminalStream(
         wake.trySend(Unit)
     }
 
+    /**
+     * Drops the connection that is flowing and resumes at once from the last byte handed over: the
+     * network under it went away, and a socket on a vanished network looks open until a ping goes
+     * unanswered, half a minute later. Nothing is lost or shown twice.
+     */
+    fun reconnectNow() {
+        active?.cancel()
+        wake.trySend(Unit)
+    }
+
     /** The pane's bytes in order, for as long as this flow is collected. */
     fun feeds(): Flow<TerminalFeed> = flow {
         var attempt = 0
@@ -109,6 +119,7 @@ class TerminalStream(
                 trace("stream failed after ${elapsed(openedAt)}ms at $received bytes: ${e.javaClass.simpleName}: ${e.message}")
                 if (stopped) return@flow
                 if (++attempt > MAX_ATTEMPTS) throw e
+                // A drop asked for by reconnectNow is retried at once: its wake is still pending.
                 pause(backoff(attempt))
             } finally {
                 // A deliberate stop ends the stream; a drop keeps it waiting for a resume.
