@@ -82,6 +82,24 @@ at its MagicDNS name. Nothing has to be opened on the router.
    notification shows while the app watches; its **Stop** turns alerts off. The app does not start
    on its own after a reboot, and Android's battery saving can delay an alert.
 
+## Reporting a problem
+
+The app keeps the last few hours of its own log on the phone, so a problem can be reported after it
+happened.
+
+1. **Settings › Diagnostics.** The line says `Off` while the app only keeps its last few hours, and
+   `Recording` while a recording runs.
+2. If the problem already happened, tap **Share report** and attach the file to an issue. If it only
+   shows up while you use the app, tap **Start recording**, reproduce it, then come back and tap
+   **Stop and share**.
+3. **Open an issue** copies the same report and opens the issue page: paste it, say what you were
+   doing, and attach the file if you shared one.
+
+The report holds the app version, the phone, your hosts, what the connection did, and the app's own
+log - the last few hours, and a recording too if you made one. Addresses and host names become
+`<hidden>`; tab titles, what a pane printed and what you typed are never in it. It is plain text, so
+you can read it before you send it.
+
 ## How it works
 
 - **Control.** One WebSocket to `/api/control` (`rex.control.v1`). The app subscribes to Rex's
