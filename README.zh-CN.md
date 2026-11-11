@@ -120,9 +120,8 @@ arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这
 
 - [Rex](https://rex.app)，由 [Superlogical](https://superlogical.com) 开发——多路复用器本身、它的 API
   和会话模型。
-- [libghostty-android](https://github.com/SagerNet/libghostty-android)，由
-  [SagerNet](https://github.com/SagerNet) 开发——VT 绑定和终端视图。
-- [Ghostty](https://ghostty.org)，由 Mitchell Hashimoto 及贡献者开发——终端模拟器。
+- [Ghostty](https://ghostty.org)，由 Mitchell Hashimoto 及贡献者开发，MIT——终端模拟器：App 构建的是它
+  官方的 libghostty-vt，许可证见 `app/src/main/assets/licenses/Ghostty-MIT.txt`。
 - [Tailscale](https://github.com/tailscale/tailscale)，Tailscale Inc. 及贡献者，BSD-3-Clause——App 内的
   Tailscale 节点就是它的 tsnet 库。
 - [Material Symbols](https://github.com/google/material-design-icons)（Rounded），Google，Apache

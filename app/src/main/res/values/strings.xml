@@ -125,7 +125,7 @@
     <string name="action_search">Search</string>
     <string name="settings">Settings</string>
     <string name="settings_source">Source on GitHub</string>
-    <string name="settings_credits">Rex by Superlogical. Ghostty and libghostty-android by their authors. Icons from Material Symbols.</string>
+    <string name="settings_credits">Rex by Superlogical. Ghostty by its authors. Icons from Material Symbols.</string>
     <string name="diagnostics">Diagnostics</string>
     <string name="diagnostics_what">The app keeps the last few hours of its log on the phone, so a problem you noticed before opening this sheet is already in the report: the app version, the phone, your hosts, and what the connection did. If it only shows up while you use the app, start a recording and reproduce it - that goes into the report too. Addresses and host names become &lt;hidden&gt;; tab titles and what a pane printed are never written.</string>
     <string name="diagnostics_recording_what">Recording · %1$s · %2$d lines. Use the app as usual until the problem shows, then stop and share.</string>

@@ -3,7 +3,6 @@ package me.leaver.rexpocket.ui
 import android.os.Handler
 import android.os.SystemClock
 import android.os.Looper
-import android.view.MotionEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -18,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -30,21 +30,18 @@ import androidx.compose.ui.viewinterop.AndroidView
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.TerminalFeed
 import me.leaver.rexpocket.diagnostics.Diagnostics
-import io.github.sagernet.libghostty.GhosttyTerminalSession
-import io.github.sagernet.libghostty.GhosttyUiHandler
-import android.content.Context
-import io.github.sagernet.libghostty.compose.GhosttyTerminal
-import io.github.sagernet.libghostty.compose.rememberGhosttyTerminalState
+import me.leaver.rexpocket.terminal.TerminalSession
+import me.leaver.rexpocket.terminal.TerminalView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
-import kotlin.math.abs
 
 /**
- * Terminal surface backed by libghostty-vt.
+ * Terminal surface backed by the official libghostty-vt: [TerminalSession] holds the emulator and
+ * [TerminalView] draws it.
  *
  * Rex streams a pane: a `GHOSTSNP` snapshot of it first, then its output as it comes. The snapshot
  * becomes the emulator itself, so the pane arrives complete - scrollback, colours, cursor and the
@@ -68,7 +65,7 @@ internal fun TerminalPane(
     onTyped: (ByteArray, () -> Unit) -> Boolean = { _, _ -> false },
     /** A link the user long-pressed in the pane: a hyperlink the program set, or a URL in its text. */
     onLink: (String) -> Unit = {},
-    onSession: (GhosttyTerminalSession?) -> Unit = {},
+    onSession: (TerminalSession?) -> Unit = {},
     /** The pane's editor, which is what raises and drops the keyboard for it. */
     onKeyboard: (TerminalImeView?) -> Unit = {},
     /** A horizontal swipe across the pane: forward means towards the next pane. */
@@ -76,9 +73,8 @@ internal fun TerminalPane(
     onError: (Exception) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val termState = rememberGhosttyTerminalState()
     // Replaced when Rex sends a new snapshot: a reconnect, or a pane whose stream started over.
-    var session by remember(blockId) { mutableStateOf<GhosttyTerminalSession?>(null) }
+    var session by remember(blockId) { mutableStateOf<TerminalSession?>(null) }
     // Collected again from the top when the user asks for the picture again.
     var attempt by remember(blockId) { mutableStateOf(0) }
     val currentInput = rememberUpdatedState(onInput)
@@ -87,6 +83,7 @@ internal fun TerminalPane(
     val currentResize = rememberUpdatedState(onResize)
     val currentSwipe = rememberUpdatedState(onSwipe)
     val currentKeyboard = rememberUpdatedState(onKeyboard)
+    val currentFont = rememberUpdatedState(onFont)
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
 
     LaunchedEffect(blockId, attempt) {
@@ -101,7 +98,7 @@ internal fun TerminalPane(
                     is TerminalFeed.Snapshot -> {
                         Diagnostics.event(CONN_TAG, "pane $blockId: ${feed.bytes.size} bytes after ${SystemClock.elapsedRealtime() - askedAt}ms")
                         val restored = withContext(Dispatchers.Default) {
-                            GhosttyTerminalSession.restore(context, feed.bytes)
+                            TerminalSession.restore(feed.bytes)
                         }
                         if (restored == null) {
                             Diagnostics.event(CONN_TAG, "pane $blockId: the snapshot did not restore")
@@ -132,66 +129,38 @@ internal fun TerminalPane(
     // The keyboard types into this, not into the pane: see TerminalImeView for why the pane cannot
     // hold it itself. It sits under the terminal, so every gesture still lands on the pane.
     val keyboard = remember(context) { TerminalImeView(context) }
+    val pane = remember(context) {
+        TerminalView(context).also { view ->
+            view.onFontSizeChanged = { currentFont.value(it / 12f) }
+            // A long press on a link offers it instead of selecting its text: agents print the pull
+            // requests and sign-in pages they want you to open.
+            view.onLink = { currentLink.value(it) }
+            // A horizontal swipe moves between the panes of a split, which is what the dots under
+            // the card promise. Vertical drags stay the pane's own: history, or the program's wheel.
+            view.onSwipe = { forward -> currentSwipe.value?.invoke(forward) }
+        }
+    }
+    // A tap on the pane is a tap on its text: it raises the keyboard, which the pane never asks for
+    // itself - the view is not focusable, as its own input connection would answer with no text type.
+    SideEffect {
+        keyboard.pane = pane
+        pane.onTap = { keyboard.showIme() }
+    }
     // Published before the terminal view exists, so the key row can raise the keyboard at once.
     LaunchedEffect(keyboard) { currentKeyboard.value(keyboard) }
     Box(modifier) {
         AndroidView(factory = { keyboard }, modifier = Modifier.fillMaxSize())
-        GhosttyTerminal(
-            session = session,
-            state = termState,
-            // A restored snapshot carries the desktop's default colours; the app's own are applied here,
-            // so a pane never flips from the app's paper to a white one after a reconnect.
-            theme = theme,
-            typeface = terminalTypeface,
-            // The view fills its whole canvas and draws rows scrolled above its top; Compose hosts
-            // Android views without clipping, so unclipped it paints over the header and tab bar.
+        AndroidView(
+            factory = { pane },
+            // The view fills its whole canvas; Compose hosts Android views without clipping.
             modifier = Modifier.fillMaxSize().clipToBounds(),
-            fontSizeSp = 12f * fontScale,
-            // The keyboard is raised by a tap on the pane, not by the app attaching it.
-            focusOnAttach = false,
-            onFontSizeChanged = { onFont(it / 12f) },
-            configure = { view ->
-                // Typing goes straight into the pane, as it does on the desktop: tapping the
-                // terminal raises the keyboard and every committed character is sent as input.
-                // The keyboard is raised on the view's behalf, so the view itself never asks for
-                // focus - its own input connection would answer with no text type at all.
-                view.showImeOnTap = false
-                view.isFocusable = false
-                view.isFocusableInTouchMode = false
-                keyboard.pane = view
-                // A long press on a link offers it instead of selecting its text: agents print the
-                // pull requests and sign-in pages they want you to open.
-                view.urlDetectionEnabled = true
-                view.uiHandler = object : GhosttyUiHandler {
-                    override fun showLinkMenu(context: Context, url: String, openLink: () -> Unit, copyUrl: () -> Unit) {
-                        currentLink.value(url)
-                    }
-                }
-                // A horizontal swipe moves between the panes of a split, which is what the dots
-                // under the card promise. The view keeps its vertical scrolling and selection: the
-                // listener only reads the gesture and lets the event through.
-                val threshold = 72f * view.resources.displayMetrics.density
-                var downX = 0f
-                var downY = 0f
-                view.setOnTouchListener { _, event ->
-                    when (event.actionMasked) {
-                        MotionEvent.ACTION_DOWN -> {
-                            downX = event.x
-                            downY = event.y
-                        }
-                        MotionEvent.ACTION_UP -> {
-                            val dx = event.x - downX
-                            val dy = event.y - downY
-                            if (abs(dx) > threshold && abs(dx) > abs(dy) * 1.5f) {
-                                currentSwipe.value?.invoke(dx < 0)
-                            } else if (abs(dx) < threshold && abs(dy) < threshold) {
-                                // A tap on the pane is a tap on its text: raise the keyboard.
-                                keyboard.showIme()
-                            }
-                        }
-                    }
-                    false
-                }
+            update = { view ->
+                // A restored snapshot carries the desktop's default colours; the app's own are applied
+                // here, so a pane never flips from the app's paper to a white one after a reconnect.
+                view.theme = theme
+                view.typeface = terminalTypeface
+                view.fontSizeSp = 12f * fontScale
+                view.session = session
             },
         )
         // Until the first snapshot there is nothing to draw; a black rectangle with no words looks
@@ -215,12 +184,12 @@ internal fun TerminalPane(
 
 /** Sends what the emulator produces, and reports its grid, through the screen's callbacks. */
 private fun bind(
-    session: GhosttyTerminalSession,
+    session: TerminalSession,
     input: InputBatcher,
     typed: androidx.compose.runtime.State<(ByteArray, () -> Unit) -> Boolean>,
     resize: androidx.compose.runtime.State<(Int, Int, Int, Int) -> Unit>,
 ) {
-    session.transport = object : GhosttyTerminalSession.Transport {
+    session.transport = object : TerminalSession.Transport {
         override fun sendInput(data: ByteArray) {
             if (typed.value(data, input::flush)) return
             // A swipe over a full-screen TUI turns into one mouse-wheel report per row, and each
@@ -232,10 +201,7 @@ private fun bind(
             Diagnostics.event(CONN_TAG, "resize to ${columns}x$rows")
             resize.value(columns, rows, widthPixels, heightPixels)
         }
-
-        override fun close() = Unit
     }
-    session.systemClipboardWriteEnabled = false
 }
 
 /** What a pane shows before Rex has sent its first snapshot: a line of state, and a way to ask again. */
