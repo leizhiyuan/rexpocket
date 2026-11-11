@@ -162,6 +162,8 @@
         <item quantity="one">%1$d pane</item>
         <item quantity="other">%1$d panes</item>
     </plurals>
+    <string name="key_arrows">Arrow keys</string>
+    <string name="arrows_pinned">Pinned</string>
     <string name="key_keyboard">Keyboard</string>
     <string name="error_operation_failed">Operation failed</string>
     <string name="state_folded">Folded</string>

@@ -159,6 +159,8 @@
     <plurals name="pane_count">
         <item quantity="other">%1$d 个窗格</item>
     </plurals>
+    <string name="key_arrows">方向键</string>
+    <string name="arrows_pinned">已固定</string>
     <string name="key_keyboard">键盘</string>
     <string name="error_operation_failed">操作失败</string>
     <string name="state_folded">已折叠</string>
