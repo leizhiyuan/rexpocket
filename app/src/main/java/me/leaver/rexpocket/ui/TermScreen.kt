@@ -254,7 +254,7 @@ internal fun TermScreen(
                         }
                     },
                     onError = { onAct { note(it.toProblem()) } },
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 3.dp, vertical = 2.dp),
                 )
             }
         }
