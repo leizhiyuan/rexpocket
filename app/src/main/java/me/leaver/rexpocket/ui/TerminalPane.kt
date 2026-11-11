@@ -27,11 +27,11 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.viewinterop.AndroidView
 import me.leaver.rexpocket.BuildConfig
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.TerminalFeed
 import io.github.sagernet.libghostty.GhosttyTerminalSession
-import io.github.sagernet.libghostty.GhosttyTerminalView
 import io.github.sagernet.libghostty.GhosttyUiHandler
 import android.content.Context
 import io.github.sagernet.libghostty.compose.GhosttyTerminal
@@ -52,7 +52,7 @@ import kotlin.math.abs
  * escape sequence the program was in the middle of - and everything after it is fed in order.
  */
 @Composable
-fun TerminalPane(
+internal fun TerminalPane(
     blockId: String,
     feeds: (String) -> Flow<TerminalFeed>,
     fontScale: Float,
@@ -70,8 +70,8 @@ fun TerminalPane(
     /** A link the user long-pressed in the pane: a hyperlink the program set, or a URL in its text. */
     onLink: (String) -> Unit = {},
     onSession: (GhosttyTerminalSession?) -> Unit = {},
-    /** The Android view itself, for raising and dropping the IME from the key row. */
-    onView: (GhosttyTerminalView?) -> Unit = {},
+    /** The pane's editor, which is what raises and drops the keyboard for it. */
+    onKeyboard: (TerminalImeView?) -> Unit = {},
     /** A horizontal swipe across the pane: forward means towards the next pane. */
     onSwipe: ((forward: Boolean) -> Unit)? = null,
     onError: (Exception) -> Unit = {},
@@ -87,7 +87,7 @@ fun TerminalPane(
     val currentLink = rememberUpdatedState(onLink)
     val currentResize = rememberUpdatedState(onResize)
     val currentSwipe = rememberUpdatedState(onSwipe)
-    val currentView = rememberUpdatedState(onView)
+    val currentKeyboard = rememberUpdatedState(onKeyboard)
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
 
     LaunchedEffect(blockId, attempt) {
@@ -131,7 +131,13 @@ fun TerminalPane(
     }
 
     val theme = remember(Colors.isDark) { terminalTheme() }
+    // The keyboard types into this, not into the pane: see TerminalImeView for why the pane cannot
+    // hold it itself. It sits under the terminal, so every gesture still lands on the pane.
+    val keyboard = remember(context) { TerminalImeView(context) }
+    // Published before the terminal view exists, so the key row can raise the keyboard at once.
+    LaunchedEffect(keyboard) { currentKeyboard.value(keyboard) }
     Box(modifier) {
+        AndroidView(factory = { keyboard }, modifier = Modifier.fillMaxSize())
         GhosttyTerminal(
             session = session,
             state = termState,
@@ -149,9 +155,12 @@ fun TerminalPane(
             configure = { view ->
                 // Typing goes straight into the pane, as it does on the desktop: tapping the
                 // terminal raises the keyboard and every committed character is sent as input.
-                view.showImeOnTap = true
-                view.isFocusable = true
-                view.isFocusableInTouchMode = true
+                // The keyboard is raised on the view's behalf, so the view itself never asks for
+                // focus - its own input connection would answer with no text type at all.
+                view.showImeOnTap = false
+                view.isFocusable = false
+                view.isFocusableInTouchMode = false
+                keyboard.pane = view
                 // A long press on a link offers it instead of selecting its text: agents print the
                 // pull requests and sign-in pages they want you to open.
                 view.urlDetectionEnabled = true
@@ -177,12 +186,14 @@ fun TerminalPane(
                             val dy = event.y - downY
                             if (abs(dx) > threshold && abs(dx) > abs(dy) * 1.5f) {
                                 currentSwipe.value?.invoke(dx < 0)
+                            } else if (abs(dx) < threshold && abs(dy) < threshold) {
+                                // A tap on the pane is a tap on its text: raise the keyboard.
+                                keyboard.showIme()
                             }
                         }
                     }
                     false
                 }
-                currentView.value(view)
             },
         )
         // Until the first snapshot there is nothing to draw; a black rectangle with no words looks
@@ -194,7 +205,7 @@ fun TerminalPane(
         onDispose {
             input.flush()
             onSession(null)
-            onView(null)
+            onKeyboard(null)
             session?.let { s ->
                 s.transport = null
                 s.close()
