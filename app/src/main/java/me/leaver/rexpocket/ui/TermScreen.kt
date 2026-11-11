@@ -58,7 +58,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import io.github.sagernet.libghostty.GhosttyTerminalSession
-import io.github.sagernet.libghostty.GhosttyTerminalView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlin.math.roundToInt
@@ -160,7 +159,8 @@ internal fun TermScreen(
     var rename by remember { mutableStateOf<Rename?>(null) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     var termSession by remember { mutableStateOf<GhosttyTerminalSession?>(null) }
-    var termView by remember { mutableStateOf<GhosttyTerminalView?>(null) }
+    // The pane's editor: what the keyboard key raises, and what Back and the session list drop.
+    var keyboard by remember { mutableStateOf<TerminalImeView?>(null) }
     val view = state.view
     val tab = view?.activeWindow()
     val focused = view?.focusedBlock()
@@ -189,7 +189,7 @@ internal fun TermScreen(
     // Typing goes straight to the terminal, as it does on the desktop: the keyboard key raises the
     // IME for the pane, and the key row stays above it. There is no composer between them.
     fun toggleKeyboard() {
-        val target = termView ?: return
+        val target = keyboard ?: return
         val ime = context.getSystemService(InputMethodManager::class.java)
         // Whether the keyboard is up, not whether the pane has focus: the IME can be showing while
         // focus sits in its own window, and then the same key must put it away.
@@ -198,7 +198,6 @@ internal fun TermScreen(
             ime?.hideSoftInputFromWindow(target.windowToken, 0)
             target.clearFocus()
         } else {
-            target.requestFocus()
             target.showIme()
         }
     }
@@ -210,7 +209,7 @@ internal fun TermScreen(
     // session list does not come back with a keyboard over it.
     DisposableEffect(Unit) {
         onDispose {
-            termView?.clearFocus()
+            keyboard?.clearFocus()
             ime?.hide()
         }
     }
@@ -244,7 +243,7 @@ internal fun TermScreen(
                     onLink = { link = it },
                     onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
                     onSession = { termSession = it },
-                    onView = { termView = it },
+                    onKeyboard = { keyboard = it },
                     // A horizontal swipe on the pane moves to the pane beside it, as the dots
                     // under it say there is one.
                     onSwipe = { forward ->
