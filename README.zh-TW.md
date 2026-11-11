@@ -96,8 +96,8 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再�
 - **窗格歸屬。** 手機只用 `session.own_block` 佔住螢幕上的那個窗格，於是 Rex 以手機的尺寸顯示它。
   在分頁和窗格之間切換只發生在手機上，Rex 的目前分頁仍屬於桌面。桌面搶走正在顯示的窗格時，
   手機會再搶回來，桌面堅持得越久，手機就等得越久。交還的窗格一直屬於桌面，直到你接管。
-- **Tailscale。** 節點是 sing-box 的 Tailscale endpoint，前面是回環位址上的 SOCKS5 入口，只有 App
-  自己的連線會走它。節點的 UDP 綁在手機的 Wi-Fi 或行動網路上，在 VPN 允許 App 繞過時會繞開 Clash
+- **Tailscale。** 節點是官方的 `tailscale.com/tsnet` 程式庫，跑在使用者空間，前面是回環位址上的 SOCKS5
+  代理，只有 App 自己的連線會走它。節點的 UDP 綁在手機的 Wi-Fi 或行動網路上，在 VPN 允許 App 繞過時會繞開 Clash
   這類代理 VPN，這樣才打得通直連。主頁會顯示到每台 tailnet 主機的路徑——直連、peer relay 還是
   DERP——以及往返延遲，點一下可以重新測量。
 
@@ -116,8 +116,8 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再�
 ```
 
 APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 會建置一個以偵錯金鑰簽署的版本。只建置
-arm64-v8a。`app/libs/libbox.aar`（sing-box 1.14.4）已經放在儲存庫裡；要建置其他 ABI，執行
-[tools/build-libbox.sh](tools/build-libbox.sh)。`core` 裡的整合測試會連到 `127.0.0.1:7297` 上的 Rex
+arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/` 這個 Go 模組建置，`tailscale.com` 的
+版本由其 `go.mod` 鎖定；要重新建置，執行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。`core` 裡的整合測試會連到 `127.0.0.1:7297` 上的 Rex
 （可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），沒有 Rex 時會略過。
 
 ## 致謝
@@ -127,6 +127,7 @@ arm64-v8a。`app/libs/libbox.aar`（sing-box 1.14.4）已經放在儲存庫裡�
 - [libghostty-android](https://github.com/SagerNet/libghostty-android)，由
   [SagerNet](https://github.com/SagerNet) 開發——VT 繫結和終端機檢視。
 - [Ghostty](https://ghostty.org)，由 Mitchell Hashimoto 及貢獻者開發——終端機模擬器。
-- [sing-box](https://github.com/SagerNet/sing-box) 及其 libbox 程式庫——Tailscale 節點。
+- [Tailscale](https://github.com/tailscale/tailscale)，Tailscale Inc. 及貢獻者，BSD-3-Clause——App 內的
+  Tailscale 節點就是它的 tsnet 程式庫。
 - [Material Symbols](https://github.com/google/material-design-icons)（Rounded），Google，Apache
   License 2.0——介面圖示。程式圖示是 App 自己畫的，不是各產品的標誌。
