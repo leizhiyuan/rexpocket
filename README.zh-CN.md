@@ -113,10 +113,25 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再�
 ./gradlew :core:test :app:assembleDebug
 ```
 
-APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 会构建一个用调试密钥签名的版本。只构建
+APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 会构建一个用发布密钥签名的版本（见下文「发布」）。只构建
 arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这个 Go 模块构建，`tailscale.com` 的版本
 由其 `go.mod` 锁定；要重新构建，运行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。`core` 里的集成测试连接 `127.0.0.1:7297` 上的 Rex
 （可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），没有 Rex 时会跳过。
+
+### 发布
+
+应用从自己的 GitHub release 自更新，而 Android 只允许用和已安装应用同一把密钥签名的更新覆盖安装。所以**无论在哪台电脑构建，每个版本都用同一把密钥签名**；用其他密钥签的版本不能覆盖安装，只能先卸载，而卸载会清除应用里的主机和 tailnet 登录。
+
+1. 在未跟踪的 `local.properties`（或 Gradle 属性、环境变量）里告诉 Gradle 密钥在哪，相对路径从项目根目录算：
+   ```properties
+   REXPOCKET_KEYSTORE=release.keystore
+   REXPOCKET_KEYSTORE_PASSWORD=...
+   REXPOCKET_KEY_ALIAS=...
+   REXPOCKET_KEY_PASSWORD=...
+   ```
+2. 在 `app/build.gradle.kts` 里提高 `versionCode` 和 `versionName`，以 `build: release <version>` 提交。
+3. `./gradlew :app:assembleRelease`。没有设置密钥时构建会中止，绝不会回退到调试密钥。用 `apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk` 检查结果。
+4. 发布一个标签为 `v<version>` 的 GitHub release，只附这一个 APK，命名为 `RexPocket-<version>.apk`。alpha、beta、rc 要标为 pre-release：已安装的预发布版会跟随预发布版，已安装的正式版只接受正式版。不要替换已发布 release 的 APK，修复就发新版本。
 
 ## 致谢
 

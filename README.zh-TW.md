@@ -117,10 +117,25 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再�
 ./gradlew :core:test :app:assembleDebug
 ```
 
-APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 會建置一個以偵錯金鑰簽署的版本。只建置
+APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 會建置一個以發布金鑰簽署的版本（見下文「發布」）。只建置
 arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/` 這個 Go 模組建置，`tailscale.com` 的
 版本由其 `go.mod` 鎖定；要重新建置，執行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。`core` 裡的整合測試會連到 `127.0.0.1:7297` 上的 Rex
 （可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），沒有 Rex 時會略過。
+
+### 發布
+
+應用程式從自己的 GitHub release 自動更新，而 Android 只允許用和已安裝應用程式同一把金鑰簽署的更新覆蓋安裝。所以**無論在哪台電腦建置，每個版本都用同一把金鑰簽署**；用其他金鑰簽的版本不能覆蓋安裝，只能先解除安裝，而解除安裝會清除應用程式裡的主機和 tailnet 登入。
+
+1. 在未追蹤的 `local.properties`（或 Gradle 屬性、環境變數）裡告訴 Gradle 金鑰在哪，相對路徑從專案根目錄算：
+   ```properties
+   REXPOCKET_KEYSTORE=release.keystore
+   REXPOCKET_KEYSTORE_PASSWORD=...
+   REXPOCKET_KEY_ALIAS=...
+   REXPOCKET_KEY_PASSWORD=...
+   ```
+2. 在 `app/build.gradle.kts` 裡提高 `versionCode` 和 `versionName`，以 `build: release <version>` 提交。
+3. `./gradlew :app:assembleRelease`。沒有設定金鑰時建置會中止，絕不會回退到偵錯金鑰。用 `apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk` 檢查結果。
+4. 發布一個標籤為 `v<version>` 的 GitHub release，只附這一個 APK，命名為 `RexPocket-<version>.apk`。alpha、beta、rc 要標為 pre-release：已安裝的預發布版會跟隨預發布版，已安裝的正式版只接受正式版。不要取代已發布 release 的 APK，修正就發新版本。
 
 ## 致謝
 

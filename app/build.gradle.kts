@@ -1,8 +1,22 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// Every release is signed with one key, so a build made on any computer installs over the last one.
+// The key is not in the repository: point these at the keystore (Gradle properties, environment or
+// local.properties; a relative path is from the project root).
+//   REXPOCKET_KEYSTORE, REXPOCKET_KEYSTORE_PASSWORD, REXPOCKET_KEY_ALIAS, REXPOCKET_KEY_PASSWORD
+// A release build stops when the key is not set, instead of falling back to the debug key.
+// local.properties is not tracked, so the key's location and passwords can live there on a build machine.
+val localProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.isFile }?.reader()?.use { load(it) }
+}
+fun signingSetting(name: String): String? =
+    providers.gradleProperty(name).orNull ?: System.getenv(name) ?: localProperties.getProperty(name)
 
 android {
     namespace = "me.leaver.rexpocket"
@@ -22,12 +36,19 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            signingSetting("REXPOCKET_KEYSTORE")?.let { storeFile = rootProject.file(it) }
+            storePassword = signingSetting("REXPOCKET_KEYSTORE_PASSWORD")
+            keyAlias = signingSetting("REXPOCKET_KEY_ALIAS")
+            keyPassword = signingSetting("REXPOCKET_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Personal build: sign with the debug key so a sideloaded APK can be updated
-            // without keeping a private keystore in the repository.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -94,6 +115,16 @@ tasks.withType<Test>().configureEach {
     // A new libghostty is a reason to run them again, not just a changed test.
     inputs.dir(hostLibraryDir)
     systemProperty("java.library.path", hostLibraryDir.absolutePath)
+}
+
+// A release build is only made with the release key: with no key set it stops before anything is
+// signed, instead of producing an APK that cannot update the installed app.
+gradle.taskGraph.whenReady {
+    if (allTasks.none { it.project == project && Regex("(package|bundle)Release").matches(it.name) }) return@whenReady
+    val release = android.signingConfigs.getByName("release")
+    if (release.storeFile == null || release.storePassword == null || release.keyAlias == null || release.keyPassword == null) {
+        throw GradleException("Release builds need REXPOCKET_KEYSTORE, REXPOCKET_KEYSTORE_PASSWORD, REXPOCKET_KEY_ALIAS and REXPOCKET_KEY_PASSWORD (Gradle properties, environment or local.properties); see the README.")
+    }
 }
 
 dependencies {

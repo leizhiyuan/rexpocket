@@ -12,3 +12,7 @@ captures/
 # Built by tools/build-ghostty.py
 native/.build/
 app/src/main/jniLibs/
+
+# Release signing key: never committed, see app/build.gradle.kts
+*.keystore
+*.jks

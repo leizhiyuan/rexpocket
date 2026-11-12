@@ -140,7 +140,7 @@ Requires JDK 17, the Android SDK (platform 36) with an NDK, and python3 with cur
 ```
 
 The APK lands in `app/build/outputs/apk/debug/`; `:app:assembleRelease` builds one signed with the
-debug key. Builds are arm64-v8a only. The terminal is the official libghostty-vt, built from the
+release key (see Releasing below). Builds are arm64-v8a only. The terminal is the official libghostty-vt, built from the
 Ghostty revision pinned in [native/ghostty/source.json](native/ghostty/source.json) by
 [tools/build-ghostty.py](tools/build-ghostty.py), which Gradle runs; the first build downloads Zig
 and the Ghostty source, checked against their pinned checksums. To move to a newer Ghostty, change
@@ -149,6 +149,30 @@ the revision and checksum there. `app/libs/tailnet.aar` - the Go module in `tail
 [tools/build-tailnet.sh](tools/build-tailnet.sh). The integration
 tests in `core` run against a Rex on `127.0.0.1:7297` (set `REX_TEST_HOST` / `REX_TEST_PORT`) and
 are skipped without one.
+
+### Releasing
+
+The app updates itself from its GitHub releases, and Android only installs an update signed by the
+same key as the installed app. So **every release is signed with one key, whatever computer builds
+it**; a release signed with another key cannot be installed over the last, only after uninstalling,
+which erases the app's hosts and tailnet login.
+
+1. Tell Gradle where the release key is, in the untracked `local.properties` (or as Gradle properties or
+   environment variables). A relative path is from the project root:
+   ```properties
+   REXPOCKET_KEYSTORE=release.keystore
+   REXPOCKET_KEYSTORE_PASSWORD=...
+   REXPOCKET_KEY_ALIAS=...
+   REXPOCKET_KEY_PASSWORD=...
+   ```
+2. Raise `versionCode` and `versionName` in `app/build.gradle.kts`, and commit it as
+   `build: release <version>`.
+3. `./gradlew :app:assembleRelease`. The build stops if the key is not set; it never falls back to the
+   debug key. Check the result with `apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk`.
+4. Publish a GitHub release tagged `v<version>` with that one APK attached, named
+   `RexPocket-<version>.apk`. Mark it a pre-release for an alpha, beta or rc: an installed pre-release
+   follows pre-releases, an installed finished build only takes finished ones. Do not replace the APK of
+   a published release - a new fix is a new version.
 
 ## Acknowledgements
 
