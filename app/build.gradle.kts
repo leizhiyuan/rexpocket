@@ -27,8 +27,8 @@ android {
         applicationId = "me.leaver.rexpocket"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "0.1.0-alpha2"
+        versionCode = 20
+        versionName = "0.1.0"
 
         // The tailnet and Ghostty libraries are built for arm64 only, so the APK must not claim the other ABIs either.
         ndk.abiFilters += "arm64-v8a"
