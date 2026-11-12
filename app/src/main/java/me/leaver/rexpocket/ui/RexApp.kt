@@ -14,6 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
+import me.leaver.rexpocket.R
+import me.leaver.rexpocket.update.InstallResult
+import me.leaver.rexpocket.update.UpdateState
 
 // The app root: picks the screen for the route and hosts the dialogs that float over all of them.
 
@@ -33,9 +36,30 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val tailnetPath by model.tailnetPath.collectAsState()
     val alerts by model.alerts.collectAsState()
     val upload by model.upload.collectAsState()
+    val update by model.update.collectAsState()
     val context = LocalContext.current
     var tailscaleOpen by remember { mutableStateOf(false) }
+    // Each offer is shown once per app run; the settings row still has it afterwards.
+    var offeredOnce by remember { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(Unit) { model.restore() }
+    // Once a day: look for a newer build and say so. Nothing is downloaded until it is asked for.
+    LaunchedEffect(Unit) { model.checkForUpdates() }
+
+    // The settings row and the offer do the same next thing: download what was found, install what
+    // was downloaded, or ask again. Nothing here runs on its own.
+    val install = {
+        if (model.installUpdate() == InstallResult.NeedsPermission) {
+            toast(context, context.getString(R.string.update_allow_install))
+        }
+    }
+    val updateTapped: (UpdateState) -> Unit = { state ->
+        when (state) {
+            is UpdateState.Available -> model.downloadUpdate()
+            is UpdateState.Ready -> install()
+            is UpdateState.Downloading -> Unit
+            else -> model.checkForUpdates(force = true)
+        }
+    }
     LifecycleStartEffect(model) {
         model.setForeground(true)
         onStopOrDispose { model.setForeground(false) }
@@ -75,6 +99,8 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onAlerts = model::setAlerts,
                     onFontSettings = { fontSettingsOpen = true },
                     onDiagnosticsReport = { limit -> model.diagnosticReport(limit) },
+                    update = update,
+                    onUpdate = { updateTapped(update) },
                 )
                 Route.Term -> TermScreen(
                     state = pocket,
@@ -94,6 +120,24 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onRetryUpload = model::retryUpload,
                 )
             }
+        }
+        val offered = update
+        val offeredTag = when (offered) {
+            is UpdateState.Available -> offered.tag
+            is UpdateState.Ready -> offered.tag
+            else -> null
+        }
+        val offerKey = offeredTag?.let { if (offered is UpdateState.Ready) "$it-ready" else "$it-available" }
+        if (offeredTag != null && offerKey != null && offerKey !in offeredOnce) {
+            UpdateOfferDialog(
+                tag = offeredTag,
+                downloaded = offered is UpdateState.Ready,
+                onConfirm = {
+                    offeredOnce = offeredOnce + offerKey
+                    updateTapped(offered)
+                },
+                onLater = { offeredOnce = offeredOnce + offerKey },
+            )
         }
         if (fontSettingsOpen) {
             FontSettingsDialog(terminalFont, model::selectTerminalFont) { fontSettingsOpen = false }

@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The app downloads a newer build of itself and hands it to the system installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- The Tailscale box reads the phone's interfaces and default network. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Background alerts: the notifications, and the foreground service that keeps the connection up. -->
