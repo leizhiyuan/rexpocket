@@ -191,4 +191,20 @@
     <string name="alerts_watching">Watching %1$s for programs that need you</string>
     <string name="alerts_stop">Stop</string>
     <string name="alerts_failed">failed</string>
+
+    <string name="update_title">Updates</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_current">Up to date</string>
+    <string name="update_available">%1$s is available</string>
+    <string name="update_downloading">Downloading %1$s · %2$d%%</string>
+    <string name="update_ready">%1$s is downloaded</string>
+    <string name="update_failed">Could not check or download</string>
+    <string name="update_available_title">RexPocket %1$s is available</string>
+    <string name="update_available_body">This build is published on GitHub. Downloading it installs nothing: the APK is checked, and Android asks again before anything is replaced.</string>
+    <string name="update_download">Download</string>
+    <string name="update_ready_title">RexPocket %1$s is ready</string>
+    <string name="update_ready_body">The APK is downloaded and checked. Installing it closes the app; Android asks once for permission to install an app from RexPocket.</string>
+    <string name="update_install">Install</string>
+    <string name="update_later">Later</string>
+    <string name="update_allow_install">Allow RexPocket to install apps, then tap Install again.</string>
 </resources>

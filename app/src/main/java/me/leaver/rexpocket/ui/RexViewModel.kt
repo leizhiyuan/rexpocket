@@ -43,6 +43,9 @@ import me.leaver.rexpocket.net.NetworkWatcher
 import me.leaver.rexpocket.net.TailscaleBox
 import me.leaver.rexpocket.net.TailscaleConfig
 import me.leaver.rexpocket.net.TailscaleStatus
+import me.leaver.rexpocket.update.InstallResult
+import me.leaver.rexpocket.update.UpdateState
+import me.leaver.rexpocket.update.Updater
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
@@ -82,6 +85,10 @@ sealed interface Route {
 class RexViewModel(app: Application) : AndroidViewModel(app) {
     private val store = HostStore(app)
     private val tailscaleBox = TailscaleBox(app)
+    private val updater = Updater(app)
+
+    /** The newer build the app found, from the check through to the downloaded APK. */
+    val update: StateFlow<UpdateState> = updater.state
     val hosts = MutableStateFlow(store.list())
     val tailscale = MutableStateFlow(store.tailscale())
     val tailscaleStatus: StateFlow<TailscaleStatus> = tailscaleBox.status
@@ -574,6 +581,22 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         val target = store.lastHost()?.let { store.find(it) } ?: return
         connect(target, resume = true)
     }
+
+    /**
+     * Looks for a newer build and downloads it. Starting the app only asks when the last check is
+     * old; the settings row asks every time it is tapped.
+     */
+    fun checkForUpdates(force: Boolean = false) {
+        viewModelScope.launch { updater.check(force) }
+    }
+
+    /** Downloads the release the check offered; nothing is fetched before this is called. */
+    fun downloadUpdate() {
+        viewModelScope.launch { updater.download() }
+    }
+
+    /** Opens the system installer on the downloaded APK; see [Updater.install]. */
+    fun installUpdate(): InstallResult = updater.install()
 
     /** The shown pane's bytes for as long as the screen collects them; see [PocketSession.watchPane]. */
     fun watchPane(blockId: String): Flow<TerminalFeed> = session?.watchPane(blockId) ?: emptyFlow()

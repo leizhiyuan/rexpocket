@@ -2,4 +2,6 @@
 <paths>
     <!-- Only the reports the app wrote here, never the rest of the cache. -->
     <cache-path name="diagnostics" path="diagnostics/" />
+    <!-- And the update it downloaded, handed to the system installer one file at a time. -->
+    <cache-path name="updates" path="updates/" />
 </paths>

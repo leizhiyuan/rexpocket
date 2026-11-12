@@ -188,4 +188,20 @@
     <string name="alerts_watching">正在监听 %1$s 上需要你处理的程序</string>
     <string name="alerts_stop">停止</string>
     <string name="alerts_failed">出错了</string>
+
+    <string name="update_title">更新</string>
+    <string name="update_checking">检查中…</string>
+    <string name="update_current">已是最新</string>
+    <string name="update_available">有 %1$s</string>
+    <string name="update_downloading">正在下载 %1$s · %2$d%%</string>
+    <string name="update_ready">%1$s 已下载</string>
+    <string name="update_failed">检查或下载失败</string>
+    <string name="update_available_title">RexPocket %1$s 可以更新</string>
+    <string name="update_available_body">这个版本已经发在 GitHub 上。现在只是下载，还不会安装：下载完会校验，安装前 Android 还会问一次。</string>
+    <string name="update_download">下载</string>
+    <string name="update_ready_title">RexPocket %1$s 已就绪</string>
+    <string name="update_ready_body">安装包已下载并校验。安装会关掉 App；Android 会先问一次是否允许 RexPocket 安装应用。</string>
+    <string name="update_install">安装</string>
+    <string name="update_later">稍后</string>
+    <string name="update_allow_install">请允许 RexPocket 安装应用，然后再点一次安装。</string>
 </resources>

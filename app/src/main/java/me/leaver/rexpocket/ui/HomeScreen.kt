@@ -82,6 +82,7 @@ import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.SavedHost
 import me.leaver.rexpocket.data.TailscaleSettings
+import me.leaver.rexpocket.update.UpdateState
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.net.TailscaleStatus
 
@@ -145,6 +146,9 @@ internal fun HomeScreen(
     onFontSettings: () -> Unit,
     /** Builds the diagnostics report when the person asks for one, kept to [limit] characters. */
     onDiagnosticsReport: (limit: Int) -> String,
+    /** The newer build the app found, if it found one, and the tap that acts on it. */
+    update: UpdateState,
+    onUpdate: () -> Unit,
 ) {
     val context = LocalContext.current
     // Android 13 asks for notifications at run time; alerts come on once the person allows them.
@@ -377,6 +381,11 @@ internal fun HomeScreen(
             onDiagnostics = {
                 settings = false
                 diagnostics = true
+            },
+            update = update,
+            onUpdate = {
+                settings = false
+                onUpdate()
             },
         )
     }
@@ -730,6 +739,8 @@ private fun SettingsSheet(
     onFontSettings: () -> Unit,
     recording: Boolean,
     onDiagnostics: () -> Unit,
+    update: UpdateState,
+    onUpdate: () -> Unit,
 ) {
     val context = LocalContext.current
     val joined = tailscale.enabled && tailscaleStatus.backendState == "Running"
@@ -763,6 +774,12 @@ private fun SettingsSheet(
                 onClick = onDiagnostics,
             )
             SheetItem(stringResource(R.string.settings_source), icon = R.drawable.ic_open_in_new) { openLink(context, SOURCE_URL) }
+            SheetItem(
+                label = stringResource(R.string.update_title),
+                icon = R.drawable.ic_arrow_down,
+                detail = updateDetail(update),
+                onClick = onUpdate,
+            )
         }
         Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
             Text(

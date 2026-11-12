@@ -37,6 +37,10 @@ through a Tailscale node built into the app.
   desktop keeps its own tab. **Release** hands a pane back to the desk until you **Take over**.
 - **Your tailnet, without the Tailscale app.** The app runs its own Tailscale node, so a host is
   reachable by its MagicDNS name or `100.x` address without taking the phone's VPN slot.
+- **Knows when it is old.** Once a day, and whenever Settings › Updates is tapped, the app asks its
+  GitHub releases whether a newer build exists and says so; nothing is downloaded until you ask, and
+  Android asks once for permission to install it. An alpha follows the alphas, a finished build only
+  takes finished ones.
 - **Light and dark,** following the phone, in English and Simplified Chinese.
 
 ## Set up the computer
