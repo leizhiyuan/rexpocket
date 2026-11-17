@@ -5,8 +5,8 @@
 # RexPocket
 
 终端多路复用器 [Rex](https://rex.app) 的 Android 客户端。它把你自己的 Rex 服务器上的所有会话一直列到标签页，
-点开任意窗格就是一个全屏终端，直接输入。它只和你的 Rex 通信，不经过任何第三方——可以走局域网，
-也可以通过 App 内置的 Tailscale 节点走你的 tailnet。
+点开任意窗格就是一个全屏终端，直接输入。它只和你的 Rex 通信，不经过任何第三方——可以走局域网、
+通过 App 内置的 Tailscale 节点走你的 tailnet，或者走电脑自己的 SSH 服务。
 
 | 主页 | 终端 | 夜间终端 |
 | --- | --- | --- |
@@ -29,6 +29,9 @@
   **交还** 把窗格还给桌面，直到你再 **接管**。
 - **不装 Tailscale 也能上 tailnet。** App 自带一个 Tailscale 节点，用 MagicDNS 名字或 `100.x` 地址
   就能连到主机，也不占手机唯一的 VPN 位置。
+- **通过 SSH 添加主机。** 填 `ssh://host`，再填账号和密码（或私钥），就能通过机器本来就在跑的 SSH 服务
+  连到 Rex，不用对外开放 Rex 端口。第一次连接会显示并记住主机密钥；密钥变了会停下，等你确认。
+  tailnet 地址仍然走 App 内置的节点。
 - **知道自己旧了。** 每天启动时（以及点设置 › 更新时）去 GitHub releases 查有没有新版本，有就提示；
   你不点就不下载，安装前 Android 只会问一次权限。alpha 版只跟 alpha 走，正式版只收正式版。
 - **浅色与深色**跟随手机，支持英文和简体中文。
@@ -48,12 +51,18 @@ rex server start --extra-listen :7297 --allow-anonymous
 **tailnet。** 在电脑上打开 Rex 内置的 Tailscale，它会用自己的 MagicDNS 名字通过 HTTPS 提供 Rex，
 路由器上什么都不用开。
 
+**SSH。** 在电脑上装好 Rex（`rex server install` 就会装好），让非交互登录也能运行 `rex`
+（App 也会去 `~/.local/bin` 找）。路由器上什么都不用开：App 通过机器自己的 SSH 服务连进去。 传输层的完整设计见
+[docs/design/ssh-hosts.md](docs/design/ssh-hosts.md)。
+
 ## 使用
 
 1. **添加主机。** 设置 › 添加主机，填名字和地址就行：
    - `192.0.2.10`——明文，7297 端口
    - `192.0.2.10:7300`——换个端口
    - `my-mac.tail1234.ts.net` 或 `100.x` 地址——走 Tailscale，443 端口，TLS
+   - `ssh://192.0.2.10` 或 `ssh://my-mac.tail1234.ts.net`——走那台机器的 SSH 服务，
+     填账号和密码（或私钥）；第一次连接会让你确认主机密钥
 
    输入框下面那行会显示 App 打算怎么连。
 2. **tailnet 主机要先加入 tailnet。** 设置 › Tailscale，给手机起一个节点名并保存。App 会打开一次
@@ -94,6 +103,10 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再�
 - **窗格归属。** 手机只用 `session.own_block` 占住屏幕上的那个窗格，于是 Rex 按手机的尺寸显示它。
   在标签页和窗格之间切换只发生在手机上，Rex 的当前标签页仍然归桌面。桌面抢走正在显示的窗格时，
   手机会再抢回来，桌面坚持得越久，手机等得越久。交还的窗格一直归桌面，直到你接管。
+- **SSH。** 每条 HTTP 或 WebSocket 连接都是一条 SSH exec 通道，在里面运行
+  `rex __internal dial-stdio`，把标准输入输出接到那台机器上 Rex 自己的 Unix socket。App 记住第一次
+  看到的主机密钥，之后每次连接都比对；密钥变了就不再重试，等你确认新的。主机直连，地址在 tailnet 上时
+  走内置的 Tailscale 节点。
 - **Tailscale。** 节点是官方的 `tailscale.com/tsnet` 库，跑在用户态，前面是回环地址上的 SOCKS5 代理，
   只有 App 自己的连接走它。节点的 UDP 绑定在手机的 Wi-Fi 或移动网络上，在 VPN 允许 App 绕过时会绕开 Clash
   这类代理 VPN，这样才能打通直连。主页会显示到每台 tailnet 主机的路径——直连、peer relay 还是
@@ -116,7 +129,7 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再�
 APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 会构建一个用发布密钥签名的版本（见下文「发布」）。只构建
 arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这个 Go 模块构建，`tailscale.com` 的版本
 由其 `go.mod` 锁定；要重新构建，运行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。`core` 里的集成测试连接 `127.0.0.1:7297` 上的 Rex
-（可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），没有 Rex 时会跳过。
+（可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），没有 Rex 时会跳过。 SSH 测试需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台机器，并用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 给出凭据才会运行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可选。
 
 ### 发布
 
@@ -141,5 +154,8 @@ arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这
   官方的 libghostty-vt，许可证见 `app/src/main/assets/licenses/Ghostty-MIT.txt`。
 - [Tailscale](https://github.com/tailscale/tailscale)，Tailscale Inc. 及贡献者，BSD-3-Clause——App 内的
   Tailscale 节点就是它的 tsnet 库。
+- [JSch](https://github.com/mwiede/jsch)，JCraft, Inc. 及贡献者，Revised BSD——SSH 客户端。
+  [eddsa](https://github.com/str4d/ed25519-java)，Str4d 及贡献者，CC0——Android 自带的安全提供者
+  没有给 JSch 的 Ed25519 实现。
 - [Material Symbols](https://github.com/google/material-design-icons)（Rounded），Google，Apache
   License 2.0——界面图标。程序图标是 App 自己画的，不是各产品的 logo。

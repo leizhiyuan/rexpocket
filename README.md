@@ -6,8 +6,8 @@
 
 An Android client for [Rex](https://rex.app), the terminal multiplexer. It shows every session on
 your own Rex servers, down to the tab, and opens any pane as a full-screen terminal you type into
-directly. It talks to your Rex and nothing else - on the local network, or over your tailnet
-through a Tailscale node built into the app.
+directly. It talks to your Rex and nothing else - on the local network, over your tailnet through a
+Tailscale node built into the app, or through the computer's own SSH daemon.
 
 | Home | Terminal | Terminal at night |
 | --- | --- | --- |
@@ -37,6 +37,10 @@ through a Tailscale node built into the app.
   desktop keeps its own tab. **Release** hands a pane back to the desk until you **Take over**.
 - **Your tailnet, without the Tailscale app.** The app runs its own Tailscale node, so a host is
   reachable by its MagicDNS name or `100.x` address without taking the phone's VPN slot.
+- **Hosts over SSH.** Add `ssh://host` and sign in with an account and a password or a private key;
+  the app reaches Rex through the SSH daemon the machine already runs - no Rex port has to be open.
+  The host key is shown and pinned on the first connection; a changed one stops the connection
+  until you confirm it. A tailnet address is still dialed through the built-in node.
 - **Knows when it is old.** Once a day, and whenever Settings › Updates is tapped, the app asks its
   GitHub releases whether a newer build exists and says so; nothing is downloaded until you ask, and
   Android asks once for permission to install it. An alpha follows the alphas, a finished build only
@@ -59,12 +63,20 @@ trust.
 **Over a tailnet.** Turn on Rex's built-in Tailscale on the computer; it serves Rex over HTTPS
 at its MagicDNS name. Nothing has to be opened on the router.
 
+**Over SSH.** Install Rex on the computer, as `rex server install` does, so a non-interactive
+login can run `rex` (the app also looks in `~/.local/bin`). Nothing has to be opened: the app
+reaches the server through the machine's own SSH daemon. How the transport works is described in
+[docs/design/ssh-hosts.md](docs/design/ssh-hosts.md).
+
 ## Use the app
 
 1. **Add a host.** Settings › Add host. A name and an address is all it takes:
    - `192.0.2.10` - plaintext on port 7297
    - `192.0.2.10:7300` - another port
    - `my-mac.tail1234.ts.net` or a `100.x` address - through Tailscale, on 443 with TLS
+   - `ssh://192.0.2.10` or `ssh://my-mac.tail1234.ts.net` - through that machine's SSH daemon;
+     type the account and a password or a private key, and the first connection asks you to
+     confirm its host key
 
    The line under the field shows how the app will connect.
 2. **For a tailnet host, join the tailnet.** Settings › Tailscale, give the phone a node name and
@@ -117,6 +129,11 @@ you can read it before you send it.
   applies the phone's size to it. Moving between tabs and panes is local to the phone: Rex's
   active tab stays the desktop's. When the desktop takes the shown pane, the phone takes it back,
   waiting longer each time the desk insists. A released pane stays the desk's until Take over.
+- **SSH.** Each HTTP or WebSocket connection is an SSH exec channel running
+  `rex __internal dial-stdio`, which joins its input and output to Rex's own Unix socket on that
+  machine. The app pins the host key it saw, compares it on every connection, and a changed key
+  stops retrying until you confirm the new one. The host is dialed directly, or through the
+  built-in Tailscale node when its address is on the tailnet.
 - **Tailscale.** The node is the official `tailscale.com/tsnet` library running in userspace,
   with a SOCKS5 proxy on loopback in front of it; only the app's own connections use it. The node's UDP is bound to the phone's Wi-Fi or mobile
   network, around a proxy VPN such as Clash when the VPN allows apps to bypass it, so a direct
@@ -148,7 +165,9 @@ the revision and checksum there. `app/libs/tailnet.aar` - the Go module in `tail
 `tailscale.com` at the version its `go.mod` pins - is checked in; to build it again, run
 [tools/build-tailnet.sh](tools/build-tailnet.sh). The integration
 tests in `core` run against a Rex on `127.0.0.1:7297` (set `REX_TEST_HOST` / `REX_TEST_PORT`) and
-are skipped without one.
+are skipped without one. The SSH test runs only when `REX_SSH_HOST` and `REX_SSH_USER` name a
+machine and `REX_SSH_KEY` or `REX_SSH_PASSWORD` gives a credential; `REX_SSH_PORT`,
+`REX_SSH_HOST_KEY`, `REX_SSH_KEY_PASSPHRASE` and `REX_SSH_SOCKS` are optional.
 
 ### Releasing
 
@@ -182,6 +201,9 @@ which erases the app's hosts and tailnet login.
   emulator: the app builds its official libghostty-vt library, license in `app/src/main/assets/licenses/Ghostty-MIT.txt`.
 - [Tailscale](https://github.com/tailscale/tailscale), by Tailscale Inc. and contributors, BSD-3-Clause -
   the tsnet library the app's Tailscale node is.
+- [JSch](https://github.com/mwiede/jsch), by JCraft, Inc. and contributors, Revised BSD - the SSH
+  client. [eddsa](https://github.com/str4d/ed25519-java), by Str4d and contributors, CC0 - the
+  Ed25519 implementation Android's own security providers do not give JSch.
 - [Material Symbols](https://github.com/google/material-design-icons) (Rounded), by Google, Apache
   License 2.0 - the interface icons. The program marks are the app's own drawings, not the
   products' logos.
