@@ -49,7 +49,7 @@ Tailscale node built into the app, or through the computer's own SSH daemon.
 
 ## Set up the computer
 
-Rex has to listen where the phone can reach it.
+Rex has to be reachable from the phone: over the local network, over a tailnet, or through SSH.
 
 **On the local network.** Start Rex with a plaintext port:
 
