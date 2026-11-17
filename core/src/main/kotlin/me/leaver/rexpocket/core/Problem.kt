@@ -23,6 +23,18 @@ enum class Trouble {
     /** The app's own Tailscale node could not start. */
     Tailnet,
 
+    /** The machine's SSH key has not been confirmed yet; [Problem.detail] is its fingerprint. */
+    SshHostKeyUnknown,
+
+    /** The machine's SSH key is not the one that was trusted; [Problem.detail] is the new one. */
+    SshHostKeyChanged,
+
+    /** SSH refused the password or the key, or the key could not be read. */
+    SshAuth,
+
+    /** SSH reached the machine, but Rex is not installed or cannot run there. */
+    SshCommand,
+
     Other,
 }
 
@@ -40,9 +52,35 @@ class ConnectionDroppedException(message: String, cause: Throwable?) : Exception
 /** An action that needs a connection, a session or a pane before there is one. */
 class NotReadyException(message: String) : IllegalStateException(message)
 
+/**
+ * OkHttp can reduce a failure under a socket it was given to "exhausted all routes", dropping the
+ * reason. When the transport knows what happened, and the generic failure says nothing specific,
+ * the transport's exception is the one the person needs to see.
+ */
+fun Throwable.explainedBy(transport: Throwable?): Throwable {
+    if (transport == null) return this
+    return when (toProblem().trouble) {
+        Trouble.Other, Trouble.Unreachable, Trouble.TimedOut -> transport
+        else -> this
+    }
+}
+
 /** Classifies by exception type along the cause chain; the message is kept as detail. */
 fun Throwable.toProblem(): Problem {
     val chain = generateSequence(this) { it.cause }.toList()
+    chain.firstOrNull { it is SshHostKeyException }?.let { error ->
+        val ssh = error as SshHostKeyException
+        return Problem(
+            if (ssh.changed) Trouble.SshHostKeyChanged else Trouble.SshHostKeyUnknown,
+            ssh.fingerprint,
+        )
+    }
+    chain.firstOrNull { it is SshAuthException }?.let { error ->
+        return Problem(Trouble.SshAuth, error.message)
+    }
+    chain.firstOrNull { it is SshCommandException }?.let { error ->
+        return Problem(Trouble.SshCommand, error.message)
+    }
     val trouble = when {
         this is ConnectionDroppedException -> Trouble.Dropped
         this is NotReadyException -> Trouble.NotReady

@@ -27,6 +27,8 @@ class RexClient(
     private val connectTimeoutMs: Long = 12_000,
     /** The API revision asked for in the hello; Rex answers the highest it knows up to this one. */
     private val apiRevision: Int = 7,
+    /** Why the transport itself failed, when OkHttp reduced it to "exhausted all routes". */
+    private val transportFailure: () -> Throwable? = { null },
 ) {
     private val ids = AtomicLong(0)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JSONObject>>()
@@ -55,8 +57,12 @@ class RexClient(
         socket = http.newWebSocket(request, listener(reconnectToken))
         // withTimeout throws a CancellationException, which callers rightly pass through; a host
         // that never says hello is a failure to retry, not a cancellation.
-        return withTimeoutOrNull(connectTimeoutMs) { opened.await() }
-            ?: throw RexTimeoutException("No answer from Rex within ${connectTimeoutMs / 1000}s")
+        return try {
+            withTimeoutOrNull(connectTimeoutMs) { opened.await() }
+                ?: throw RexTimeoutException("No answer from Rex within ${connectTimeoutMs / 1000}s")
+        } catch (e: Exception) {
+            throw e.explainedBy(transportFailure())
+        }
     }
 
     suspend fun call(method: String, payload: JSONObject? = null, timeoutMs: Long = 20_000): JSONObject {
@@ -218,5 +224,9 @@ class RexClient(
         /** A client whose sockets go through the app's own Tailscale inbound on [socksPort]. */
         fun forSocksPort(socksPort: Int, apiRevision: Int = 7): RexClient =
             RexClient(defaultHttp(socksPort), apiRevision = apiRevision)
+
+        /** A client whose sockets are exec channels on [tunnel], so Rex is reached over SSH. */
+        fun forSsh(tunnel: SshTunnel, apiRevision: Int = 7): RexClient =
+            RexClient(tunnel.http(), apiRevision = apiRevision, transportFailure = { tunnel.lastFailure() })
     }
 }

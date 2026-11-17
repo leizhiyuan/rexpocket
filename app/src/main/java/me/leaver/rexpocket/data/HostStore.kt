@@ -14,7 +14,16 @@ data class SavedHost(
     val plaintext: Boolean,
     /** Reach this host through the built-in Tailscale node instead of the phone's network. */
     val viaTailscale: Boolean = false,
-)
+    /** The SSH account when Rex is reached over SSH, empty when Rex listens on a port. */
+    val sshUser: String = "",
+    val sshPassword: String = "",
+    val sshPrivateKey: String = "",
+    val sshPassphrase: String = "",
+    /** The `SHA256:...` the person confirmed, empty until the first connection asks. */
+    val sshHostKey: String = "",
+) {
+    val viaSsh: Boolean get() = sshUser.isNotBlank()
+}
 
 /** Settings for the Tailscale node the app runs itself: joined, and the name it goes by. */
 data class TailscaleSettings(
@@ -24,6 +33,7 @@ data class TailscaleSettings(
 
 class HostStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("rexpocket", Context.MODE_PRIVATE)
+    private val secrets = SecretBox()
 
     fun list(): List<SavedHost> {
         val raw = prefs.getString(KEY_HOSTS, "[]") ?: "[]"
@@ -39,6 +49,11 @@ class HostStore(context: Context) {
                         port = o.optInt("port", 7297),
                         plaintext = o.optBoolean("plaintext", true),
                         viaTailscale = o.optBoolean("viaTailscale", false),
+                        sshUser = o.optString("sshUser", ""),
+                        sshPassword = secrets.open(o.optString("sshPassword", "")),
+                        sshPrivateKey = secrets.open(o.optString("sshPrivateKey", "")),
+                        sshPassphrase = secrets.open(o.optString("sshPassphrase", "")),
+                        sshHostKey = o.optString("sshHostKey", ""),
                     ),
                 )
             }
@@ -156,7 +171,12 @@ class HostStore(context: Context) {
                     .put("host", h.host)
                     .put("port", h.port)
                     .put("plaintext", h.plaintext)
-                    .put("viaTailscale", h.viaTailscale),
+                    .put("viaTailscale", h.viaTailscale)
+                    .put("sshUser", h.sshUser)
+                    .put("sshPassword", secrets.seal(h.sshPassword))
+                    .put("sshPrivateKey", secrets.seal(h.sshPrivateKey))
+                    .put("sshPassphrase", secrets.seal(h.sshPassphrase))
+                    .put("sshHostKey", h.sshHostKey),
             )
         }
         prefs.edit().putString(KEY_HOSTS, arr.toString()).apply()

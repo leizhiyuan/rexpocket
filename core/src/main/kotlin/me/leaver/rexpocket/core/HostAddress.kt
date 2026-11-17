@@ -9,8 +9,12 @@ data class HostAddress(
     val port: Int,
     val plaintext: Boolean,
     val viaTailscale: Boolean,
+    /** True for `ssh://` addresses, where the account is asked for beside the address. */
+    val viaSsh: Boolean = false,
+    /** The account when the address itself names one, as in `ssh://user@host`. */
+    val sshUser: String? = null,
 ) {
-    fun endpoint(): Endpoint = Endpoint(host, port, plaintext)
+    fun endpoint(): Endpoint = Endpoint(host, port, plaintext, sshUser = sshUser)
 }
 
 object HostAddressParser {
@@ -20,12 +24,16 @@ object HostAddressParser {
     /** TLS below this port is what a tailnet host exposed over HTTPS answers on. */
     const val TLS_PORT = 443
 
-    private val SCHEMES = listOf("https", "http", "wss", "ws")
+    /** SSH's own port. */
+    const val SSH_PORT = 22
+
+    private val SCHEMES = listOf("https", "http", "wss", "ws", "ssh")
 
     /**
-     * Reads `host`, `host:port` or a whole URL. A name under `.ts.net`, a `100.64/10` address or a
-     * Tailscale IPv6 address is reached through the built-in node, and then TLS on 443 is assumed
-     * unless the address names another port.
+     * Reads `host`, `host:port` or a whole URL. `ssh://user@host[:port]` reaches Rex through that
+     * machine's SSH daemon instead of a Rex port, and then the address names no Rex port at all.
+     * A name under `.ts.net`, a `100.64/10` address or a Tailscale IPv6 address is reached through
+     * the built-in node, and then TLS on 443 is assumed unless the address names another port.
      */
     fun parse(raw: String): HostAddress? {
         var text = raw.trim()
@@ -44,6 +52,8 @@ object HostAddressParser {
         text = text.substringBefore('/').substringBefore('?').trim()
         if (text.isEmpty()) return null
 
+        if (scheme == "ssh") return parseSsh(text)
+
         val (host, portText) = splitHostPort(text) ?: return null
         val explicitPort = portText?.let { it.toIntOrNull()?.takeIf { port -> port in 1..65535 } }
         if (portText != null && explicitPort == null) return null
@@ -56,6 +66,29 @@ object HostAddressParser {
         }
         val port = explicitPort ?: if (plaintext) PLAIN_PORT else TLS_PORT
         return HostAddress(host, port, plaintext, tailnet)
+    }
+
+    /**
+     * `ssh://host[:port]` or `ssh://user@host[:port]`. The account may be named here or typed in its
+     * own field; a phone has no useful default one, so one of the two is required.
+     */
+    private fun parseSsh(text: String): HostAddress? {
+        val at = text.lastIndexOf('@')
+        if (at == 0 || at == text.lastIndex) return null
+        val user = if (at > 0) text.substring(0, at).trim() else null
+        if (user != null && (user.isEmpty() || user.any { it.isWhitespace() || it == '@' })) return null
+        val rest = if (at > 0) text.substring(at + 1) else text
+        val (host, portText) = splitHostPort(rest) ?: return null
+        val port = if (portText == null) SSH_PORT
+        else portText.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
+        return HostAddress(
+            host,
+            port,
+            plaintext = true,
+            viaTailscale = isTailnet(host),
+            viaSsh = true,
+            sshUser = user,
+        )
     }
 
     /** A MagicDNS name, a `100.64/10` address or one of the Tailscale IPv6 addresses. */

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +42,9 @@ import androidx.compose.ui.semantics.Role
 
 
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 
 import androidx.compose.ui.text.font.FontWeight
 
@@ -77,7 +81,15 @@ internal fun PrimaryButton(label: String, modifier: Modifier = Modifier, enabled
 }
 
 @Composable
-internal fun Field(hint: String, value: String, autoFocus: Boolean = false, onChange: (String) -> Unit) {
+internal fun Field(
+    hint: String,
+    value: String,
+    autoFocus: Boolean = false,
+    password: Boolean = false,
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+    onChange: (String) -> Unit,
+) {
     // With autoFocus the field opens focused with its text selected, so a rename can be typed over.
     var field by remember { mutableStateOf(TextFieldValue(value, if (autoFocus) TextRange(0, value.length) else TextRange(value.length))) }
     val focus = remember { FocusRequester() }
@@ -102,7 +114,10 @@ internal fun Field(hint: String, value: String, autoFocus: Boolean = false, onCh
             },
             textStyle = TextStyle(color = Colors.ink, fontSize = TextStyles.body),
             cursorBrush = SolidColor(Colors.accent),
-            singleLine = true,
+            singleLine = singleLine,
+            minLines = minLines,
+            visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else KeyboardType.Text),
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp).border(1.dp, Colors.line, RoundedCornerShape(Radius.chip))
                 .padding(horizontal = 12.dp, vertical = 12.dp)
                 .focusRequester(focus),
@@ -140,6 +155,10 @@ internal fun problemText(problem: Problem, endpoint: String): String = when (pro
     Trouble.TailnetNotJoined -> stringResource(R.string.error_join_tailnet_first)
     Trouble.Tailnet -> stringResource(R.string.problem_tailnet, problem.detail.orEmpty())
     Trouble.Rejected -> stringResource(R.string.problem_rejected, problem.detail.orEmpty())
+    Trouble.SshHostKeyUnknown -> stringResource(R.string.problem_ssh_host_key_unknown)
+    Trouble.SshHostKeyChanged -> stringResource(R.string.problem_ssh_host_key_changed)
+    Trouble.SshAuth -> stringResource(R.string.problem_ssh_auth, problem.detail.orEmpty())
+    Trouble.SshCommand -> stringResource(R.string.problem_ssh_command, problem.detail.orEmpty())
     Trouble.Other -> problem.detail ?: stringResource(R.string.error_operation_failed)
 }
 

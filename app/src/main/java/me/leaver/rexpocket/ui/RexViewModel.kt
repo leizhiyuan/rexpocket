@@ -24,6 +24,9 @@ import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.Problem
+import me.leaver.rexpocket.core.SshCredentials
+import me.leaver.rexpocket.core.SshSettings
+import me.leaver.rexpocket.core.SshTunnel
 import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.Trouble
 import kotlinx.coroutines.flow.emptyFlow
@@ -66,6 +69,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import java.io.File
 
 // The app state: hosts, the tailnet node, and the one Rex connection the screens share.
@@ -162,6 +166,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     private var session: PocketSession? = null
+    private var sshTunnel: SshTunnel? = null
     private var foreground = true
     private var sessionJob: Job? = null
     private var watch: Job? = null
@@ -289,6 +294,20 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Remembers the SSH host key the person confirmed and connects again. An unknown key and a
+     * changed one take the same path: the dialog says which it was before this is called.
+     */
+    fun trustSshHostKey(fingerprint: String) {
+        val current = host ?: return
+        if (!current.viaSsh || fingerprint.isBlank()) return
+        val updated = current.copy(sshHostKey = fingerprint)
+        saveHost(updated)
+        host = updated
+        Diagnostics.event(CONN_TAG, "ssh host key confirmed for ${current.host}")
+        connect(updated, resume = true)
+    }
+
+    /**
      * Connects and, when [resume] is set, goes back to the session and pane the app was showing
      * before the process died. A plain connect stops at the session list.
      */
@@ -299,23 +318,24 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         val previousSession = store.lastSession(target.id)
         route.value = Route.Home
         val settings = store.tailscale()
+        val endpoint = target.endpoint()
         if (target.viaTailscale && !settings.enabled) {
             // The host is saved either way; without a joined node there is no route to it.
             Diagnostics.event(CONN_TAG, "${target.label}: the tailnet is not joined")
             _pocket.value = PocketState(
                 phase = Phase.Failed,
-                endpointLabel = "${target.host}:${target.port}",
+                endpointLabel = endpoint.label(),
                 problem = Problem(Trouble.TailnetNotJoined, null),
             )
             return
         }
         val viaTailscale = target.viaTailscale
-        Diagnostics.event(CONN_TAG, "connect ${target.host}:${target.port} tailnet=$viaTailscale plaintext=${target.plaintext} resume=$resume")
+        Diagnostics.event(CONN_TAG, "connect ${endpoint.label()} tailnet=$viaTailscale ssh=${target.viaSsh} plaintext=${target.plaintext} resume=$resume")
         // Draw the list the host had last time straight away; the live one replaces it below.
         val cached = if (resume) emptyList() else store.cachedSessions(target.id)
         _pocket.value = PocketState(
             phase = Phase.Connecting,
-            endpointLabel = "${target.host}:${target.port}",
+            endpointLabel = endpoint.label(),
             sessions = cached,
         )
         if (Alerts.enabled.value) Alerts.watch(getApplication(), target.label)
@@ -335,7 +355,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (e: Exception) {
                     _pocket.value = PocketState(
                         phase = Phase.Failed,
-                        endpointLabel = "${target.host}:${target.port}",
+                        endpointLabel = endpoint.label(),
                         problem = Problem(Trouble.Tailnet, e.message),
                     )
                     return@launch
@@ -357,15 +377,41 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             } else {
                 0
             }
+            val trace = { line: String -> if (BuildConfig.DEBUG) Log.i(CONN_TAG, line) }
+            // The SSH tunnel is per host and outlives a reconnect attempt: only the channels under it
+            // come and go. Every Rex connection of this host goes through the same route.
+            val ssh = if (target.viaSsh) {
+                SshTunnel(
+                    SshSettings(
+                        host = target.host,
+                        port = target.port,
+                        user = target.sshUser,
+                        credentials = SshCredentials(
+                            password = target.sshPassword.takeIf { it.isNotEmpty() },
+                            privateKey = target.sshPrivateKey.takeIf { it.isNotEmpty() },
+                            passphrase = target.sshPassphrase.takeIf { it.isNotEmpty() },
+                        ),
+                        hostKey = target.sshHostKey.takeIf { it.isNotEmpty() },
+                        socksPort = socksPort,
+                    ),
+                    trace,
+                ).also { sshTunnel = it }
+            } else {
+                null
+            }
+            val httpFactory: () -> OkHttpClient = { ssh?.http() ?: RexClient.defaultHttp(socksPort) }
             val s = PocketSession(
-                Endpoint(target.host, target.port, target.plaintext),
-                clientFactory = { RexClient.forSocksPort(socksPort) },
+                endpoint,
+                httpFactory = httpFactory,
+                // The SSH client also carries the transport's own reason for a failure OkHttp hides.
+                clientFactory = { if (ssh != null) RexClient.forSsh(ssh) else RexClient(httpFactory()) },
                 // Uploads reserve a file on their own revision-11 connection, over the same route.
-                uploadClientFactory = { RexClient.forSocksPort(socksPort, FileUpload.API_REVISION) },
+                uploadClientFactory = {
+                    if (ssh != null) RexClient.forSsh(ssh, FileUpload.API_REVISION)
+                    else RexClient(httpFactory(), apiRevision = FileUpload.API_REVISION)
+                },
                 cachedSessions = cached,
-                // The terminal stream takes the same route as the control connection.
-                socksPort = socksPort,
-                trace = { if (BuildConfig.DEBUG) Log.i(CONN_TAG, it) },
+                trace = trace,
             )
             session = s
             sessionReady.complete(s)
@@ -603,6 +649,14 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
 
     fun retryNow() {
         Diagnostics.event(CONN_TAG, "retry asked for")
+        val open = host
+        val finished = sessionJob?.isCompleted ?: true
+        // A connection stopped by a wrong key or an unconfirmed host key has no loop left to wake.
+        // The retry starts a new one from the host as it is saved now, after an edit.
+        if (open != null && finished) {
+            connect(hosts.value.firstOrNull { it.id == open.id } ?: open, resume = true)
+            return
+        }
         session?.retryNow()
     }
 
@@ -636,7 +690,14 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                 ReportedFact(
                     "connection",
                     buildString {
-                        append(if (open == null) "idle" else if (open.viaTailscale) "tailnet" else "local")
+                        append(
+                            when {
+                                open == null -> "idle"
+                                open.viaSsh -> "ssh"
+                                open.viaTailscale -> "tailnet"
+                                else -> "local"
+                            },
+                        )
                         append(" · ").append(state.phase)
                         if (state.resumed) append(" · resumed")
                         if (state.owning) append(" · owns the pane")
@@ -659,8 +720,10 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                     ReportedFact(
                         "host",
                         buildString {
-                            append(known.label).append(" · ").append(known.host).append(':').append(known.port)
-                            append(if (known.plaintext) " · plaintext" else " · tls")
+                            append(known.label).append(" · ")
+                            if (known.viaSsh) append("ssh ").append(known.sshUser).append('@')
+                            append(known.host).append(':').append(known.port)
+                            if (!known.viaSsh) append(if (known.plaintext) " · plaintext" else " · tls")
                             append(if (known.viaTailscale) " · tailnet" else " · local")
                             append(if (known.id == open?.id) " · connected" else "")
                         },
@@ -691,10 +754,12 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             for (known in hosts.value) {
                 add(known.label)
                 add(known.host)
+                if (known.sshUser.isNotBlank()) add(known.sshUser)
             }
             open?.let {
                 add(it.label)
                 add(it.host)
+                if (it.sshUser.isNotBlank()) add(it.sshUser)
             }
             add(tailscale.value.hostname)
         }
@@ -706,6 +771,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         disconnectQuiet()
         Alerts.unwatch(getApplication())
         store.setLastHost(null)
+        // The next tap on the host connects again; a host that is only on screen is not "on".
+        host = null
         route.value = Route.Home
     }
 
@@ -844,14 +911,26 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         uploadJob?.cancel()
         clearUpload()
         val closing = session
+        val tunnel = sshTunnel
         session = null
+        sshTunnel = null
         sessionJob?.cancel()
         _pocket.value = PocketState()
         // The teardown waits for a disown round trip; leaving the screen must not wait with it, and it
         // must still run when the view model itself is going away, so it is not on viewModelScope.
-        if (closing != null) teardown.launch { runCatching { closing.stop() } }
+        // The SSH session closes after that round trip, which may still need it.
+        if (closing != null) {
+            teardown.launch {
+                runCatching { closing.stop() }
+                tunnel?.close()
+            }
+        } else {
+            tunnel?.close()
+        }
     }
 }
+
+private fun SavedHost.endpoint(): Endpoint = Endpoint(host, port, plaintext, sshUser = sshUser.takeIf { it.isNotBlank() })
 
 /**
  * Runs a session's teardown after whatever started it is gone. The disown it waits for is one
