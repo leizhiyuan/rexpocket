@@ -59,23 +59,25 @@ sealed interface TerminalFeed {
  */
 internal class StreamDecoder(private val nonce: ULong) {
     private val nonceText = nonce.toString()
-    private var pending = ByteArray(0)
+
+    /**
+     * The bytes of the stream not decoded yet, and how many of [buffer] they occupy. A large
+     * snapshot arrives in whatever pieces the network hands over - many small ones over SSH - so
+     * appending grows the array geometrically instead of copying all of it on every piece.
+     */
+    private var buffer = ByteArray(0)
+    private var size = 0
     private var snapshotDone = false
 
     /** Takes the next bytes of the stream and returns what is ready to be shown. */
     fun feed(bytes: ByteArray): List<TerminalFeed> {
         if (bytes.isEmpty()) return emptyList()
-        val buffer = if (pending.isEmpty()) bytes else pending + bytes
-        pending = ByteArray(0)
+        append(bytes)
         val out = ArrayList<TerminalFeed>(2)
         var at = 0
         if (!snapshotDone) {
-            when (val length = SnapshotFrame.length(buffer)) {
-                0 -> {
-                    // Still incomplete, unless it cannot be a snapshot at all.
-                    pending = buffer
-                    return out
-                }
+            when (val length = SnapshotFrame.length(buffer, size)) {
+                0 -> return out // Still incomplete, and it may be a snapshot yet.
                 -1 -> snapshotDone = true
                 else -> {
                     out += TerminalFeed.Snapshot(buffer.copyOfRange(0, length))
@@ -84,30 +86,50 @@ internal class StreamDecoder(private val nonce: ULong) {
                 }
             }
         }
-        val text = stripRexMessages(buffer, at)
+        val text = stripRexMessages(buffer, at, size)
         if (text != null) {
-            pending = text.second
             if (text.first.isNotEmpty()) out += TerminalFeed.Output(text.first)
+            consume(text.second)
+        } else {
+            size = 0
         }
         return out
     }
 
-    /** Output from [from], and the unfinished message held back at the end (if any). */
-    private fun stripRexMessages(buffer: ByteArray, from: Int): Pair<ByteArray, ByteArray>? {
-        val out = java.io.ByteArrayOutputStream(buffer.size - from)
+    /** Appends without copying the old bytes every time: a snapshot can be megabytes. */
+    private fun append(bytes: ByteArray) {
+        val needed = size + bytes.size
+        if (needed > buffer.size) {
+            var capacity = if (buffer.isEmpty()) 256 else buffer.size
+            while (capacity < needed) capacity = maxOf(capacity * 2, needed)
+            buffer = buffer.copyOf(capacity)
+        }
+        bytes.copyInto(buffer, size)
+        size = needed
+    }
+
+    /** Keeps [rest] as the start of the next message, in the same array when there is room. */
+    private fun consume(rest: ByteArray) {
+        if (rest.size > buffer.size) buffer = rest.copyOf() else rest.copyInto(buffer, 0)
+        size = rest.size
+    }
+
+    /** Output from [from], up to [end], and the unfinished message held back (if any). */
+    private fun stripRexMessages(buffer: ByteArray, from: Int, end: Int): Pair<ByteArray, ByteArray>? {
+        val out = java.io.ByteArrayOutputStream(end - from)
         var i = from
-        while (i < buffer.size) {
+        while (i < end) {
             // An escape sequence split by the end of this message: the next byte says whether it is
             // one of Rex's, so it waits.
-            if (buffer[i] == ESC && i + 1 >= buffer.size) {
-                return out.toByteArray() to buffer.copyOfRange(i, buffer.size)
+            if (buffer[i] == ESC && i + 1 >= end) {
+                return out.toByteArray() to buffer.copyOfRange(i, end)
             }
             if (buffer[i] == ESC && buffer[i + 1] == APC) {
-                when (val match = matchRexMessage(buffer, i)) {
+                when (val match = matchRexMessage(buffer, i, end)) {
                     is RexMatch.Mine -> i = match.end
                     RexMatch.Partial -> {
-                        if (buffer.size - i <= MAX_HELD) {
-                            return out.toByteArray() to buffer.copyOfRange(i, buffer.size)
+                        if (end - i <= MAX_HELD) {
+                            return out.toByteArray() to buffer.copyOfRange(i, end)
                         }
                         out.write(buffer[i].toInt())
                         i++
@@ -126,23 +148,23 @@ internal class StreamDecoder(private val nonce: ULong) {
     }
 
     /** Whether the APC at [start] is one of Rex's, complete ([RexMatch.Mine]) or still arriving. */
-    private fun matchRexMessage(buffer: ByteArray, start: Int): RexMatch {
+    private fun matchRexMessage(buffer: ByteArray, start: Int, end: Int): RexMatch {
         var i = start + 2
         for (c in PREFIX) {
-            if (i >= buffer.size) return RexMatch.Partial
+            if (i >= end) return RexMatch.Partial
             if (buffer[i] != c) return RexMatch.NotMine
             i++
         }
         for (c in nonceText) {
-            if (i >= buffer.size) return RexMatch.Partial
+            if (i >= end) return RexMatch.Partial
             if (buffer[i] != c.code.toByte()) return RexMatch.NotMine
             i++
         }
-        if (i >= buffer.size) return RexMatch.Partial
+        if (i >= end) return RexMatch.Partial
         if (buffer[i] != SEMICOLON) return RexMatch.NotMine
         i++
-        while (i < buffer.size) {
-            if (buffer[i] == ESC && i + 1 < buffer.size && buffer[i + 1] == ST) return RexMatch.Mine(i + 2)
+        while (i < end) {
+            if (buffer[i] == ESC && i + 1 < end && buffer[i + 1] == ST) return RexMatch.Mine(i + 2)
             i++
         }
         return RexMatch.Partial
