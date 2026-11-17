@@ -28,6 +28,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -79,9 +80,11 @@ class PocketSession(
     private val socksPort: Int = 0,
     /** Diagnostics for the terminal stream and the calls a pane waits on; silent by default. */
     private val trace: (String) -> Unit = {},
+    /** Every Rex connection of this host: direct, through the tailnet, or through SSH. */
+    private val httpFactory: () -> OkHttpClient = { RexClient.defaultHttp(socksPort) },
     /** Uploads speak API revision 11 on their own connection, so the live one keeps its contract. */
-    private val uploadClientFactory: () -> RexClient = { RexClient(apiRevision = FileUpload.API_REVISION) },
-    private val clientFactory: () -> RexClient = { RexClient() },
+    private val uploadClientFactory: () -> RexClient = { RexClient(httpFactory(), apiRevision = FileUpload.API_REVISION) },
+    private val clientFactory: () -> RexClient = { RexClient(httpFactory()) },
 ) {
     private val _state = MutableStateFlow(PocketState(sessions = cachedSessions))
     val state: StateFlow<PocketState> = _state
@@ -193,6 +196,8 @@ class PocketSession(
                     }
                     val woken = withTimeoutOrNull(backoff) { retry.receive() } != null
                     backoff = if (woken) MIN_BACKOFF_MS else (backoff * 2).coerceAtMost(MAX_BACKOFF_MS)
+                    // A wrong key or an unconfirmed host key stays wrong until the person changes it.
+                    if (e.isFatalConnectionProblem()) break
                 }
             }
         }
@@ -511,7 +516,7 @@ class PocketSession(
             ?: throw NotReadyException("No terminal in this window")
         val uploader = FileUpload(
             endpoint,
-            { RexClient.defaultHttp(socksPort) },
+            httpFactory,
             uploadClientFactory,
             trace,
         )
@@ -631,7 +636,7 @@ class PocketSession(
         // The last failure stays on screen while the next attempt runs: a picker that only says
         // "connecting" while a tunnel is down gives no way to tell retrying from hanging.
         _state.update {
-            it.copy(phase = Phase.Connecting, endpointLabel = "${endpoint.host}:${endpoint.port}")
+            it.copy(phase = Phase.Connecting, endpointLabel = endpoint.label())
         }
         try {
             val welcome = client.connect(endpoint, reconnectToken)
@@ -916,7 +921,7 @@ class PocketSession(
                         launch { sizeLoop(sid, blockId) }
                         ownershipLoop(sid, blockId)
                     }
-                    val stream = TerminalStream(endpoint, { RexClient.defaultHttp(socksPort) }, trace) { ticket(sid, blockId) }
+                    val stream = TerminalStream(endpoint, httpFactory, trace) { ticket(sid, blockId) }
                     streams += stream
                     try {
                         stream.feeds().collect { emit(it) }

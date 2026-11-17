@@ -79,6 +79,60 @@ class HostAddressTest {
     }
 
     @Test
+    fun anSshAddressNamesTheAccountAndItsOwnPort() {
+        val address = HostAddressParser.parse("ssh://root@192.0.2.10")!!
+        assertEquals("192.0.2.10", address.host)
+        assertEquals(22, address.port)
+        assertEquals("root", address.sshUser)
+        assertTrue(address.viaSsh)
+        assertTrue(address.plaintext)
+        assertFalse(address.viaTailscale)
+
+        val port = HostAddressParser.parse("ssh://deploy@studio.example.com:2222")!!
+        assertEquals("studio.example.com", port.host)
+        assertEquals(2222, port.port)
+        assertEquals("deploy", port.sshUser)
+    }
+
+    @Test
+    fun anSshTailnetHostStillGoesThroughTheNode() {
+        val address = HostAddressParser.parse("ssh://root@studio.tail1234.ts.net")!!
+        assertTrue(address.viaTailscale)
+        assertEquals(22, address.port)
+        assertEquals("root", address.sshUser)
+    }
+
+    @Test
+    fun anSshIpv6LiteralKeepsItsBrackets() {
+        val address = HostAddressParser.parse("ssh://root@[fd7a:115c:a1e0::1]:2222")!!
+        assertEquals("[fd7a:115c:a1e0::1]", address.host)
+        assertEquals(2222, address.port)
+        assertTrue(address.viaTailscale)
+    }
+
+    @Test
+    fun anSshAddressMayLeaveTheAccountForItsOwnField() {
+        val address = HostAddressParser.parse("ssh://example.com")!!
+        assertEquals("example.com", address.host)
+        assertEquals(22, address.port)
+        assertTrue(address.viaSsh)
+        assertNull(address.sshUser)
+
+        assertNull(HostAddressParser.parse("ssh://@example.com"))
+        assertNull(HostAddressParser.parse("ssh://root@example.com:notaport"))
+        assertNull(HostAddressParser.parse("ssh://root@example.com:70000"))
+    }
+
+    @Test
+    fun anSshEndpointKeepsTheAddressForTheLabel() {
+        val endpoint = HostAddressParser.parse("ssh://root@studio.example.com:2222")!!.endpoint()
+        assertEquals("root@studio.example.com:2222", endpoint.label())
+        assertTrue(endpoint.viaSsh)
+        assertEquals("ws://127.0.0.1:7297/api/control", endpoint.ws("/api/control"))
+        assertEquals("http://127.0.0.1:7297", endpoint.httpBase())
+    }
+
+    @Test
     fun nothingUsableMeansNoAddress() {
         assertNull(HostAddressParser.parse(""))
         assertNull(HostAddressParser.parse("   "))

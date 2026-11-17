@@ -15,6 +15,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.Trouble
+import me.leaver.rexpocket.data.SavedHost
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import me.leaver.rexpocket.update.InstallResult
 import me.leaver.rexpocket.update.UpdateState
 
@@ -158,5 +165,54 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                 },
             )
         }
+        val sshHost = model.host
+        val sshProblem = pocket.problem
+        if (sshHost != null && sshHost.viaSsh && sshProblem != null &&
+            (sshProblem.trouble == Trouble.SshHostKeyUnknown || sshProblem.trouble == Trouble.SshHostKeyChanged)
+        ) {
+            SshHostKeyDialog(
+                host = sshHost,
+                changed = sshProblem.trouble == Trouble.SshHostKeyChanged,
+                fingerprint = sshProblem.detail.orEmpty(),
+                onTrust = { fingerprint -> model.trustSshHostKey(fingerprint) },
+                onCancel = { model.disconnect() },
+            )
+        }
     }
+}
+
+/**
+ * The SSH key of the machine, before anything about the account is sent. First use and a changed
+ * key take the same dialog; only the wording, and how loudly it warns, differ.
+ */
+@Composable
+private fun SshHostKeyDialog(
+    host: SavedHost,
+    changed: Boolean,
+    fingerprint: String,
+    onTrust: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        containerColor = Colors.surface,
+        title = { Text(stringResource(R.string.ssh_host_key_title, host.label), color = Colors.ink) },
+        text = {
+            Text(
+                stringResource(
+                    if (changed) R.string.ssh_host_key_changed_body else R.string.ssh_host_key_unknown_body,
+                    fingerprint,
+                ),
+                color = Colors.muted,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onTrust(fingerprint) }) {
+                Text(stringResource(R.string.action_trust), color = if (changed) Colors.danger else Colors.accent, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
+        },
+    )
 }

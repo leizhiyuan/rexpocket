@@ -47,6 +47,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -910,7 +914,8 @@ internal fun TailscaleDialog(
 /**
  * Adding a host is a name and an address. The port, the scheme and whether the address has to go
  * through the built-in Tailscale node all follow from the address, and the line under the field
- * says what the app made of it.
+ * says what the app made of it. `ssh://user@host` adds the account: Rex is then reached through
+ * that machine's SSH daemon, with a password or a private key.
  */
 @Composable
 internal fun HostDialog(
@@ -922,17 +927,73 @@ internal fun HostDialog(
     onJoinTailnet: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var label by remember { mutableStateOf(initial?.label ?: "") }
     var confirmDelete by remember { mutableStateOf(false) }
     var address by remember {
         mutableStateOf(
             initial?.let { host ->
-                val scheme = if (host.plaintext) "ws" else "wss"
-                "$scheme://${host.host}:${host.port}"
+                if (host.viaSsh) {
+                    "ssh://${host.host}:${host.port}"
+                } else {
+                    val scheme = if (host.plaintext) "ws" else "wss"
+                    "$scheme://${host.host}:${host.port}"
+                }
             } ?: "",
         )
     }
+    var sshUser by remember { mutableStateOf(initial?.sshUser.orEmpty()) }
+    var password by remember { mutableStateOf(initial?.sshPassword.orEmpty()) }
+    var privateKey by remember { mutableStateOf(initial?.sshPrivateKey.orEmpty()) }
+    var passphrase by remember { mutableStateOf(initial?.sshPassphrase.orEmpty()) }
+    var useKey by remember { mutableStateOf(!initial?.sshPrivateKey.isNullOrEmpty()) }
     val parsed = remember(address) { HostAddressParser.parse(address) }
+    val ssh = parsed?.viaSsh == true
+    // The account can be in the address or in its own field; the address wins when it names one.
+    LaunchedEffect(parsed?.sshUser) {
+        val fromAddress = parsed?.sshUser
+        if (!fromAddress.isNullOrBlank() && fromAddress != sshUser) sshUser = fromAddress
+    }
+    val user = parsed?.sshUser?.takeIf { it.isNotBlank() } ?: sshUser.trim()
+    val sameSshHost = initial != null && initial.viaSsh && parsed != null &&
+        initial.host == parsed.host && initial.port == parsed.port && initial.sshUser == user
+    val pinned = if (sameSshHost) initial.sshHostKey else ""
+    val credentialReady = if (useKey) privateKey.isNotBlank() else password.isNotBlank()
+    val identityReady = !ssh || (user.isNotBlank() && credentialReady)
+    val canSave = parsed != null && identityReady
+
+    fun savedHost(viaTailscale: Boolean): SavedHost? {
+        val address = parsed ?: return null
+        return asSavedHost(
+            initial = initial,
+            label = label,
+            parsed = address,
+            viaTailscale = viaTailscale,
+            sshUser = user,
+            sshPassword = if (!useKey) password else "",
+            sshPrivateKey = if (useKey) privateKey else "",
+            sshPassphrase = if (useKey) passphrase else "",
+            sshHostKey = pinned,
+        )
+    }
+
+    val pickKey = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val key = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+                }.getOrNull()
+            }
+            if (key.isNullOrBlank()) {
+                toast(context, context.getString(R.string.ssh_key_unreadable))
+            } else {
+                privateKey = key
+                useKey = true
+            }
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Colors.surface,
@@ -943,14 +1004,17 @@ internal fun HostDialog(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 Field(stringResource(R.string.field_name), label) { label = it }
                 Field(stringResource(R.string.field_address), address) { address = it }
                 if (parsed != null) {
                     Text(
                         listOfNotNull(
-                            "${parsed.host}:${parsed.port}",
-                            stringResource(if (parsed.plaintext) R.string.host_transport_plain else R.string.host_transport_tls),
+                            if (ssh && user.isNotBlank()) "$user@${parsed.host}:${parsed.port}" else "${parsed.host}:${parsed.port}",
+                            stringResource(if (ssh) R.string.host_transport_ssh else if (parsed.plaintext) R.string.host_transport_plain else R.string.host_transport_tls),
                             stringResource(R.string.tailscale_title).takeIf { parsed.viaTailscale },
                         ).joinToString(" · "),
                         color = Colors.muted,
@@ -959,29 +1023,75 @@ internal fun HostDialog(
                 } else if (address.isNotBlank()) {
                     Text(stringResource(R.string.host_address_invalid), color = Colors.danger, fontSize = TextStyles.label)
                 }
-                val tailnetTarget = parsed
-                if (tailnetTarget != null && tailnetTarget.viaTailscale && !tailscaleEnabled) {
+                if (ssh) {
+                    Text(stringResource(R.string.ssh_address_hint), color = Colors.muted, fontSize = TextStyles.label)
+                    Field(stringResource(R.string.ssh_user), sshUser) { sshUser = it }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { useKey = false }) {
+                            Text(
+                                stringResource(R.string.ssh_auth_password),
+                                color = if (!useKey) Colors.accent else Colors.muted,
+                                fontWeight = if (!useKey) FontWeight.SemiBold else FontWeight.Normal,
+                            )
+                        }
+                        TextButton(onClick = { useKey = true }) {
+                            Text(
+                                stringResource(R.string.ssh_auth_key),
+                                color = if (useKey) Colors.accent else Colors.muted,
+                                fontWeight = if (useKey) FontWeight.SemiBold else FontWeight.Normal,
+                            )
+                        }
+                    }
+                    if (useKey) {
+                        Field(stringResource(R.string.ssh_private_key), privateKey, password = true, singleLine = false, minLines = 3) { privateKey = it }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { pickKey.launch(arrayOf("*/*")) }) {
+                                Text(stringResource(R.string.ssh_key_file), color = Colors.accent)
+                            }
+                            if (privateKey.isNotBlank()) {
+                                Text(stringResource(R.string.ssh_key_loaded), color = Colors.ok, fontSize = TextStyles.label)
+                            }
+                        }
+                        Field(stringResource(R.string.ssh_passphrase), passphrase, password = true) { passphrase = it }
+                    } else {
+                        Field(stringResource(R.string.ssh_password), password, password = true) { password = it }
+                    }
+                    if (!identityReady) {
+                        Text(
+                            stringResource(if (user.isBlank()) R.string.ssh_user_required else R.string.ssh_identity_required),
+                            color = Colors.amber,
+                            fontSize = TextStyles.label,
+                        )
+                    }
+                    if (pinned.isNotBlank()) {
+                        Text(stringResource(R.string.ssh_host_key_trusted, pinned), color = Colors.muted, fontSize = TextStyles.label)
+                    }
+                }
+                if (parsed != null && parsed.viaTailscale && !tailscaleEnabled) {
                     Text(
                         stringResource(R.string.tailscale_need_join_host),
                         color = Colors.amber,
                         fontSize = TextStyles.label,
                         modifier = Modifier.clickable {
-                            onSave(asSavedHost(initial, label, tailnetTarget, viaTailscale = true))
+                            savedHost(viaTailscale = true)?.let(onSave)
                             onJoinTailnet()
                         },
                     )
                 }
-                if (parsed?.plaintext == true) {
+                if (parsed?.plaintext == true && !ssh) {
                     Text(stringResource(R.string.field_plaintext_warning), color = Colors.amber, fontSize = TextStyles.label)
                 }
             }
         },
         confirmButton = {
-            // Nothing to save until the address says where to connect.
+            // Nothing to save until the address says where to connect and how to get in.
             TextButton(
-                enabled = parsed != null,
-                onClick = { parsed?.let { onSave(asSavedHost(initial, label, it, viaTailscale = it.viaTailscale)) } },
-            ) { Text(stringResource(R.string.action_save), color = if (parsed != null) Colors.accent else Colors.muted) }
+                enabled = canSave,
+                onClick = {
+                    val address = parsed ?: return@TextButton
+                    savedHost(viaTailscale = address.viaTailscale)?.let(onSave)
+                },
+            ) { Text(stringResource(R.string.action_save), color = if (canSave) Colors.accent else Colors.muted) }
         },
         dismissButton = {
             Row {
@@ -1013,6 +1123,11 @@ internal fun asSavedHost(
     label: String,
     parsed: HostAddress,
     viaTailscale: Boolean,
+    sshUser: String = "",
+    sshPassword: String = "",
+    sshPrivateKey: String = "",
+    sshPassphrase: String = "",
+    sshHostKey: String = "",
 ) = SavedHost(
     id = initial?.id ?: HostStore.newId(),
     label = label.trim().ifBlank { parsed.host },
@@ -1020,4 +1135,9 @@ internal fun asSavedHost(
     port = parsed.port,
     plaintext = parsed.plaintext,
     viaTailscale = viaTailscale,
+    sshUser = if (parsed.viaSsh) sshUser.trim() else "",
+    sshPassword = if (parsed.viaSsh) sshPassword else "",
+    sshPrivateKey = if (parsed.viaSsh) sshPrivateKey else "",
+    sshPassphrase = if (parsed.viaSsh) sshPassphrase else "",
+    sshHostKey = if (parsed.viaSsh) sshHostKey else "",
 )

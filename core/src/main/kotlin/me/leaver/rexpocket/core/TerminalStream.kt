@@ -1,6 +1,7 @@
 package me.leaver.rexpocket.core
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.async
@@ -9,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -62,7 +64,10 @@ class TerminalStream(
         wake.trySend(Unit)
     }
 
-    /** The pane's bytes in order, for as long as this flow is collected. */
+    /**
+     * The pane's bytes in order, for as long as this flow is collected. Decoding runs off the main
+     * thread: a snapshot can be megabytes, and its pieces arrive in whatever size the network made.
+     */
     fun feeds(): Flow<TerminalFeed> = flow {
         var attempt = 0
         while (!stopped) {
@@ -127,7 +132,7 @@ class TerminalStream(
                 active = null
             }
         }
-    }
+    }.flowOn(Dispatchers.Default)
 
     fun close() {
         stopped = true

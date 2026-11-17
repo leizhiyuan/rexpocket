@@ -7,16 +7,26 @@ data class Endpoint(
     val host: String,
     val port: Int = 7297,
     val plaintext: Boolean = true,
+    /** The SSH account when this host is reached over SSH, null when Rex listens on a port. */
+    val sshUser: String? = null,
 ) {
+    val viaSsh: Boolean get() = !sshUser.isNullOrBlank()
+
     fun httpBase(): String {
+        if (viaSsh) return "http://$SSH_HOST:$SSH_PORT"
         val scheme = if (plaintext) "http" else "https"
         return "$scheme://${normalizedHost()}:$port"
     }
 
     fun ws(path: String): String {
+        if (viaSsh) return "ws://$SSH_HOST:$SSH_PORT$path"
         val scheme = if (plaintext) "ws" else "wss"
         return "$scheme://${normalizedHost()}:$port$path"
     }
+
+    /** What the screens and a report call this connection: the address as the person typed it. */
+    fun label(): String =
+        if (viaSsh) "$sshUser@$host:$port" else "$host:$port"
 
     private fun normalizedHost(): String {
         var h = host.trim()
@@ -30,6 +40,12 @@ data class Endpoint(
         val colon = h.lastIndexOf(':')
         if (colon > 0 && h.substring(colon + 1).all { it.isDigit() }) return h.substring(0, colon)
         return h
+    }
+
+    private companion object {
+        /** No listener lives here: the SSH socket factory turns every connection into a channel. */
+        const val SSH_HOST = "127.0.0.1"
+        const val SSH_PORT = 7297
     }
 }
 
