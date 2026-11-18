@@ -12,6 +12,12 @@
 | --- | --- | --- |
 | ![主页](docs/screenshots/home-zh.png) | ![终端](docs/screenshots/terminal-zh.png) | ![夜间终端](docs/screenshots/terminal-dark-zh.png) |
 
+在平板或桌面窗口里，列表常驻在打开的窗格旁边——切换会话或标签页不必离开正在看的终端，底部的按键栏也只是一手可及的宽度。
+
+| 平板：列表与窗格并排 | 平板：设置面板 |
+| --- | --- |
+| ![平板](docs/screenshots/tablet-panes.png) | ![平板上的设置面板](docs/screenshots/tablet-sheet.png) |
+
 ## 功能
 
 - **所有主机、会话、标签页都在一个页面。** 每个标签页显示里面跑的是什么——pi、Claude、Codex、编辑器
