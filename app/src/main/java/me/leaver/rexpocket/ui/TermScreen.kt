@@ -336,6 +336,8 @@ internal fun TermScreen(
                             onKey = { key, own -> press(key, own) },
                             onNewLine = { press(KeyPress("enter", 0), "shift") },
                             onPaste = { pasteClipboard() },
+                            onAttach = { filePicker.launch("*/*") },
+                            attachReady = upload?.running != true,
                             onKeyboard = { toggleKeyboard() },
                         )
                     }

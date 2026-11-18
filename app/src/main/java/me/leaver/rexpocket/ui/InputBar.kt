@@ -87,10 +87,13 @@ import kotlin.math.abs
  * the arrow stick and the keyboard key keep the right, always in the same place.
  *
  * The pill starts with what an agent asks for most: back out, interrupt, complete, accept, `ctrl`.
- * Paste and a slash for pi's command menu follow off the edge. C-c is red while the program works
- * or waits. `ctrl` applies to the next key, from this row or from the phone keyboard; a quick second
- * tap keeps it on, and holding it opens the other control chords. Return held is shift-Return: a
- * new line in an agent's prompt.
+ * Paste, the paperclip and a slash for pi's command menu follow off the edge. C-c is red while the
+ * program works or waits. `ctrl` applies to the next key, from this row or from the phone keyboard;
+ * a quick second tap keeps it on, and holding it opens the other control chords. Return held is
+ * shift-Return: a new line in an agent's prompt.
+ *
+ * The paperclip is the dock's way to send a file or an image: it opens the platform's picker, and
+ * goes quiet while the file picked last is still on its way.
  */
 @Composable
 internal fun KeyBar(
@@ -102,6 +105,9 @@ internal fun KeyBar(
     onKey: (key: KeyPress, own: String) -> Unit,
     onNewLine: () -> Unit,
     onPaste: () -> Unit,
+    onAttach: () -> Unit,
+    /** False while an upload is running: a second file would only be dropped. */
+    attachReady: Boolean,
     onKeyboard: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
@@ -137,6 +143,12 @@ internal fun KeyBar(
                     onKey(KeyPress("key_$letter", letter.code, text = letter.toString()), "ctrl")
                 }
                 Key(stringResource(R.string.key_paste), key, icon = R.drawable.ic_paste) { onPaste() }
+                Key(
+                    stringResource(R.string.upload_attach),
+                    key,
+                    icon = R.drawable.ic_attach_file,
+                    color = if (attachReady) Colors.ink else Colors.muted,
+                ) { if (attachReady) onAttach() }
                 // A slash opens pi's command menu; the stick then walks it.
                 Key("/", key) { onKey(KeyPress("slash", '/'.code, text = "/"), "") }
             }
