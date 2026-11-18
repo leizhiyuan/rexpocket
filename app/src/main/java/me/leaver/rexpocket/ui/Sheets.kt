@@ -195,6 +195,9 @@ private val ICON_INSET = 56.dp
  * One row of a sheet: an icon in a 24 dp slot, the label, a detail or a check at the end. The row is
  * 56 dp high, the platform's one-line list item. A group's rows either all have icons or none do,
  * so their labels share one keyline.
+ *
+ * A row that only changes what its own detail shows - a switch, a pick between two - stays open
+ * ([keepOpen]): closing the sheet would take away the one place the change is visible.
  */
 @Composable
 internal fun SheetScope.SheetItem(
@@ -203,10 +206,13 @@ internal fun SheetScope.SheetItem(
     detail: String? = null,
     marked: Boolean = false,
     icon: Int? = null,
+    keepOpen: Boolean = false,
     onClick: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { close(onClick) }.padding(horizontal = 16.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            .clickable { if (keepOpen) onClick() else close(onClick) }
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {

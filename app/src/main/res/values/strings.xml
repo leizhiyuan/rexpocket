@@ -230,6 +230,8 @@
     <string name="update_channel">Update channel</string>
     <string name="update_channel_stable">Stable</string>
     <string name="update_channel_preview">Preview</string>
+    <string name="update_channel_switched_stable">Stable channel: finished releases only</string>
+    <string name="update_channel_switched_preview">Preview channel: alphas and betas too</string>
     <string name="update_checking">Checking…</string>
     <string name="update_current">Up to date</string>
     <string name="update_available">%1$s is available</string>

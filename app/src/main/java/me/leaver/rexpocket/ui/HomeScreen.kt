@@ -331,6 +331,14 @@ internal fun HomeScreen(
                     if (rows.isEmpty()) {
                         item { NotFound(activeOnly = activeOnly) }
                     }
+                    // The list is the only place a host is added from, so the way to add one is at
+                    // the end of it - above it, there is nothing until a host exists.
+                    if (!searchOpen && hosts.isNotEmpty()) {
+                        item(key = "add-host") {
+                            Spacer(Modifier.height(12.dp))
+                            AddHostRow(onClick = { creating = true })
+                        }
+                    }
                 }
                 if (!searchOpen) {
                     FloatingControls(
@@ -406,10 +414,7 @@ internal fun HomeScreen(
                 diagnostics = true
             },
             update = update,
-            onUpdate = {
-                settings = false
-                onUpdate()
-            },
+            onUpdate = { onUpdate() },
             channel = updateChannel,
             onChannel = onUpdateChannel,
         )
@@ -657,6 +662,28 @@ private fun TabRow(
     }
 }
 
+/**
+ * The end of the list: the way to add another computer, where the list runs out. It sits under the
+ * hosts rather than in the settings, because adding one is a thing to do to this list.
+ */
+@Composable
+private fun AddHostRow(onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(Radius.card)).background(Colors.surface)
+            .clickable(role = Role.Button, onClick = onClick).padding(start = 16.dp, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Glyph(R.drawable.ic_add, Colors.accent, size = 24.dp)
+        Spacer(Modifier.width(16.dp))
+        Text(
+            stringResource(R.string.action_add_host),
+            color = Colors.accent,
+            fontSize = TextStyles.subhead,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
 @Composable
 private fun EmptyTabs(text: String, canOpen: Boolean, onOpen: () -> Unit) {
     Row(
@@ -781,6 +808,9 @@ private fun SettingsSheet(
 ) {
     val context = LocalContext.current
     val joined = tailscale.enabled && tailscaleStatus.backendState == "Running"
+    // Said on the tap, because the row's own detail is the only other sign the channel moved.
+    val switchedToStable = stringResource(R.string.update_channel_switched_stable)
+    val switchedToPreview = stringResource(R.string.update_channel_switched_preview)
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.settings)) {
         // Four cards, each one answer to a different question: how the phone reaches a computer,
         // what the terminal looks and feels like, which build it installs, and what the app is. A
@@ -803,6 +833,7 @@ private fun SettingsSheet(
                 label = stringResource(R.string.alerts_title),
                 icon = R.drawable.ic_notifications,
                 detail = stringResource(if (alerts) R.string.alerts_on else R.string.alerts_off),
+                keepOpen = true,
                 onClick = onAlerts,
             )
         }
@@ -811,6 +842,7 @@ private fun SettingsSheet(
                 label = stringResource(R.string.keybar_title),
                 icon = R.drawable.ic_keyboard,
                 detail = stringResource(if (keyBar) R.string.keybar_always else R.string.keybar_auto),
+                keepOpen = true,
                 onClick = { onKeyBar(!keyBar) },
             )
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
@@ -823,14 +855,18 @@ private fun SettingsSheet(
                 detail = stringResource(
                     if (channel == UpdateChannel.Preview) R.string.update_channel_preview else R.string.update_channel_stable,
                 ),
+                keepOpen = true,
                 onClick = {
-                    onChannel(if (channel == UpdateChannel.Preview) UpdateChannel.Stable else UpdateChannel.Preview)
+                    val next = if (channel == UpdateChannel.Preview) UpdateChannel.Stable else UpdateChannel.Preview
+                    onChannel(next)
+                    toast(context, if (next == UpdateChannel.Preview) switchedToPreview else switchedToStable)
                 },
             )
             SheetItem(
                 label = stringResource(R.string.update_title),
                 icon = R.drawable.ic_arrow_down,
                 detail = updateDetail(update),
+                keepOpen = true,
                 onClick = onUpdate,
             )
         }
