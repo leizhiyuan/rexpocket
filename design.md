@@ -152,7 +152,12 @@ The whole screen is the terminal's paper; nothing sits on a band of a second gre
    dock says what it is doing, how far it got and the one control that fits - Cancel while it runs,
    Retry after a failure, Dismiss when it is done or unconfirmed. A sent file turns green and goes
    by itself; an unconfirmed one stays until dismissed, because Rex may already have the file.
-4. **A link.** A long press on a link in the pane opens a sheet titled with it: Open, Copy, Share.
+4. **The keyboard.** It takes no room from the terminal. Opening it slides the pane up by just
+   enough to keep the cursor's row above it - never by more than the keyboard's own height, and
+   nothing at all while it is closed - and lifts the dock, the pane strip and the upload pill over
+   the pane. The grid the program was given does not change, so nothing redraws or reflows for a
+   keyboard coming and going, and no resize is sent.
+5. **A link.** A long press on a link in the pane opens a sheet titled with it: Open, Copy, Share.
    Only an http or https link can be opened or shared.
 
 ## Rules the screens follow
