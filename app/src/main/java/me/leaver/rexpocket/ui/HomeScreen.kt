@@ -331,6 +331,14 @@ internal fun HomeScreen(
                     if (rows.isEmpty()) {
                         item { NotFound(activeOnly = activeOnly) }
                     }
+                    // The list is the only place a host is added from, so the way to add one is at
+                    // the end of it - above it, there is nothing until a host exists.
+                    if (!searchOpen && hosts.isNotEmpty()) {
+                        item(key = "add-host") {
+                            Spacer(Modifier.height(12.dp))
+                            AddHostRow(onClick = { creating = true })
+                        }
+                    }
                 }
                 if (!searchOpen) {
                     FloatingControls(
@@ -654,6 +662,28 @@ private fun TabRow(
             Text(detail, color = if (busy) Colors.accent else Colors.muted, fontSize = TextStyles.label, maxLines = 1)
         }
         Glyph(R.drawable.ic_chevron_right, Colors.muted, size = 24.dp)
+    }
+}
+
+/**
+ * The end of the list: the way to add another computer, where the list runs out. It sits under the
+ * hosts rather than in the settings, because adding one is a thing to do to this list.
+ */
+@Composable
+private fun AddHostRow(onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(Radius.card)).background(Colors.surface)
+            .clickable(role = Role.Button, onClick = onClick).padding(start = 16.dp, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Glyph(R.drawable.ic_add, Colors.accent, size = 24.dp)
+        Spacer(Modifier.width(16.dp))
+        Text(
+            stringResource(R.string.action_add_host),
+            color = Colors.accent,
+            fontSize = TextStyles.subhead,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
