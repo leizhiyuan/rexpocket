@@ -46,6 +46,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -57,6 +59,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -123,11 +126,19 @@ private data class HomeSession(
 private fun PocketState.activityOf(block: BlockInfo): ProgramRecord? =
     blockStatus[block.id]?.takeIf { it.state == "working" || it.state == "blocked" }
 
+/** The folds of the list, as one saveable value: which hosts and sessions are open. */
+private val StringSetSaver = Saver<Set<String>, List<String>>(
+    save = { it.toList() },
+    restore = { it.toSet() },
+)
+
 @Composable
 internal fun HomeScreen(
     hosts: List<SavedHost>,
     connected: SavedHost?,
     state: PocketState,
+    /** True while the open pane stands beside this list, so the tab on the right carries a mark. */
+    detail: Boolean = false,
     tailscale: TailscaleSettings,
     tailscaleStatus: TailscaleStatus,
     tailnetError: String?,
@@ -176,11 +187,13 @@ internal fun HomeScreen(
     var diagnostics by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(Diagnostics.capture(context) != null) }
     var menuHost by remember { mutableStateOf<SavedHost?>(null) }
-    var searchOpen by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
-    var activeOnly by remember { mutableStateOf(false) }
-    var collapsedHosts by remember { mutableStateOf(emptySet<String>()) }
-    var collapsedSessions by remember { mutableStateOf(emptySet<String>()) }
+    // What the person was looking at survives the window being rebuilt under it, which a resize in
+    // a free-form window does: the search stays open on its query, and the folds stay folded.
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var activeOnly by rememberSaveable { mutableStateOf(false) }
+    var collapsedHosts by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(emptySet<String>()) }
+    var collapsedSessions by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(emptySet<String>()) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val closeSearch: () -> Unit = {
@@ -298,6 +311,7 @@ internal fun HomeScreen(
                                                 row = row,
                                                 state = state,
                                                 opening = openingThis,
+                                                open = detail && live && state.activeSessionId == row.session.id,
                                                 onOpen = { windowId -> onOpenTab(host, row.session.id, windowId) },
                                             )
                                         }
@@ -562,6 +576,8 @@ private fun TabCard(
     row: HomeSession,
     state: PocketState,
     opening: Boolean,
+    /** True for the session whose tab the pane beside the list is showing. */
+    open: Boolean,
     onOpen: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Colors.surface)) {
@@ -576,6 +592,7 @@ private fun TabCard(
                 detail = detailFor(window, activity),
                 busy = activity != null,
                 opening = opening,
+                open = open && window.id == state.view?.activeWindowId,
                 onOpen = { onOpen(window.id) },
             )
         }
@@ -600,10 +617,16 @@ private fun TabRow(
     detail: String,
     busy: Boolean,
     opening: Boolean,
+    /** True for the tab the pane beside the list is showing. */
+    open: Boolean,
     onOpen: () -> Unit,
 ) {
+    val selected = stringResource(R.string.state_selected)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(enabled = !opening, role = Role.Button, onClick = onOpen)
+        Modifier.fillMaxWidth().heightIn(min = 64.dp)
+            .background(if (open) Colors.keyOn else Color.Transparent)
+            .clickable(enabled = !opening, role = Role.Button, onClick = onOpen)
+            .semantics { if (open) stateDescription = selected }
             .padding(start = KEY_MARK, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -12,6 +12,12 @@
 | --- | --- | --- |
 | ![主頁](docs/screenshots/home-zh.png) | ![終端機](docs/screenshots/terminal-zh.png) | ![夜間終端機](docs/screenshots/terminal-dark-zh.png) |
 
+在平板或桌面視窗裡，清單常駐在開啟的窗格旁邊——切換工作階段或分頁不必離開正在看的終端機，底部的按鍵列也只是一手可及的寬度。
+
+| 平板：清單與窗格並排 | 平板：設定面板 |
+| --- | --- |
+| ![平板](docs/screenshots/tablet-panes.png) | ![平板上的設定面板](docs/screenshots/tablet-sheet.png) |
+
 ## 功能
 
 - **所有主機、工作階段、分頁都在同一頁。** 每個分頁顯示裡面跑的是什麼——pi、Claude、Codex、編輯器

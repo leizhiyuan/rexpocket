@@ -170,6 +170,8 @@
     <string name="action_enter">回车</string>
     <string name="session_open_to_load">打开以查看标签页</string>
     <string name="no_tabs">没有标签页</string>
+    <string name="pane_none_title">没有打开的窗格</string>
+    <string name="pane_none_body">在左侧选一个标签页：它的终端在这里打开，列表仍留在旁边。</string>
     <string name="action_show_active">只看有活动的</string>
     <string name="no_activity">现在没有正在运行的任务</string>
     <string name="action_more">更多操作</string>

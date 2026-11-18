@@ -13,6 +13,13 @@ Tailscale node built into the app, or through the computer's own SSH daemon.
 | --- | --- | --- |
 | ![Home](docs/screenshots/home-en.png) | ![Terminal](docs/screenshots/terminal-en.png) | ![Terminal at night](docs/screenshots/terminal-dark-en.png) |
 
+On a tablet or in a desktop window the list stays beside the open pane - a session or a tab is
+switched without leaving the terminal it was showing, and the dock is one hand's reach wide.
+
+| Tablet: the list beside the pane | Tablet: a sheet at the platform's width |
+| --- | --- |
+| ![Tablet](docs/screenshots/tablet-panes.png) | ![A sheet on a tablet](docs/screenshots/tablet-sheet.png) |
+
 ## Features
 
 - **Every host, session and tab on one screen.** Each tab shows what runs in it - pi, Claude,
