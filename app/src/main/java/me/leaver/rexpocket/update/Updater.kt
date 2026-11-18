@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -16,6 +17,8 @@ import me.leaver.rexpocket.BuildConfig
 import me.leaver.rexpocket.core.AppRelease
 import me.leaver.rexpocket.core.AppVersion
 import me.leaver.rexpocket.core.UpdateApk
+import me.leaver.rexpocket.core.UpdateChannel
+import me.leaver.rexpocket.core.defaultChannel
 import me.leaver.rexpocket.core.newestFor
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import okhttp3.OkHttpClient
@@ -57,11 +60,12 @@ enum class InstallResult {
 /**
  * The app's own updater, against its GitHub releases.
  *
- * It runs the version it was built as: a pre-release build takes pre-releases, so an alpha keeps
- * following the alphas, while a finished build only takes finished ones. A check only says what is
- * published - once a day when the app starts, and whenever the settings row is tapped. Nothing is
- * downloaded until it is asked for, and the APK is then checked against the size and the SHA-256 the
- * feed gives before Android's installer is offered it.
+ * It follows the update channel the settings offer: stable takes finished releases only, preview
+ * takes the newest one published, pre-releases included. A build that has never chosen follows what
+ * it came from - an alpha keeps the previews, a finished build the finished ones. A check only says
+ * what is published - once a day when the app starts, and whenever the settings row is tapped.
+ * Nothing is downloaded until it is asked for, and the APK is then checked against the size and the
+ * SHA-256 the feed gives before Android's installer is offered it.
  */
 class Updater(context: Context) {
     private val app = context.applicationContext
@@ -78,6 +82,22 @@ class Updater(context: Context) {
 
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
+
+    private val _channel = MutableStateFlow(storedChannel())
+    val channel: StateFlow<UpdateChannel> = _channel.asStateFlow()
+
+    /**
+     * Takes the other channel from now on. What the last check offered was looked for on the channel
+     * being left, so it is dropped rather than downloaded, and the next check runs at once.
+     */
+    fun setChannel(next: UpdateChannel) {
+        if (_channel.value == next) return
+        prefs.edit().putString(KEY_CHANNEL, next.name).remove(KEY_CHECKED_AT).apply()
+        _channel.value = next
+        offered = null
+        _state.value = UpdateState.Idle
+        Diagnostics.event(TAG, "channel ${next.name}")
+    }
 
     /**
      * Looks for a newer release. A check that is not [force] is skipped when one already ran today,
@@ -101,7 +121,7 @@ class Updater(context: Context) {
         val release = try {
             val feed = get(FEED)
             if (!feed.isSuccessful) throw IOException("releases answered HTTP ${feed.code}")
-            AppRelease.parseFeed(feed.body?.string().orEmpty()).newestFor(running)
+            AppRelease.parseFeed(feed.body?.string().orEmpty()).newestFor(running, _channel.value)
         } catch (e: IOException) {
             // Offline or GitHub is down: nothing to say while it is only the app starting up.
             Diagnostics.event(TAG, "check failed: ${e.message}")
@@ -111,11 +131,11 @@ class Updater(context: Context) {
         remember()
         val apk = release?.apk
         if (release == null || apk == null) {
-            Diagnostics.event(TAG, "no build newer than ${running}")
+            Diagnostics.event(TAG, "no build newer than ${running} on ${_channel.value.name}")
             _state.value = UpdateState.UpToDate
             return@withContext
         }
-        Diagnostics.event(TAG, "found ${release.tag} (${apk.size} bytes)")
+        Diagnostics.event(TAG, "found ${release.tag} (${apk.size} bytes) on ${_channel.value.name}")
         offered = release
         _state.value = UpdateState.Available(release.tag, apk.size)
     }
@@ -187,6 +207,12 @@ class Updater(context: Context) {
             if (!part.renameTo(file)) throw IOException("cannot keep the download")
             Diagnostics.event(TAG, "downloaded ${release.tag} to ${file.name}")
             _state.value = UpdateState.Ready(release.tag, file)
+        } catch (e: CancellationException) {
+            // The channel was switched away from this build, or the app is going: nothing is kept.
+            part.delete()
+            Diagnostics.event(TAG, "download of ${release.tag} cancelled")
+            if ((_state.value as? UpdateState.Downloading)?.tag == release.tag) _state.value = UpdateState.Idle
+            throw e
         } catch (e: IOException) {
             part.delete()
             Diagnostics.event(TAG, "download failed: ${e.message}")
@@ -200,6 +226,12 @@ class Updater(context: Context) {
     private fun checkedToday(): Boolean =
         System.currentTimeMillis() - prefs.getLong(KEY_CHECKED_AT, 0L) < CHECK_INTERVAL_MS
 
+    /** The channel picked last time; a build that has never had one follows what it came from. */
+    private fun storedChannel(): UpdateChannel {
+        val stored = prefs.getString(KEY_CHANNEL, null)
+        return UpdateChannel.entries.firstOrNull { it.name == stored } ?: defaultChannel(current)
+    }
+
     private fun remember() {
         prefs.edit().putLong(KEY_CHECKED_AT, System.currentTimeMillis()).apply()
     }
@@ -210,6 +242,7 @@ class Updater(context: Context) {
         const val USER_AGENT = "RexPocket"
         const val FEED = "https://api.github.com/repos/leizhiyuan/rexpocket/releases?per_page=10"
         const val KEY_CHECKED_AT = "update.checkedAt"
+        const val KEY_CHANNEL = "update.channel"
         const val CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
     }
 }

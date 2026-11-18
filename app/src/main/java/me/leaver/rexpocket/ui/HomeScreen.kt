@@ -85,6 +85,7 @@ import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.ProgramRecord
 import me.leaver.rexpocket.core.SessionView
 import me.leaver.rexpocket.core.TailnetPath
+import me.leaver.rexpocket.core.UpdateChannel
 import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.SavedHost
@@ -167,6 +168,9 @@ internal fun HomeScreen(
     /** The newer build the app found, if it found one, and the tap that acts on it. */
     update: UpdateState,
     onUpdate: () -> Unit,
+    /** Which builds the updater offers, and the tap on the other one. */
+    updateChannel: UpdateChannel,
+    onUpdateChannel: (UpdateChannel) -> Unit,
 ) {
     val context = LocalContext.current
     // Android 13 asks for notifications at run time; alerts come on once the person allows them.
@@ -410,6 +414,8 @@ internal fun HomeScreen(
                 settings = false
                 onUpdate()
             },
+            channel = updateChannel,
+            onChannel = onUpdateChannel,
         )
     }
 
@@ -775,6 +781,8 @@ private fun SettingsSheet(
     onDiagnostics: () -> Unit,
     update: UpdateState,
     onUpdate: () -> Unit,
+    channel: UpdateChannel,
+    onChannel: (UpdateChannel) -> Unit,
 ) {
     val context = LocalContext.current
     val joined = tailscale.enabled && tailscaleStatus.backendState == "Running"
@@ -814,6 +822,17 @@ private fun SettingsSheet(
                 onClick = onDiagnostics,
             )
             SheetItem(stringResource(R.string.settings_source), icon = R.drawable.ic_open_in_new) { openLink(context, SOURCE_URL) }
+            // The channel first: it is what the row under it looks on.
+            SheetItem(
+                label = stringResource(R.string.update_channel),
+                icon = R.drawable.ic_swap,
+                detail = stringResource(
+                    if (channel == UpdateChannel.Preview) R.string.update_channel_preview else R.string.update_channel_stable,
+                ),
+                onClick = {
+                    onChannel(if (channel == UpdateChannel.Preview) UpdateChannel.Stable else UpdateChannel.Preview)
+                },
+            )
             SheetItem(
                 label = stringResource(R.string.update_title),
                 icon = R.drawable.ic_arrow_down,

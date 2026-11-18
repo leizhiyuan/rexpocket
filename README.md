@@ -53,8 +53,9 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   until you confirm it. A tailnet address is still dialed through the built-in node.
 - **Knows when it is old.** Once a day, and whenever Settings › Updates is tapped, the app asks its
   GitHub releases whether a newer build exists and says so; nothing is downloaded until you ask, and
-  Android asks once for permission to install it. An alpha follows the alphas, a finished build only
-  takes finished ones.
+  Android asks once for permission to install it. The update channel says what counts as newer:
+  **Stable** takes finished releases only, **Preview** takes the newest published, alphas and betas
+  included. A build that has never chosen follows what it came from.
 - **Light and dark,** following the phone, in English and Simplified Chinese.
 
 ## Set up the computer

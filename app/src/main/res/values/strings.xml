@@ -220,6 +220,9 @@
     <string name="alerts_failed">failed</string>
 
     <string name="update_title">Updates</string>
+    <string name="update_channel">Update channel</string>
+    <string name="update_channel_stable">Stable</string>
+    <string name="update_channel_preview">Preview</string>
     <string name="update_checking">Checking…</string>
     <string name="update_current">Up to date</string>
     <string name="update_available">%1$s is available</string>

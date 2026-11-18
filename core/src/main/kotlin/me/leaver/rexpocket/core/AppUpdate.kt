@@ -143,9 +143,23 @@ data class AppRelease(
 }
 
 /**
- * The newest release worth installing: newer than [current], carrying an APK, and stable unless the
- * app itself is a pre-release - an alpha is not offered over a finished version.
+ * Which builds the app is willing to take. Stable only takes finished releases; Preview takes
+ * them too, and an alpha, a beta or a release candidate as soon as it is published.
  */
-fun List<AppRelease>.newestFor(current: AppVersion): AppRelease? =
-    filter { it.apk != null && it.version > current && (current.isPreRelease || !it.preRelease) }
+enum class UpdateChannel { Stable, Preview }
+
+/**
+ * The channel a build follows until one is picked: an alpha or a beta stays on the preview channel,
+ * a finished build on the stable one, so an install that never chose keeps taking what it came from.
+ */
+fun defaultChannel(current: AppVersion?): UpdateChannel =
+    if (current?.isPreRelease == true) UpdateChannel.Preview else UpdateChannel.Stable
+
+/**
+ * The newest release worth installing on [channel]: newer than [current], carrying an APK, and
+ * never a pre-release on the stable channel - an alpha is not offered over a finished version.
+ * Only newer builds are offered, so turning the channel back to stable never installs an older one.
+ */
+fun List<AppRelease>.newestFor(current: AppVersion, channel: UpdateChannel): AppRelease? =
+    filter { it.apk != null && it.version > current && (channel == UpdateChannel.Preview || !it.preRelease) }
         .maxByOrNull { it.version }

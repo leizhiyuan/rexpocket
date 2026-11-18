@@ -217,6 +217,9 @@
     <string name="alerts_failed">出错了</string>
 
     <string name="update_title">更新</string>
+    <string name="update_channel">更新通道</string>
+    <string name="update_channel_stable">稳定</string>
+    <string name="update_channel_preview">尝鲜</string>
     <string name="update_checking">检查中…</string>
     <string name="update_current">已是最新</string>
     <string name="update_available">有 %1$s</string>

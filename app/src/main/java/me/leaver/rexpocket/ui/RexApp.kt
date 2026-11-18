@@ -60,6 +60,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val keyBar by model.keyBar.collectAsState()
     val upload by model.upload.collectAsState()
     val update by model.update.collectAsState()
+    val updateChannel by model.updateChannel.collectAsState()
     val context = LocalContext.current
     var tailscaleOpen by remember { mutableStateOf(false) }
     // Each offer is shown once per app run; the settings row still has it afterwards.
@@ -131,6 +132,8 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onDiagnosticsReport = { limit -> model.diagnosticReport(limit) },
                     update = update,
                     onUpdate = { updateTapped(update) },
+                    updateChannel = updateChannel,
+                    onUpdateChannel = model::setUpdateChannel,
                 )
             }
             val term: @Composable (Boolean) -> Unit = { embedded ->
