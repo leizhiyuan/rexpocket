@@ -32,6 +32,7 @@ import me.leaver.rexpocket.core.Trouble
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.Flow
 import me.leaver.rexpocket.core.TerminalFeed
+import me.leaver.rexpocket.core.UpdateChannel
 import me.leaver.rexpocket.core.toProblem
 import me.leaver.rexpocket.core.RexClient
 import me.leaver.rexpocket.data.HostStore
@@ -93,6 +94,10 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The newer build the app found, from the check through to the downloaded APK. */
     val update: StateFlow<UpdateState> = updater.state
+
+    /** Which builds the updater offers: finished ones only, or the newest published as well. */
+    val updateChannel: StateFlow<UpdateChannel> = updater.channel
+    private var updateJob: Job? = null
     val hosts = MutableStateFlow(store.list())
     val tailscale = MutableStateFlow(store.tailscale())
     val tailscaleStatus: StateFlow<TailscaleStatus> = tailscaleBox.status
@@ -646,7 +651,17 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Downloads the release the check offered; nothing is fetched before this is called. */
     fun downloadUpdate() {
-        viewModelScope.launch { updater.download() }
+        updateJob = viewModelScope.launch { updater.download() }
+    }
+
+    /**
+     * Takes the other update channel from now on. Whatever the last check offered belongs to the
+     * channel being left, so a download of it is stopped and the next check runs at once.
+     */
+    fun setUpdateChannel(channel: UpdateChannel) {
+        updateJob?.cancel()
+        updater.setChannel(channel)
+        viewModelScope.launch { updater.check(force = true) }
     }
 
     /** Opens the system installer on the downloaded APK; see [Updater.install]. */

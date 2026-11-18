@@ -13,30 +13,24 @@ import org.junit.Test
 class KeyboardTest {
     @Test
     fun `a closed keyboard moves nothing`() {
-        assertEquals(0f, imeShift(cursorBottomPx = 900f, imePx = 0, paneHeightPx = 1000), 0.01f)
+        assertEquals(0f, imeShift(imePx = 0, paneHeightPx = 1000), 0.01f)
     }
 
     @Test
-    fun `a cursor the keyboard does not reach leaves the pane where it is`() {
-        // A 400 px keyboard over a 1000 px pane covers from 600 down: the row at 500 is not there.
-        assertEquals(0f, imeShift(cursorBottomPx = 500f, imePx = 400, paneHeightPx = 1000), 0.01f)
+    fun `the pane moves by the keyboard, so the bottom of the terminal stays above it`() {
+        // What has to stay on screen is the last row of the grid, where a program draws the line
+        // being typed into - not the cursor, which a full-screen program hides.
+        assertEquals(400f, imeShift(imePx = 400, paneHeightPx = 1000), 0.01f)
     }
 
     @Test
-    fun `the pane moves just far enough to bring the cursor above the keyboard`() {
-        // The row ends at 900 and 300 of it would be under the keyboard.
-        assertEquals(300f, imeShift(cursorBottomPx = 900f, imePx = 400, paneHeightPx = 1000), 0.01f)
-    }
-
-    @Test
-    fun `the pane never moves further than the keyboard itself`() {
-        // A cursor already off the bottom of the pane asks for more than the keyboard covers.
-        assertEquals(400f, imeShift(cursorBottomPx = 1400f, imePx = 400, paneHeightPx = 1000), 0.01f)
+    fun `a keyboard taller than the pane takes the whole pane`() {
+        assertEquals(1000f, imeShift(imePx = 1400, paneHeightPx = 1000), 0.01f)
     }
 
     @Test
     fun `a pane that has not been laid out yet is left alone`() {
-        assertEquals(0f, imeShift(cursorBottomPx = 900f, imePx = 400, paneHeightPx = 0), 0.01f)
+        assertEquals(0f, imeShift(imePx = 400, paneHeightPx = 0), 0.01f)
     }
 
     @Test

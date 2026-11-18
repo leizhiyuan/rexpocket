@@ -30,12 +30,12 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   programs are exactly as on the desk.
 - **Made for the phone.** Typing goes straight into the pane. A floating dock holds the keyboard,
   Return and a key row: `esc`, `C-c`, arrows that repeat while held, Tab, `shift` / `ctrl` /
-  `alt` for the next key (from the row or the phone keyboard), paste, `/` and copy. Hold `ctrl`
-  for `C-c` `C-d` `C-z` `C-r` `C-l` `C-a` `C-e` `C-w` `C-j`. A split shows one pane at a time,
-  with a bar to move between them. **The keyboard never resizes the terminal** - the pane slides up
-  under it, just enough to keep the cursor in view, so a program in it is never redrawn for the
-  keyboard coming or going - and **a keyboard on the desk takes the dock away**, since it has every
-  key on it. Paste and attach stay in the menu.
+  `alt` for the next key (from the row or the phone keyboard), paste, a paperclip and `/`. Hold
+  `ctrl` for `C-c` `C-d` `C-z` `C-r` `C-l` `C-a` `C-e` `C-w` `C-j`. A split shows one pane at a
+  time, with a bar to move between them. **The keyboard never resizes the terminal** - the pane
+  slides up under it by what it covers, so the line being typed into stays in view and a program in
+  it is never redrawn for the keyboard coming or going - and **a keyboard on the desk takes the dock
+  away**, since it has every key on it. Paste and attach stay in the menu.
 - **Links.** Long-press a link a program printed, or one it set as a hyperlink, to open, copy or
   share it.
 - **Files and images.** Pick any file on the phone and send it to the pane you are looking at.
@@ -53,8 +53,9 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   until you confirm it. A tailnet address is still dialed through the built-in node.
 - **Knows when it is old.** Once a day, and whenever Settings › Updates is tapped, the app asks its
   GitHub releases whether a newer build exists and says so; nothing is downloaded until you ask, and
-  Android asks once for permission to install it. An alpha follows the alphas, a finished build only
-  takes finished ones.
+  Android asks once for permission to install it. The update channel says what counts as newer:
+  **Stable** takes finished releases only, **Preview** takes the newest published, alphas and betas
+  included. A build that has never chosen follows what it came from.
 - **Light and dark,** following the phone, in English and Simplified Chinese.
 
 ## Set up the computer

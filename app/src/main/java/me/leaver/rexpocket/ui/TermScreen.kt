@@ -37,7 +37,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -237,16 +236,15 @@ internal fun TermScreen(
     // do in the reference, instead of sitting on bands of a second grey.
     //
     // The keyboard takes no room from the terminal. The pane keeps the grid it has and slides up by
-    // what the keyboard covers - just enough to keep the cursor's row above it - while the dock and
-    // the rest of the bottom chrome rise over it. A program is therefore never resized by the screen
-    // keyboard opening, so it never redraws or reflows for it.
+    // what the keyboard covers - the bottom of the terminal, the rows being typed into, stays where
+    // it was - while the dock and the rest of the bottom chrome rise over it. A program is therefore
+    // never resized by the screen keyboard opening, so it never redraws or reflows for it.
     val hardwareKeys = rememberHardwareKeyboard()
     val dock = keyBarShown(hardwareKeys, keyBarWithKeyboard)
     var bottomPx by remember { mutableIntStateOf(0) }
     var panePx by remember { mutableIntStateOf(0) }
-    var cursorPx by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current
-    val slide = imeShift(cursorPx, imeHeight(), panePx)
+    val slide = imeShift(imeHeight(), panePx)
 
     Box(Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.fillMaxSize().padding(bottom = with(density) { bottomPx.toDp() })) {
@@ -279,7 +277,6 @@ internal fun TermScreen(
                         onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
                         onSession = { termSession = it },
                         onKeyboard = { keyboard = it },
-                        onCursor = { cursorPx = it },
                         hardwareKeyboard = hardwareKeys,
                         // A horizontal swipe on the pane moves to the pane beside it, as the dots
                         // under it say there is one.
@@ -339,6 +336,8 @@ internal fun TermScreen(
                             onKey = { key, own -> press(key, own) },
                             onNewLine = { press(KeyPress("enter", 0), "shift") },
                             onPaste = { pasteClipboard() },
+                            onAttach = { filePicker.launch("*/*") },
+                            attachReady = upload?.running != true,
                             onKeyboard = { toggleKeyboard() },
                         )
                     }

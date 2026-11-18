@@ -1,5 +1,7 @@
 package me.leaver.rexpocket.core
 
+import me.leaver.rexpocket.core.UpdateChannel.Preview
+import me.leaver.rexpocket.core.UpdateChannel.Stable
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -65,23 +67,53 @@ class AppUpdateTest {
     @Test
     fun `a release without an APK is never offered`() {
         val releases = AppRelease.parseFeed(feed(release("v1.1.0", asset = null), release("v1.0.0")))
-        assertEquals("v1.0.0", releases.newestFor(AppVersion.parse("0.9.0")!!)?.tag)
+        assertEquals("v1.0.0", releases.newestFor(AppVersion.parse("0.9.0")!!, Stable)?.tag)
     }
 
     @Test
     fun `the running build is never offered itself`() {
         val releases = AppRelease.parseFeed(feed(release("v0.0.16"), release("v0.1.0-alpha1", prerelease = true)))
-        assertNull(releases.newestFor(AppVersion.parse("0.0.16")!!))
-        assertNull(releases.newestFor(AppVersion.parse("0.1.0-alpha1")!!))
+        assertNull(releases.newestFor(AppVersion.parse("0.0.16")!!, Stable))
+        assertNull(releases.newestFor(AppVersion.parse("0.1.0-alpha1")!!, Preview))
         // An alpha does take the stable version that follows it.
-        assertEquals("v0.0.16", releases.newestFor(AppVersion.parse("0.0.9")!!)?.tag)
+        assertEquals("v0.0.16", releases.newestFor(AppVersion.parse("0.0.9")!!, Stable)?.tag)
     }
 
     @Test
-    fun `a finished build does not get offered a pre-release`() {
+    fun `the stable channel never gets offered a pre-release, whatever the build is`() {
         val releases = AppRelease.parseFeed(feed(release("v0.1.0-alpha1", prerelease = true)))
-        assertNull(releases.newestFor(AppVersion.parse("0.0.16")!!))
-        assertEquals("v0.1.0-alpha1", releases.newestFor(AppVersion.parse("0.0.9-alpha3")!!)?.tag)
+        assertNull(releases.newestFor(AppVersion.parse("0.0.16")!!, Stable))
+        // Not even an alpha that would rather keep following the alphas.
+        assertNull(releases.newestFor(AppVersion.parse("0.0.9-alpha3")!!, Stable))
+        assertEquals("v0.1.0-alpha1", releases.newestFor(AppVersion.parse("0.0.9-alpha3")!!, Preview)?.tag)
+    }
+
+    @Test
+    fun `the preview channel takes the newest build, pre-release or not`() {
+        val releases = AppRelease.parseFeed(
+            feed(
+                release("v0.2.0"),
+                release("v0.3.0-alpha1", prerelease = true),
+                release("v0.2.1"),
+            ),
+        )
+        val running = AppVersion.parse("0.1.0")!!
+        assertEquals("v0.2.1", releases.newestFor(running, Stable)?.tag)
+        assertEquals("v0.3.0-alpha1", releases.newestFor(running, Preview)?.tag)
+    }
+
+    @Test
+    fun `turning back to stable never offers an older build`() {
+        val releases = AppRelease.parseFeed(feed(release("v0.1.9"), release("v0.2.0-beta1", prerelease = true)))
+        assertNull(releases.newestFor(AppVersion.parse("0.2.0-alpha2")!!, Stable))
+    }
+
+    @Test
+    fun `an install that never chose a channel follows the build it came from`() {
+        assertEquals(UpdateChannel.Stable, defaultChannel(AppVersion.parse("0.1.0")!!))
+        assertEquals(UpdateChannel.Preview, defaultChannel(AppVersion.parse("0.1.0-alpha2")!!))
+        assertEquals(UpdateChannel.Preview, defaultChannel(AppVersion.parse("0.1.0-rc1")!!))
+        assertEquals(UpdateChannel.Stable, defaultChannel(null))
     }
 
     @Test
@@ -93,6 +125,6 @@ class AppUpdateTest {
                 release("v0.0.16"),
             ),
         )
-        assertEquals("v0.0.17", releases.newestFor(AppVersion.parse("0.0.14")!!)?.tag)
+        assertEquals("v0.0.17", releases.newestFor(AppVersion.parse("0.0.14")!!, Stable)?.tag)
     }
 }

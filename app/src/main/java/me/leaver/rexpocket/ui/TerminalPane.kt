@@ -68,8 +68,6 @@ internal fun TerminalPane(
     onSession: (TerminalSession?) -> Unit = {},
     /** The pane's editor, which is what raises and drops the keyboard for it. */
     onKeyboard: (TerminalImeView?) -> Unit = {},
-    /** Where the cursor's row ends in the pane, in pixels: the screen slides the pane by it. */
-    onCursor: (cursorBottomPx: Float) -> Unit = {},
     /** True while a keyboard other than the screen's is attached: the pane keeps the focus then. */
     hardwareKeyboard: Boolean = false,
     /** A horizontal swipe across the pane: forward means towards the next pane. */
@@ -87,7 +85,6 @@ internal fun TerminalPane(
     val currentResize = rememberUpdatedState(onResize)
     val currentSwipe = rememberUpdatedState(onSwipe)
     val currentKeyboard = rememberUpdatedState(onKeyboard)
-    val currentCursor = rememberUpdatedState(onCursor)
     val currentFont = rememberUpdatedState(onFont)
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
 
@@ -140,7 +137,6 @@ internal fun TerminalPane(
             // A long press on a link offers it instead of selecting its text: agents print the pull
             // requests and sign-in pages they want you to open.
             view.onLink = { currentLink.value(it) }
-            view.onCursorMoved = { currentCursor.value(it) }
             // A horizontal swipe moves between the panes of a split, which is what the dots under
             // the card promise. Vertical drags stay the pane's own: history, or the program's wheel.
             view.onSwipe = { forward -> currentSwipe.value?.invoke(forward) }

@@ -219,14 +219,6 @@ internal class TerminalView(context: Context) : View(context) {
             if (!value) clearFocus()
         }
 
-    /**
-     * Where the cursor's row ends, in pixels, reported when it moves. The screen slides the pane up
-     * under the screen keyboard by this - never by a resize, which the program would see.
-     */
-    var onCursorMoved: ((cursorBottomPx: Float) -> Unit)? = null
-
-    private var reportedCursor = -1f
-
     // ---- Layout ----------------------------------------------------------------------------
 
     private fun measureFont() {
@@ -273,19 +265,10 @@ internal class TerminalView(context: Context) : View(context) {
 
     // ---- Drawing ---------------------------------------------------------------------------
 
-    /** Tells the screen where the cursor's row ends, once per move: a pane under the keyboard keeps it. */
-    private fun reportCursor(frame: TerminalFrame) {
-        val bottom = if (frame.cursorX < 0 || frame.cursorY < 0) 0f else (frame.cursorY + 1) * cellHeight
-        if (abs(bottom - reportedCursor) < 0.5f) return
-        reportedCursor = bottom
-        onCursorMoved?.invoke(bottom)
-    }
-
     override fun onDraw(canvas: Canvas) {
         val frame = selection?.frame ?: currentFrame()
         canvas.drawColor(frame?.background ?: theme.background)
         if (frame == null) return
-        reportCursor(frame)
         val columns = min(frame.columns, ceil(width / cellWidth).toInt())
         val rows = min(frame.rows, ceil(height / cellHeight).toInt())
         val images = if (frame.images.isEmpty()) emptyList() else frame.images.sortedWith(compareBy({ it.layer }, { it.z }))
