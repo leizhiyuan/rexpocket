@@ -96,9 +96,9 @@
 
     <string name="pane_reading">正在读取画面…</string>
     <string name="pane_no_picture">画面还没有来</string>
-    <string name="key_escape">esc</string>
-    <string name="key_ctrl">ctrl</string>
-    <string name="key_tab">tab</string>
+    <string name="key_escape">Esc</string>
+    <string name="key_ctrl">Ctrl</string>
+    <string name="key_tab">Tab</string>
     <string name="key_ctrl_c">C-c</string>
     <string name="key_paste">粘贴</string>
     <string name="upload_attach">发送文件</string>

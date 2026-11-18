@@ -97,9 +97,9 @@
 
     <string name="pane_reading">Reading the screen…</string>
     <string name="pane_no_picture">No picture yet</string>
-    <string name="key_escape">esc</string>
-    <string name="key_ctrl">ctrl</string>
-    <string name="key_tab">tab</string>
+    <string name="key_escape">Esc</string>
+    <string name="key_ctrl">Ctrl</string>
+    <string name="key_tab">Tab</string>
     <string name="key_ctrl_c">C-c</string>
     <string name="key_paste">Paste</string>
     <string name="upload_attach">Send a file</string>
