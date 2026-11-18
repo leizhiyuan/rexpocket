@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -36,14 +37,19 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -53,6 +59,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -216,87 +223,113 @@ internal fun TermScreen(
 
     // One paper for the whole screen, the terminal's: the top bar and the dock float on it, as they
     // do in the reference, instead of sitting on bands of a second grey.
-    Column(Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().navigationBarsPadding().imePadding()) {
-        SessionTopBar(
-            state = state,
-            view = view,
-            tab = tab,
-            status = status,
-            onBack = onBack,
-            showBack = !embedded,
-            onNavigate = { if (view != null) sheet = Sheet.Navigator },
-            onHolder = { if (state.owning) onAct { releasePane() } else onAct { takeOver() } },
-            onMore = { sheet = Sheet.Actions },
-        )
-        TermBanner(state, onRetry = onRetry, onDismiss = onDismissNotice)
-        // The pane sits on its own paper: white in the day, the page at night, edge to edge, the
-        // way a terminal fills the screen.
-        Box(Modifier.weight(1f).fillMaxWidth().background(Colors.terminal)) {
-            val shown = focused?.id
-            key(shown) {
-                TerminalPane(
-                    blockId = shown.orEmpty(),
-                    feeds = watchPane,
-                    fontScale = fontScale,
-                    terminalTypeface = terminalTypeface,
-                    onFont = onFont,
-                    onInput = { bytes -> onAct { writeBytes(bytes) } },
-                    onTyped = ::typed,
-                    onLink = { link = it },
-                    onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
-                    onSession = { termSession = it },
-                    onKeyboard = { keyboard = it },
-                    // A horizontal swipe on the pane moves to the pane beside it, as the dots
-                    // under it say there is one.
-                    onSwipe = { forward ->
-                        if (panes.size > 1) {
-                            val index = panes.indexOfFirst { it.id == focused?.id }
-                            val next = (index + if (forward) 1 else -1).coerceIn(0, panes.lastIndex)
-                            if (next != index) onAct { focusBlock(panes[next].id) }
-                        }
-                    },
-                    onError = { onAct { note(it.toProblem()) } },
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 3.dp, vertical = 2.dp),
-                )
-            }
-        }
-        if (panes.size > 1) {
-            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp), contentAlignment = Alignment.Center) {
-                PaneBar(
-                    tab = tab,
-                    focused = focused,
-                    status = state.blockStatus,
-                    programs = state.programs,
-                    onSelect = { block -> onAct { focusBlock(block.id) } },
-                )
-            }
-        }
-        upload?.let {
-            ReachableWidth {
-                UploadPill(
-                    status = it,
-                    onCancel = onCancelUpload,
-                    onDismiss = onDismissUpload,
-                    onRetry = onRetryUpload,
-                )
-            }
-        }
-        // The dock is one hand's reach wide, whatever the window is: a tablet or a desk window keeps
-        // the keys together in the middle instead of spreading them across the bottom edge.
-        ReachableWidth {
-            KeyBar(
-                mods = mods,
-                busy = status?.state == "working" || status?.state == "blocked",
-                imeUp = imeShown(),
-                onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
-                onKey = { key, own -> press(key, own) },
-                onNewLine = { press(KeyPress("enter", 0), "shift") },
-                onPaste = {
-                    val text = clipboard(context)
-                    if (text.isNullOrEmpty()) toast(context, context.getString(R.string.toast_clipboard_empty)) else onAct { paste(text) }
-                },
-                onKeyboard = { toggleKeyboard() },
+    //
+    // The keyboard takes no room from the terminal. The pane keeps the grid it has and slides up by
+    // what the keyboard covers - just enough to keep the cursor's row above it - while the dock and
+    // the rest of the bottom chrome rise over it. A program is therefore never resized by the screen
+    // keyboard opening, so it never redraws or reflows for it.
+    var bottomPx by remember { mutableIntStateOf(0) }
+    var panePx by remember { mutableIntStateOf(0) }
+    var cursorPx by remember { mutableFloatStateOf(0f) }
+    val density = LocalDensity.current
+    val slide = imeShift(cursorPx, imeHeight(), panePx)
+
+    Box(Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().navigationBarsPadding()) {
+        Column(Modifier.fillMaxSize().padding(bottom = with(density) { bottomPx.toDp() })) {
+            SessionTopBar(
+                state = state,
+                view = view,
+                tab = tab,
+                status = status,
+                onBack = onBack,
+                showBack = !embedded,
+                onNavigate = { if (view != null) sheet = Sheet.Navigator },
+                onHolder = { if (state.owning) onAct { releasePane() } else onAct { takeOver() } },
+                onMore = { sheet = Sheet.Actions },
             )
+            TermBanner(state, onRetry = onRetry, onDismiss = onDismissNotice)
+            // The pane sits on its own paper: white in the day, the page at night, edge to edge, the
+            // way a terminal fills the screen.
+            Box(Modifier.weight(1f).fillMaxWidth().background(Colors.terminal).clipToBounds()) {
+                val shown = focused?.id
+                key(shown) {
+                    TerminalPane(
+                        blockId = shown.orEmpty(),
+                        feeds = watchPane,
+                        fontScale = fontScale,
+                        terminalTypeface = terminalTypeface,
+                        onFont = onFont,
+                        onInput = { bytes -> onAct { writeBytes(bytes) } },
+                        onTyped = ::typed,
+                        onLink = { link = it },
+                        onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
+                        onSession = { termSession = it },
+                        onKeyboard = { keyboard = it },
+                        onCursor = { cursorPx = it },
+                        // A horizontal swipe on the pane moves to the pane beside it, as the dots
+                        // under it say there is one.
+                        onSwipe = { forward ->
+                            if (panes.size > 1) {
+                                val index = panes.indexOfFirst { it.id == focused?.id }
+                                val next = (index + if (forward) 1 else -1).coerceIn(0, panes.lastIndex)
+                                if (next != index) onAct { focusBlock(panes[next].id) }
+                            }
+                        },
+                        onError = { onAct { note(it.toProblem()) } },
+                        modifier = Modifier.fillMaxSize()
+                            // Moved, not resized: see imeShift. An offset keeps the pane's measured size
+                            // - and so the grid the program was given - exactly as it was.
+                            .offset { IntOffset(0, -slide.roundToInt()) }
+                            .padding(horizontal = 3.dp, vertical = 2.dp)
+                            .onSizeChanged { panePx = it.height },
+                    )
+                }
+            }
+        }
+        // The bottom of the screen, on its own: the pane's size is measured above without it, so the
+        // keyboard can lift this stack without the terminal ever changing shape.
+        Box(Modifier.align(Alignment.BottomCenter).imePadding()) {
+            Column(Modifier.onSizeChanged { bottomPx = it.height }) {
+                if (panes.size > 1) {
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp), contentAlignment = Alignment.Center) {
+                        PaneBar(
+                            tab = tab,
+                            focused = focused,
+                            status = state.blockStatus,
+                            programs = state.programs,
+                            onSelect = { block -> onAct { focusBlock(block.id) } },
+                        )
+                    }
+                }
+                upload?.let {
+                    ReachableWidth {
+                        UploadPill(
+                            status = it,
+                            onCancel = onCancelUpload,
+                            onDismiss = onDismissUpload,
+                            onRetry = onRetryUpload,
+                        )
+                    }
+                }
+                // The dock is one hand's reach wide, whatever the window is: a tablet or a desk
+                // window keeps the keys together in the middle instead of spreading them across the
+                // bottom edge.
+                ReachableWidth {
+                    KeyBar(
+                        mods = mods,
+                        busy = status?.state == "working" || status?.state == "blocked",
+                        imeUp = imeShown(),
+                        onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
+                        onKey = { key, own -> press(key, own) },
+                        onNewLine = { press(KeyPress("enter", 0), "shift") },
+                        onPaste = {
+                            val text = clipboard(context)
+                            if (text.isNullOrEmpty()) toast(context, context.getString(R.string.toast_clipboard_empty)) else onAct { paste(text) }
+                        },
+                        onKeyboard = { toggleKeyboard() },
+                    )
+                }
+            }
         }
     }
 

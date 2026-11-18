@@ -32,7 +32,9 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   Return and a key row: `esc`, `C-c`, arrows that repeat while held, Tab, `shift` / `ctrl` /
   `alt` for the next key (from the row or the phone keyboard), paste, `/` and copy. Hold `ctrl`
   for `C-c` `C-d` `C-z` `C-r` `C-l` `C-a` `C-e` `C-w` `C-j`. A split shows one pane at a time,
-  with a bar to move between them.
+  with a bar to move between them. **The keyboard never resizes the terminal** - the pane slides up
+  under it, just enough to keep the cursor in view, so a program in it is never redrawn for the
+  keyboard coming or going.
 - **Links.** Long-press a link a program printed, or one it set as a hyperlink, to open, copy or
   share it.
 - **Files and images.** Pick any file on the phone and send it to the pane you are looking at.
