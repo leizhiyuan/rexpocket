@@ -145,6 +145,8 @@ internal fun TermScreen(
     onCancelUpload: () -> Unit,
     onDismissUpload: () -> Unit,
     onRetryUpload: () -> Unit,
+    /** True when this pane shares the window with the list, which is then the way back. */
+    embedded: Boolean = false,
 ) {
     val context = LocalContext.current
     val ime = LocalSoftwareKeyboardController.current
@@ -221,6 +223,7 @@ internal fun TermScreen(
             tab = tab,
             status = status,
             onBack = onBack,
+            showBack = !embedded,
             onNavigate = { if (view != null) sheet = Sheet.Navigator },
             onHolder = { if (state.owning) onAct { releasePane() } else onAct { takeOver() } },
             onMore = { sheet = Sheet.Actions },
@@ -269,26 +272,32 @@ internal fun TermScreen(
             }
         }
         upload?.let {
-            UploadPill(
-                status = it,
-                onCancel = onCancelUpload,
-                onDismiss = onDismissUpload,
-                onRetry = onRetryUpload,
+            ReachableWidth {
+                UploadPill(
+                    status = it,
+                    onCancel = onCancelUpload,
+                    onDismiss = onDismissUpload,
+                    onRetry = onRetryUpload,
+                )
+            }
+        }
+        // The dock is one hand's reach wide, whatever the window is: a tablet or a desk window keeps
+        // the keys together in the middle instead of spreading them across the bottom edge.
+        ReachableWidth {
+            KeyBar(
+                mods = mods,
+                busy = status?.state == "working" || status?.state == "blocked",
+                imeUp = imeShown(),
+                onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
+                onKey = { key, own -> press(key, own) },
+                onNewLine = { press(KeyPress("enter", 0), "shift") },
+                onPaste = {
+                    val text = clipboard(context)
+                    if (text.isNullOrEmpty()) toast(context, context.getString(R.string.toast_clipboard_empty)) else onAct { paste(text) }
+                },
+                onKeyboard = { toggleKeyboard() },
             )
         }
-        KeyBar(
-            mods = mods,
-            busy = status?.state == "working" || status?.state == "blocked",
-            imeUp = imeShown(),
-            onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
-            onKey = { key, own -> press(key, own) },
-            onNewLine = { press(KeyPress("enter", 0), "shift") },
-            onPaste = {
-                val text = clipboard(context)
-                if (text.isNullOrEmpty()) toast(context, context.getString(R.string.toast_clipboard_empty)) else onAct { paste(text) }
-            },
-            onKeyboard = { toggleKeyboard() },
-        )
     }
 
     when (val open = sheet) {
@@ -504,6 +513,8 @@ private fun SessionTopBar(
     tab: WindowInfo?,
     status: ProgramRecord?,
     onBack: () -> Unit,
+    /** False while the list stands beside this pane: there the pane has no way back to leave. */
+    showBack: Boolean,
     onNavigate: () -> Unit,
     onHolder: () -> Unit,
     onMore: () -> Unit,
@@ -518,7 +529,11 @@ private fun SessionTopBar(
         Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RoundButton(R.drawable.ic_back, stringResource(R.string.action_back), onBack, plate = Colors.key, size = 40.dp)
+        if (showBack) {
+            RoundButton(R.drawable.ic_back, stringResource(R.string.action_back), onBack, plate = Colors.key, size = 40.dp)
+        } else {
+            Spacer(Modifier.width(4.dp))
+        }
         Row(
             Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(Radius.card))
                 .clickable(enabled = view != null, role = Role.Button, onClickLabel = stringResource(R.string.menu_navigate), onClick = onNavigate)

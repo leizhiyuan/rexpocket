@@ -172,6 +172,8 @@
     <string name="action_enter">Enter</string>
     <string name="session_open_to_load">Open to see tabs</string>
     <string name="no_tabs">No tabs</string>
+    <string name="pane_none_title">No pane open</string>
+    <string name="pane_none_body">Choose a tab on the left: its terminal opens here, and the list stays beside it.</string>
     <string name="action_show_active">Show active only</string>
     <string name="no_activity">Nothing is running right now</string>
     <string name="action_more">More actions</string>

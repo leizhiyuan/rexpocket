@@ -66,6 +66,29 @@ and a one-tint monochrome layer for themed icons. The cuff, the part that has to
 the 66 dp safe circle; the arm runs off the left edge, as a sleeve does. Silk `#FBF5E8`, cinnabar
 `#C0392B` on the cuff, gilt `#D9B46A`, sky `#0A1027` - the icon's own palette, not the screens'.
 
+## The window
+
+The layout follows the window, not the device: a phone, a tablet, a foldable and a window on a desk
+take the same two classes from the platform, at 600 dp and 840 dp of width and 480 dp of height.
+Nothing is locked to an orientation, and a window resized across either line is laid out again where
+it lands.
+
+- **One column.** The list, and the pane over it when one is open. Where the window is wider than
+  560 dp the list is held to that and centred, so a host's row and its tabs do not stretch across
+  the window. An open pane keeps the whole width, its dock held to 720 dp in the middle - one
+  hand's reach - rather than spread over the bottom edge.
+- **Two panes.** At 840 dp of width and taller than a phone held sideways, the list stays beside the
+  open pane - two fifths of the window, between 320 and 420 dp - so a session or a tab is switched
+  without leaving the terminal it was showing. The tab on the right carries a `keyOn` plate and is
+  announced as selected. With nothing open, the pane side says so and waits for a pick. The pane
+  beside the list has no back arrow - the list is the way back - and Back closes the pane, leaving
+  the list and its connection as they were. A phone on its side is wide enough by the width class
+  but has no height for two panes, so it keeps the one column.
+- A sheet and a dialog keep the widths the platform gives them (a bottom sheet 640 dp, a dialog
+  560 dp), so they read the same on every window.
+- What the person was looking at outlives the window being laid out again: the search and its query,
+  the folds of the list, and the activity filter are kept as saveable state.
+
 ## The home
 
 There is no second screen between a host, its sessions and their tabs.

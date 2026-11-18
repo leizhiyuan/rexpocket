@@ -1,8 +1,19 @@
 package me.leaver.rexpocket.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -10,8 +21,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import me.leaver.rexpocket.R
@@ -25,7 +39,8 @@ import androidx.compose.ui.text.font.FontWeight
 import me.leaver.rexpocket.update.InstallResult
 import me.leaver.rexpocket.update.UpdateState
 
-// The app root: picks the screen for the route and hosts the dialogs that float over all of them.
+// The app root: lays the list and the pane out for the window in hand, and hosts the dialogs that
+// float over both.
 
 @Composable
 fun RexPocketApp(model: RexViewModel = viewModel()) {
@@ -80,8 +95,13 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     }
     RexTheme {
         Box(Modifier.fillMaxSize().background(Colors.bg)) {
-            when (route) {
-                Route.Home -> HomeScreen(
+            val window = windowSize()
+            // A tablet or a desk window keeps the list beside the pane: a session or a tab is
+            // switched without leaving the terminal it was showing. With nothing open, the pane
+            // side says so and waits for a pick.
+            val home: @Composable (Boolean) -> Unit = { detail ->
+                HomeScreen(
+                    detail = detail,
                     hosts = hosts,
                     connected = model.host,
                     state = pocket,
@@ -109,7 +129,10 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     update = update,
                     onUpdate = { updateTapped(update) },
                 )
-                Route.Term -> TermScreen(
+            }
+            val term: @Composable (Boolean) -> Unit = { embedded ->
+                TermScreen(
+                    embedded = embedded,
                     state = pocket,
                     fontScale = font,
                     terminalTypeface = terminalTypeface,
@@ -126,6 +149,24 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onDismissUpload = model::dismissUpload,
                     onRetryUpload = model::retryUpload,
                 )
+            }
+            when (layoutFor(window, hasHosts = hosts.isNotEmpty(), terminalOpen = route == Route.Term)) {
+                WindowLayout.ListDetail -> BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val list = listPaneWidth(maxWidth)
+                    val open = route == Route.Term
+                    Row(Modifier.fillMaxSize()) {
+                        Box(Modifier.width(list).fillMaxHeight()) { home(open) }
+                        Box(Modifier.width(1.dp).fillMaxHeight().background(Colors.line))
+                        Box(Modifier.weight(1f).fillMaxHeight()) { if (open) term(true) else NoPaneOpen() }
+                    }
+                }
+                WindowLayout.CappedColumn -> BoxWithConstraints(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    Box(Modifier.width(minOf(maxWidth, COLUMN_MAX)).fillMaxHeight()) { home(false) }
+                }
+                WindowLayout.OneColumn -> if (route == Route.Term) term(false) else home(false)
             }
         }
         val offered = update
@@ -178,6 +219,39 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                 onCancel = { model.disconnect() },
             )
         }
+    }
+}
+
+/**
+ * The pane side of a window that has room for two, with nothing open in it yet: the list on the
+ * left is where a pane is picked, and it stays there.
+ */
+@Composable
+private fun NoPaneOpen() {
+    Column(
+        Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Glyph(R.drawable.ic_sessions, Colors.muted, size = 44.dp)
+        Spacer(Modifier.height(16.dp))
+        Text(
+            stringResource(R.string.pane_none_title),
+            color = Colors.ink,
+            fontSize = TextStyles.title,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 360.dp),
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.pane_none_body),
+            color = Colors.muted,
+            fontSize = TextStyles.label,
+            lineHeight = labelLeading,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 360.dp),
+        )
     }
 }
 
