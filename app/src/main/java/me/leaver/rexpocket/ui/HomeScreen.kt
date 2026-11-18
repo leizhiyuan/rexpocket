@@ -395,10 +395,6 @@ internal fun HomeScreen(
                 settings = false
                 onTailscale()
             },
-            onAddHost = {
-                settings = false
-                creating = true
-            },
             alerts = alerts,
             onAlerts = toggleAlerts,
             keyBar = keyBar,
@@ -771,7 +767,6 @@ private fun SettingsSheet(
     tailnetError: String?,
     onDismiss: () -> Unit,
     onTailscale: () -> Unit,
-    onAddHost: () -> Unit,
     alerts: Boolean,
     onAlerts: () -> Unit,
     keyBar: Boolean,
@@ -787,7 +782,11 @@ private fun SettingsSheet(
     val context = LocalContext.current
     val joined = tailscale.enabled && tailscaleStatus.backendState == "Running"
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.settings)) {
-        Group {
+        // Four cards, each one answer to a different question: how the phone reaches a computer,
+        // what the terminal looks and feels like, which build it installs, and what the app is. A
+        // flat list of rows made every one of them equally far away; adding a host is not here at
+        // all, because the list it belongs to has its own + button.
+        Group(stringResource(R.string.settings_group_connection)) {
             SheetItem(
                 label = stringResource(R.string.tailscale_title),
                 icon = R.drawable.ic_tailnet,
@@ -799,15 +798,15 @@ private fun SettingsSheet(
                 },
                 onClick = onTailscale,
             )
-        }
-        Group {
+            // Alerts are the connection kept up in the background, so they sit with the way in.
             SheetItem(
                 label = stringResource(R.string.alerts_title),
                 icon = R.drawable.ic_notifications,
                 detail = stringResource(if (alerts) R.string.alerts_on else R.string.alerts_off),
                 onClick = onAlerts,
             )
-            SheetItem(stringResource(R.string.action_add_host), icon = R.drawable.ic_add, onClick = onAddHost)
+        }
+        Group(stringResource(R.string.settings_group_terminal)) {
             SheetItem(
                 label = stringResource(R.string.keybar_title),
                 icon = R.drawable.ic_keyboard,
@@ -815,13 +814,8 @@ private fun SettingsSheet(
                 onClick = { onKeyBar(!keyBar) },
             )
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
-            SheetItem(
-                label = stringResource(R.string.diagnostics),
-                detail = stringResource(if (recording) R.string.diagnostics_state_on else R.string.diagnostics_state_off),
-                icon = R.drawable.ic_attach_file,
-                onClick = onDiagnostics,
-            )
-            SheetItem(stringResource(R.string.settings_source), icon = R.drawable.ic_open_in_new) { openLink(context, SOURCE_URL) }
+        }
+        Group(stringResource(R.string.settings_group_version)) {
             // The channel first: it is what the row under it looks on.
             SheetItem(
                 label = stringResource(R.string.update_channel),
@@ -839,6 +833,16 @@ private fun SettingsSheet(
                 detail = updateDetail(update),
                 onClick = onUpdate,
             )
+        }
+        // About the app itself: what it recorded, where its code is, and what it is built from.
+        Group(stringResource(R.string.settings_group_about)) {
+            SheetItem(
+                label = stringResource(R.string.diagnostics),
+                detail = stringResource(if (recording) R.string.diagnostics_state_on else R.string.diagnostics_state_off),
+                icon = R.drawable.ic_build,
+                onClick = onDiagnostics,
+            )
+            SheetItem(stringResource(R.string.settings_source), icon = R.drawable.ic_open_in_new) { openLink(context, SOURCE_URL) }
         }
         Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
             Text(

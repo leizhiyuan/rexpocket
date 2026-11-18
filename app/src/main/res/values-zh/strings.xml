@@ -96,9 +96,9 @@
 
     <string name="pane_reading">正在读取画面…</string>
     <string name="pane_no_picture">画面还没有来</string>
-    <string name="key_escape">esc</string>
-    <string name="key_ctrl">ctrl</string>
-    <string name="key_tab">tab</string>
+    <string name="key_escape">Esc</string>
+    <string name="key_ctrl">Ctrl</string>
+    <string name="key_tab">Tab</string>
     <string name="key_ctrl_c">C-c</string>
     <string name="key_paste">粘贴</string>
     <string name="upload_attach">发送文件</string>
@@ -147,6 +147,10 @@
     <string name="action_search">搜索</string>
     <string name="settings">设置</string>
     <string name="settings_source">GitHub 源码</string>
+    <string name="settings_group_connection">连接</string>
+    <string name="settings_group_terminal">终端</string>
+    <string name="settings_group_version">版本</string>
+    <string name="settings_group_about">关于</string>
     <string name="settings_credits">Rex 由 Superlogical 开发，Ghostty 归其作者。图标来自 Material Symbols。</string>
     <string name="diagnostics">诊断</string>
     <string name="diagnostics_what">App 会把最近几小时的日志留在手机上，所以打开这里之前就出现的问题，报告里已经包含：App 版本、手机、你的主机、连接都做了什么。如果问题只在操作时才出现，就开一个记录再复现，它也会一并写进报告。地址和主机名会变成 &lt;hidden&gt;；标签页标题和窗格里打印的内容不会被记录。</string>
