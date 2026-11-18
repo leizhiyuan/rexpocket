@@ -152,6 +152,8 @@ internal fun TermScreen(
     onCancelUpload: () -> Unit,
     onDismissUpload: () -> Unit,
     onRetryUpload: () -> Unit,
+    /** True when the key bar is kept even with a keyboard on the desk. */
+    keyBarWithKeyboard: Boolean = false,
     /** True when this pane shares the window with the list, which is then the way back. */
     embedded: Boolean = false,
 ) {
@@ -173,6 +175,16 @@ internal fun TermScreen(
     val focused = view?.focusedBlock()
     val status = focused?.let { state.blockStatus[it.id] }
     val panes = tab?.blocks.orEmpty()
+
+    /** Puts what the clipboard holds into the program, where a key on the bar or the menu asks for it. */
+    fun pasteClipboard() {
+        val text = clipboard(context)
+        if (text.isNullOrEmpty()) {
+            toast(context, context.getString(R.string.toast_clipboard_empty))
+        } else {
+            onAct { paste(text) }
+        }
+    }
 
     /** Sends a key with the modifiers the key row holds; the ones on for one key are then used up. */
     fun press(key: KeyPress, own: String = "") {
@@ -228,6 +240,8 @@ internal fun TermScreen(
     // what the keyboard covers - just enough to keep the cursor's row above it - while the dock and
     // the rest of the bottom chrome rise over it. A program is therefore never resized by the screen
     // keyboard opening, so it never redraws or reflows for it.
+    val hardwareKeys = rememberHardwareKeyboard()
+    val dock = keyBarShown(hardwareKeys, keyBarWithKeyboard)
     var bottomPx by remember { mutableIntStateOf(0) }
     var panePx by remember { mutableIntStateOf(0) }
     var cursorPx by remember { mutableFloatStateOf(0f) }
@@ -266,6 +280,7 @@ internal fun TermScreen(
                         onSession = { termSession = it },
                         onKeyboard = { keyboard = it },
                         onCursor = { cursorPx = it },
+                        hardwareKeyboard = hardwareKeys,
                         // A horizontal swipe on the pane moves to the pane beside it, as the dots
                         // under it say there is one.
                         onSwipe = { forward ->
@@ -311,23 +326,22 @@ internal fun TermScreen(
                         )
                     }
                 }
-                // The dock is one hand's reach wide, whatever the window is: a tablet or a desk
-                // window keeps the keys together in the middle instead of spreading them across the
-                // bottom edge.
-                ReachableWidth {
-                    KeyBar(
-                        mods = mods,
-                        busy = status?.state == "working" || status?.state == "blocked",
-                        imeUp = imeShown(),
-                        onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
-                        onKey = { key, own -> press(key, own) },
-                        onNewLine = { press(KeyPress("enter", 0), "shift") },
-                        onPaste = {
-                            val text = clipboard(context)
-                            if (text.isNullOrEmpty()) toast(context, context.getString(R.string.toast_clipboard_empty)) else onAct { paste(text) }
-                        },
-                        onKeyboard = { toggleKeyboard() },
-                    )
+                if (dock) {
+                    // The dock is one hand's reach wide, whatever the window is: a tablet or a desk
+                    // window keeps the keys together in the middle instead of spreading them across
+                    // the bottom edge.
+                    ReachableWidth {
+                        KeyBar(
+                            mods = mods,
+                            busy = status?.state == "working" || status?.state == "blocked",
+                            imeUp = imeShown(),
+                            onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
+                            onKey = { key, own -> press(key, own) },
+                            onNewLine = { press(KeyPress("enter", 0), "shift") },
+                            onPaste = { pasteClipboard() },
+                            onKeyboard = { toggleKeyboard() },
+                        )
+                    }
                 }
             }
         }
@@ -352,10 +366,13 @@ internal fun TermScreen(
                     }
                 }
             }
-            if (upload?.running != true) {
-                Group {
+            // Paste is here as well as on the key bar, because a keyboard on the desk takes the bar
+            // away and a chord only reaches the program, never the phone's clipboard.
+            Group {
+                if (upload?.running != true) {
                     SheetItem(stringResource(R.string.upload_attach), icon = R.drawable.ic_attach_file) { filePicker.launch("*/*") }
                 }
+                SheetItem(stringResource(R.string.key_paste), icon = R.drawable.ic_paste) { pasteClipboard() }
             }
             Group(stringResource(R.string.level_tab)) {
                 SheetItem(stringResource(R.string.menu_new_tab), icon = R.drawable.ic_add) { onAct { newWindow() } }

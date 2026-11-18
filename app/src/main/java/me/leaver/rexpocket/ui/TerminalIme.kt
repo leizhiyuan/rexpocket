@@ -53,7 +53,13 @@ internal class TerminalImeView(context: Context) : View(context) {
 
     override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
-        if (gainFocus) raise()
+        if (gainFocus) {
+            raise()
+        } else if (pane?.hardwareKeys == true) {
+            // The screen keyboard is going away and a desk keyboard is what types: the pane takes the
+            // focus back, so its keys keep reaching the program without another tap.
+            pane?.requestFocus()
+        }
     }
 
     override fun onCheckIsTextEditor(): Boolean = true

@@ -158,6 +158,9 @@ internal fun HomeScreen(
     onTailscale: () -> Unit,
     alerts: Boolean,
     onAlerts: (Boolean) -> Unit,
+    /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
+    keyBar: Boolean,
+    onKeyBar: (Boolean) -> Unit,
     onFontSettings: () -> Unit,
     /** Builds the diagnostics report when the person asks for one, kept to [limit] characters. */
     onDiagnosticsReport: (limit: Int) -> String,
@@ -394,6 +397,8 @@ internal fun HomeScreen(
             },
             alerts = alerts,
             onAlerts = toggleAlerts,
+            keyBar = keyBar,
+            onKeyBar = onKeyBar,
             onFontSettings = onFontSettings,
             recording = recording,
             onDiagnostics = {
@@ -763,6 +768,8 @@ private fun SettingsSheet(
     onAddHost: () -> Unit,
     alerts: Boolean,
     onAlerts: () -> Unit,
+    keyBar: Boolean,
+    onKeyBar: (Boolean) -> Unit,
     onFontSettings: () -> Unit,
     recording: Boolean,
     onDiagnostics: () -> Unit,
@@ -793,6 +800,12 @@ private fun SettingsSheet(
                 onClick = onAlerts,
             )
             SheetItem(stringResource(R.string.action_add_host), icon = R.drawable.ic_add, onClick = onAddHost)
+            SheetItem(
+                label = stringResource(R.string.keybar_title),
+                icon = R.drawable.ic_keyboard,
+                detail = stringResource(if (keyBar) R.string.keybar_always else R.string.keybar_auto),
+                onClick = { onKeyBar(!keyBar) },
+            )
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
             SheetItem(
                 label = stringResource(R.string.diagnostics),

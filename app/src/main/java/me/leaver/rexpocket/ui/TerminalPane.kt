@@ -70,6 +70,8 @@ internal fun TerminalPane(
     onKeyboard: (TerminalImeView?) -> Unit = {},
     /** Where the cursor's row ends in the pane, in pixels: the screen slides the pane by it. */
     onCursor: (cursorBottomPx: Float) -> Unit = {},
+    /** True while a keyboard other than the screen's is attached: the pane keeps the focus then. */
+    hardwareKeyboard: Boolean = false,
     /** A horizontal swipe across the pane: forward means towards the next pane. */
     onSwipe: ((forward: Boolean) -> Unit)? = null,
     onError: (Exception) -> Unit = {},
@@ -144,8 +146,14 @@ internal fun TerminalPane(
             view.onSwipe = { forward -> currentSwipe.value?.invoke(forward) }
         }
     }
+    // With a keyboard on the desk the pane holds the focus itself, so its keys reach the program
+    // without the screen keyboard having to be raised first. The screen keyboard's turn comes from
+    // a tap on the pane, which still moves the focus to its own view.
+    LaunchedEffect(hardwareKeyboard) {
+        if (hardwareKeyboard && !keyboard.hasFocus()) pane.requestFocus()
+    }
     // A tap on the pane is a tap on its text: it raises the keyboard, which the pane never asks for
-    // itself - the view is not focusable, as its own input connection would answer with no text type.
+    // itself - it is no text editor, and its input connection would answer with no text type at all.
     SideEffect {
         keyboard.pane = pane
         pane.onTap = { keyboard.showIme() }
@@ -164,6 +172,7 @@ internal fun TerminalPane(
                 view.theme = theme
                 view.typeface = terminalTypeface
                 view.fontSizeSp = 12f * fontScale
+                view.hardwareKeys = hardwareKeyboard
                 view.session = session
             },
         )

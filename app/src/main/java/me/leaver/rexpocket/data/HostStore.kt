@@ -149,6 +149,16 @@ class HostStore(context: Context) {
         prefs.edit().putBoolean(KEY_ALERTS, on).apply()
     }
 
+    /**
+     * Whether the key bar stays on screen with a keyboard attached. Off by default: the bar is the
+     * screen keyboard's, and a desk keyboard already has every key on it.
+     */
+    fun keyBarAlways(): Boolean = prefs.getBoolean(KEY_KEY_BAR, false)
+
+    fun setKeyBarAlways(on: Boolean) {
+        prefs.edit().putBoolean(KEY_KEY_BAR, on).apply()
+    }
+
     fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)
 
     fun downloadedFont(): Boolean = prefs.getBoolean("downloaded_font", false)
@@ -187,6 +197,7 @@ class HostStore(context: Context) {
         private const val KEY_LAST_HOST = "last_host"
         private const val KEY_FONT = "font_scale"
         private const val KEY_ALERTS = "background_alerts"
+        private const val KEY_KEY_BAR = "key_bar_always"
         private const val KEY_TAILSCALE_ENABLED = "tailscale_enabled"
         private const val KEY_TAILSCALE_HOSTNAME = "tailscale_hostname"
         fun newId(): String = UUID.randomUUID().toString()
