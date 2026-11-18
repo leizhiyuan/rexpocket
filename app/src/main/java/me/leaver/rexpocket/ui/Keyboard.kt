@@ -35,12 +35,16 @@ internal fun keyBarShown(hardwareKeyboard: Boolean, always: Boolean): Boolean = 
 internal fun imeHeight(): Int = WindowInsets.ime.getBottom(LocalDensity.current)
 
 /**
- * How far the pane slides up when the keyboard covers it. The terminal is not resized for the
+ * How far the pane slides up while the keyboard covers it. The terminal is not resized for the
  * keyboard - the program would take that as a window change and redraw everything - so the pane is
- * moved instead: up by just enough that the cursor's row sits above the keyboard, never further
- * than the keyboard itself, and not at all while it is closed.
+ * moved instead: up by what the keyboard covers, which puts the bottom of the terminal - the
+ * prompt, the composer, the status line - back where it was, above the dock.
+ *
+ * What has to stay visible is the bottom of the grid, not the cursor: a full-screen program draws
+ * its own cursor and hides the terminal's (`pi`, `htop`, Claude Code all do), and the rows it draws
+ * below the cursor are part of what is being typed into.
  */
-internal fun imeShift(cursorBottomPx: Float, imePx: Int, paneHeightPx: Int): Float {
-    if (imePx <= 0 || paneHeightPx <= 0 || cursorBottomPx <= 0f) return 0f
-    return (cursorBottomPx + imePx - paneHeightPx).coerceIn(0f, imePx.toFloat())
+internal fun imeShift(imePx: Int, paneHeightPx: Int): Float {
+    if (imePx <= 0 || paneHeightPx <= 0) return 0f
+    return minOf(imePx, paneHeightPx).toFloat()
 }
