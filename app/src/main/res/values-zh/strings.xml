@@ -30,9 +30,12 @@
     <string name="action_delete">删除</string>
     <string name="action_cancel">取消</string>
     <string name="field_name">名称</string>
+    <string name="field_name_optional">可留空，默认用地址</string>
     <string name="field_address">地址</string>
+    <string name="field_address_placeholder">192.168.1.10</string>
     <string name="field_plaintext_warning">明文模式下，任何能连上端口的人都有完整权限。</string>
     <string name="host_address_invalid">这个地址不可用。可以填主机、主机:端口，或完整 URL。</string>
+    <string name="host_address_hint">填电脑的 IP，或它在网络/ tailnet 上的名字：192.168.1.10、mac.local、mac.tail1234.ts.net。要经那台机器的 SSH 连 Rex，就填 ssh://user@host。</string>
 
     <string name="tailscale_title">Tailscale</string>
     <string name="tailscale_not_joined">未加入</string>

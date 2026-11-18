@@ -88,6 +88,8 @@ internal fun Field(
     password: Boolean = false,
     singleLine: Boolean = true,
     minLines: Int = 1,
+    /** What an empty field says inside the box, so it is clear what belongs in it. */
+    placeholder: String? = null,
     onChange: (String) -> Unit,
 ) {
     // With autoFocus the field opens focused with its text selected, so a rename can be typed over.
@@ -106,22 +108,34 @@ internal fun Field(
     }
     Column {
         Text(hint, color = Colors.muted, fontSize = TextStyles.label)
-        BasicTextField(
-            value = field,
-            onValueChange = {
-                field = it
-                onChange(it.text)
-            },
-            textStyle = TextStyle(color = Colors.ink, fontSize = TextStyles.body),
-            cursorBrush = SolidColor(Colors.accent),
-            singleLine = singleLine,
-            minLines = minLines,
-            visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else KeyboardType.Text),
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp).border(1.dp, Colors.line, RoundedCornerShape(Radius.chip))
-                .padding(horizontal = 12.dp, vertical = 12.dp)
-                .focusRequester(focus),
-        )
+        // The placeholder is painted behind the field, which stays the thing that takes the tap.
+        Box(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            if (placeholder != null && field.text.isEmpty()) {
+                Text(
+                    placeholder,
+                    color = Colors.muted,
+                    fontSize = TextStyles.body,
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 13.dp),
+                )
+            }
+            BasicTextField(
+                value = field,
+                onValueChange = {
+                    field = it
+                    onChange(it.text)
+                },
+                textStyle = TextStyle(color = Colors.ink, fontSize = TextStyles.body),
+                cursorBrush = SolidColor(Colors.accent),
+                singleLine = singleLine,
+                minLines = minLines,
+                visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+                keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else KeyboardType.Text),
+                modifier = Modifier.fillMaxWidth().border(1.dp, Colors.line, RoundedCornerShape(Radius.chip))
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
+                    .focusRequester(focus),
+            )
+        }
     }
 }
 

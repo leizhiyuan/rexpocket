@@ -30,9 +30,12 @@
     <string name="action_delete">Delete</string>
     <string name="action_cancel">Cancel</string>
     <string name="field_name">Name</string>
+    <string name="field_name_optional">Optional; the address is used</string>
     <string name="field_address">Address</string>
+    <string name="field_address_placeholder">192.168.1.10</string>
     <string name="field_plaintext_warning">In plaintext mode anyone who can reach the port has full access.</string>
     <string name="host_address_invalid">That address is not usable. Try host, host:port or a full URL.</string>
+    <string name="host_address_hint">The computer\'s IP or its name on the network or tailnet: 192.168.1.10, mac.local, mac.tail1234.ts.net. To go through that machine\'s SSH instead of a Rex port, type ssh://user@host.</string>
 
     <string name="tailscale_title">Tailscale</string>
     <string name="tailscale_not_joined">Not joined</string>

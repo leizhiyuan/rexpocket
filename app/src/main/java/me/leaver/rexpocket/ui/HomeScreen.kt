@@ -969,8 +969,9 @@ internal fun TailscaleDialog(
 /**
  * Adding a host is a name and an address. The port, the scheme and whether the address has to go
  * through the built-in Tailscale node all follow from the address, and the line under the field
- * says what the app made of it. `ssh://user@host` adds the account: Rex is then reached through
- * that machine's SSH daemon, with a password or a private key.
+ * says what the app made of it - or, while there is nothing to make of it yet, what can be typed
+ * there. `ssh://user@host` adds the account: Rex is then reached through that machine's SSH daemon,
+ * with a password or a private key.
  */
 @Composable
 internal fun HostDialog(
@@ -1063,8 +1064,16 @@ internal fun HostDialog(
                 Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Field(stringResource(R.string.field_name), label) { label = it }
-                Field(stringResource(R.string.field_address), address) { address = it }
+                Field(
+                    stringResource(R.string.field_name),
+                    label,
+                    placeholder = stringResource(R.string.field_name_optional),
+                ) { label = it }
+                Field(
+                    stringResource(R.string.field_address),
+                    address,
+                    placeholder = stringResource(R.string.field_address_placeholder),
+                ) { address = it }
                 if (parsed != null) {
                     Text(
                         listOfNotNull(
@@ -1075,8 +1084,17 @@ internal fun HostDialog(
                         color = Colors.muted,
                         fontSize = TextStyles.label,
                     )
-                } else if (address.isNotBlank()) {
-                    Text(stringResource(R.string.host_address_invalid), color = Colors.danger, fontSize = TextStyles.label)
+                } else {
+                    // Nothing was typed yet, or what was typed is not an address: say what can be.
+                    if (address.isNotBlank()) {
+                        Text(stringResource(R.string.host_address_invalid), color = Colors.danger, fontSize = TextStyles.label)
+                    }
+                    Text(
+                        stringResource(R.string.host_address_hint),
+                        color = Colors.muted,
+                        fontSize = TextStyles.label,
+                        lineHeight = labelLeading,
+                    )
                 }
                 if (ssh) {
                     Text(stringResource(R.string.ssh_address_hint), color = Colors.muted, fontSize = TextStyles.label)
