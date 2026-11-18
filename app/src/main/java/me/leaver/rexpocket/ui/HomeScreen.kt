@@ -414,10 +414,7 @@ internal fun HomeScreen(
                 diagnostics = true
             },
             update = update,
-            onUpdate = {
-                settings = false
-                onUpdate()
-            },
+            onUpdate = { onUpdate() },
             channel = updateChannel,
             onChannel = onUpdateChannel,
         )
@@ -811,6 +808,9 @@ private fun SettingsSheet(
 ) {
     val context = LocalContext.current
     val joined = tailscale.enabled && tailscaleStatus.backendState == "Running"
+    // Said on the tap, because the row's own detail is the only other sign the channel moved.
+    val switchedToStable = stringResource(R.string.update_channel_switched_stable)
+    val switchedToPreview = stringResource(R.string.update_channel_switched_preview)
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.settings)) {
         // Four cards, each one answer to a different question: how the phone reaches a computer,
         // what the terminal looks and feels like, which build it installs, and what the app is. A
@@ -833,6 +833,7 @@ private fun SettingsSheet(
                 label = stringResource(R.string.alerts_title),
                 icon = R.drawable.ic_notifications,
                 detail = stringResource(if (alerts) R.string.alerts_on else R.string.alerts_off),
+                keepOpen = true,
                 onClick = onAlerts,
             )
         }
@@ -841,6 +842,7 @@ private fun SettingsSheet(
                 label = stringResource(R.string.keybar_title),
                 icon = R.drawable.ic_keyboard,
                 detail = stringResource(if (keyBar) R.string.keybar_always else R.string.keybar_auto),
+                keepOpen = true,
                 onClick = { onKeyBar(!keyBar) },
             )
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
@@ -853,14 +855,18 @@ private fun SettingsSheet(
                 detail = stringResource(
                     if (channel == UpdateChannel.Preview) R.string.update_channel_preview else R.string.update_channel_stable,
                 ),
+                keepOpen = true,
                 onClick = {
-                    onChannel(if (channel == UpdateChannel.Preview) UpdateChannel.Stable else UpdateChannel.Preview)
+                    val next = if (channel == UpdateChannel.Preview) UpdateChannel.Stable else UpdateChannel.Preview
+                    onChannel(next)
+                    toast(context, if (next == UpdateChannel.Preview) switchedToPreview else switchedToStable)
                 },
             )
             SheetItem(
                 label = stringResource(R.string.update_title),
                 icon = R.drawable.ic_arrow_down,
                 detail = updateDetail(update),
+                keepOpen = true,
                 onClick = onUpdate,
             )
         }
