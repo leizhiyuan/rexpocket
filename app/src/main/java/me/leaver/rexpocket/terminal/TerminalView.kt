@@ -206,6 +206,20 @@ internal class TerminalView(context: Context) : View(context) {
     }
 
     /**
+     * True while a keyboard other than the screen's is attached. The pane then takes the focus - it
+     * is not a text editor, so nothing raises the screen keyboard for it - and the keys a desk
+     * keyboard sends come straight here, without a tap on the pane first.
+     */
+    var hardwareKeys: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            isFocusable = value
+            isFocusableInTouchMode = value
+            if (!value) clearFocus()
+        }
+
+    /**
      * Where the cursor's row ends, in pixels, reported when it moves. The screen slides the pane up
      * under the screen keyboard by this - never by a resize, which the program would see.
      */
@@ -724,6 +738,12 @@ internal class TerminalView(context: Context) : View(context) {
         dropBitmaps()
         scroller.abortAnimation()
         super.onDetachedFromWindow()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // A desk keyboard types here, and the pane is the only view that can take the keys for it.
+        if (hardwareKeys) requestFocus()
     }
 
     // ---- Keys and text ---------------------------------------------------------------------

@@ -161,6 +161,9 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Background alerts: on, the app stays connected while it is away and says when a program needs you. */
     val alerts: StateFlow<Boolean> = Alerts.enabled.also { it.value = store.alerts() }
+
+    /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
+    val keyBar = MutableStateFlow(store.keyBarAlways())
     private val attention = AttentionLedger()
     var host: SavedHost? = null
         private set
@@ -231,6 +234,11 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
      * Turns background alerts on or off. Called from the settings screen, which is on screen: Android
      * only lets an app start its foreground service while the person can see it.
      */
+    fun setKeyBar(always: Boolean) {
+        keyBar.value = always
+        store.setKeyBarAlways(always)
+    }
+
     fun setAlerts(on: Boolean) {
         Alerts.enabled.value = on
         val open = host

@@ -156,7 +156,11 @@ The whole screen is the terminal's paper; nothing sits on a band of a second gre
    enough to keep the cursor's row above it - never by more than the keyboard's own height, and
    nothing at all while it is closed - and lifts the dock, the pane strip and the upload pill over
    the pane. The grid the program was given does not change, so nothing redraws or reflows for a
-   keyboard coming and going, and no resize is sent.
+   keyboard coming and going, and no resize is sent. A keyboard on the desk - a tablet's cover, one
+   over Bluetooth or USB - takes the dock away, since it has every key the bar offers, and the pane
+   keeps the focus itself so its keys reach the program without a tap; Paste and Attach stay in the
+   menu, because a chord reaches the program and never the phone's clipboard. The dock comes back
+   when the settings ask for it.
 5. **A link.** A long press on a link in the pane opens a sheet titled with it: Open, Copy, Share.
    Only an http or https link can be opened or shared.
 
