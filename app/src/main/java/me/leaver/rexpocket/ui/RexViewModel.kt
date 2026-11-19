@@ -37,6 +37,8 @@ import me.leaver.rexpocket.core.toProblem
 import me.leaver.rexpocket.core.RexClient
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.FontFiles
+import me.leaver.rexpocket.data.FontCatalog
+import me.leaver.rexpocket.data.SYSTEM_FONT
 import me.leaver.rexpocket.data.TerminalFontState
 import me.leaver.rexpocket.data.downloadedTypeface
 import me.leaver.rexpocket.data.SavedHost
@@ -124,34 +126,40 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     private val _pocket = MutableStateFlow(PocketState())
     val pocket: StateFlow<PocketState> = _pocket
     val fontScale = MutableStateFlow(store.fontScale())
-    private val fontFiles = FontFiles(File(app.filesDir, "terminal-fonts"))
+    private val fontRoot = File(app.filesDir, "terminal-fonts")
+    private val fontFiles = FontCatalog.fonts.associate { it.id to FontFiles(fontRoot, it) }
+    private val fontFaces = mutableMapOf<String, Typeface>()
     val terminalTypeface = MutableStateFlow(Typeface.MONOSPACE)
     internal val terminalFont = MutableStateFlow(TerminalFontState())
 
-    internal fun selectTerminalFont(downloaded: Boolean) {
-        if (terminalFont.value.initializing || terminalFont.value.downloading) return
-        if (!downloaded) {
+    internal fun selectTerminalFont(id: String) {
+        if (terminalFont.value.initializing || terminalFont.value.downloading != null) return
+        if (id == SYSTEM_FONT) {
             terminalTypeface.value = Typeface.MONOSPACE
-            store.setDownloadedFont(false)
-            terminalFont.value = terminalFont.value.copy(selected = false, failed = false)
+            store.setTerminalFont(SYSTEM_FONT)
+            terminalFont.value = terminalFont.value.copy(selected = SYSTEM_FONT, failed = null)
             return
         }
-        terminalFont.value = terminalFont.value.copy(downloading = true, failed = false, progress = 0f)
+        val font = FontCatalog.find(id) ?: return
+        terminalFont.value = terminalFont.value.copy(downloading = id, failed = null, progress = 0f)
         viewModelScope.launch {
             try {
-                val face = withContext(Dispatchers.IO) {
-                    val files = fontFiles.install(progress = { progress ->
+                val face = fontFaces[id] ?: withContext(Dispatchers.IO) {
+                    val files = fontFiles.getValue(id).install(progress = { progress ->
                         terminalFont.value = terminalFont.value.copy(progress = progress)
                     })
-                    downloadedTypeface(files)
+                    downloadedTypeface(files, font)
                 }
+                fontFaces[id] = face
                 terminalTypeface.value = face
-                store.setDownloadedFont(true)
-                terminalFont.value = terminalFont.value.copy(selected = true, available = true, downloading = false)
+                store.setTerminalFont(id)
+                terminalFont.value = terminalFont.value.copy(
+                    selected = id, available = terminalFont.value.available + id, downloading = null,
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                terminalFont.value = terminalFont.value.copy(downloading = false, failed = true)
+                terminalFont.value = terminalFont.value.copy(downloading = null, failed = id)
             }
         }
     }
@@ -197,16 +205,24 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch {
-            val face = withContext(Dispatchers.IO) {
-                runCatching {
-                    if (fontFiles.available()) downloadedTypeface(fontFiles.directory) else null
-                }.getOrNull()
+            val saved = store.terminalFont()
+            val (available, face) = withContext(Dispatchers.IO) {
+                val available = fontFiles.filterValues { it.available() }.keys.toSet()
+                val font = FontCatalog.find(saved)
+                val face = if (saved in available && font != null) runCatching {
+                    downloadedTypeface(fontFiles.getValue(saved).directory, font)
+                }.getOrNull() else null
+                available to face
             }
-            val selected = store.downloadedFont() && face != null
-            if (selected) terminalTypeface.value = face
-            store.setDownloadedFont(selected)
+            val selected = if (face != null) saved else SYSTEM_FONT
+            if (face != null) {
+                fontFaces[saved] = face
+                terminalTypeface.value = face
+            }
+            store.setTerminalFont(selected)
             terminalFont.value = TerminalFontState(
-                selected = selected, available = face != null, initializing = false,
+                selected = selected, available = available, initializing = false,
+                failed = saved.takeIf { it != SYSTEM_FONT && face == null },
             )
         }
         // The watch notification's Stop turns alerts off from outside the app; the setting follows.

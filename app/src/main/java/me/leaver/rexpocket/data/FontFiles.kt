@@ -5,11 +5,18 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 
-internal data class FontAsset(val name: String, val sha256: String)
+internal data class FontAsset(
+    val name: String,
+    val sha256: String,
+    val folder: String = "",
+    val weight: Int = 400,
+    val italic: Boolean = false,
+)
 
 /** Installs a complete verified family; incomplete downloads never become the active font. */
-internal class FontFiles(private val root: File, private val assets: List<FontAsset> = JETBRAINS) {
-    val directory = File(root, "jetbrains-mono-v1")
+internal class FontFiles(private val root: File, private val font: TerminalFont) {
+    private val assets = font.assets
+    val directory = File(root, font.cacheKey)
 
     fun available(): Boolean = assets.all { matches(File(directory, it.name), it.sha256) }
 
@@ -19,7 +26,7 @@ internal class FontFiles(private val root: File, private val assets: List<FontAs
     ): File {
         if (available()) return directory
         check(root.isDirectory || root.mkdirs())
-        val staging = File(root, "jetbrains-mono-v1.partial")
+        val staging = File(root, "${font.cacheKey}.partial")
         staging.deleteRecursively()
         check(staging.mkdirs())
         try {
@@ -52,7 +59,8 @@ internal class FontFiles(private val root: File, private val assets: List<FontAs
     }.getOrDefault(false)
 
     private fun download(asset: FontAsset, target: File) {
-        val connection = URL("$SOURCE/${asset.name}").openConnection() as HttpURLConnection
+        val path = listOf(font.source, asset.folder, asset.name).filter { it.isNotEmpty() }.joinToString("/")
+        val connection = URL(path).openConnection() as HttpURLConnection
         connection.connectTimeout = 15_000
         connection.readTimeout = 15_000
         try {
@@ -76,13 +84,6 @@ internal class FontFiles(private val root: File, private val assets: List<FontAs
     }
 
     companion object {
-        private const val MAX_BYTES = 1_048_576L
-        private const val SOURCE = "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/19371302b95d218af43299bce79ddbddd0bc364d/fonts/ttf"
-        private val JETBRAINS = listOf(
-            FontAsset("JetBrainsMono-Regular.ttf", "e6fd0d7e91550b3ed2b735d4312474362c4716edc4fc0577a0f61ed782d5aed1"),
-            FontAsset("JetBrainsMono-Bold.ttf", "d22c4f3821d725eb01210d278d95dfcfcaadc34699a06658d47c8a5cc5830ada"),
-            FontAsset("JetBrainsMono-Italic.ttf", "6dc8e1322d4b2013b64e277bf66abc6748207c46a590471d4296876c2c235d0c"),
-            FontAsset("JetBrainsMono-BoldItalic.ttf", "cec9b489af5c98a94cb8d8d8708ef1640cca0f296b207de1f50b2dd95e967bdf"),
-        )
+        private const val MAX_BYTES = 16_777_216L
     }
 }
