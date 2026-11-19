@@ -57,6 +57,8 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val opening by model.opening.collectAsState()
     val tailnetPath by model.tailnetPath.collectAsState()
     val alerts by model.alerts.collectAsState()
+    val keyBarShift by model.keyBarShift.collectAsState()
+    val keyBarAlt by model.keyBarAlt.collectAsState()
     val keyBar by model.keyBar.collectAsState()
     val upload by model.upload.collectAsState()
     val update by model.update.collectAsState()
@@ -126,6 +128,10 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onTailscale = { tailscaleOpen = true },
                     alerts = alerts,
                     onAlerts = model::setAlerts,
+                    keyBarShift = keyBarShift,
+                    keyBarAlt = keyBarAlt,
+                    onKeyBarShift = model::setKeyBarShift,
+                    onKeyBarAlt = model::setKeyBarAlt,
                     keyBar = keyBar,
                     onKeyBar = model::setKeyBar,
                     onFontSettings = { fontSettingsOpen = true },
@@ -140,6 +146,8 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                 TermScreen(
                     embedded = embedded,
                     keyBarWithKeyboard = keyBar,
+                    keyBarShift = keyBarShift,
+                    keyBarAlt = keyBarAlt,
                     state = pocket,
                     fontScale = font,
                     terminalTypeface = terminalTypeface,

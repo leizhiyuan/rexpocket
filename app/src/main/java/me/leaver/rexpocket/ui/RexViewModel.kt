@@ -177,6 +177,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
 
     /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
     val keyBar = MutableStateFlow(store.keyBarAlways())
+    val keyBarShift = MutableStateFlow(store.keyBarShift())
+    val keyBarAlt = MutableStateFlow(store.keyBarAlt())
     private val attention = AttentionLedger()
     var host: SavedHost? = null
         private set
@@ -258,6 +260,16 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     fun setKeyBar(always: Boolean) {
         keyBar.value = always
         store.setKeyBarAlways(always)
+    }
+
+    fun setKeyBarShift(on: Boolean) {
+        store.setKeyBarShift(on)
+        keyBarShift.value = on
+    }
+
+    fun setKeyBarAlt(on: Boolean) {
+        store.setKeyBarAlt(on)
+        keyBarAlt.value = on
     }
 
     fun setAlerts(on: Boolean) {

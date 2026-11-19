@@ -153,6 +153,8 @@ internal fun TermScreen(
     onRetryUpload: () -> Unit,
     /** True when the key bar is kept even with a keyboard on the desk. */
     keyBarWithKeyboard: Boolean = false,
+    keyBarShift: Boolean = false,
+    keyBarAlt: Boolean = false,
     /** True when this pane shares the window with the list, which is then the way back. */
     embedded: Boolean = false,
 ) {
@@ -162,7 +164,7 @@ internal fun TermScreen(
         if (uri != null) onAttach(uri)
     }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
-    var mods by remember { mutableStateOf(KeyModifiers()) }
+    var mods by remember(keyBarShift, keyBarAlt) { mutableStateOf(KeyModifiers()) }
     var link by remember { mutableStateOf<String?>(null) }
     var rename by remember { mutableStateOf<Rename?>(null) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
@@ -198,7 +200,11 @@ internal fun TermScreen(
      */
     fun typed(bytes: ByteArray, flushFirst: () -> Unit): Boolean {
         if (!mods.any) return false
-        val key = keyPressFor(String(bytes, Charsets.UTF_8)) ?: return false
+        val key = keyPressFor(String(bytes, Charsets.UTF_8)) ?: run {
+            // An IME commit is still the next input, even when it is not a single key.
+            mods = mods.afterTextCommit(String(bytes, Charsets.UTF_8))
+            return false
+        }
         flushFirst()
         press(key)
         return true
@@ -334,6 +340,8 @@ internal fun TermScreen(
                             imeUp = imeShown(),
                             onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
                             onKey = { key, own -> press(key, own) },
+                            showShift = keyBarShift,
+                            showAlt = keyBarAlt,
                             onNewLine = { press(KeyPress("enter", 0), "shift") },
                             onPaste = { pasteClipboard() },
                             onAttach = { filePicker.launch("*/*") },

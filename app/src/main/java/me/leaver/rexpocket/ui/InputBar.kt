@@ -109,6 +109,8 @@ internal fun KeyBar(
     /** False while an upload is running: a second file would only be dropped. */
     attachReady: Boolean,
     onKeyboard: () -> Unit,
+    showShift: Boolean = false,
+    showAlt: Boolean = false,
 ) {
     val haptics = LocalHapticFeedback.current
     val scroll = rememberScrollState()
@@ -141,6 +143,18 @@ internal fun KeyBar(
                 ) { onKey(KeyPress("enter", 0), "") }
                 CtrlKey(mods[Mod.Ctrl], key, onTap = { onMod(Mod.Ctrl) }) { letter ->
                     onKey(KeyPress("key_$letter", letter.code, text = letter.toString()), "ctrl")
+                }
+                for (mod in listOfNotNull(if (showShift) Mod.Shift else null, if (showAlt) Mod.Alt else null)) {
+                    val isShift = mod == Mod.Shift
+                    val latch = mods[mod]
+                    val description = modState(latch)
+                    Key(
+                        label = stringResource(if (isShift) R.string.key_shift else R.string.key_alt),
+                        modifier = key.semantics { stateDescription = description },
+                        color = modInk(latch),
+                        plate = modPlate(latch),
+                        icon = if (isShift) R.drawable.ic_shift else null,
+                    ) { onMod(mod) }
                 }
                 Key(stringResource(R.string.key_paste), key, icon = R.drawable.ic_paste) { onPaste() }
                 Key(

@@ -35,6 +35,9 @@ data class KeyModifiers(
     fun consume(): KeyModifiers =
         copy(latches = latches.mapValues { (_, latch) -> if (latch == Latch.Once) Latch.Off else latch })
 
+    /** A non-key IME commit consumes one-shot modifiers, but empty input is not a key. */
+    fun afterTextCommit(text: String): KeyModifiers = if (text.isEmpty()) this else consume()
+
     /** The modifiers for a key that carries [own] itself, such as `ctrl` for C-c, joined as Rex wants. */
     fun mods(own: String = ""): String {
         val held = own.split('+').filter { it.isNotEmpty() }.toSet()

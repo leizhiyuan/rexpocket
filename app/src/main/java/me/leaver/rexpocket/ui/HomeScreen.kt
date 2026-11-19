@@ -159,6 +159,10 @@ internal fun HomeScreen(
     onTailscale: () -> Unit,
     alerts: Boolean,
     onAlerts: (Boolean) -> Unit,
+    keyBarShift: Boolean,
+    keyBarAlt: Boolean,
+    onKeyBarShift: (Boolean) -> Unit,
+    onKeyBarAlt: (Boolean) -> Unit,
     /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
     keyBar: Boolean,
     onKeyBar: (Boolean) -> Unit,
@@ -405,6 +409,10 @@ internal fun HomeScreen(
             },
             alerts = alerts,
             onAlerts = toggleAlerts,
+            keyBarShift = keyBarShift,
+            keyBarAlt = keyBarAlt,
+            onKeyBarShift = onKeyBarShift,
+            onKeyBarAlt = onKeyBarAlt,
             keyBar = keyBar,
             onKeyBar = onKeyBar,
             onFontSettings = onFontSettings,
@@ -796,6 +804,11 @@ private fun SettingsSheet(
     onTailscale: () -> Unit,
     alerts: Boolean,
     onAlerts: () -> Unit,
+    keyBarShift: Boolean,
+    keyBarAlt: Boolean,
+    onKeyBarShift: (Boolean) -> Unit,
+    onKeyBarAlt: (Boolean) -> Unit,
+    /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
     keyBar: Boolean,
     onKeyBar: (Boolean) -> Unit,
     onFontSettings: () -> Unit,
@@ -844,6 +857,16 @@ private fun SettingsSheet(
                 detail = stringResource(if (keyBar) R.string.keybar_always else R.string.keybar_auto),
                 keepOpen = true,
                 onClick = { onKeyBar(!keyBar) },
+            )
+            SheetItem(
+                label = stringResource(R.string.keybar_shift), icon = R.drawable.ic_keyboard,
+                detail = stringResource(if (keyBarShift) R.string.keybar_visible else R.string.keybar_hidden),
+                keepOpen = true, onClick = { onKeyBarShift(!keyBarShift) },
+            )
+            SheetItem(
+                label = stringResource(R.string.keybar_alt), icon = R.drawable.ic_keyboard,
+                detail = stringResource(if (keyBarAlt) R.string.keybar_visible else R.string.keybar_hidden),
+                keepOpen = true, onClick = { onKeyBarAlt(!keyBarAlt) },
             )
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
         }
