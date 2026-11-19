@@ -14,7 +14,8 @@ class FontFilesTest {
     private val assets = contents.map { (name, body) ->
         FontAsset(name, MessageDigest.getInstance("SHA-256").digest(body.toByteArray()).joinToString("") { "%02x".format(it) })
     }
-    private fun store() = FontFiles(temp.root, assets)
+    private val font get() = FontCatalog.fonts.first().copy(assets = assets)
+    private fun store() = FontFiles(temp.root, font)
     private fun fetch(asset: FontAsset, file: File) { file.writeText(contents.getValue(asset.name)) }
 
     @Test fun completeFamilyIsVerifiedAndReusedOffline() {
@@ -74,5 +75,37 @@ class FontFilesTest {
         files.install(fetch = ::fetch)
         File(files.directory, "regular.ttf").delete()
         assertFalse(files.available())
+    }
+
+    @Test fun differentFamiliesHaveIndependentCaches() {
+        val first = store()
+        val second = FontFiles(temp.root, font.copy(id = "hack-nerd"))
+        first.install(fetch = ::fetch)
+        assertFalse(second.available())
+        second.install(fetch = ::fetch)
+        assertNotEquals(first.directory, second.directory)
+        File(second.directory, "regular.ttf").delete()
+        assertTrue(first.available())
+        assertFalse(second.available())
+    }
+
+    @Test fun nerdFontLargerThanOneMegabyteIsAccepted() {
+        val body = ByteArray(3_000_000) { 42 }
+        val hash = MessageDigest.getInstance("SHA-256").digest(body).joinToString("") { "%02x".format(it) }
+        val files = FontFiles(temp.root, font.copy(assets = listOf(FontAsset("regular.ttf", hash))))
+        files.install(fetch = { _, file -> file.writeBytes(body) })
+        assertTrue(files.available())
+    }
+
+    @Test fun oversizedFileIsRejectedWithoutReplacingPreviousFamily() {
+        val files = store()
+        files.install(fetch = ::fetch)
+        val oversized = File(temp.root, "oversized.ttf")
+        java.io.RandomAccessFile(oversized, "rw").use { it.setLength(16_777_217L) }
+        val replacement = FontFiles(temp.root, font.copy(assets = listOf(FontAsset("regular.ttf", "0".repeat(64)))))
+        assertThrows(IllegalStateException::class.java) {
+            replacement.install(fetch = { _, file -> oversized.copyTo(file) })
+        }
+        assertTrue(files.available())
     }
 }
