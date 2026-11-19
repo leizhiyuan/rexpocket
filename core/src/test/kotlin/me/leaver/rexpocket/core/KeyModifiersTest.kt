@@ -6,6 +6,41 @@ import org.junit.Test
 
 class KeyModifiersTest {
     @Test
+    fun unmappedImeCommitsConsumeOnceButPreserveLocks() {
+        for (text in listOf("中文", "ab", "?")) {
+            val mods = KeyModifiers().tap(Mod.Shift, 1_000)
+                .tap(Mod.Alt, 1_000).tap(Mod.Alt, 1_100)
+            assertNull(keyPressFor(text))
+            val after = mods.afterTextCommit(text)
+            assertEquals(Latch.Off, after[Mod.Shift])
+            assertEquals(Latch.Locked, after[Mod.Alt])
+        }
+        val once = KeyModifiers().tap(Mod.Shift, 1_000)
+        assertEquals(once, once.afterTextCommit(""))
+    }
+
+    @Test
+    fun optionalShiftWorksForTabAndArrowWithoutConsumingText() {
+        for (code in listOf("tab", "arrow_up", "enter")) {
+            val once = KeyModifiers().tap(Mod.Shift, 1_000)
+            val event = once.event(KeyPress(code, 0))
+            assertEquals("shift", event.mods)
+            assertEquals("", event.consumedMods)
+            assertEquals(Latch.Off, once.consume()[Mod.Shift])
+        }
+    }
+
+    @Test
+    fun lockedShiftSurvivesRepeatedArrows() {
+        var mods = KeyModifiers().tap(Mod.Shift, 1_000).tap(Mod.Shift, 1_100)
+        repeat(5) {
+            assertEquals("shift", mods.event(KeyPress("arrow_up", 0)).mods)
+            mods = mods.consume()
+        }
+        assertEquals(Latch.Locked, mods[Mod.Shift])
+    }
+
+    @Test
     fun aTapArmsAModifierForOneKey() {
         val armed = KeyModifiers().tap(Mod.Ctrl, now = 1_000)
         assertEquals(Latch.Once, armed[Mod.Ctrl])

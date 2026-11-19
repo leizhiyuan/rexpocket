@@ -246,4 +246,9 @@
     <string name="update_install">Install</string>
     <string name="update_later">Later</string>
     <string name="update_allow_install">Allow RexPocket to install apps, then tap Install again.</string>
+
+    <string name="keybar_shift">Show Shift key</string>
+    <string name="keybar_alt">Show Alt key</string>
+    <string name="keybar_visible">Shown</string>
+    <string name="keybar_hidden">Hidden</string>
 </resources>

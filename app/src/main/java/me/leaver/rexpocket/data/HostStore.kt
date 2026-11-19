@@ -153,6 +153,11 @@ class HostStore(context: Context) {
      * Whether the key bar stays on screen with a keyboard attached. Off by default: the bar is the
      * screen keyboard's, and a desk keyboard already has every key on it.
      */
+    fun keyBarShift(): Boolean = prefs.getBoolean("keybar_shift", false)
+    fun keyBarAlt(): Boolean = prefs.getBoolean("keybar_alt", false)
+    fun setKeyBarShift(on: Boolean) { prefs.edit().putBoolean("keybar_shift", on).apply() }
+    fun setKeyBarAlt(on: Boolean) { prefs.edit().putBoolean("keybar_alt", on).apply() }
+
     fun keyBarAlways(): Boolean = prefs.getBoolean(KEY_KEY_BAR, false)
 
     fun setKeyBarAlways(on: Boolean) {

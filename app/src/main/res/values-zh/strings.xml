@@ -243,4 +243,8 @@
     <string name="update_install">安装</string>
     <string name="update_later">稍后</string>
     <string name="update_allow_install">请允许 RexPocket 安装应用，然后再点一次安装。</string>
+    <string name="keybar_shift">显示 Shift 键</string>
+    <string name="keybar_alt">显示 Alt 键</string>
+    <string name="keybar_visible">显示</string>
+    <string name="keybar_hidden">隐藏</string>
 </resources>
