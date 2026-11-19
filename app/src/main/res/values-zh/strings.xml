@@ -98,6 +98,8 @@
     <string name="pane_no_picture">画面还没有来</string>
     <string name="key_escape">Esc</string>
     <string name="key_ctrl">Ctrl</string>
+    <string name="key_shift">Shift</string>
+    <string name="key_alt">Alt</string>
     <string name="key_tab">Tab</string>
     <string name="key_ctrl_c">C-c</string>
     <string name="key_paste">粘贴</string>

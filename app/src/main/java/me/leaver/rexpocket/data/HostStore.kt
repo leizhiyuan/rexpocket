@@ -153,15 +153,22 @@ class HostStore(context: Context) {
      * Whether the key bar stays on screen with a keyboard attached. Off by default: the bar is the
      * screen keyboard's, and a desk keyboard already has every key on it.
      */
-    fun keyBarShift(): Boolean = prefs.getBoolean("keybar_shift", false)
-    fun keyBarAlt(): Boolean = prefs.getBoolean("keybar_alt", false)
-    fun setKeyBarShift(on: Boolean) { prefs.edit().putBoolean("keybar_shift", on).apply() }
-    fun setKeyBarAlt(on: Boolean) { prefs.edit().putBoolean("keybar_alt", on).apply() }
-
     fun keyBarAlways(): Boolean = prefs.getBoolean(KEY_KEY_BAR, false)
 
     fun setKeyBarAlways(on: Boolean) {
         prefs.edit().putBoolean(KEY_KEY_BAR, on).apply()
+    }
+
+    fun keyBarShift(): Boolean = prefs.getBoolean(KEY_KEY_BAR_SHIFT, false)
+
+    fun setKeyBarShift(on: Boolean) {
+        prefs.edit().putBoolean(KEY_KEY_BAR_SHIFT, on).apply()
+    }
+
+    fun keyBarAlt(): Boolean = prefs.getBoolean(KEY_KEY_BAR_ALT, false)
+
+    fun setKeyBarAlt(on: Boolean) {
+        prefs.edit().putBoolean(KEY_KEY_BAR_ALT, on).apply()
     }
 
     fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)
@@ -204,6 +211,8 @@ class HostStore(context: Context) {
         private const val KEY_FONT = "font_scale"
         private const val KEY_ALERTS = "background_alerts"
         private const val KEY_KEY_BAR = "key_bar_always"
+        private const val KEY_KEY_BAR_SHIFT = "keybar_shift"
+        private const val KEY_KEY_BAR_ALT = "keybar_alt"
         private const val KEY_TAILSCALE_ENABLED = "tailscale_enabled"
         private const val KEY_TAILSCALE_HOSTNAME = "tailscale_hostname"
         fun newId(): String = UUID.randomUUID().toString()
