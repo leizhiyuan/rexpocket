@@ -195,7 +195,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
             )
         }
         if (fontSettingsOpen) {
-            FontSettingsDialog(terminalFont, model::selectTerminalFont) { fontSettingsOpen = false }
+            FontSettingsDialog(terminalFont, terminalTypeface, model::selectTerminalFont) { fontSettingsOpen = false }
         }
         if (tailscaleOpen) {
             TailscaleDialog(

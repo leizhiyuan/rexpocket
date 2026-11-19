@@ -161,10 +161,11 @@ class HostStore(context: Context) {
 
     fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)
 
-    fun downloadedFont(): Boolean = prefs.getBoolean("downloaded_font", false)
+    fun terminalFont(): String = prefs.getString("terminal_font", null)
+        ?: if (prefs.getBoolean("downloaded_font", false)) "jetbrains-mono" else SYSTEM_FONT
 
-    fun setDownloadedFont(selected: Boolean) {
-        prefs.edit().putBoolean("downloaded_font", selected).apply()
+    fun setTerminalFont(id: String) {
+        prefs.edit().putString("terminal_font", id).apply()
     }
 
     fun setFontScale(scale: Float) {
