@@ -92,13 +92,14 @@ The end-to-end test found two bugs, both fixed with unit tests:
 - Ping waited on a lazily connected peer that nothing woke. It now sends a datagram until the peer
   connects.
 
-A Netbird build was also tried by hand on an arm64 phone. A first build connected and joined; a host
-reached by its `.netbird.cloud` name failed there, which led to the name fixes above.
+A Netbird build was also tried by hand on an arm64 phone. A first build joined, but a host reached by
+its `.netbird.cloud` name failed, which led to the name fixes above. With the fixes, the phone reaches
+a Mac over SSH by its `.netbird.cloud` name and is in daily use.
 
 ## Not verified
 
 - **The Go library on arm64 hardware in CI.** No hosted runner offers an arm64 emulator with KVM, so
-  CI runs the same sources built for x86_64. The arm64 build is checked on a phone only by hand.
+  CI runs the same sources built for x86_64. The arm64 build is checked by hand on a phone.
 - **Network changes on Netbird.** `NetbirdRunning.networkChanged` does nothing, because the embedded
   client exposes no rebind; Netbird's engine is relied on to follow the network.
 - **Interactive Netbird login.** The embedded client has no SSO flow, so a node joins only with a setup
