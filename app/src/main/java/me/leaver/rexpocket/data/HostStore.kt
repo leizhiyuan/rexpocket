@@ -2,6 +2,7 @@ package me.leaver.rexpocket.data
 
 import android.content.Context
 import me.leaver.rexpocket.core.ListedSession
+import me.leaver.rexpocket.core.TailnetBackend
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -12,7 +13,7 @@ data class SavedHost(
     val host: String,
     val port: Int,
     val plaintext: Boolean,
-    /** Reach this host through the built-in Tailscale node instead of the phone's network. */
+    /** Reach this host through the built-in tailnet node instead of the phone's network. */
     val viaTailscale: Boolean = false,
     /** The SSH account when Rex is reached over SSH, empty when Rex listens on a port. */
     val sshUser: String = "",
@@ -25,10 +26,15 @@ data class SavedHost(
     val viaSsh: Boolean get() = sshUser.isNotBlank()
 }
 
-/** Settings for the Tailscale node the app runs itself: joined, and the name it goes by. */
-data class TailscaleSettings(
+/**
+ * Settings for the tailnet node the app runs itself: which backend, whether it is joined, and the
+ * name it goes by. [managementUrl] is the Netbird management server, blank for Netbird Cloud.
+ */
+data class TailnetSettings(
+    val backend: TailnetBackend = TailnetBackend.Tailscale,
     val enabled: Boolean = false,
     val hostname: String = "",
+    val managementUrl: String = "",
 )
 
 class HostStore(context: Context) {
@@ -130,15 +136,23 @@ class HostStore(context: Context) {
     private fun panes(hostId: String): JSONObject =
         JSONObject(prefs.getString(panesKey(hostId), null) ?: "{}")
 
-    fun tailscale(): TailscaleSettings = TailscaleSettings(
+    /**
+     * The tailnet settings. The enabled flag and the name keep the keys the Tailscale-only app
+     * stored them under, so an installed app keeps its join; a missing backend is Tailscale.
+     */
+    fun tailnet(): TailnetSettings = TailnetSettings(
+        backend = TailnetBackend.fromStorage(prefs.getString(KEY_TAILNET_BACKEND, null)),
         enabled = prefs.getBoolean(KEY_TAILSCALE_ENABLED, false),
         hostname = prefs.getString(KEY_TAILSCALE_HOSTNAME, "").orEmpty(),
+        managementUrl = prefs.getString(KEY_NETBIRD_MANAGEMENT_URL, "").orEmpty(),
     )
 
-    fun setTailscale(settings: TailscaleSettings) {
+    fun setTailnet(settings: TailnetSettings) {
         prefs.edit()
+            .putString(KEY_TAILNET_BACKEND, settings.backend.storageKey)
             .putBoolean(KEY_TAILSCALE_ENABLED, settings.enabled)
             .putString(KEY_TAILSCALE_HOSTNAME, settings.hostname.trim())
+            .putString(KEY_NETBIRD_MANAGEMENT_URL, settings.managementUrl.trim())
             .apply()
     }
 
@@ -215,6 +229,8 @@ class HostStore(context: Context) {
         private const val KEY_KEY_BAR_ALT = "keybar_alt"
         private const val KEY_TAILSCALE_ENABLED = "tailscale_enabled"
         private const val KEY_TAILSCALE_HOSTNAME = "tailscale_hostname"
+        private const val KEY_TAILNET_BACKEND = "tailnet_backend"
+        private const val KEY_NETBIRD_MANAGEMENT_URL = "netbird_management_url"
         fun newId(): String = UUID.randomUUID().toString()
         private fun lastKey(id: String) = "last:$id"
         private fun panesKey(id: String) = "panes:$id"

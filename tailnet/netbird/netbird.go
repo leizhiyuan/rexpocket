@@ -1,11 +1,6 @@
-// Package netbird is the app's Netbird node: the embeddable client of github.com/netbirdio/netbird
-// (client/embed), behind the same API the tailnet package offers, so the app can join a Netbird
-// network instead of a Tailscale one.
-//
-// Like the tailnet node it runs in userspace (netstack): it needs neither VpnService nor the
-// Netbird app, and the app reaches the network through a SOCKS5 proxy on loopback that dials
-// through the node. It is its own gomobile library, so its dependency graph does not have to
-// resolve together with tailscale.com's.
+//go:build netbird
+
+// The Netbird node itself: the build with the netbird tag. See platform.go for the package.
 package netbird
 
 import (
@@ -14,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,18 +20,15 @@ import (
 	socks5 "github.com/things-go/go-socks5"
 )
 
-// Platform is what the app wants told: the node's log and its state changes. Implemented in Kotlin.
-type Platform interface {
-	// Log receives one line of the node's own log.
-	Log(line string)
-
-	// StateChanged is told the node's state changed; it then asks [Node.State].
-	StateChanged()
-}
+// Available reports whether this build has the Netbird node.
+func Available() bool { return true }
 
 // startTimeout bounds how long Start may wait for the engine: a management server that does not
 // answer must not hold the app's connect forever.
 const startTimeout = 90 * time.Second
+
+// pingPoll is how often Ping looks again for a peer whose connection is still coming up.
+const pingPoll = 200 * time.Millisecond
 
 // stateInterval is how often the platform is told to read the node's state again. The embedded
 // client has no IPN bus to subscribe to, so its peers are polled.
@@ -168,7 +161,8 @@ func (n *Node) ProxyPort() int32 {
 
 // State is the node's state as JSON, in the shape the tailnet package reports:
 // {"backendState", "authUrl", "tailnet", "self", "peers": [{"dnsName", "hostName", "ips": [...]}]}.
-// A node that started is "Running"; the embedded client does not report an auth URL.
+// The node is "Running" once its management and signal connections are up, and "Starting" until
+// then; the embedded client does not report an auth URL.
 func (n *Node) State() (string, error) {
 	if n.closed.Load() {
 		return "", errors.New("netbird: node is closed")
@@ -177,7 +171,10 @@ func (n *Node) State() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out := state{BackendState: "Running"}
+	out := state{BackendState: "Starting"}
+	if st.ManagementState.Connected && st.SignalState.Connected {
+		out.BackendState = "Running"
+	}
 	if st.LocalPeerState.FQDN != "" {
 		out.Self = strings.TrimSuffix(st.LocalPeerState.FQDN, ".")
 	}
@@ -198,6 +195,61 @@ func (n *Node) State() (string, error) {
 	}
 	b, err := json.Marshal(out)
 	return string(b), err
+}
+
+// Ping reports the path to the peer at ip as JSON, in the shape the tailnet package reports:
+// {"latencyMs", "endpoint", "peerRelay", "derpRegionId", "derpRegionCode", "relayServer", "error"}.
+// Netbird keeps the latency of its own keepalives, so nothing is sent: it waits up to timeoutMillis
+// for the peer's connection to come up, then reports the path it settled on. A direct path names
+// its endpoint; a relayed one names the relay server, which is never a peer of the network.
+func (n *Node) Ping(ip string, timeoutMillis int32) (string, error) {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return "", err
+	}
+	deadline := time.Now().Add(time.Duration(timeoutMillis) * time.Millisecond)
+	for {
+		res := n.pathTo(addr)
+		if res.Error == "" || time.Now().After(deadline) {
+			b, err := json.Marshal(res)
+			return string(b), err
+		}
+		time.Sleep(pingPoll)
+	}
+}
+
+// pathTo reads the path to the peer at addr from the client's status once.
+func (n *Node) pathTo(addr netip.Addr) ping {
+	st, err := n.client.Status()
+	if err != nil {
+		return ping{Error: err.Error()}
+	}
+	for _, p := range st.Peers {
+		if p.IP != addr.String() {
+			continue
+		}
+		if p.ConnStatus != embed.PeerStatusConnected {
+			return ping{Error: "the peer is not connected yet"}
+		}
+		res := ping{LatencyMs: float64(p.Latency) / float64(time.Millisecond)}
+		if p.Relayed {
+			res.RelayServer = p.RelayServerAddress
+		} else {
+			res.Endpoint = p.RemoteIceCandidateEndpoint
+		}
+		return res
+	}
+	return ping{Error: "not a peer of this network"}
+}
+
+type ping struct {
+	LatencyMs      float64 `json:"latencyMs"`
+	Endpoint       string  `json:"endpoint"`
+	PeerRelay      string  `json:"peerRelay"`
+	DERPRegionID   int64   `json:"derpRegionId"`
+	DERPRegionCode string  `json:"derpRegionCode"`
+	RelayServer    string  `json:"relayServer"`
+	Error          string  `json:"error"`
 }
 
 // Close stops the proxy and the node.

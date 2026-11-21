@@ -91,10 +91,15 @@ object HostAddressParser {
         )
     }
 
-    /** A MagicDNS name, a `100.64/10` address or one of the Tailscale IPv6 addresses. */
+    /**
+     * A MagicDNS name, a Netbird Cloud name, a `100.64/10` address or one of the Tailscale IPv6
+     * addresses. Netbird's own addresses are in `100.64/10` too, so they are on the tailnet either way;
+     * a self-hosted Netbird names its peers under a domain of its own, which is reached by address.
+     */
     fun isTailnet(host: String): Boolean {
         val name = host.trim().trim('[', ']').lowercase()
         if (name.endsWith(".ts.net")) return true
+        if (name.endsWith(".netbird.cloud")) return true
         if (name.startsWith("fd7a:115c:a1e0")) return true
         val parts = name.split('.')
         if (parts.size != 4) return false

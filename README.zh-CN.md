@@ -6,7 +6,7 @@
 
 终端多路复用器 [Rex](https://rex.app) 的 Android 客户端。它把你自己的 Rex 服务器上的所有会话一直列到标签页，
 点开任意窗格就是一个全屏终端，直接输入。它只和你的 Rex 通信，不经过任何第三方——可以走局域网、
-通过 App 内置的 Tailscale 节点走你的 tailnet，或者走电脑自己的 SSH 服务。
+通过 App 内置的 Tailscale 或 Netbird 节点走你的 tailnet，或者走电脑自己的 SSH 服务。
 
 | 主页 | 终端 | 夜间终端 |
 | --- | --- | --- |
@@ -35,8 +35,8 @@
 - **后台提醒。** 可选：App 在后台时保持连接，程序等你批准、回答、登录或出错时发通知，点通知直接打开那个窗格。
 - **和桌面同时用。** 手机只占它正在显示的那个窗格，并按手机尺寸显示；桌面停在它自己的标签页上。
   **交还** 把窗格还给桌面，直到你再 **接管**。
-- **不装 Tailscale 也能上 tailnet。** App 自带一个 Tailscale 节点，用 MagicDNS 名字或 `100.x` 地址
-  就能连到主机，也不占手机唯一的 VPN 位置。
+- **不装 Tailscale 或 Netbird 也能上 tailnet。** App 自带一个 Tailscale 或 Netbird 节点，用 MagicDNS
+  名字或 `100.x` 地址就能连到主机，也不占手机唯一的 VPN 位置。
 - **通过 SSH 添加主机。** 填 `ssh://host`，再填账号和密码（或私钥），就能通过机器本来就在跑的 SSH 服务
   连到 Rex，不用对外开放 Rex 端口。第一次连接会显示并记住主机密钥；密钥变了会停下，等你确认。
   tailnet 地址仍然走 App 内置的节点。
@@ -70,12 +70,14 @@ rex server start --extra-listen :7297 --allow-anonymous
    - `192.0.2.10`——明文，7297 端口
    - `192.0.2.10:7300`——换个端口
    - `my-mac.tail1234.ts.net` 或 `100.x` 地址——走 Tailscale，443 端口，TLS
+   - `my-pc.netbird.cloud`——走 Netbird，443 端口，TLS（自建的 Netbird 用 `100.x` 地址连接）
    - `ssh://192.0.2.10` 或 `ssh://my-mac.tail1234.ts.net`——走那台机器的 SSH 服务，
      填账号和密码（或私钥）；第一次连接会让你确认主机密钥
 
    输入框下面那行会显示 App 打算怎么连。
-2. **tailnet 主机要先加入 tailnet。** 设置 › Tailscale，给手机起一个节点名并保存。App 会打开一次
-   登录页，之后节点随 App 启动。
+2. **tailnet 主机要先加入 tailnet。** 设置 › Tailnet，选 Tailscale 或 Netbird，给手机起一个节点名并保存。
+   Tailscale 会打开一次登录页。Netbird 第一次需要它后台生成的安装密钥；自建的 Netbird 还要填管理服务器的
+   地址。之后节点随 App 启动。
 3. **打开标签页。** 在主页点一个标签页。会话旁边的加号新建标签页，主机的菜单里可以新建会话。
 4. **终端里：**
    - 点窗格开始输入。拖动查看回滚，双指缩放改字号，长按选中；长按链接可以打开它。
@@ -114,11 +116,11 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再�
 - **SSH。** 每条 HTTP 或 WebSocket 连接都是一条 SSH exec 通道，在里面运行
   `rex __internal dial-stdio`，把标准输入输出接到那台机器上 Rex 自己的 Unix socket。App 记住第一次
   看到的主机密钥，之后每次连接都比对；密钥变了就不再重试，等你确认新的。主机直连，地址在 tailnet 上时
-  走内置的 Tailscale 节点。
-- **Tailscale。** 节点是官方的 `tailscale.com/tsnet` 库，跑在用户态，前面是回环地址上的 SOCKS5 代理，
-  只有 App 自己的连接走它。节点的 UDP 绑定在手机的 Wi-Fi 或移动网络上，在 VPN 允许 App 绕过时会绕开 Clash
-  这类代理 VPN，这样才能打通直连。主页会显示到每台 tailnet 主机的路径——直连、peer relay 还是
-  DERP——以及往返延迟，点一下可以重新测量。
+  走内置的 tailnet 节点。
+- **tailnet 节点。** 一次只运行一个：官方的 `tailscale.com/tsnet` 库，或 Netbird 的嵌入式客户端。两者都跑在
+  用户态，前面是回环地址上的 SOCKS5 代理，只有 App 自己的连接走它。Tailscale 节点的 UDP 绑定在手机的 Wi-Fi
+  或移动网络上，在 VPN 允许 App 绕过时会绕开 Clash 这类代理 VPN，这样才能打通直连。主页会显示到每台 tailnet
+  主机的路径——直连、peer relay、DERP 还是 Netbird 中继服务器——以及往返延迟，点一下可以重新测量。
 
 ### 让 tailnet 更快
 
@@ -135,8 +137,8 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再�
 ```
 
 APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 会构建一个用发布密钥签名的版本（见下文「发布」）。只构建
-arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这个 Go 模块构建，`tailscale.com` 的版本
-由其 `go.mod` 锁定；要重新构建，运行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。`core` 里的集成测试连接 `127.0.0.1:7297` 上的 Rex
+arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这个 Go 模块构建，包含 `tailscale.com` 的 tsnet 库
+（版本由其 `go.mod` 锁定）和 `tailnet/netbird` 中的 Netbird 嵌入式客户端；要重新构建，运行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。Netbird 需要单独选择打包：`REXPOCKET_NETBIRD=1 tools/build-tailnet.sh` 会生成 `app/libs/tailnet-netbird.aar`，再用 `./gradlew -Prexpocket.netbird=true :app:assembleRelease` 链接进 App。它会让 APK 增加约 30 MB（29 MB 增至 59 MB），所以默认构建不包含它；没有它时，设置 › Tailnet 只提供 Tailscale。`core` 里的集成测试连接 `127.0.0.1:7297` 上的 Rex
 （可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），没有 Rex 时会跳过。 SSH 测试需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台机器，并用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 给出凭据才会运行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可选。
 
 ### 发布
@@ -162,6 +164,9 @@ arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这
   官方的 libghostty-vt，许可证见 `app/src/main/assets/licenses/Ghostty-MIT.txt`。
 - [Tailscale](https://github.com/tailscale/tailscale)，Tailscale Inc. 及贡献者，BSD-3-Clause——App 内的
   Tailscale 节点就是它的 tsnet 库。
+- [Netbird](https://github.com/netbirdio/netbird)，NetBird GmbH 及贡献者，BSD-3-Clause——App 内的 Netbird
+  节点就是它的嵌入式客户端；App 只包含其客户端部分，不含服务端部分。
+- [go-socks5](https://github.com/things-go/go-socks5)，Things Go 及贡献者，MIT——Netbird 节点前面的 SOCKS5 服务。
 - [JSch](https://github.com/mwiede/jsch)，JCraft, Inc. 及贡献者，Revised BSD——SSH 客户端。
   [eddsa](https://github.com/str4d/ed25519-java)，Str4d 及贡献者，CC0——Android 自带的安全提供者
   没有给 JSch 的 Ed25519 实现。

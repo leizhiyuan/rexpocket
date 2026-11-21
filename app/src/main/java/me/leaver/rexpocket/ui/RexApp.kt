@@ -51,8 +51,8 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val terminalTypeface by model.terminalTypeface.collectAsState()
     val terminalFont by model.terminalFont.collectAsState()
     var fontSettingsOpen by remember { mutableStateOf(false) }
-    val tailscale by model.tailscale.collectAsState()
-    val tailscaleStatus by model.tailscaleStatus.collectAsState()
+    val tailnet by model.tailnet.collectAsState()
+    val tailnetStatus by model.tailnetStatus.collectAsState()
     val tailnetError by model.tailnetError.collectAsState()
     val opening by model.opening.collectAsState()
     val tailnetPath by model.tailnetPath.collectAsState()
@@ -64,7 +64,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val update by model.update.collectAsState()
     val updateChannel by model.updateChannel.collectAsState()
     val context = LocalContext.current
-    var tailscaleOpen by remember { mutableStateOf(false) }
+    var tailnetOpen by remember { mutableStateOf(false) }
     // Each offer is shown once per app run; the settings row still has it afterwards.
     var offeredOnce by remember { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(Unit) { model.restore() }
@@ -92,7 +92,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     }
     // A node that still needs a login can only say so through the link it prints, so take the
     // user straight to it instead of leaving a URL to copy.
-    val authUrl = tailscaleStatus.authUrl
+    val authUrl = tailnetStatus.authUrl
     LaunchedEffect(authUrl) {
         if (authUrl.isBlank()) return@LaunchedEffect
         openLink(context, authUrl)
@@ -109,8 +109,8 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     hosts = hosts,
                     connected = model.host,
                     state = pocket,
-                    tailscale = tailscale,
-                    tailscaleStatus = tailscaleStatus,
+                    tailnet = tailnet,
+                    tailnetStatus = tailnetStatus,
                     tailnetError = tailnetError,
                     tailnetPath = tailnetPath,
                     opening = opening,
@@ -125,7 +125,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onProbePath = model::probeTailnetPath,
                     onSave = model::saveHost,
                     onDelete = model::deleteHost,
-                    onTailscale = { tailscaleOpen = true },
+                    onTailnet = { tailnetOpen = true },
                     alerts = alerts,
                     onAlerts = model::setAlerts,
                     keyBarShift = keyBarShift,
@@ -205,19 +205,20 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
         if (fontSettingsOpen) {
             FontSettingsDialog(terminalFont, terminalTypeface, model::selectTerminalFont) { fontSettingsOpen = false }
         }
-        if (tailscaleOpen) {
-            TailscaleDialog(
-                initial = tailscale,
-                status = tailscaleStatus,
+        if (tailnetOpen) {
+            TailnetDialog(
+                initial = tailnet,
+                backends = model.tailnetBackends,
+                status = tailnetStatus,
                 error = tailnetError,
-                onDismiss = { tailscaleOpen = false },
-                onJoin = { name ->
-                    model.joinTailnet(name)
-                    tailscaleOpen = false
+                onDismiss = { tailnetOpen = false },
+                onJoin = { backend, name, managementUrl, setupKey ->
+                    model.joinTailnet(backend, name, managementUrl, setupKey)
+                    tailnetOpen = false
                 },
                 onLeave = {
                     model.leaveTailnet()
-                    tailscaleOpen = false
+                    tailnetOpen = false
                 },
             )
         }

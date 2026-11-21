@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -84,15 +85,16 @@ import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.ProgramRecord
 import me.leaver.rexpocket.core.SessionView
+import me.leaver.rexpocket.core.TailnetBackend
 import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.UpdateChannel
 import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.SavedHost
-import me.leaver.rexpocket.data.TailscaleSettings
+import me.leaver.rexpocket.data.TailnetSettings
 import me.leaver.rexpocket.update.UpdateState
 import me.leaver.rexpocket.diagnostics.Diagnostics
-import me.leaver.rexpocket.net.TailscaleStatus
+import me.leaver.rexpocket.net.TailnetStatus
 
 // The hosts, each with its sessions under it and their tabs under those: one list to search, one
 // place to connect from.
@@ -140,8 +142,8 @@ internal fun HomeScreen(
     state: PocketState,
     /** True while the open pane stands beside this list, so the tab on the right carries a mark. */
     detail: Boolean = false,
-    tailscale: TailscaleSettings,
-    tailscaleStatus: TailscaleStatus,
+    tailnet: TailnetSettings,
+    tailnetStatus: TailnetStatus,
     tailnetError: String?,
     tailnetPath: TailnetPath?,
     opening: Opening?,
@@ -156,7 +158,7 @@ internal fun HomeScreen(
     onProbePath: () -> Unit,
     onSave: (SavedHost) -> Unit,
     onDelete: (String) -> Unit,
-    onTailscale: () -> Unit,
+    onTailnet: () -> Unit,
     alerts: Boolean,
     onAlerts: (Boolean) -> Unit,
     keyBarShift: Boolean,
@@ -282,7 +284,7 @@ internal fun HomeScreen(
                                 },
                                 onMenu = { menuHost = host },
                             )
-                            if (live) HostStatus(state, tailnetPath, onRetry, onProbePath)
+                            if (live) HostStatus(state, tailnetPath, tailnetName(tailnet.backend), onRetry, onProbePath)
                         }
                         if (hostExpanded) {
                             sessions.forEach { row ->
@@ -360,7 +362,7 @@ internal fun HomeScreen(
     if (creating || editing != null) {
         HostDialog(
             initial = editing,
-            tailscaleEnabled = tailscale.enabled,
+            tailnetEnabled = tailnet.enabled,
             onDismiss = { creating = false; editing = null },
             onDelete = editing?.let { host -> { onDelete(host.id); creating = false; editing = null } },
             onSave = {
@@ -371,7 +373,7 @@ internal fun HomeScreen(
             onJoinTailnet = {
                 creating = false
                 editing = null
-                onTailscale()
+                onTailnet()
             },
         )
     }
@@ -399,13 +401,13 @@ internal fun HomeScreen(
 
     if (settings) {
         SettingsSheet(
-            tailscale = tailscale,
-            tailscaleStatus = tailscaleStatus,
+            tailnet = tailnet,
+            tailnetStatus = tailnetStatus,
             tailnetError = tailnetError,
             onDismiss = { settings = false },
-            onTailscale = {
+            onTailnet = {
                 settings = false
-                onTailscale()
+                onTailnet()
             },
             alerts = alerts,
             onAlerts = toggleAlerts,
@@ -502,7 +504,7 @@ private fun HostHeader(
 
 /** The line under a connected host: why it is not live, and how the tailnet carries it. */
 @Composable
-private fun HostStatus(state: PocketState, path: TailnetPath?, onRetry: () -> Unit, onProbe: () -> Unit) {
+private fun HostStatus(state: PocketState, path: TailnetPath?, network: String, onRetry: () -> Unit, onProbe: () -> Unit) {
     val problem = rememberSettledProblem(state.phase, state.problem.takeIf { state.phase != Phase.Live })
     if (problem != null) {
         Row(
@@ -518,11 +520,12 @@ private fun HostStatus(state: PocketState, path: TailnetPath?, onRetry: () -> Un
     if (path != null) {
         val ms = path.latencyMs?.let { " · ${it.toInt()} ms" }.orEmpty()
         val (text, color) = when (path) {
-            is TailnetPath.Direct -> stringResource(R.string.tailnet_path_direct) + ms to Colors.ok
-            is TailnetPath.PeerRelay -> stringResource(R.string.tailnet_path_peer_relay) + ms to Colors.amber
+            is TailnetPath.Direct -> stringResource(R.string.tailnet_path_direct, network) + ms to Colors.ok
+            is TailnetPath.PeerRelay -> stringResource(R.string.tailnet_path_peer_relay, network) + ms to Colors.amber
             is TailnetPath.Derp ->
-                stringResource(R.string.tailnet_path_derp, path.regionCode.ifBlank { path.regionId.toString() }) + ms to Colors.amber
-            is TailnetPath.Unreachable -> stringResource(R.string.tailnet_path_unreachable, path.reason) to Colors.danger
+                stringResource(R.string.tailnet_path_derp, network, path.regionCode.ifBlank { path.regionId.toString() }) + ms to Colors.amber
+            is TailnetPath.Relay -> stringResource(R.string.tailnet_path_relay, network) + ms to Colors.amber
+            is TailnetPath.Unreachable -> stringResource(R.string.tailnet_path_unreachable, network, path.reason) to Colors.danger
         }
         Text(
             text,
@@ -797,11 +800,11 @@ private fun SearchBar(
 
 @Composable
 private fun SettingsSheet(
-    tailscale: TailscaleSettings,
-    tailscaleStatus: TailscaleStatus,
+    tailnet: TailnetSettings,
+    tailnetStatus: TailnetStatus,
     tailnetError: String?,
     onDismiss: () -> Unit,
-    onTailscale: () -> Unit,
+    onTailnet: () -> Unit,
     alerts: Boolean,
     onAlerts: () -> Unit,
     keyBarShift: Boolean,
@@ -820,7 +823,7 @@ private fun SettingsSheet(
     onChannel: (UpdateChannel) -> Unit,
 ) {
     val context = LocalContext.current
-    val joined = tailscale.enabled && tailscaleStatus.backendState == "Running"
+    val joined = tailnet.enabled && tailnetStatus.backendState == "Running"
     // Said on the tap, because the row's own detail is the only other sign the channel moved.
     val switchedToStable = stringResource(R.string.update_channel_switched_stable)
     val switchedToPreview = stringResource(R.string.update_channel_switched_preview)
@@ -831,15 +834,15 @@ private fun SettingsSheet(
         // all, because the list it belongs to has its own + button.
         Group(stringResource(R.string.settings_group_connection)) {
             SheetItem(
-                label = stringResource(R.string.tailscale_title),
+                label = stringResource(R.string.tailnet_title),
                 icon = R.drawable.ic_tailnet,
                 detail = when {
                     tailnetError != null -> stringResource(R.string.tailscale_state_failed)
                     joined -> stringResource(R.string.tailscale_state_running)
-                    tailscale.enabled -> tailnetState(tailscaleStatus)
+                    tailnet.enabled -> tailnetState(tailnetStatus)
                     else -> stringResource(R.string.tailscale_not_joined)
                 },
-                onClick = onTailscale,
+                onClick = onTailnet,
             )
             // Alerts are the connection kept up in the background, so they sit with the way in.
             SheetItem(
@@ -945,9 +948,9 @@ private fun EmptyHome(onAdd: () -> Unit) {
     }
 }
 
-/** Tailscale's backend state in the app's own words; empty while nothing is running. */
+/** The node's backend state in the app's own words; empty while nothing is running. */
 @Composable
-internal fun tailnetState(status: TailscaleStatus): String = when (status.backendState) {
+internal fun tailnetState(status: TailnetStatus): String = when (status.backendState) {
     "" -> ""
     "Running" -> stringResource(R.string.tailscale_state_running)
     "Starting" -> stringResource(R.string.tailscale_state_starting)
@@ -957,30 +960,65 @@ internal fun tailnetState(status: TailscaleStatus): String = when (status.backen
     else -> status.text.ifBlank { status.backendState }
 }
 
+/** The network a backend's node is called in the app's own words. */
+internal fun tailnetName(backend: TailnetBackend): String = if (backend == TailnetBackend.Netbird) "Netbird" else "Tailscale"
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun TailscaleDialog(
-    initial: TailscaleSettings,
-    status: TailscaleStatus,
+internal fun TailnetDialog(
+    initial: TailnetSettings,
+    backends: List<TailnetBackend>,
+    status: TailnetStatus,
     error: String?,
     onDismiss: () -> Unit,
-    onJoin: (String) -> Unit,
+    onJoin: (TailnetBackend, String, String, String) -> Unit,
     onLeave: () -> Unit,
 ) {
     val context = LocalContext.current
+    var backend by remember { mutableStateOf(initial.backend) }
     var hostname by remember { mutableStateOf(initial.hostname) }
+    var managementUrl by remember { mutableStateOf(initial.managementUrl) }
+    var setupKey by remember { mutableStateOf("") }
+    // The node's own state and login only describe the backend that is joined, not one picked here.
+    val joinedHere = initial.enabled && backend == initial.backend
     val state = tailnetState(status)
+    val netbird = backend == TailnetBackend.Netbird
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Colors.surface,
-        title = { Text(stringResource(R.string.tailscale_title), color = Colors.ink) },
+        title = { Text(stringResource(R.string.tailnet_title), color = Colors.ink) },
         text = {
             Column(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                Text(stringResource(R.string.tailnet_backend_label), color = Colors.muted, fontSize = TextStyles.label)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (choice in backends) {
+                        FilterChip(
+                            selected = backend == choice,
+                            onClick = { backend = choice },
+                            label = { Text(tailnetName(choice)) },
+                        )
+                    }
+                }
                 Field(stringResource(R.string.tailscale_hostname), hostname) { hostname = it }
-                if (initial.enabled) {
+                if (netbird) {
+                    Field(
+                        stringResource(R.string.netbird_management_url),
+                        managementUrl,
+                        placeholder = stringResource(R.string.netbird_management_placeholder),
+                    ) { managementUrl = it }
+                    if (!joinedHere) {
+                        Field(
+                            stringResource(R.string.netbird_setup_key),
+                            setupKey,
+                            password = true,
+                            placeholder = stringResource(R.string.netbird_setup_key_placeholder),
+                        ) { setupKey = it }
+                    }
+                }
+                if (joinedHere) {
                     Text(
                         listOfNotNull(
                             state.ifBlank { null },
@@ -991,7 +1029,7 @@ internal fun TailscaleDialog(
                     )
                 }
                 error?.let { Text(it, color = Colors.danger, fontSize = TextStyles.label) }
-                if (status.authUrl.isNotBlank()) {
+                if (joinedHere && status.authUrl.isNotBlank()) {
                     Text(
                         status.authUrl,
                         color = Colors.accent,
@@ -1007,13 +1045,21 @@ internal fun TailscaleDialog(
                     )
                     Text(stringResource(R.string.tailscale_login_hint), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
                 }
-                Text(stringResource(R.string.tailscale_hint), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
+                if (netbird && !joinedHere) {
+                    Text(stringResource(R.string.netbird_need_key), color = Colors.amber, fontSize = TextStyles.label, lineHeight = labelLeading)
+                }
+                Text(
+                    stringResource(if (netbird) R.string.netbird_hint else R.string.tailscale_hint),
+                    color = Colors.muted,
+                    fontSize = TextStyles.label,
+                    lineHeight = labelLeading,
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onJoin(hostname) }) {
+            TextButton(onClick = { onJoin(backend, hostname, managementUrl, setupKey) }) {
                 Text(
-                    stringResource(if (initial.enabled) R.string.action_save else R.string.tailscale_join),
+                    stringResource(if (joinedHere) R.string.action_save else R.string.tailscale_join),
                     color = Colors.accent,
                 )
             }
@@ -1031,7 +1077,7 @@ internal fun TailscaleDialog(
 
 /**
  * Adding a host is a name and an address. The port, the scheme and whether the address has to go
- * through the built-in Tailscale node all follow from the address, and the line under the field
+ * through the built-in tailnet node all follow from the address, and the line under the field
  * says what the app made of it - or, while there is nothing to make of it yet, what can be typed
  * there. `ssh://user@host` adds the account: Rex is then reached through that machine's SSH daemon,
  * with a password or a private key.
@@ -1039,7 +1085,7 @@ internal fun TailscaleDialog(
 @Composable
 internal fun HostDialog(
     initial: SavedHost?,
-    tailscaleEnabled: Boolean,
+    tailnetEnabled: Boolean,
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)?,
     onSave: (SavedHost) -> Unit,
@@ -1142,7 +1188,7 @@ internal fun HostDialog(
                         listOfNotNull(
                             if (ssh && user.isNotBlank()) "$user@${parsed.host}:${parsed.port}" else "${parsed.host}:${parsed.port}",
                             stringResource(if (ssh) R.string.host_transport_ssh else if (parsed.plaintext) R.string.host_transport_plain else R.string.host_transport_tls),
-                            stringResource(R.string.tailscale_title).takeIf { parsed.viaTailscale },
+                            stringResource(R.string.tailnet_title).takeIf { parsed.viaTailscale },
                         ).joinToString(" · "),
                         color = Colors.muted,
                         fontSize = TextStyles.label,
@@ -1203,7 +1249,7 @@ internal fun HostDialog(
                         Text(stringResource(R.string.ssh_host_key_trusted, pinned), color = Colors.muted, fontSize = TextStyles.label)
                     }
                 }
-                if (parsed != null && parsed.viaTailscale && !tailscaleEnabled) {
+                if (parsed != null && parsed.viaTailscale && !tailnetEnabled) {
                     Text(
                         stringResource(R.string.tailscale_need_join_host),
                         color = Colors.amber,

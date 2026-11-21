@@ -7,7 +7,7 @@
 An Android client for [Rex](https://rex.app), the terminal multiplexer. It shows every session on
 your own Rex servers, down to the tab, and opens any pane as a full-screen terminal you type into
 directly. It talks to your Rex and nothing else - on the local network, over your tailnet through a
-Tailscale node built into the app, or through the computer's own SSH daemon.
+Tailscale or Netbird node built into the app, or through the computer's own SSH daemon.
 
 | Home | Terminal | Terminal at night |
 | --- | --- | --- |
@@ -45,8 +45,9 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   program waits for approval, an answer or a login, or fails. Tap the alert to open that pane.
 - **Works beside the desk.** The phone holds only the pane it shows and sizes it to the phone; the
   desktop keeps its own tab. **Release** hands a pane back to the desk until you **Take over**.
-- **Your tailnet, without the Tailscale app.** The app runs its own Tailscale node, so a host is
-  reachable by its MagicDNS name or `100.x` address without taking the phone's VPN slot.
+- **Your tailnet, without the Tailscale or Netbird app.** The app runs its own Tailscale or Netbird
+  node, so a host is reachable by its MagicDNS name or `100.x` address without taking the phone's VPN
+  slot.
 - **Hosts over SSH.** Add `ssh://host` and sign in with an account and a password or a private key;
   the app reaches Rex through the SSH daemon the machine already runs - no Rex port has to be open.
   The host key is shown and pinned on the first connection; a changed one stops the connection
@@ -85,13 +86,17 @@ reaches the server through the machine's own SSH daemon. How the transport works
    - `192.0.2.10` - plaintext on port 7297
    - `192.0.2.10:7300` - another port
    - `my-mac.tail1234.ts.net` or a `100.x` address - through Tailscale, on 443 with TLS
+   - `my-pc.netbird.cloud` - through Netbird, on 443 with TLS (a self-hosted Netbird's peers are
+     reached by their `100.x` address)
    - `ssh://192.0.2.10` or `ssh://my-mac.tail1234.ts.net` - through that machine's SSH daemon;
      type the account and a password or a private key, and the first connection asks you to
      confirm its host key
 
    The line under the field shows how the app will connect.
-2. **For a tailnet host, join the tailnet.** Settings › Tailscale, give the phone a node name and
-   save. The app opens the sign-in page once; after that the node starts with the app.
+2. **For a tailnet host, join the tailnet.** Settings › Tailnet, pick Tailscale or Netbird, give the
+   phone a node name and save. Tailscale opens its sign-in page once. Netbird asks for a setup key
+   from its dashboard the first time, and a self-hosted Netbird also needs its management server's
+   address; after that the node starts with the app.
 3. **Open a tab.** Tap a tab on the home screen. The plus beside a session makes a new tab; the
    host's menu starts a new session.
 4. **In the terminal:**
@@ -144,12 +149,13 @@ you can read it before you send it.
   `rex __internal dial-stdio`, which joins its input and output to Rex's own Unix socket on that
   machine. The app pins the host key it saw, compares it on every connection, and a changed key
   stops retrying until you confirm the new one. The host is dialed directly, or through the
-  built-in Tailscale node when its address is on the tailnet.
-- **Tailscale.** The node is the official `tailscale.com/tsnet` library running in userspace,
-  with a SOCKS5 proxy on loopback in front of it; only the app's own connections use it. The node's UDP is bound to the phone's Wi-Fi or mobile
-  network, around a proxy VPN such as Clash when the VPN allows apps to bypass it, so a direct
-  path can form. The home screen shows the path to each tailnet host - direct, peer relay or
-  DERP - with its round trip; tap it to measure again.
+  built-in tailnet node when its address is on the tailnet.
+- **Tailnet nodes.** The app runs one node at a time: the official `tailscale.com/tsnet` library, or
+  Netbird's embedded client. Both run in userspace with a SOCKS5 proxy on loopback in front of them,
+  and only the app's own connections use it. The Tailscale node's UDP is bound to the phone's Wi-Fi
+  or mobile network, around a proxy VPN such as Clash when the VPN allows apps to bypass it, so a
+  direct path can form. The home screen shows the path to each tailnet host - direct, peer relay,
+  DERP or a Netbird relay server - with its round trip; tap it to measure again.
 
 ### A faster tailnet path
 
@@ -173,8 +179,11 @@ Ghostty revision pinned in [native/ghostty/source.json](native/ghostty/source.js
 [tools/build-ghostty.py](tools/build-ghostty.py), which Gradle runs; the first build downloads Zig
 and the Ghostty source, checked against their pinned checksums. To move to a newer Ghostty, change
 the revision and checksum there. `app/libs/tailnet.aar` - the Go module in `tailnet/`, around
-`tailscale.com` at the version its `go.mod` pins - is checked in; to build it again, run
-[tools/build-tailnet.sh](tools/build-tailnet.sh). The integration
+`tailscale.com` at the version its `go.mod` pins, and Netbird's embedded client in `tailnet/netbird` -
+is checked in; to build it again, run [tools/build-tailnet.sh](tools/build-tailnet.sh). Netbird is a build choice: `REXPOCKET_NETBIRD=1
+tools/build-tailnet.sh` writes `app/libs/tailnet-netbird.aar`, and `./gradlew -Prexpocket.netbird=true
+:app:assembleRelease` links it in. It adds about 30 MB to the APK (29 MB to 59 MB), so the default build leaves it
+out; without it the Settings › Tailnet screen offers Tailscale only. The integration
 tests in `core` run against a Rex on `127.0.0.1:7297` (set `REX_TEST_HOST` / `REX_TEST_PORT`) and
 are skipped without one. The SSH test runs only when `REX_SSH_HOST` and `REX_SSH_USER` name a
 machine and `REX_SSH_KEY` or `REX_SSH_PASSWORD` gives a credential; `REX_SSH_PORT`,
@@ -212,6 +221,10 @@ which erases the app's hosts and tailnet login.
   emulator: the app builds its official libghostty-vt library, license in `app/src/main/assets/licenses/Ghostty-MIT.txt`.
 - [Tailscale](https://github.com/tailscale/tailscale), by Tailscale Inc. and contributors, BSD-3-Clause -
   the tsnet library the app's Tailscale node is.
+- [Netbird](https://github.com/netbirdio/netbird), by NetBird GmbH and contributors, BSD-3-Clause - the
+  embedded client the app's Netbird node is. Only its client code is in the app, not its server parts.
+- [go-socks5](https://github.com/things-go/go-socks5), by Things Go and contributors, MIT - the SOCKS5
+  server in front of the Netbird node.
 - [JSch](https://github.com/mwiede/jsch), by JCraft, Inc. and contributors, Revised BSD - the SSH
   client. [eddsa](https://github.com/str4d/ed25519-java), by Str4d and contributors, CC0 - the
   Ed25519 implementation Android's own security providers do not give JSch.
