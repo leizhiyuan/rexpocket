@@ -73,7 +73,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import me.leaver.rexpocket.R
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.DeskKey
 import me.leaver.rexpocket.core.KeyModifiers
+import me.leaver.rexpocket.core.symbolPress
 import me.leaver.rexpocket.core.KeyPress
 import me.leaver.rexpocket.core.Latch
 import me.leaver.rexpocket.core.Mod
@@ -88,9 +93,14 @@ import kotlin.math.abs
  *
  * The pill starts with what an agent asks for most: back out, interrupt, complete, accept, `ctrl`.
  * Paste, the paperclip and a slash for pi's command menu follow off the edge. C-c is red while the
- * program works or waits. `ctrl` applies to the next key, from this row or from the phone keyboard;
- * a quick second tap keeps it on, and holding it opens the other control chords. Return held is
- * shift-Return: a new line in an agent's prompt.
+ * program works or waits; Settings can make it wait for a hold while the program is idle, where a
+ * stray tap would wipe a half-written prompt, or take it off the bar, leaving Ctrl then `c`. `ctrl`
+ * applies to the next key, from this row or from the phone keyboard; a quick second tap keeps it
+ * on, and holding it opens the other control chords. Return held is shift-Return: a new line in an
+ * agent's prompt.
+ *
+ * Fn pins a panel of the rest of a desk keyboard - Home, End, the page keys, Delete, F1 to F12 -
+ * and the symbols a phone keyboard keeps a page away. The modifiers held in the row apply to them.
  *
  * The paperclip is the dock's way to send a file or an image: it opens the platform's picker, and
  * goes quiet while the file picked last is still on its way.
@@ -111,8 +121,12 @@ internal fun KeyBar(
     onKeyboard: () -> Unit,
     showShift: Boolean = false,
     showAlt: Boolean = false,
+    ctrlC: CtrlCKey = CtrlCKey.Tap,
+    onDeskKey: (DeskKey) -> Unit = {},
 ) {
     val haptics = LocalHapticFeedback.current
+    val context = LocalContext.current
+    val holdHint = stringResource(R.string.key_ctrl_c_hold_hint)
     val scroll = rememberScrollState()
     val pill = RoundedCornerShape(50)
     Row(
@@ -128,8 +142,24 @@ internal fun KeyBar(
                 val key = Modifier.size(KEY_SIZE)
                 Key(stringResource(R.string.key_escape), key) { onKey(KeyPress("escape", 0), "") }
                 // Always named for the chord it sends; red says the program would take it as a stop.
-                Key(stringResource(R.string.key_ctrl_c), key, color = if (busy) Colors.danger else Colors.ink) {
-                    onKey(KeyPress("key_c", 'c'.code, text = "c"), "ctrl")
+                if (ctrlC != CtrlCKey.Hidden) {
+                    val interrupt = { onKey(KeyPress("key_c", 'c'.code, text = "c"), "ctrl") }
+                    Key(
+                        stringResource(R.string.key_ctrl_c),
+                        key,
+                        color = if (busy) Colors.danger else Colors.ink,
+                        onLongClick = if (ctrlC == CtrlCKey.Hold) {
+                            {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                interrupt()
+                            }
+                        } else {
+                            null
+                        },
+                    ) {
+                        // Held unless the program is busy: then a tap is still the quick stop.
+                        if (ctrlC.tapSends(busy)) interrupt() else toast(context, holdHint)
+                    }
                 }
                 Key(stringResource(R.string.key_tab), key, icon = R.drawable.ic_tab_key) { onKey(KeyPress("tab", 0), "") }
                 Key(
@@ -156,6 +186,7 @@ internal fun KeyBar(
                         icon = if (isShift) R.drawable.ic_shift else null,
                     ) { onMod(mod) }
                 }
+                MoreKeys(key, onDesk = onDeskKey, onSymbol = { symbol -> symbolPress(symbol)?.let { onKey(it, "") } })
                 Key(stringResource(R.string.key_paste), key, icon = R.drawable.ic_paste) { onPaste() }
                 Key(
                     stringResource(R.string.upload_attach),
@@ -327,6 +358,93 @@ private fun ArrowStick(modifier: Modifier, onArrow: (String) -> Unit) {
     }
 }
 
+/**
+ * Fn: a tap pins the panel of the keys a phone keyboard lacks above the bar, and a second tap puts
+ * it away. It is not focusable, so the phone keyboard stays up under it, and the bar's modifiers
+ * can still be tapped while it is open: Shift then End selects, Ctrl then F5 is C-F5.
+ */
+@Composable
+private fun MoreKeys(modifier: Modifier, onDesk: (DeskKey) -> Unit, onSymbol: (Char) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val label = stringResource(R.string.key_more)
+    val state = stringResource(if (open) R.string.arrows_pinned else R.string.mod_off)
+    val edge = with(LocalDensity.current) { POPUP_EDGE.roundToPx() }
+    val above = remember(edge) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+                val x = (anchorBounds.center.x - popupContentSize.width / 2)
+                    .coerceIn(edge, maxOf(edge, windowSize.width - popupContentSize.width - edge))
+                val y = (anchorBounds.top - popupContentSize.height - edge).coerceAtLeast(0)
+                return IntOffset(x, y)
+            }
+        }
+    }
+    Box(
+        modifier.height(KEY_HEIGHT).clip(RoundedCornerShape(Radius.chip))
+            .background(if (open) Colors.keyOn else Colors.clear)
+            .clickable(role = Role.Button) { open = !open }
+            .semantics { contentDescription = label; stateDescription = state }
+            .testTag(MORE_KEYS_TAG)
+            .padding(horizontal = KEY_PAD),
+        contentAlignment = Alignment.Center,
+    ) {
+        KeyText(stringResource(R.string.key_more_short), if (open) Colors.accent else Colors.ink)
+        if (open) {
+            Popup(popupPositionProvider = above, properties = PopupProperties(focusable = false)) {
+                MorePanel(onDesk, onSymbol)
+            }
+        }
+    }
+}
+
+/** The panel's rows: the moving and editing keys, the function keys in two sixes, then symbols. */
+@Composable
+private fun MorePanel(onDesk: (DeskKey) -> Unit, onSymbol: (Char) -> Unit) {
+    val names = mapOf(
+        DeskKey.Home to stringResource(R.string.key_home),
+        DeskKey.End to stringResource(R.string.key_end),
+        DeskKey.PageUp to stringResource(R.string.key_page_up),
+        DeskKey.PageDown to stringResource(R.string.key_page_down),
+        DeskKey.Insert to stringResource(R.string.key_insert),
+        DeskKey.Delete to stringResource(R.string.key_delete),
+    )
+    val function = DeskKey.entries.filter { it !in names }
+    Column(
+        Modifier.width(MORE_PANEL_WIDTH).floating(RoundedCornerShape(Radius.card)).padding(PAD_INSET)
+            .testTag(MORE_PANEL_TAG),
+        verticalArrangement = Arrangement.spacedBy(CHORD_GAP),
+    ) {
+        for (row in listOf(names.keys.toList(), function.take(6), function.drop(6))) {
+            PanelRow(row.map { k -> (names[k] ?: k.name) to { onDesk(k) } })
+        }
+        PanelRow(MORE_SYMBOLS.map { c -> c.toString() to { onSymbol(c) } })
+    }
+}
+
+@Composable
+private fun PanelRow(keys: List<Pair<String, () -> Unit>>) {
+    Row(Modifier.fillMaxWidth().height(MORE_KEY_HEIGHT), horizontalArrangement = Arrangement.spacedBy(CHORD_GAP)) {
+        for ((name, press) in keys) {
+            Box(
+                Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(Radius.chip))
+                    .background(Colors.key)
+                    .clickable(role = Role.Button, onClick = press),
+                contentAlignment = Alignment.Center,
+            ) {
+                KeyText(name, Colors.ink)
+            }
+        }
+    }
+}
+
+/** The symbols a phone keyboard buries that a shell line is full of. */
+internal const val MORE_SYMBOLS = "|~`\\/-_"
+
+internal const val MORE_KEYS_TAG = "more_keys"
+internal const val MORE_PANEL_TAG = "more_keys_panel"
+private val MORE_PANEL_WIDTH = 336.dp
+private val MORE_KEY_HEIGHT = 44.dp
+
 /** The pinned arrow pad: up over left, down and right, as the arrows sit on a desk keyboard. */
 @Composable
 private fun ArrowPad(onArrow: (String) -> Unit) {
@@ -449,7 +567,8 @@ private fun StickFace(direction: String?, knob: Offset, deadZone: Float) {
 /**
  * The control chords a shell and an agent use, behind a held `ctrl`: end of input, suspend, history
  * search, clear, line start and end, delete a word, delete to the line start, and a newline.
- * Interrupt is not here: C-c has a key of its own in the row.
+ * Interrupt is not here: C-c has a key of its own in the row, and with that key turned off in
+ * Settings, a tap on `ctrl` and then `c` from the phone keyboard sends it.
  */
 internal val CTRL_CHORDS = listOf('d', 'z', 'r', 'l', 'a', 'e', 'w', 'u', 'j')
 

@@ -257,4 +257,16 @@
     <string name="keybar_alt">显示 Alt 键</string>
     <string name="keybar_visible">显示</string>
     <string name="keybar_hidden">隐藏</string>
+    <string name="keybar_ctrl_c">C-c 键</string>
+    <string name="keybar_ctrl_c_tap">点一下发送</string>
+    <string name="keybar_ctrl_c_hold">空闲时需长按</string>
+    <string name="key_ctrl_c_hold_hint">长按 C-c 发送，或按 Ctrl 再按 c</string>
+    <string name="key_more">更多按键</string>
+    <string name="key_more_short">Fn</string>
+    <string name="key_home">Home</string>
+    <string name="key_end">End</string>
+    <string name="key_page_up">PgUp</string>
+    <string name="key_page_down">PgDn</string>
+    <string name="key_insert">Ins</string>
+    <string name="key_delete">Del</string>
 </resources>

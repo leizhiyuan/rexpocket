@@ -30,7 +30,10 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   programs are exactly as on the desk.
 - **Made for the phone.** Typing goes straight into the pane. A floating dock holds the keyboard,
   Return and a key row: `esc`, `C-c`, arrows that repeat while held, Tab, Return, `ctrl`, paste, a paperclip and `/`.
-  Settings → Terminal can show optional `Shift` and `Alt` keys; both are hidden by default. Hold
+  Settings → Terminal can show optional `Shift` and `Alt` keys; both are hidden by default. There
+  too, the `C-c` key can be made to need a hold while the program is idle, or taken off the bar
+  (`ctrl` then `c` still sends it). `Fn` pins a panel of Home, End, PgUp, PgDn, Ins, Del, F1-F12
+  and the symbols a phone keyboard buries; the row's modifiers apply to them. Hold
   `ctrl` for `C-c` `C-d` `C-z` `C-r` `C-l` `C-a` `C-e` `C-w` `C-j`. A split shows one pane at a
   time, with a bar to move between them. **The keyboard never resizes the terminal** - the pane
   slides up under it by what it covers, so the line being typed into stays in view and a program in

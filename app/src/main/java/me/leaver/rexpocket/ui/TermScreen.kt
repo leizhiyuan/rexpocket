@@ -68,7 +68,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlin.math.roundToInt
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.BlockInfo
+import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.DeskKey
 import me.leaver.rexpocket.core.KeyModifiers
+import me.leaver.rexpocket.core.metaState
 import me.leaver.rexpocket.core.KeyPress
 import me.leaver.rexpocket.core.keyPressFor
 import me.leaver.rexpocket.core.Phase
@@ -155,6 +158,7 @@ internal fun TermScreen(
     keyBarWithKeyboard: Boolean = false,
     keyBarShift: Boolean = false,
     keyBarAlt: Boolean = false,
+    keyBarCtrlC: CtrlCKey = CtrlCKey.Tap,
     /** True when this pane shares the window with the list, which is then the way back. */
     embedded: Boolean = false,
 ) {
@@ -191,6 +195,17 @@ internal fun TermScreen(
     fun press(key: KeyPress, own: String = "") {
         val e = mods.event(key, own)
         onAct { sendKey(e.code, mods = e.mods, text = e.text, codepoint = e.codepoint, consumedMods = e.consumedMods) }
+        mods = mods.consume()
+    }
+
+    /**
+     * Home, Page Up, F5 and the rest, as a keyboard on the desk sends them: the pane's terminal
+     * encodes the key in the modes the program set, with the modifiers the key row holds, and the
+     * bytes go the way a desk keyboard's do.
+     */
+    fun pressDesk(key: DeskKey) {
+        val terminal = termSession ?: return
+        terminal.encodeKey(key.keyCode, false, mods.metaState(), null)?.let(terminal::send)
         mods = mods.consume()
     }
 
@@ -342,6 +357,8 @@ internal fun TermScreen(
                             onKey = { key, own -> press(key, own) },
                             showShift = keyBarShift,
                             showAlt = keyBarAlt,
+                            ctrlC = keyBarCtrlC,
+                            onDeskKey = { pressDesk(it) },
                             onNewLine = { press(KeyPress("enter", 0), "shift") },
                             onPaste = { pasteClipboard() },
                             onAttach = { filePicker.launch("*/*") },

@@ -59,6 +59,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val alerts by model.alerts.collectAsState()
     val keyBarShift by model.keyBarShift.collectAsState()
     val keyBarAlt by model.keyBarAlt.collectAsState()
+    val keyBarCtrlC by model.keyBarCtrlC.collectAsState()
     val keyBar by model.keyBar.collectAsState()
     val upload by model.upload.collectAsState()
     val update by model.update.collectAsState()
@@ -132,6 +133,8 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     keyBarAlt = keyBarAlt,
                     onKeyBarShift = model::setKeyBarShift,
                     onKeyBarAlt = model::setKeyBarAlt,
+                    keyBarCtrlC = keyBarCtrlC,
+                    onKeyBarCtrlC = model::setKeyBarCtrlC,
                     keyBar = keyBar,
                     onKeyBar = model::setKeyBar,
                     onFontSettings = { fontSettingsOpen = true },
@@ -148,6 +151,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     keyBarWithKeyboard = keyBar,
                     keyBarShift = keyBarShift,
                     keyBarAlt = keyBarAlt,
+                    keyBarCtrlC = keyBarCtrlC,
                     state = pocket,
                     fontScale = font,
                     terminalTypeface = terminalTypeface,

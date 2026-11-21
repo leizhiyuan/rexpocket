@@ -9,6 +9,10 @@ import android.view.View
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import me.leaver.rexpocket.core.DeskKey
+import me.leaver.rexpocket.core.KeyModifiers
+import me.leaver.rexpocket.core.Mod
+import me.leaver.rexpocket.core.metaState
 import me.leaver.rexpocket.terminal.TerminalFrame
 import me.leaver.rexpocket.terminal.TerminalSession
 import me.leaver.rexpocket.terminal.TerminalTheme
@@ -202,6 +206,35 @@ class TerminalViewTest {
 
         assertEquals("\u001b[A\u001bOA", sent.toString())
     }
+
+    /**
+     * The key bar's Fn panel: each desk key comes out of libghostty-vt as a desk keyboard's would,
+     * with the modifiers the key row holds, and in the cursor mode the program set.
+     */
+    @Test
+    fun theFnPanelsKeysAreEncodedAsADeskKeyboardsAre() {
+        val plain = mapOf(
+            DeskKey.Home to "\u001b[H", DeskKey.End to "\u001b[F", DeskKey.PageUp to "\u001b[5~",
+            DeskKey.PageDown to "\u001b[6~", DeskKey.Insert to "\u001b[2~", DeskKey.Delete to "\u001b[3~",
+            DeskKey.F1 to "\u001bOP", DeskKey.F2 to "\u001bOQ", DeskKey.F3 to "\u001bOR", DeskKey.F4 to "\u001bOS",
+            DeskKey.F5 to "\u001b[15~", DeskKey.F6 to "\u001b[17~", DeskKey.F7 to "\u001b[18~", DeskKey.F8 to "\u001b[19~",
+            DeskKey.F9 to "\u001b[20~", DeskKey.F10 to "\u001b[21~", DeskKey.F11 to "\u001b[23~", DeskKey.F12 to "\u001b[24~",
+        )
+        assertEquals(DeskKey.entries.toSet(), plain.keys)
+        for ((key, bytes) in plain) assertEquals(key.name, bytes, encode(key, KeyModifiers()))
+
+        val shift = KeyModifiers().tap(Mod.Shift, 1_000)
+        val ctrl = KeyModifiers().tap(Mod.Ctrl, 1_000)
+        assertEquals("\u001b[1;2F", encode(DeskKey.End, shift))
+        assertEquals("\u001b[15;5~", encode(DeskKey.F5, ctrl))
+        assertEquals("\u001b[3;5~", encode(DeskKey.Delete, ctrl))
+
+        feed("\u001b[?1h")
+        assertEquals("\u001bOH", encode(DeskKey.Home, KeyModifiers()))
+    }
+
+    private fun encode(key: DeskKey, mods: KeyModifiers): String =
+        String(requireNotNull(session.encodeKey(key.keyCode, false, mods.metaState(), null)) { key.name }, Charsets.UTF_8)
 
     // ---- Gestures -----------------------------------------------------------------------
 

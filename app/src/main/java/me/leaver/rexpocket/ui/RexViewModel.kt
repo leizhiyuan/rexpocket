@@ -19,6 +19,7 @@ import me.leaver.rexpocket.R
 import me.leaver.rexpocket.alerts.Alert
 import me.leaver.rexpocket.alerts.AlertTarget
 import me.leaver.rexpocket.alerts.Alerts
+import me.leaver.rexpocket.core.CtrlCKey
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
@@ -217,6 +218,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     val keyBar = MutableStateFlow(store.keyBarAlways())
     val keyBarShift = MutableStateFlow(store.keyBarShift())
     val keyBarAlt = MutableStateFlow(store.keyBarAlt())
+    val keyBarCtrlC = MutableStateFlow(store.keyBarCtrlC())
     private val attention = AttentionLedger()
     var host: SavedHost? = null
         private set
@@ -308,6 +310,11 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     fun setKeyBarAlt(on: Boolean) {
         store.setKeyBarAlt(on)
         keyBarAlt.value = on
+    }
+
+    fun setKeyBarCtrlC(choice: CtrlCKey) {
+        store.setKeyBarCtrlC(choice)
+        keyBarCtrlC.value = choice
     }
 
     fun setAlerts(on: Boolean) {

@@ -80,6 +80,7 @@ import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.BlockInfo
 import me.leaver.rexpocket.core.HostAddress
 import me.leaver.rexpocket.core.HostAddressParser
+import me.leaver.rexpocket.core.CtrlCKey
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketState
@@ -165,6 +166,8 @@ internal fun HomeScreen(
     keyBarAlt: Boolean,
     onKeyBarShift: (Boolean) -> Unit,
     onKeyBarAlt: (Boolean) -> Unit,
+    keyBarCtrlC: CtrlCKey,
+    onKeyBarCtrlC: (CtrlCKey) -> Unit,
     /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
     keyBar: Boolean,
     onKeyBar: (Boolean) -> Unit,
@@ -415,6 +418,8 @@ internal fun HomeScreen(
             keyBarAlt = keyBarAlt,
             onKeyBarShift = onKeyBarShift,
             onKeyBarAlt = onKeyBarAlt,
+            keyBarCtrlC = keyBarCtrlC,
+            onKeyBarCtrlC = onKeyBarCtrlC,
             keyBar = keyBar,
             onKeyBar = onKeyBar,
             onFontSettings = onFontSettings,
@@ -811,6 +816,8 @@ private fun SettingsSheet(
     keyBarAlt: Boolean,
     onKeyBarShift: (Boolean) -> Unit,
     onKeyBarAlt: (Boolean) -> Unit,
+    keyBarCtrlC: CtrlCKey,
+    onKeyBarCtrlC: (CtrlCKey) -> Unit,
     /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
     keyBar: Boolean,
     onKeyBar: (Boolean) -> Unit,
@@ -870,6 +877,18 @@ private fun SettingsSheet(
                 label = stringResource(R.string.keybar_alt), icon = R.drawable.ic_keyboard,
                 detail = stringResource(if (keyBarAlt) R.string.keybar_visible else R.string.keybar_hidden),
                 keepOpen = true, onClick = { onKeyBarAlt(!keyBarAlt) },
+            )
+            // A tap steps through the three: tapped, held unless the program is busy, and gone.
+            SheetItem(
+                label = stringResource(R.string.keybar_ctrl_c), icon = R.drawable.ic_keyboard,
+                detail = stringResource(
+                    when (keyBarCtrlC) {
+                        CtrlCKey.Tap -> R.string.keybar_ctrl_c_tap
+                        CtrlCKey.Hold -> R.string.keybar_ctrl_c_hold
+                        CtrlCKey.Hidden -> R.string.keybar_hidden
+                    },
+                ),
+                keepOpen = true, onClick = { onKeyBarCtrlC(keyBarCtrlC.next()) },
             )
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
         }

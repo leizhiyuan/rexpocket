@@ -1,6 +1,7 @@
 package me.leaver.rexpocket.data
 
 import android.content.Context
+import me.leaver.rexpocket.core.CtrlCKey
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.TailnetBackend
 import org.json.JSONArray
@@ -185,6 +186,13 @@ class HostStore(context: Context) {
         prefs.edit().putBoolean(KEY_KEY_BAR_ALT, on).apply()
     }
 
+    /** How the C-c key behaves; a tap sends it unless the person chose otherwise. */
+    fun keyBarCtrlC(): CtrlCKey = CtrlCKey.fromPref(prefs.getString(KEY_KEY_BAR_CTRL_C, null))
+
+    fun setKeyBarCtrlC(choice: CtrlCKey) {
+        prefs.edit().putString(KEY_KEY_BAR_CTRL_C, choice.pref).apply()
+    }
+
     fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)
 
     fun terminalFont(): String = prefs.getString("terminal_font", null)
@@ -227,6 +235,7 @@ class HostStore(context: Context) {
         private const val KEY_KEY_BAR = "key_bar_always"
         private const val KEY_KEY_BAR_SHIFT = "keybar_shift"
         private const val KEY_KEY_BAR_ALT = "keybar_alt"
+        private const val KEY_KEY_BAR_CTRL_C = "keybar_ctrl_c"
         private const val KEY_TAILSCALE_ENABLED = "tailscale_enabled"
         private const val KEY_TAILSCALE_HOSTNAME = "tailscale_hostname"
         private const val KEY_TAILNET_BACKEND = "tailnet_backend"
