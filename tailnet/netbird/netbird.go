@@ -103,9 +103,7 @@ func startClient(client *embed.Client, platform Platform) (*Node, error) {
 	}
 	n.proxy = ln
 	server := socks5.NewServer(
-		socks5.WithDial(func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return client.DialContext(ctx, network, addr)
-		}),
+		socks5.WithDial(n.dial),
 		socks5.WithLogger(socksLogger{platform}),
 	)
 	go server.Serve(ln)
