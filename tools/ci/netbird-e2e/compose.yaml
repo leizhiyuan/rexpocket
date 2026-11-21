@@ -1,0 +1,44 @@
+# Self-hosted NetBird control plane plus one SSH peer, for tailnet/netbird/e2e_test.go.
+# The network has a fixed subnet so the host (where the Go test runs) reaches the
+# server at a known address; up.sh maps netbird.e2e to it in /etc/hosts.
+name: netbird-e2e
+
+networks:
+  nb:
+    ipam:
+      config:
+        - subnet: 172.29.83.0/24
+
+services:
+  server:
+    image: netbirdio/netbird-server:0.83.2
+    command: ["--config", "/nb/config.yaml"]
+    environment:
+      # Lets /api/setup mint an admin PAT during the unauthenticated bootstrap.
+      NB_SETUP_PAT_ENABLED: "true"
+      NB_DISABLE_GEOLOCATION: "true"
+    volumes:
+      - ./config.yaml:/nb/config.yaml:ro
+    tmpfs:
+      - /nb/data
+    networks:
+      nb:
+        ipv4_address: 172.29.83.10
+        aliases: [netbird.e2e]
+
+  peer:
+    # Built by up.sh from Dockerfile.peer.
+    image: rexpocket/netbird-e2e-peer:0.83.2
+    hostname: peer
+    profiles: [peer]
+    cap_add: [NET_ADMIN, SYS_ADMIN]
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      NB_MANAGEMENT_URL: "http://netbird.e2e:8080"
+      NB_SETUP_KEY: "${NETBIRD_E2E_SETUP_KEY:-}"
+      NB_HOSTNAME: peer
+      NB_LOG_LEVEL: info
+    networks:
+      nb:
+        ipv4_address: 172.29.83.20

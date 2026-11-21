@@ -104,6 +104,7 @@ func startClient(client *embed.Client, platform Platform) (*Node, error) {
 	n.proxy = ln
 	server := socks5.NewServer(
 		socks5.WithDial(n.dial),
+		socks5.WithResolver(peerResolver{peers: n.peersOf, next: socks5.DNSResolver{}}),
 		socks5.WithLogger(socksLogger{platform}),
 	)
 	go server.Serve(ln)
@@ -197,24 +198,61 @@ func (n *Node) State() (string, error) {
 
 // Ping reports the path to the peer at ip as JSON, in the shape the tailnet package reports:
 // {"latencyMs", "endpoint", "peerRelay", "derpRegionId", "derpRegionCode", "relayServer", "error"}.
-// Netbird keeps the latency of its own keepalives, so nothing is sent: it waits up to timeoutMillis
+// Netbird keeps the latency of its own keepalives, so no echo is timed: it waits up to timeoutMillis
 // for the peer's connection to come up, then reports the path it settled on. A direct path names
 // its endpoint; a relayed one names the relay server, which is never a peer of the network.
+//
+// Netbird connects to a peer lazily, on the first packet for it, so while the peer is not connected
+// Ping sends it a datagram to bring the connection up; otherwise it would wait for nothing.
 func (n *Node) Ping(ip string, timeoutMillis int32) (string, error) {
 	addr, err := netip.ParseAddr(ip)
 	if err != nil {
 		return "", err
 	}
 	deadline := time.Now().Add(time.Duration(timeoutMillis) * time.Millisecond)
+	res := waitForPath(func() ping { return n.pathTo(addr) }, func() { n.wake(addr) }, deadline, pingPoll)
+	b, err := json.Marshal(res)
+	return string(b), err
+}
+
+// wakeEvery is how often Ping sends another packet to a peer whose connection is not up yet.
+const wakeEvery = time.Second
+
+// waitForPath reads the path until it has no error or the deadline passes. While the peer is not
+// connected it calls wake, at most once per wakeEvery, starting at once.
+func waitForPath(read func() ping, wake func(), deadline time.Time, poll time.Duration) ping {
+	var woke time.Time
 	for {
-		res := n.pathTo(addr)
+		res := read()
 		if res.Error == "" || time.Now().After(deadline) {
-			b, err := json.Marshal(res)
-			return string(b), err
+			return res
 		}
-		time.Sleep(pingPoll)
+		if res.Error == errNotConnected && time.Since(woke) >= wakeEvery {
+			wake()
+			woke = time.Now()
+		}
+		time.Sleep(poll)
 	}
 }
+
+// wakePort is where wake's datagram goes: the discard port. Nothing needs to answer it; it only
+// has to pass through the tunnel for the lazy connection to start.
+const wakePort = 9
+
+// wake sends one datagram to the peer at addr through the node, which starts a lazy connection.
+func (n *Node) wake(addr netip.Addr) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := n.client.DialContext(ctx, "udp", netip.AddrPortFrom(addr, wakePort).String())
+	if err != nil {
+		return
+	}
+	conn.Write([]byte{0})
+	conn.Close()
+}
+
+// errNotConnected is the path's error while the peer's connection is not up.
+const errNotConnected = "the peer is not connected yet"
 
 // pathTo reads the path to the peer at addr from the client's status once.
 func (n *Node) pathTo(addr netip.Addr) ping {
@@ -227,7 +265,7 @@ func (n *Node) pathTo(addr netip.Addr) ping {
 			continue
 		}
 		if p.ConnStatus != embed.PeerStatusConnected {
-			return ping{Error: "the peer is not connected yet"}
+			return ping{Error: errNotConnected}
 		}
 		res := ping{LatencyMs: float64(p.Latency) / float64(time.Millisecond)}
 		if p.Relayed {

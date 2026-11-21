@@ -6,6 +6,8 @@ import (
 	"context"
 	"net"
 	"strings"
+
+	socks5 "github.com/things-go/go-socks5"
 )
 
 // peerName is one peer of the network as the node lists it: its address and its DNS name.
@@ -47,6 +49,23 @@ func (n *Node) peersOf() []peerName {
 		out = append(out, peerName{ip: p.IP, fqdn: p.FQDN})
 	}
 	return out
+}
+
+// peerResolver is the SOCKS5 server's name resolver. The server resolves a requested name before
+// it dials, so without this a peer's name would go to the host's DNS, which does not know it, and
+// never reach [Node.dial]: a peer's name resolves to its address, any other name goes on to next.
+type peerResolver struct {
+	peers func() []peerName
+	next  socks5.NameResolver
+}
+
+func (r peerResolver) Resolve(ctx context.Context, name string) (context.Context, net.IP, error) {
+	if ip, ok := addressOf(name, r.peers()); ok {
+		if parsed := net.ParseIP(ip); parsed != nil {
+			return ctx, parsed, nil
+		}
+	}
+	return r.next.Resolve(ctx, name)
 }
 
 // dial dials through the node, with a name resolved from its peers first.
