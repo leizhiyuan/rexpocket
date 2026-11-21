@@ -83,8 +83,10 @@ jobs:
       - name: Allow KVM for the emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
+          sudo udevadm control --reload-rules || true
+          sudo udevadm trigger --name-match=kvm || true
+          # Report what this runner offers, so a missing KVM is visible in the log.
+          ls -l /dev/kvm || echo "no /dev/kvm on this runner"
 
       - name: Install the Android NDK, platform and emulator image
         run: |
