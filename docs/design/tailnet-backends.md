@@ -68,29 +68,58 @@ libraries are required for Android 15's 16 KB pages, so the APK cannot compress 
 
 The 16 KB alignment check passes for both libraries and both APKs.
 
-## Not verified here
+## Verification
 
-- **On a device.** Nothing has run on a phone or emulator. The Netbird node's connection, relay, and
-  reconnect behaviour are unknown until it does. Tailscale's network-change handling does not apply to
-  Netbird: `NetbirdRunning.networkChanged` does nothing, because the embedded client exposes no rebind.
-- **Libghostty.** The terminal library cannot be built in this environment: its source download is
-  blocked by the egress policy. The APK sizes above exclude it, and the `TerminalSessionTest` unit
-  tests that load it fail for that reason. Everything else in the unit tests passes.
-- **Interactive Netbird login.** The embedded client has no SSO flow, so a node joins only with a
-  setup key.
-- **Self-hosted names.** A self-hosted Netbird's domain is not recognised; those peers need their
-  `100.x` address. Each name would need a setting to be recognised.
+Three GitHub Actions workflows run on every push:
+
+- **`android-apk`** builds the default and the Netbird debug APKs for arm64, with libghostty.
+- **`Netbird e2e`** brings up `netbirdio/netbird-server` 0.83.2 (management, signal, relay, STUN) and
+  an OpenSSH peer in Docker (`tools/ci/netbird-e2e/`). The setup key comes from the server's
+  unauthenticated `/api/setup` bootstrap and its REST API, with no login. `tailnet/netbird/e2e_test.go`
+  (tags `netbird e2e`) runs the app's Go node against it. The node joins and reaches Running and lists
+  the peer. Ping returns a path, relayed in CI. The test reads `SSH-2.0` from the peer's port 22
+  through the SOCKS5 proxy by its name. It then restarts without the key and does it again.
+- **`device-test`** runs every instrumented test class on x86_64 emulators, API 30 and 34, with an
+  x86_64 build of both native libraries (`-Prexpocket.abi=x86_64`, test-only; release builds stay
+  arm64). The x86_64 build is needed because the emulator's ARM translation stops with SIGILL on Go's
+  CPU-feature probe (`mrs x0, midr_el1`), which real arm64 phones handle. The run covers app launch,
+  Netbird library load, start errors, the terminal, and the IME: 22 of 22 pass.
+
+The end-to-end test found two bugs, both fixed with unit tests:
+
+- The SOCKS5 server resolved names with system DNS before dialing, so peer names never reached the
+  node. `peerResolver` now answers them from the node's peers.
+- Ping waited on a lazily connected peer that nothing woke. It now sends a datagram until the peer
+  connects.
+
+A Netbird build was also tried by hand on an arm64 phone. A first build connected and joined; a host
+reached by its `.netbird.cloud` name failed there, which led to the name fixes above.
+
+## Not verified
+
+- **The Go library on arm64 hardware in CI.** No hosted runner offers an arm64 emulator with KVM, so
+  CI runs the same sources built for x86_64. The arm64 build is checked on a phone only by hand.
+- **Network changes on Netbird.** `NetbirdRunning.networkChanged` does nothing, because the embedded
+  client exposes no rebind; Netbird's engine is relied on to follow the network.
+- **Interactive Netbird login.** The embedded client has no SSO flow, so a node joins only with a setup
+  key.
+- **Self-hosted names.** A self-hosted Netbird's domain is not recognised when a host is added; those
+  peers need their `100.x` address. Each name would need a setting to be recognised. Once dialing,
+  any peer name the node knows resolves.
 - **Shared addresses.** Tailscale and Netbird both use `100.64/10`, so such an address goes to
   whichever node is joined.
-- **Licensing.** The Netbird code in the build is its BSD-3-Clause client code. The build pulls in no
-  `management/`, `signal/`, `relay/`, or `combined/` directories, which are AGPLv3.
+
+## Licensing
+
+The app links only Netbird's BSD-3-Clause client code; the build pulls in no `management/`, `signal/`,
+`relay/`, or `combined/` directories, which are AGPLv3. The end-to-end workflow runs Netbird's
+server image in CI only; nothing from it ships.
 
 ## Tests
 
-- `core`: 143 JVM tests pass, including the Netbird name rule, the state and path parsers, the
-  backend choice, and the relay case.
-- `app`: 31 of 53 unit tests pass; the 22 that fail are `TerminalSessionTest`, which needs libghostty.
-  The new `TailnetBoxTest` covers node-name cleaning.
-- `tailnet` (Go): the Tailscale tests pass, and the Netbird package passes both with and without the
-  `netbird` tag. The tests cover the saved-key read, the early start errors, the stub, and the ping
-  JSON field names the app parses.
+- `core`: JVM tests for the Netbird name rule, the state and path parsers, the backend choice, and the
+  relay case.
+- `app`: `TailnetBoxTest` (node-name cleaning) and the instrumented `TailnetNodeInstrumentedTest`.
+- `tailnet` (Go): the Tailscale tests, and the Netbird package with and without the `netbird` tag:
+  saved-key read, start errors, the stub, the ping JSON fields, peer-name resolution, the resolver,
+  and ping wake-up; plus the end-to-end test above.
