@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api-level: [30]
+        api-level: [30, 31, 33, 34, 35]
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
     steps:
@@ -53,6 +53,38 @@ jobs:
       - name: Build the app and test APKs
         run: ./gradlew --no-daemon -Prexpocket.netbird=true :app:assembleDebug :app:assembleDebugAndroidTest
 
+      - name: Write the test script
+        # Each class runs on its own, so a native crash in one does not hide the results of the rest.
+        run: |
+          cat > "$RUNNER_TEMP/run-tests.sh" <<'SH'
+          set -u
+          adb shell getprop ro.product.cpu.abilist
+          adb shell getprop ro.dalvik.vm.native.bridge
+          adb shell getprop ro.build.version.sdk
+          mkdir -p out
+          status=0
+          for class in \
+              me.leaver.rexpocket.net.TailnetNodeInstrumentedTest \
+              me.leaver.rexpocket.data.FontPreferenceTest \
+              me.leaver.rexpocket.ui.TerminalImeTest \
+              me.leaver.rexpocket.ui.TerminalViewTest; do
+            adb logcat -c || true
+            if ./gradlew --no-daemon -q -Prexpocket.netbird=true :app:connectedDebugAndroidTest \
+                -Pandroid.testInstrumentationRunnerArguments.class="$class"; then
+              echo "RESULT $class: passed"
+            else
+              echo "RESULT $class: FAILED"
+              status=1
+            fi
+            mkdir -p "out/$class"
+            cp -r app/build/reports/androidTests "out/$class/" 2>/dev/null || true
+            cp -r app/build/outputs/androidTest-results "out/$class/" 2>/dev/null || true
+            adb logcat -d > "out/$class/logcat.txt" || true
+            grep -E "ndk_translation|SIGILL|SIGSEGV|Fatal signal|FATAL EXCEPTION|UnsatisfiedLinkError" "out/$class/logcat.txt" | head -20 || true
+          done
+          exit $status
+          SH
+
       - name: Run the instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -62,20 +94,13 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            adb shell getprop ro.product.cpu.abilist
-            adb shell getprop ro.dalvik.vm.native.bridge
-            adb shell getprop ro.build.version.sdk
-            ./gradlew --no-daemon -Prexpocket.netbird=true :app:connectedDebugAndroidTest || (adb logcat -d > logcat.txt; exit 1)
-            adb logcat -d > logcat.txt
+          script: sh "$RUNNER_TEMP/run-tests.sh"
 
       - name: Keep the test reports
         if: always()
         run: |
           mkdir -p out
           cp -r app/build/reports/androidTests out/ 2>/dev/null || true
-          cp -r app/build/outputs/androidTest-results out/ 2>/dev/null || true
-          cp logcat.txt out/ 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
         if: always()
