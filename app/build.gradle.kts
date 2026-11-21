@@ -31,7 +31,9 @@ android {
         versionName = "0.1.3"
 
         // The tailnet and Ghostty libraries are built for arm64 only, so the APK must not claim the other ABIs either.
-        ndk.abiFilters += "arm64-v8a"
+        // The device tests on an x86_64 emulator build both libraries for x86_64 and pass
+        // -Prexpocket.abi=x86_64 (see .github/workflows/device-test.yml); nothing else sets it.
+        ndk.abiFilters += (findProperty("rexpocket.abi") as String?) ?: "arm64-v8a"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

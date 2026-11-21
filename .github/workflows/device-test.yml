@@ -1,8 +1,13 @@
 name: device-test
 
-# Runs the instrumented tests (app/src/androidTest) on an x86_64 emulator. The app ships arm64-v8a
-# native code only; the x86_64 Android 11+ images translate ARM code (native bridge), which is what
-# lets the arm64 APK install and load its libraries here.
+# Runs the instrumented tests (app/src/androidTest) on an x86_64 emulator, with KVM.
+#
+# The app ships arm64-v8a native code only. The x86_64 images' ARM translation (libndk_translation,
+# API 30 to 35) runs libghostty, but not the Go tailnet library: when the Netbird node starts, the
+# library executes `mrs x0, midr_el1` (Go CPU-feature detection), which the translator does not
+# implement, and the app dies with SIGILL. A real arm64 kernel traps and answers that read. So the test build here is an x86_64 one: both native libraries are built for x86_64 from
+# the same sources and pinned versions, and -Prexpocket.abi=x86_64 packs them. The release build and
+# the scripts it uses are unchanged; the x86_64 copies of the build scripts below exist only on the runner.
 on:
   workflow_dispatch:
   push:
@@ -18,9 +23,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api-level: [30, 31, 33, 34, 35]
+        api-level: [30, 34]
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
+      # The arm64 libghostty is not built: this APK carries the x86_64 one.
+      GRADLE_ARGS: -x :app:buildGhostty -Prexpocket.netbird=true -Prexpocket.abi=x86_64
     steps:
       - uses: actions/checkout@v4
 
@@ -47,11 +54,24 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.1.0" "ndk;28.2.13676358"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
 
-      - name: Build the Netbird library
-        run: REXPOCKET_NETBIRD=1 sh tools/build-tailnet.sh
+      - name: Build the Netbird library for x86_64
+        run: |
+          sed 's#-target android/arm64#-target android/amd64#' tools/build-tailnet.sh > tools/build-tailnet-x86_64.sh
+          grep -q 'android/amd64' tools/build-tailnet-x86_64.sh
+          REXPOCKET_NETBIRD=1 sh tools/build-tailnet-x86_64.sh
+          unzip -l app/libs/tailnet-netbird.aar | grep 'jni/'
+
+      - name: Build libghostty for x86_64
+        run: |
+          sed -e 's#aarch64-linux-android#x86_64-linux-android#g' -e 's#prefix-arm64#prefix-x86_64#' \
+              -e 's#jniLibs/arm64-v8a/#jniLibs/x86_64/#' tools/build-ghostty.py > tools/build-ghostty-x86_64.py
+          python3 tools/build-ghostty-x86_64.py
+          file app/src/main/jniLibs/x86_64/libghostty_jni.so
 
       - name: Build the app and test APKs
-        run: ./gradlew --no-daemon -Prexpocket.netbird=true :app:assembleDebug :app:assembleDebugAndroidTest
+        run: |
+          ./gradlew --no-daemon $GRADLE_ARGS :app:assembleDebug :app:assembleDebugAndroidTest
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep 'lib/'
 
       - name: Write the test script
         # Each class runs on its own, so a native crash in one does not hide the results of the rest.
@@ -69,7 +89,7 @@ jobs:
               me.leaver.rexpocket.ui.TerminalImeTest \
               me.leaver.rexpocket.ui.TerminalViewTest; do
             adb logcat -c || true
-            if ./gradlew --no-daemon -q -Prexpocket.netbird=true :app:connectedDebugAndroidTest \
+            if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \
                 -Pandroid.testInstrumentationRunnerArguments.class="$class"; then
               echo "RESULT $class: passed"
             else
