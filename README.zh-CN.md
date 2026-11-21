@@ -61,7 +61,7 @@ rex server start --extra-listen :7297 --allow-anonymous
 路由器上什么都不用开。
 
 **SSH。** 在电脑上装好 Rex（`rex server install` 就会装好），让非交互登录也能运行 `rex`
-（App 也会去 `~/.local/bin` 找）。路由器上什么都不用开：App 通过机器自己的 SSH 服务连进去。 传输层的完整设计见
+（App 也会去 `~/.local/bin`、`/usr/local/bin` 和 `/usr/bin` 找）。非交互的 SSH 登录不会读交互式 shell 的 PATH，所以在 macOS 上 Rex 装在 App 包里，要把它链接到上面某个目录，例如 `ln -s "<Rex App>/Contents/MacOS/rex" ~/.local/bin/rex`，指向包里的 `Versions/Current`，这样更新后仍然有效。路由器上什么都不用开：App 通过机器自己的 SSH 服务连进去。 传输层的完整设计见
 [docs/design/ssh-hosts.md](docs/design/ssh-hosts.md)。
 
 ## 使用

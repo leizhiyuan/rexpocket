@@ -76,8 +76,12 @@ trust.
 at its MagicDNS name. Nothing has to be opened on the router.
 
 **Over SSH.** Install Rex on the computer, as `rex server install` does, so a non-interactive
-login can run `rex` (the app also looks in `~/.local/bin`). Nothing has to be opened: the app
-reaches the server through the machine's own SSH daemon. How the transport works is described in
+login can run `rex` (the app also looks in `~/.local/bin`, `/usr/local/bin` and `/usr/bin`). A
+non-interactive SSH login does not read the interactive shell's PATH, so on macOS, where Rex lives in
+the app bundle, link it into one of those folders, for example
+`ln -s "<Rex app>/Contents/MacOS/rex" ~/.local/bin/rex`, pointing at the bundle's `Versions/Current`
+so it survives updates. Nothing has to be opened: the app reaches the server through the machine's
+own SSH daemon. How the transport works is described in
 [docs/design/ssh-hosts.md](docs/design/ssh-hosts.md).
 
 ## Use the app
