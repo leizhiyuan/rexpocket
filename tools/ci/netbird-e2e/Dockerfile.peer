@@ -1,0 +1,13 @@
+# A NetBird peer with an OpenSSH server, for the e2e test to reach by name.
+# The optional build secret "ca" is an extra CA bundle for apk, trusted only while installing
+# (for a build behind a TLS-intercepting proxy); up.sh passes it from $NETBIRD_E2E_BUILD_CA.
+FROM netbirdio/netbird:0.83.2
+RUN --mount=type=secret,id=ca,required=false \
+    cp /etc/ssl/certs/ca-certificates.crt /tmp/ca.orig \
+    && if [ -s /run/secrets/ca ]; then cat /run/secrets/ca >> /etc/ssl/certs/ca-certificates.crt; fi \
+    && apk add --no-cache openssh-server \
+    && mv /tmp/ca.orig /etc/ssl/certs/ca-certificates.crt \
+    && ssh-keygen -A \
+    && printf 'PasswordAuthentication no\nPermitRootLogin no\n' >> /etc/ssh/sshd_config
+COPY --chmod=0755 peer-entrypoint.sh /usr/local/bin/peer-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/peer-entrypoint.sh"]

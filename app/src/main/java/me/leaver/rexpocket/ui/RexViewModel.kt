@@ -19,6 +19,7 @@ import me.leaver.rexpocket.R
 import me.leaver.rexpocket.alerts.Alert
 import me.leaver.rexpocket.alerts.AlertTarget
 import me.leaver.rexpocket.alerts.Alerts
+import me.leaver.rexpocket.core.CtrlCKey
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
@@ -27,6 +28,7 @@ import me.leaver.rexpocket.core.Problem
 import me.leaver.rexpocket.core.SshCredentials
 import me.leaver.rexpocket.core.SshSettings
 import me.leaver.rexpocket.core.SshTunnel
+import me.leaver.rexpocket.core.TailnetBackend
 import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.Trouble
 import kotlinx.coroutines.flow.emptyFlow
@@ -42,13 +44,17 @@ import me.leaver.rexpocket.data.SYSTEM_FONT
 import me.leaver.rexpocket.data.TerminalFontState
 import me.leaver.rexpocket.data.downloadedTypeface
 import me.leaver.rexpocket.data.SavedHost
-import me.leaver.rexpocket.data.TailscaleSettings
+import me.leaver.rexpocket.data.TailnetSettings
 import me.leaver.rexpocket.core.ReportedFact
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.net.NetworkWatcher
+import me.leaver.rexpocket.net.NetbirdBox
+import me.leaver.rexpocket.net.NetbirdConfig
+import me.leaver.rexpocket.net.TailnetConfig
+import me.leaver.rexpocket.net.TailnetNode
+import me.leaver.rexpocket.net.TailnetStatus
 import me.leaver.rexpocket.net.TailscaleBox
 import me.leaver.rexpocket.net.TailscaleConfig
-import me.leaver.rexpocket.net.TailscaleStatus
 import me.leaver.rexpocket.update.InstallResult
 import me.leaver.rexpocket.update.UpdateState
 import me.leaver.rexpocket.update.Updater
@@ -60,6 +66,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -67,6 +74,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -92,6 +100,7 @@ sealed interface Route {
 class RexViewModel(app: Application) : AndroidViewModel(app) {
     private val store = HostStore(app)
     private val tailscaleBox = TailscaleBox(app)
+    private val netbirdBox = NetbirdBox(app)
     private val updater = Updater(app)
 
     /** The newer build the app found, from the check through to the downloaded APK. */
@@ -101,8 +110,38 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     val updateChannel: StateFlow<UpdateChannel> = updater.channel
     private var updateJob: Job? = null
     val hosts = MutableStateFlow(store.list())
-    val tailscale = MutableStateFlow(store.tailscale())
-    val tailscaleStatus: StateFlow<TailscaleStatus> = tailscaleBox.status
+    val tailnet = MutableStateFlow(store.tailnet())
+
+    /** The backends this build can run: Netbird only when it was built in. */
+    val tailnetBackends: List<TailnetBackend> by lazy {
+        TailnetBackend.entries.filter { it == TailnetBackend.Tailscale || NetbirdBox.available() }
+    }
+
+    /** The status of the backend that is selected, so the home screen follows the choice. */
+    val tailnetStatus: StateFlow<TailnetStatus> = combine(
+        tailscaleBox.status,
+        netbirdBox.status,
+        tailnet,
+    ) { tailscale, netbird, settings ->
+        if (settings.backend == TailnetBackend.Netbird) netbird else tailscale
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, TailnetStatus())
+
+    /** The node of [backend]: only one of them runs at a time. */
+    private fun nodeFor(backend: TailnetBackend): TailnetNode =
+        if (backend == TailnetBackend.Netbird) netbirdBox else tailscaleBox
+
+    /** The node of the selected backend. */
+    private val activeNode: TailnetNode get() = nodeFor(tailnet.value.backend)
+
+    /** The credentials and settings a backend's node starts with. */
+    private fun configFor(settings: TailnetSettings, setupKey: String = ""): TailnetConfig = when (settings.backend) {
+        TailnetBackend.Tailscale -> TailscaleConfig(authKey = "", hostname = settings.hostname)
+        TailnetBackend.Netbird -> NetbirdConfig(
+            setupKey = setupKey,
+            hostname = settings.hostname,
+            managementUrl = settings.managementUrl,
+        )
+    }
 
     /**
      * How the open tailnet host is reached right now: direct, through a peer relay, or through a
@@ -117,7 +156,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         val target = host?.takeIf { it.viaTailscale } ?: return
         pathJob?.cancel()
         pathJob = viewModelScope.launch {
-            val path = withContext(Dispatchers.IO) { tailscaleBox.probePath(target.host) }
+            val path = withContext(Dispatchers.IO) { activeNode.probePath(target.host) }
             _tailnetPath.value = path
             Diagnostics.event(CONN_TAG, "tailnet path to ${target.host}: $path")
         }
@@ -179,6 +218,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     val keyBar = MutableStateFlow(store.keyBarAlways())
     val keyBarShift = MutableStateFlow(store.keyBarShift())
     val keyBarAlt = MutableStateFlow(store.keyBarAlt())
+    val keyBarCtrlC = MutableStateFlow(store.keyBarCtrlC())
     private val attention = AttentionLedger()
     var host: SavedHost? = null
         private set
@@ -272,6 +312,11 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         keyBarAlt.value = on
     }
 
+    fun setKeyBarCtrlC(choice: CtrlCKey) {
+        store.setKeyBarCtrlC(choice)
+        keyBarCtrlC.value = choice
+    }
+
     fun setAlerts(on: Boolean) {
         Alerts.enabled.value = on
         val open = host
@@ -284,32 +329,35 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         // The pane goes back to the desktop's size; viewModelScope is already cancelled here.
         disconnectQuiet()
         tailscaleBox.stopAsync()
+        netbirdBox.stopAsync()
         super.onCleared()
     }
 
     /**
-     * Joins the tailnet under [hostname] (blank means the device's own name). The node starts here,
-     * not on the first connect, so the app can hand out the login link while the user is looking
-     * at the Tailscale row; a node that is already logged in just comes back up.
+     * Joins the tailnet of [backend] under [hostname] (blank means the device's own name). The node
+     * starts here, not on the first connect, so the app can hand out the login link while the user is
+     * looking at the Tailnet row; a node that is already logged in just comes back up. A Netbird node
+     * that has not joined yet needs its [setupKey]; the key is used once and never stored.
      */
-    fun joinTailnet(hostname: String) {
-        Diagnostics.event(CONN_TAG, "joining the tailnet as ${hostname.trim().ifBlank { "default" }}")
-        store.setTailscale(TailscaleSettings(enabled = true, hostname = hostname.trim()))
-        val next = store.tailscale()
-        val changed = next != tailscale.value
-        tailscale.value = next
-        if (changed) tailscaleBox.stopAsync()
-        startTailnet(next)
+    fun joinTailnet(backend: TailnetBackend, hostname: String, managementUrl: String = "", setupKey: String = "") {
+        Diagnostics.event(CONN_TAG, "joining the ${backend.storageKey} tailnet as ${hostname.trim().ifBlank { "default" }}")
+        val previous = tailnet.value
+        store.setTailnet(TailnetSettings(backend, enabled = true, hostname = hostname.trim(), managementUrl = managementUrl.trim()))
+        val next = store.tailnet()
+        tailnet.value = next
+        // Only one node runs: the one that was joined before gives way.
+        if (previous.enabled && previous.backend != backend) nodeFor(previous.backend).stopAsync()
+        startTailnet(next, setupKey)
     }
 
-    /** Brings the node up for [settings]; the login it already has makes this a plain restart. */
-    private fun startTailnet(settings: TailscaleSettings) {
+    /** Brings the selected node up for [settings]; the login it already has makes this a plain restart. */
+    private fun startTailnet(settings: TailnetSettings, setupKey: String = "") {
         tailnetJob?.cancel()
         _tailnetError.value = null
         tailnetJob = viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { tailscaleBox.start(TailscaleConfig(authKey = "", hostname = settings.hostname)) }
-                    .onFailure { _tailnetError.value = it.message ?: "Tailscale could not start" }
+                runCatching { nodeFor(settings.backend).start(configFor(settings, setupKey)) }
+                    .onFailure { _tailnetError.value = it.message ?: "The tailnet could not start" }
             }
         }
     }
@@ -317,11 +365,12 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     /** Leaves the tailnet: the node stops and its login stays in the app for the next join. */
     fun leaveTailnet() {
         Diagnostics.event(CONN_TAG, "leaving the tailnet")
+        val current = tailnet.value
         // The name is kept: rejoining later should not ask for it again.
-        store.setTailscale(TailscaleSettings(enabled = false, hostname = tailscale.value.hostname))
-        tailscale.value = store.tailscale()
+        store.setTailnet(current.copy(enabled = false))
+        tailnet.value = store.tailnet()
         tailnetJob?.cancel()
-        tailscaleBox.stopAsync()
+        nodeFor(current.backend).stopAsync()
     }
 
     fun saveHost(host: SavedHost) {
@@ -358,7 +407,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         store.setLastHost(target.id)
         val previousSession = store.lastSession(target.id)
         route.value = Route.Home
-        val settings = store.tailscale()
+        val settings = store.tailnet()
         val endpoint = target.endpoint()
         if (target.viaTailscale && !settings.enabled) {
             // The host is saved either way; without a joined node there is no route to it.
@@ -386,11 +435,10 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
             // host happens to be open.
             // The node has to be up before Rex is dialed, because the Rex connection itself is
             // what goes through it. Joining the tailnet takes a moment on the first connect.
+            val node = nodeFor(settings.backend)
             val socksPort = if (viaTailscale) {
                 val port = try {
-                    withContext(Dispatchers.IO) {
-                        tailscaleBox.start(TailscaleConfig(authKey = "", hostname = settings.hostname))
-                    }
+                    withContext(Dispatchers.IO) { node.start(configFor(settings)) }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -404,14 +452,14 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                 // The node reports Running only once its WireGuard session is up; dialing before
                 // that just gets a SOCKS failure, which looks like a broken tunnel.
                 val settled = withTimeoutOrNull(NODE_READY_MS) {
-                    tailscaleBox.status.first {
+                    node.status.first {
                         it.backendState in setOf("Running", "NeedsLogin", "NeedsMachineAuth", "Stopped")
                     }
                 }
                 // Running comes before the first netmap, and a MagicDNS name dialed before the
                 // netmap lists that peer fails in the node's DNS: that was the SOCKS error the first
                 // open showed for a moment. Waiting for the peer costs nothing once it is known.
-                if (settled?.backendState == "Running" && !tailscaleBox.awaitPeer(target.host, PEER_READY_MS)) {
+                if (settled?.backendState == "Running" && !node.awaitPeer(target.host, PEER_READY_MS)) {
                     Diagnostics.event(CONN_TAG, "${target.host} is not in the netmap yet; dialing anyway")
                 }
                 port
@@ -663,7 +711,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     fun restore() {
         // A phone that has joined a tailnet keeps the node up: the Tailscale row is the honest
         // answer to "am I in the tailnet", and a host on a tailnet can then be dialed at once.
-        if (tailscale.value.enabled) startTailnet(tailscale.value)
+        if (tailnet.value.enabled) startTailnet(tailnet.value)
         if (openedFromAlert || route.value != Route.Home || session != null) return
         val target = store.lastHost()?.let { store.find(it) } ?: return
         connect(target, resume = true)
@@ -723,7 +771,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     fun setForeground(visible: Boolean) {
         val returning = visible && !foreground
         foreground = visible
-        if (returning && host?.viaTailscale == true) viewModelScope.launch(Dispatchers.IO) { tailscaleBox.resetNetwork() }
+        if (returning && host?.viaTailscale == true) viewModelScope.launch(Dispatchers.IO) { activeNode.resetNetwork() }
         session?.setActive(visible)
     }
 
@@ -781,14 +829,14 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                     ),
                 )
             }
-            val node = tailscale.value
+            val node = tailnet.value
             add(
                 ReportedFact(
                     "tailnet",
                     when {
                         !node.enabled -> "off"
                         tailnetError.value != null -> "failed · ${tailnetError.value}"
-                        else -> "${tailscaleStatus.value.backendState.ifBlank { "starting" }} · node ${node.hostname.ifBlank { "default" }}"
+                        else -> "${node.backend.storageKey} · ${tailnetStatus.value.backendState.ifBlank { "starting" }} · node ${node.hostname.ifBlank { "default" }}"
                     },
                 ),
             )
@@ -812,7 +860,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                 add(it.host)
                 if (it.sshUser.isNotBlank()) add(it.sshUser)
             }
-            add(tailscale.value.hostname)
+            add(tailnet.value.hostname)
+            tailnet.value.managementUrl.takeIf { it.isNotBlank() }?.let { add(it) }
         }
         return Diagnostics.report(getApplication(), facts, secrets, limit)
     }

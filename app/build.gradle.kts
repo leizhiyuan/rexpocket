@@ -31,7 +31,9 @@ android {
         versionName = "0.1.3"
 
         // The tailnet and Ghostty libraries are built for arm64 only, so the APK must not claim the other ABIs either.
-        ndk.abiFilters += "arm64-v8a"
+        // The device tests on an x86_64 emulator build both libraries for x86_64 and pass
+        // -Prexpocket.abi=x86_64 (see .github/workflows/device-test.yml); nothing else sets it.
+        ndk.abiFilters += (findProperty("rexpocket.abi") as String?) ?: "arm64-v8a"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -127,6 +129,11 @@ gradle.taskGraph.whenReady {
     }
 }
 
+// Which tailnet library to link: the Tailscale-only one unless Netbird is asked for.
+val withNetbird = (findProperty("rexpocket.netbird") as String?).toBoolean()
+val tailnetLibrary = rootProject.file(if (withNetbird) "app/libs/tailnet-netbird.aar" else "app/libs/tailnet.aar")
+require(tailnetLibrary.isFile) { "${tailnetLibrary.name} is missing: build it with tools/build-tailnet.sh" }
+
 dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:core:1.7.0")
@@ -144,6 +151,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // The official tailscale.com tsnet library behind the tailnet/ Go module, see tools/build-tailnet.sh.
-    implementation(files("libs/tailnet.aar"))
+    // The tailnet library behind the tailnet/ Go module, see tools/build-tailnet.sh: the official
+    // tailscale.com tsnet library, and Netbird's embedded client when it is built in. Netbird adds
+    // about 30 MB to the APK, so it is a build choice: -Prexpocket.netbird=true links the library built
+    // with REXPOCKET_NETBIRD=1 instead.
+    implementation(files(tailnetLibrary))
 }

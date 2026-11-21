@@ -140,4 +140,13 @@ class HostAddressTest {
         assertNull(HostAddressParser.parse("host:notaport"))
         assertNull(HostAddressParser.parse("host:70000"))
     }
+
+    @Test
+    fun aNetbirdCloudNameIsOnTheTailnetOverTls() {
+        val host = HostAddressParser.parse("my-mac.netbird.cloud")!!
+        assertEquals("my-mac.netbird.cloud", host.host)
+        assertEquals(HostAddressParser.TLS_PORT, host.port)
+        assertEquals(true, host.viaTailscale)
+        assertEquals(false, HostAddressParser.parse("netbird.example.com")!!.viaTailscale)
+    }
 }

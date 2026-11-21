@@ -1,0 +1,130 @@
+name: device-test
+
+# Runs the instrumented tests (app/src/androidTest) on an x86_64 emulator, with KVM.
+#
+# The app ships arm64-v8a native code only. The x86_64 images' ARM translation (libndk_translation,
+# API 30 to 35) runs libghostty, but not the Go tailnet library: when the Netbird node starts, the
+# library executes `mrs x0, midr_el1` (Go CPU-feature detection), which the translator does not
+# implement, and the app dies with SIGILL. A real arm64 kernel traps and answers that read. So the test build here is an x86_64 one: both native libraries are built for x86_64 from
+# the same sources and pinned versions, and -Prexpocket.abi=x86_64 packs them. The release build and
+# the scripts it uses are unchanged; the x86_64 copies of the build scripts below exist only on the runner.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ccr-30ee0e05-w78lcg]
+
+permissions:
+  contents: read
+
+jobs:
+  device-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [30, 34]
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      # The arm64 libghostty is not built: this APK carries the x86_64 one.
+      GRADLE_ARGS: -x :app:buildGhostty -Prexpocket.netbird=true -Prexpocket.abi=x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Allow KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: Install the Android NDK and platform
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.1.0" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Build the Netbird library for x86_64
+        run: |
+          sed 's#-target android/arm64#-target android/amd64#' tools/build-tailnet.sh > tools/build-tailnet-x86_64.sh
+          grep -q 'android/amd64' tools/build-tailnet-x86_64.sh
+          REXPOCKET_NETBIRD=1 sh tools/build-tailnet-x86_64.sh
+          unzip -l app/libs/tailnet-netbird.aar | grep 'jni/'
+
+      - name: Build libghostty for x86_64
+        run: |
+          sed -e 's#aarch64-linux-android#x86_64-linux-android#g' -e 's#prefix-arm64#prefix-x86_64#' \
+              -e 's#jniLibs/arm64-v8a/#jniLibs/x86_64/#' tools/build-ghostty.py > tools/build-ghostty-x86_64.py
+          python3 tools/build-ghostty-x86_64.py
+          file app/src/main/jniLibs/x86_64/libghostty_jni.so
+
+      - name: Build the app and test APKs
+        run: |
+          ./gradlew --no-daemon $GRADLE_ARGS :app:assembleDebug :app:assembleDebugAndroidTest
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep 'lib/'
+
+      - name: Write the test script
+        # Each class runs on its own, so a native crash in one does not hide the results of the rest.
+        run: |
+          cat > "$RUNNER_TEMP/run-tests.sh" <<'SH'
+          set -u
+          adb shell getprop ro.product.cpu.abilist
+          adb shell getprop ro.dalvik.vm.native.bridge
+          adb shell getprop ro.build.version.sdk
+          mkdir -p out
+          status=0
+          for class in \
+              me.leaver.rexpocket.net.TailnetNodeInstrumentedTest \
+              me.leaver.rexpocket.data.FontPreferenceTest \
+              me.leaver.rexpocket.ui.TerminalImeTest \
+              me.leaver.rexpocket.ui.TerminalViewTest; do
+            adb logcat -c || true
+            if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \
+                -Pandroid.testInstrumentationRunnerArguments.class="$class"; then
+              echo "RESULT $class: passed"
+            else
+              echo "RESULT $class: FAILED"
+              status=1
+            fi
+            mkdir -p "out/$class"
+            cp -r app/build/reports/androidTests "out/$class/" 2>/dev/null || true
+            cp -r app/build/outputs/androidTest-results "out/$class/" 2>/dev/null || true
+            adb logcat -d > "out/$class/logcat.txt" || true
+            grep -E "ndk_translation|SIGILL|SIGSEGV|Fatal signal|FATAL EXCEPTION|UnsatisfiedLinkError" "out/$class/logcat.txt" | head -20 || true
+          done
+          exit $status
+          SH
+
+      - name: Run the instrumented tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: sh "$RUNNER_TEMP/run-tests.sh"
+
+      - name: Keep the test reports
+        if: always()
+        run: |
+          mkdir -p out
+          cp -r app/build/reports/androidTests out/ 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: device-test-reports-api${{ matrix.api-level }}
+          path: out/
+          if-no-files-found: warn

@@ -111,6 +111,56 @@ private val PLAIN_KEYS = mapOf(
     ';' to "semicolon", '\'' to "quote", ',' to "comma", '.' to "period", '/' to "slash", '`' to "backquote",
 )
 
+/**
+ * A symbol a phone keyboard keeps a page or two away, as the key that types it: the shifted ones -
+ * `|`, `~`, `_` - are their key with shift, so a held Ctrl or Alt still reaches them as a chord.
+ */
+fun symbolPress(symbol: Char): KeyPress? {
+    PLAIN_KEYS[symbol]?.takeIf { symbol.code > ' '.code }?.let { return KeyPress(it, symbol.code, text = symbol.toString()) }
+    val base = SHIFTED.entries.firstOrNull { (from, to) -> to == symbol && from != to }?.key ?: return null
+    val code = PLAIN_KEYS[base] ?: return null
+    return KeyPress(code, base.code, shifted = true, text = base.toString())
+}
+
+/**
+ * The keys of a desk keyboard the phone has none of: Android's key code for each, which the pane's
+ * terminal encodes in the modes the program set, as it does for a keyboard on the desk.
+ */
+enum class DeskKey(val keyCode: Int) {
+    Home(122), End(123), PageUp(92), PageDown(93), Insert(124), Delete(112),
+    F1(131), F2(132), F3(133), F4(134), F5(135), F6(136), F7(137), F8(138), F9(139), F10(140), F11(141), F12(142),
+}
+
+/** The modifiers the key row holds, as the meta state of an Android key event: shift, alt, ctrl. */
+fun KeyModifiers.metaState(): Int =
+    (if (get(Mod.Shift) != Latch.Off) META_SHIFT_ON else 0) or
+        (if (get(Mod.Alt) != Latch.Off) META_ALT_ON else 0) or
+        (if (get(Mod.Ctrl) != Latch.Off) META_CTRL_ON else 0)
+
+/** android.view.KeyEvent's flags, which libghostty's key encoder reads in the app. */
+const val META_SHIFT_ON = 0x1
+const val META_ALT_ON = 0x2
+const val META_CTRL_ON = 0x1000
+
+/**
+ * How the C-c key behaves: a tap sends it, as it always has; it needs a hold unless the program
+ * is working or waiting, so a stray tap cannot wipe a half-written prompt; or it is not on the bar
+ * at all, and Ctrl then `c` sends it.
+ */
+enum class CtrlCKey(val pref: String) {
+    Tap("tap"), Hold("hold"), Hidden("hidden");
+
+    /** The next choice, in the order the settings row steps through them. */
+    fun next(): CtrlCKey = entries[(ordinal + 1) % entries.size]
+
+    /** True when a plain tap sends C-c; otherwise the tap only says to hold it. */
+    fun tapSends(busy: Boolean): Boolean = this == Tap || busy
+
+    companion object {
+        fun fromPref(value: String?): CtrlCKey = entries.firstOrNull { it.pref == value } ?: Tap
+    }
+}
+
 /** True for an http or https link with a host: the only kind the app hands to a browser. */
 fun isWebLink(url: String): Boolean {
     val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return false

@@ -46,4 +46,20 @@ class TailnetPathTest {
             TailnetPath.from(0.0, "1.2.3.4:5", null, 2, "sfo", "timeout"),
         )
     }
+
+    @Test
+    fun aNetbirdRelayIsNamedByItsServer() {
+        assertEquals(
+            TailnetPath.Relay("rels://relay.example.com:443", 61.5),
+            TailnetPath.from(61.5, "", "", 0, "", null, relayServer = "rels://relay.example.com:443"),
+        )
+    }
+
+    @Test
+    fun aNetbirdDirectEndpointIsADirectPath() {
+        assertEquals(
+            TailnetPath.Direct("203.0.113.7:51820", 9.0),
+            TailnetPath.from(9.0, "203.0.113.7:51820", "", 0, "", null, relayServer = ""),
+        )
+    }
 }
