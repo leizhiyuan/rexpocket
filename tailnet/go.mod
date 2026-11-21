@@ -6,6 +6,7 @@ require (
 	github.com/netbirdio/netbird v0.83.2
 	github.com/things-go/go-socks5 v0.0.4
 	golang.org/x/mobile v0.0.0-20261011034528-197770444867
+	golang.org/x/net v0.61.0
 	golang.org/x/sys v0.49.0
 	tailscale.com v1.104.6
 )
@@ -140,7 +141,6 @@ require (
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
 	golang.org/x/mod v0.42.0 // indirect
-	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
