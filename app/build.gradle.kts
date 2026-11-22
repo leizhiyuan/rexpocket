@@ -80,6 +80,16 @@ android {
         // The unit tests run the real libghostty-vt on this computer; the Android classes the
         // session touches (a Handler for its debounce) only need to exist.
         unitTests.isReturnDefaultValues = true
+        // The Compose screen tests on the JVM (Robolectric, Roborazzi) read the app's resources.
+        // See docs/design/testing.md.
+        unitTests.isIncludeAndroidResources = true
+    }
+
+    // The screen tests in src/sharedTest run twice from one source: on the JVM (Robolectric) with
+    // the unit tests, quick to run on any computer, and on the emulator with the instrumented ones.
+    sourceSets {
+        getByName("test").java.srcDir("src/sharedTest/java")
+        getByName("androidTest").java.srcDir("src/sharedTest/java")
     }
 
     packaging {
@@ -131,6 +141,25 @@ tasks.withType<Test>().configureEach {
     systemProperty("java.library.path", hostLibraryDir.absolutePath)
 }
 
+// Robolectric's Android for the JVM screen tests comes through Gradle's own repositories, cached
+// like any other dependency, instead of Robolectric fetching it from Maven Central as the tests
+// run. One Android version: the one the tests' @Config names. See docs/design/testing.md.
+val robolectricAndroid: Configuration by configurations.creating { isTransitive = false }
+val robolectricJars by tasks.registering(Sync::class) {
+    from(robolectricAndroid)
+    into(layout.buildDirectory.dir("robolectric"))
+}
+tasks.withType<Test>().configureEach {
+    dependsOn(robolectricJars)
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", layout.buildDirectory.dir("robolectric").get().asFile.absolutePath)
+    // Roborazzi writes each screenshot the tests take to build/outputs/roborazzi, for review.
+    systemProperty("roborazzi.test.record", "true")
+    // Real rendering, so screenshots show the screen and layout is measured as on a phone.
+    systemProperty("robolectric.graphicsMode", "NATIVE")
+    systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+}
+
 // A release build is only made with the release key: with no key set it stops before anything is
 // signed, instead of producing an APK that cannot update the installed app.
 gradle.taskGraph.whenReady {
@@ -148,6 +177,15 @@ require(tailnetLibrary.isFile) { "${tailnetLibrary.name} is missing: build it wi
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    // Screens driven and captured on the JVM: see docs/design/testing.md.
+    testImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.test:core:1.7.0")
+    testImplementation("androidx.test.ext:junit:1.3.0")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    robolectricAndroid("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.40.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.40.1")
     androidTestImplementation("androidx.test:core:1.7.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")

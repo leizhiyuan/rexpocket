@@ -22,6 +22,7 @@ import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.CtrlCKey
 import me.leaver.rexpocket.core.DoubleTapAction
 import me.leaver.rexpocket.core.GestureSettings
+import me.leaver.rexpocket.core.KeyArrangement
 import me.leaver.rexpocket.core.LongPressAction
 import me.leaver.rexpocket.core.TapAction
 import kotlin.math.roundToInt
@@ -33,6 +34,48 @@ import kotlin.math.roundToInt
 internal fun <T> next(options: List<T>, current: T): T = options[(options.indexOf(current) + 1) % options.size]
 
 private enum class Timing { DoubleTap, LongPress }
+
+/** The pages of Settings › Terminal controls: the controls, and Arrange keys opened from them. */
+internal enum class ControlsPage { Controls, ArrangeKeys }
+
+/**
+ * Terminal controls and its Arrange keys page, as Settings opens them: [page] is the one showing,
+ * if any. Arranging the keys goes back to the controls it was opened from. The values are the app's
+ * own (the view model's, collected in RexApp); the UI tests show this same function with the same
+ * view model, so what they see is what a person sees. See docs/design/testing.md.
+ */
+@Composable
+internal fun TerminalControlsPages(
+    page: ControlsPage?,
+    onPage: (ControlsPage?) -> Unit,
+    gestures: GestureSettings,
+    onGestures: (GestureSettings) -> Unit,
+    keyBar: Boolean,
+    onKeyBar: (Boolean) -> Unit,
+    keyBarCtrlC: CtrlCKey,
+    onKeyBarCtrlC: (CtrlCKey) -> Unit,
+    keyArrangement: KeyArrangement,
+    onKeyArrangement: (KeyArrangement) -> Unit,
+) {
+    when (page) {
+        ControlsPage.Controls -> ControlsSheet(
+            onDismiss = { onPage(null) },
+            gestures = gestures,
+            onGestures = onGestures,
+            keyBar = keyBar,
+            onKeyBar = onKeyBar,
+            keyBarCtrlC = keyBarCtrlC,
+            onKeyBarCtrlC = onKeyBarCtrlC,
+            onArrangeKeys = { onPage(ControlsPage.ArrangeKeys) },
+        )
+        ControlsPage.ArrangeKeys -> ArrangeKeysSheet(
+            arrangement = keyArrangement,
+            onArrangement = onKeyArrangement,
+            onDismiss = { onPage(ControlsPage.Controls) },
+        )
+        null -> Unit
+    }
+}
 
 @Composable
 internal fun ControlsSheet(

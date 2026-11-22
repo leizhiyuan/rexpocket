@@ -91,6 +91,7 @@ jobs:
               me.leaver.rexpocket.ui.FullScreenTest \
               me.leaver.rexpocket.ui.KeyBarLayoutInstrumentedTest \
               me.leaver.rexpocket.ui.ArrangeKeysTest \
+              me.leaver.rexpocket.ui.TerminalControlsTest \
               me.leaver.rexpocket.ui.ClosedPaneTest; do
             adb logcat -c || true
             if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \
@@ -131,4 +132,31 @@ jobs:
         with:
           name: device-test-reports-api${{ matrix.api-level }}
           path: out/
+          if-no-files-found: warn
+
+      # The same screen tests on the JVM (Robolectric), and the screenshots for review (Roborazzi):
+      # see docs/design/testing.md. Once per run, not per emulator. Robolectric's Android 15 wants Java 21.
+      - uses: actions/setup-java@v4
+        if: always() && matrix.api-level == 34
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Screen tests and screenshots on the JVM
+        if: always() && matrix.api-level == 34
+        run: |
+          # These tests do not load libghostty, so the host build of it is skipped.
+          mkdir -p native/.build/host
+          ./gradlew --no-daemon $GRADLE_ARGS -x :app:buildGhosttyHost :app:testDebugUnitTest \
+            --tests 'me.leaver.rexpocket.ui.ArrangeKeysTest' \
+            --tests 'me.leaver.rexpocket.ui.TerminalControlsTest' \
+            --tests 'me.leaver.rexpocket.ui.ScreenshotsTest'
+
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.api-level == 34
+        with:
+          name: screenshots
+          path: |
+            app/build/outputs/roborazzi/
+            app/build/reports/tests/testDebugUnitTest/
           if-no-files-found: warn

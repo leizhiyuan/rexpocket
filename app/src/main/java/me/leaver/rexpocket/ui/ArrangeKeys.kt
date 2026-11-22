@@ -94,6 +94,7 @@ private fun ArrangeRow(barKey: BarKey, shown: Boolean, first: Boolean, last: Boo
         val dragLabel = stringResource(R.string.arrange_drag, name)
         Box(
             Modifier.size(48.dp)
+                .testTag("arrange-handle-${barKey.pref}")
                 .semantics { contentDescription = dragLabel }
                 .pointerInput(rowPx) {
                     detectVerticalDragGestures(

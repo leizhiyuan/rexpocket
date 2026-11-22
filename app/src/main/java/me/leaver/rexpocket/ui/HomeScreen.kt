@@ -202,8 +202,7 @@ internal fun HomeScreen(
     var editing by remember { mutableStateOf<SavedHost?>(null) }
     var creating by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
-    var controls by remember { mutableStateOf(false) }
-    var arrange by remember { mutableStateOf(false) }
+    var controlsPage by remember { mutableStateOf<ControlsPage?>(null) }
     var diagnostics by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(Diagnostics.capture(context) != null) }
     var menuHost by remember { mutableStateOf<SavedHost?>(null) }
@@ -420,7 +419,7 @@ internal fun HomeScreen(
             onAlerts = toggleAlerts,
             onControls = {
                 settings = false
-                controls = true
+                controlsPage = ControlsPage.Controls
             },
             onFontSettings = onFontSettings,
             recording = recording,
@@ -435,33 +434,18 @@ internal fun HomeScreen(
         )
     }
 
-    if (controls) {
-        ControlsSheet(
-            onDismiss = { controls = false },
-            gestures = gestures,
-            onGestures = onGestures,
-            keyBar = keyBar,
-            onKeyBar = onKeyBar,
-            keyBarCtrlC = keyBarCtrlC,
-            onKeyBarCtrlC = onKeyBarCtrlC,
-            onArrangeKeys = {
-                controls = false
-                arrange = true
-            },
-        )
-    }
-
-    // Arranging the keys goes back to the controls it was opened from.
-    if (arrange) {
-        ArrangeKeysSheet(
-            arrangement = keyArrangement,
-            onArrangement = onKeyArrangement,
-            onDismiss = {
-                arrange = false
-                controls = true
-            },
-        )
-    }
+    TerminalControlsPages(
+        page = controlsPage,
+        onPage = { controlsPage = it },
+        gestures = gestures,
+        onGestures = onGestures,
+        keyBar = keyBar,
+        onKeyBar = onKeyBar,
+        keyBarCtrlC = keyBarCtrlC,
+        onKeyBarCtrlC = onKeyBarCtrlC,
+        keyArrangement = keyArrangement,
+        onKeyArrangement = onKeyArrangement,
+    )
 
     if (diagnostics) {
         DiagnosticsSheet(
