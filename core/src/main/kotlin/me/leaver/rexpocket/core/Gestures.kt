@@ -66,9 +66,13 @@ data class GestureSettings(
     )
 
     companion object {
-        /** The ranges the settings offer, a keyboard app's kind of range. */
-        val DOUBLE_TAP_RANGE = 150..600
-        val LONG_PRESS_RANGE = 200..1500
+        /**
+         * The ranges the settings offer, a keyboard app's kind of range. The floors are as quick as
+         * a deliberate finger gets: a double tap's two taps 100 ms apart, a press held 150 ms. The
+         * phone's own times (about 300 and 400 ms) sit well inside both.
+         */
+        val DOUBLE_TAP_RANGE = 100..600
+        val LONG_PRESS_RANGE = 150..1500
 
         /**
          * The settings as stored. A double tap with no stored choice takes the one of the switch that

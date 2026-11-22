@@ -206,8 +206,10 @@
     <string name="gesture_double_tap">双击</string>
     <string name="gesture_long_press">长按</string>
     <string name="gesture_wait">等待双击</string>
-    <string name="gesture_on">开启：单击稍后生效</string>
-    <string name="gesture_off">关闭：单击立即生效</string>
+    <string name="gesture_on">开启</string>
+    <string name="gesture_off">关闭</string>
+    <string name="gesture_wait_on">单击会稍等，看是否有第二次点击</string>
+    <string name="gesture_wait_off">单击立即生效</string>
     <string name="gesture_double_tap_time">双击间隔</string>
     <string name="gesture_double_tap_time_hint">第二次点击必须在多长时间内跟上第一次。越长越容易双击；开启“等待双击”时，单击也会等待这么久。</string>
     <string name="gesture_long_press_time">长按时间</string>

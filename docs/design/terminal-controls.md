@@ -32,8 +32,8 @@ or Back.
 | Double tap | Full screen · Toggle keyboard · Nothing | Full screen |
 | Long press | Select text · Full screen · Toggle keyboard | Select text |
 | Wait for a double tap before a tap acts | on · off | off |
-| Double-tap window | 150–600 ms, or the phone's | the phone's (`ViewConfiguration`, usually 300 ms) |
-| Long-press time | 200–1500 ms, or the phone's | the phone's (usually 400 ms; the system accessibility setting changes it) |
+| Double-tap window | 100–600 ms, or the phone's | the phone's (`ViewConfiguration`, usually 300 ms) |
+| Long-press time | 150–1500 ms, or the phone's | the phone's (usually 400 ms; the system accessibility setting changes it) |
 
 Things every option keeps:
 
@@ -92,10 +92,24 @@ the pane and needs no screen keyboard.
 
 Today's settings stay, and move into the controls screen: keep the key bar with a desk keyboard,
 show Shift, show Alt, and C-c (tap · hold unless busy · hidden). The small pill gains the
-full-screen key, just past the keyboard key: the pill shows the stick and the keyboard key as
-before and scrolls sideways to it, partly visible as a hint, the way the wide pill hints at its
-further keys. The stick takes its own drags on the initial pass, before the scroll sees them, so
-scrolling never steals a stick gesture.
+full-screen key, just past the keyboard key. The stick takes its own drags on the initial pass,
+before the scroll sees them, so scrolling never steals a stick gesture.
+
+How the two pills share the width (`keyBarWidths`, JVM-tested at phone widths):
+
+1. When every key fits (landscape, a tablet), nothing scrolls: the small pill shows the stick, the
+   keyboard key and the full-screen key whole, and the wide pill takes the rest.
+2. Otherwise the wide pill scrolls, and its last visible key must show only in part - 18 to 38 dp
+   of its 48, under a 16 dp fade - as the hint that more keys follow. With the small pill whole
+   beside it that usually falls out (411 dp: 4 keys and 31 dp of the fifth), and the full-screen key
+   shows whole.
+3. When it does not, the small pill gives the wide pill just enough of the full-screen key to make
+   the wide pill's hint 20 dp: a little more of the same key, or a sliver of the next. The
+   full-screen key then shows in part (22 to 50 dp), scrolled to on a swipe: both pills hint at
+   once (393 dp: 4 keys and 20 dp; 45 dp of the full-screen key).
+
+Only the bar's width and the set of keys (Shift, Alt, C-c shown or not) decide it, never typing or
+the keyboard, so the bar moves only on a rotation or a settings change.
 
 The ⋮ menu keeps "Full screen": the pill key is a quick way for people who use the bar; the menu
 is where people look for what a screen can do, and it stays reachable when the bar is hidden by a
@@ -146,7 +160,10 @@ sheet with two groups:
 
 - **Gestures**: Tap, Double tap, Long press, Wait for double tap, Double-tap window, Long-press
   time. Choice rows step through their options on tap and stay open, as the C-c row does; the two
-  times open a slider with "Use the phone's".
+  times open a slider with "Use the phone's". "Wait for a double tap" says what it does in a line
+  under its label ("A tap waits in case a second follows" / "A tap acts at once"), its detail
+  just On or Off. Every sheet row wraps - a label to three lines, a detail to two, at most 152 dp
+  wide - so nothing is cut off on a narrow phone or with large text.
 - **Key bar**: With a desk keyboard, Shift, Alt, C-c.
 
 Stored in the app's shared preferences beside the existing keys:
@@ -175,5 +192,6 @@ keeps its own setting. Values out of range are clamped; unknown strings fall bac
   and out of full screen.
 - Instrumented: `TerminalViewTest` for the real view (wait mode, the person's long-press time, a
   long press set to act, a link still offered), `FullScreenTest` (menu, pill key, double tap,
-  Back). Whether a tap really closes the screen keyboard in full screen is covered by the pure rule
+  Back), `KeyBarLayoutInstrumentedTest` (the full-screen key whole at 411 and 891 dp, both pills
+  hinting at 426 dp). Whether a tap really closes the screen keyboard in full screen is covered by the pure rule
   only: the CI emulator reports a desk keyboard and shows no screen keyboard.

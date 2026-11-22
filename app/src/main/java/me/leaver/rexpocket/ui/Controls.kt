@@ -69,6 +69,7 @@ internal fun ControlsSheet(
             ) { onGestures(gestures.copy(longPress = next(LongPressAction.entries, gestures.longPress))) }
             SheetItem(
                 label = stringResource(R.string.gesture_wait), icon = R.drawable.ic_settings,
+                supporting = stringResource(if (gestures.waitForDoubleTap) R.string.gesture_wait_on else R.string.gesture_wait_off),
                 detail = stringResource(if (gestures.waitForDoubleTap) R.string.gesture_on else R.string.gesture_off),
                 keepOpen = true,
             ) { onGestures(gestures.copy(waitForDoubleTap = !gestures.waitForDoubleTap)) }

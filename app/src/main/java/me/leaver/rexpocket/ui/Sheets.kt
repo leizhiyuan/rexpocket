@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -188,13 +190,19 @@ private fun GroupRows(scope: SheetScope, inset: Dp, content: @Composable SheetSc
     }
 }
 
+/** The most a row's detail takes, so a long one wraps rather than crowding out the label. */
+private val DETAIL_MAX = 152.dp
+
 /** Where a row's text starts when it has an icon: the margin, the 24 dp slot and its gap. */
 private val ICON_INSET = 56.dp
 
 /**
  * One row of a sheet: an icon in a 24 dp slot, the label, a detail or a check at the end. The row is
- * 56 dp high, the platform's one-line list item. A group's rows either all have icons or none do,
- * so their labels share one keyline.
+ * at least 56 dp high, the platform's one-line list item, and grows as its text wraps: a label takes
+ * up to three lines and a detail two, so neither is cut off on a narrow phone or with large text.
+ * The detail keeps to the end, at most [DETAIL_MAX] wide, so the label always has the most room.
+ * [supporting] is a line under the label that says what the setting does. A group's rows either all
+ * have icons or none do, so their labels share one keyline.
  *
  * A row that only changes what its own detail shows - a switch, a pick between two - stays open
  * ([keepOpen]): closing the sheet would take away the one place the change is visible.
@@ -207,30 +215,43 @@ internal fun SheetScope.SheetItem(
     marked: Boolean = false,
     icon: Int? = null,
     keepOpen: Boolean = false,
+    supporting: String? = null,
     onClick: () -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp)
             .clickable { if (keepOpen) onClick() else close(onClick) }
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
             Glyph(icon, if (color == Colors.ink) Colors.muted else color, size = 24.dp)
             Spacer(Modifier.width(16.dp))
         }
-        Text(
-            label,
-            color = color,
-            fontSize = TextStyles.body,
-            fontWeight = if (marked) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                label,
+                color = color,
+                fontSize = TextStyles.body,
+                fontWeight = if (marked) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (supporting != null) {
+                Text(supporting, color = Colors.muted, fontSize = TextStyles.label, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            }
+        }
         if (detail != null) {
             Spacer(Modifier.width(12.dp))
-            Text(detail, color = Colors.muted, fontSize = TextStyles.label, maxLines = 1)
+            Text(
+                detail,
+                color = Colors.muted,
+                fontSize = TextStyles.label,
+                textAlign = TextAlign.End,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = DETAIL_MAX),
+            )
         }
         if (marked) {
             Spacer(Modifier.width(12.dp))

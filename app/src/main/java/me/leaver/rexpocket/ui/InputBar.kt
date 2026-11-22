@@ -22,6 +22,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -131,122 +132,132 @@ internal fun KeyBar(
     val holdHint = stringResource(R.string.key_ctrl_c_hold_hint)
     val scroll = rememberScrollState()
     val pill = RoundedCornerShape(50)
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(GROUP_GAP),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.weight(1f).height(BAR_HEIGHT).floating(pill)) {
-            Row(
-                Modifier.fillMaxSize().horizontalScroll(scroll).padding(horizontal = PILL_PAD),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val key = Modifier.size(KEY_SIZE)
-                Key(stringResource(R.string.key_escape), key) { onKey(KeyPress("escape", 0), "") }
-                // Always named for the chord it sends; red says the program would take it as a stop.
-                if (ctrlC != CtrlCKey.Hidden) {
-                    val interrupt = { onKey(KeyPress("key_c", 'c'.code, text = "c"), "ctrl") }
+    // The keys of the wide pill, as below; with the bar's width they decide how the two pills share
+    // it (keyBarWidths), so both show their hint and the full-screen key shows whole where it fits.
+    val keyCount = 8 + listOf(ctrlC != CtrlCKey.Hidden, showShift, showAlt).count { it }
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+        val widths = keyBarWidths(maxWidth.value, keyCount, onFullScreen != null, KEY_SIZE.value, PILL_PAD.value, GROUP_GAP.value)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(GROUP_GAP),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // The key pill takes what the small pill leaves, so together they always fill the bar.
+            Box(Modifier.weight(1f).height(BAR_HEIGHT).floating(pill).testTag(KEY_PILL_TAG)) {
+                Row(
+                    Modifier.fillMaxSize().horizontalScroll(scroll).padding(horizontal = PILL_PAD),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val key = Modifier.size(KEY_SIZE)
+                    Key(stringResource(R.string.key_escape), key) { onKey(KeyPress("escape", 0), "") }
+                    // Always named for the chord it sends; red says the program would take it as a stop.
+                    if (ctrlC != CtrlCKey.Hidden) {
+                        val interrupt = { onKey(KeyPress("key_c", 'c'.code, text = "c"), "ctrl") }
+                        Key(
+                            stringResource(R.string.key_ctrl_c),
+                            key,
+                            color = if (busy) Colors.danger else Colors.ink,
+                            onLongClick = if (ctrlC == CtrlCKey.Hold) {
+                                {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    interrupt()
+                                }
+                            } else {
+                                null
+                            },
+                        ) {
+                            // Held unless the program is busy: then a tap is still the quick stop.
+                            if (ctrlC.tapSends(busy)) interrupt() else toast(context, holdHint)
+                        }
+                    }
+                    Key(stringResource(R.string.key_tab), key, icon = R.drawable.ic_tab_key) { onKey(KeyPress("tab", 0), "") }
                     Key(
-                        stringResource(R.string.key_ctrl_c),
+                        stringResource(R.string.action_enter),
                         key,
-                        color = if (busy) Colors.danger else Colors.ink,
-                        onLongClick = if (ctrlC == CtrlCKey.Hold) {
-                            {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                interrupt()
-                            }
-                        } else {
-                            null
+                        icon = R.drawable.ic_return,
+                        onLongClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onNewLine()
                         },
-                    ) {
-                        // Held unless the program is busy: then a tap is still the quick stop.
-                        if (ctrlC.tapSends(busy)) interrupt() else toast(context, holdHint)
+                    ) { onKey(KeyPress("enter", 0), "") }
+                    CtrlKey(mods[Mod.Ctrl], key, onTap = { onMod(Mod.Ctrl) }) { letter ->
+                        onKey(KeyPress("key_$letter", letter.code, text = letter.toString()), "ctrl")
+                    }
+                    for (mod in listOfNotNull(if (showShift) Mod.Shift else null, if (showAlt) Mod.Alt else null)) {
+                        val isShift = mod == Mod.Shift
+                        val latch = mods[mod]
+                        val description = modState(latch)
+                        Key(
+                            label = stringResource(if (isShift) R.string.key_shift else R.string.key_alt),
+                            modifier = key.semantics { stateDescription = description },
+                            color = modInk(latch),
+                            plate = modPlate(latch),
+                            icon = if (isShift) R.drawable.ic_shift else null,
+                        ) { onMod(mod) }
+                    }
+                    MoreKeys(key, onDesk = onDeskKey, onSymbol = { symbol -> symbolPress(symbol)?.let { onKey(it, "") } })
+                    Key(stringResource(R.string.key_paste), key, icon = R.drawable.ic_paste) { onPaste() }
+                    Key(
+                        stringResource(R.string.upload_attach),
+                        key,
+                        icon = R.drawable.ic_attach_file,
+                        color = if (attachReady) Colors.ink else Colors.muted,
+                    ) { if (attachReady) onAttach() }
+                    // A slash opens pi's command menu; the stick then walks it.
+                    Key("/", key) { onKey(KeyPress("slash", '/'.code, text = "/"), "") }
+                }
+                // The pill goes on under this fade, so the key part under it reads as more to swipe to.
+                if (scroll.canScrollForward) {
+                    Box(
+                        Modifier.align(Alignment.CenterEnd).width(KEY_FADE).fillMaxHeight()
+                            .background(Brush.horizontalGradient(listOf(Colors.clear, Colors.raised))),
+                    )
+                }
+                if (scroll.canScrollBackward) {
+                    Box(
+                        Modifier.align(Alignment.CenterStart).width(KEY_FADE).fillMaxHeight()
+                            .background(Brush.horizontalGradient(listOf(Colors.raised, Colors.clear))),
+                    )
+                }
+            }
+            // The stick and the keyboard key, as always; past them the full-screen key, whole where the
+            // bar has room, otherwise a part of it showing at the edge as the wide pill shows its further
+            // keys, a swipe away. The stick takes its own drags before this scroll sees them, so steering
+            // never scrolls the pill. Whole, the pill wraps its keys, so rounding the widths to pixels
+            // never leaves it a pixel short and scrolling.
+            val rest = rememberScrollState()
+            Box(
+                Modifier.height(BAR_HEIGHT)
+                    .then(if (widths.fullScreenWhole || onFullScreen == null) Modifier else Modifier.width(widths.rest.dp))
+                    .floating(pill)
+                    .testTag(REST_PILL_TAG),
+            ) {
+                Row(
+                    Modifier.fillMaxHeight().horizontalScroll(rest).padding(horizontal = PILL_PAD),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ArrowStick(Modifier.size(KEY_SIZE)) { code -> onKey(KeyPress(code, 0), "") }
+                    Key(
+                        stringResource(R.string.key_keyboard),
+                        Modifier.size(KEY_SIZE),
+                        icon = if (imeUp) R.drawable.ic_keyboard_hide else R.drawable.ic_keyboard,
+                    ) { onKeyboard() }
+                    if (onFullScreen != null) {
+                        Key(stringResource(R.string.action_full_screen), Modifier.size(KEY_SIZE), icon = R.drawable.ic_fullscreen) { onFullScreen() }
                     }
                 }
-                Key(stringResource(R.string.key_tab), key, icon = R.drawable.ic_tab_key) { onKey(KeyPress("tab", 0), "") }
-                Key(
-                    stringResource(R.string.action_enter),
-                    key,
-                    icon = R.drawable.ic_return,
-                    onLongClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onNewLine()
-                    },
-                ) { onKey(KeyPress("enter", 0), "") }
-                CtrlKey(mods[Mod.Ctrl], key, onTap = { onMod(Mod.Ctrl) }) { letter ->
-                    onKey(KeyPress("key_$letter", letter.code, text = letter.toString()), "ctrl")
+                if (rest.canScrollForward) {
+                    Box(
+                        Modifier.align(Alignment.CenterEnd).width(16.dp).fillMaxHeight()
+                            .background(Brush.horizontalGradient(listOf(Colors.clear, Colors.raised))),
+                    )
                 }
-                for (mod in listOfNotNull(if (showShift) Mod.Shift else null, if (showAlt) Mod.Alt else null)) {
-                    val isShift = mod == Mod.Shift
-                    val latch = mods[mod]
-                    val description = modState(latch)
-                    Key(
-                        label = stringResource(if (isShift) R.string.key_shift else R.string.key_alt),
-                        modifier = key.semantics { stateDescription = description },
-                        color = modInk(latch),
-                        plate = modPlate(latch),
-                        icon = if (isShift) R.drawable.ic_shift else null,
-                    ) { onMod(mod) }
+                if (rest.canScrollBackward) {
+                    Box(
+                        Modifier.align(Alignment.CenterStart).width(16.dp).fillMaxHeight()
+                            .background(Brush.horizontalGradient(listOf(Colors.raised, Colors.clear))),
+                    )
                 }
-                MoreKeys(key, onDesk = onDeskKey, onSymbol = { symbol -> symbolPress(symbol)?.let { onKey(it, "") } })
-                Key(stringResource(R.string.key_paste), key, icon = R.drawable.ic_paste) { onPaste() }
-                Key(
-                    stringResource(R.string.upload_attach),
-                    key,
-                    icon = R.drawable.ic_attach_file,
-                    color = if (attachReady) Colors.ink else Colors.muted,
-                ) { if (attachReady) onAttach() }
-                // A slash opens pi's command menu; the stick then walks it.
-                Key("/", key) { onKey(KeyPress("slash", '/'.code, text = "/"), "") }
-            }
-            // The pill goes on under this fade, so the key half under it reads as more to swipe to.
-            if (scroll.canScrollForward) {
-                Box(
-                    Modifier.align(Alignment.CenterEnd).width(28.dp).fillMaxHeight()
-                        .background(Brush.horizontalGradient(listOf(Colors.clear, Colors.raised))),
-                )
-            }
-            if (scroll.canScrollBackward) {
-                Box(
-                    Modifier.align(Alignment.CenterStart).width(28.dp).fillMaxHeight()
-                        .background(Brush.horizontalGradient(listOf(Colors.raised, Colors.clear))),
-                )
-            }
-        }
-        // The stick and the keyboard key, as always; past them the full-screen key, a part of it
-        // showing at the edge as the wide pill shows its further keys, a swipe away. The stick takes
-        // its own drags before this scroll sees them, so steering never scrolls the pill.
-        val rest = rememberScrollState()
-        Box(
-            Modifier.height(BAR_HEIGHT)
-                .then(if (onFullScreen != null) Modifier.width(KEY_SIZE * 2 + PILL_PAD * 2 + PEEK) else Modifier)
-                .floating(pill),
-        ) {
-            Row(
-                Modifier.fillMaxHeight().horizontalScroll(rest).padding(horizontal = PILL_PAD),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ArrowStick(Modifier.size(KEY_SIZE)) { code -> onKey(KeyPress(code, 0), "") }
-                Key(
-                    stringResource(R.string.key_keyboard),
-                    Modifier.size(KEY_SIZE),
-                    icon = if (imeUp) R.drawable.ic_keyboard_hide else R.drawable.ic_keyboard,
-                ) { onKeyboard() }
-                if (onFullScreen != null) {
-                    Key(stringResource(R.string.action_full_screen), Modifier.size(KEY_SIZE), icon = R.drawable.ic_fullscreen) { onFullScreen() }
-                }
-            }
-            if (rest.canScrollForward) {
-                Box(
-                    Modifier.align(Alignment.CenterEnd).width(16.dp).fillMaxHeight()
-                        .background(Brush.horizontalGradient(listOf(Colors.clear, Colors.raised))),
-                )
-            }
-            if (rest.canScrollBackward) {
-                Box(
-                    Modifier.align(Alignment.CenterStart).width(16.dp).fillMaxHeight()
-                        .background(Brush.horizontalGradient(listOf(Colors.raised, Colors.clear))),
-                )
             }
         }
     }
@@ -606,8 +617,12 @@ private val KEY_HEIGHT = KEY_SIZE
 private val PILL_PAD = 4.dp
 private val GROUP_GAP = 8.dp
 
-/** How much of the full-screen key shows past the keyboard key: enough to read as more to swipe to. */
-private val PEEK = 18.dp
+/** The wide pill's fade at a scrolled edge: narrower than a hint, so a part of the key shows clear. */
+private val KEY_FADE = 16.dp
+
+/** Test tags of the bar's two pills. */
+internal const val KEY_PILL_TAG = "key-pill"
+internal const val REST_PILL_TAG = "rest-pill"
 private val KEY_PAD = 2.dp
 
 private val STICK_FACE = 96.dp

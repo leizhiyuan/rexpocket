@@ -247,7 +247,15 @@ class GesturesTest {
     @Test
     fun storedValuesAreReadAndTimesKeptInRange() {
         val s = GestureSettings.fromStored("toggle", "keyboard", "full_screen", true, 5_000, 50, true)
-        assertEquals(GestureSettings(TapAction.Toggle, DoubleTapAction.Keyboard, LongPressAction.FullScreen, true, 600, 200), s)
+        assertEquals(GestureSettings(TapAction.Toggle, DoubleTapAction.Keyboard, LongPressAction.FullScreen, true, 600, 150), s)
+        // Under the floors: clamped up to them.
+        val quick = GestureSettings.fromStored(null, null, null, false, 60, 100, null)
+        assertEquals(100 to 150, quick.doubleTapMs to quick.longPressMs)
+        // The floors themselves, and times the old floors (150 and 200 ms) let through, stay as stored.
+        val floors = GestureSettings.fromStored(null, null, null, false, 100, 150, null)
+        assertEquals(100 to 150, floors.doubleTapMs to floors.longPressMs)
+        val old = GestureSettings.fromStored(null, null, null, false, 150, 200, null)
+        assertEquals(150 to 200, old.doubleTapMs to old.longPressMs)
         val own = GestureSettings.fromStored("nothing", "nothing", "keyboard", false, 250, 700, null)
         assertEquals(GestureSettings(TapAction.Nothing, DoubleTapAction.Nothing, LongPressAction.Keyboard, false, 250, 700), own)
         assertEquals(0, GestureSettings.fromStored(null, null, null, false, -3, 0, null).doubleTapMs)

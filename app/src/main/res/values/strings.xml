@@ -208,8 +208,10 @@
     <string name="gesture_double_tap">Double tap</string>
     <string name="gesture_long_press">Long press</string>
     <string name="gesture_wait">Wait for a double tap</string>
-    <string name="gesture_on">On: a tap acts after a pause</string>
-    <string name="gesture_off">Off: a tap acts at once</string>
+    <string name="gesture_on">On</string>
+    <string name="gesture_off">Off</string>
+    <string name="gesture_wait_on">A tap waits in case a second follows</string>
+    <string name="gesture_wait_off">A tap acts at once</string>
     <string name="gesture_double_tap_time">Double-tap time</string>
     <string name="gesture_double_tap_time_hint">How soon the second tap must follow the first. Longer is easier to hit; it is also how long a tap waits when it waits for a double tap.</string>
     <string name="gesture_long_press_time">Long-press time</string>
