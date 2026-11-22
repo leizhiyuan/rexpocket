@@ -53,12 +53,21 @@ data class PocketState(
     val activeSessionId: String? = null,
     val view: SessionView? = null,
     val views: Map<String, SessionView> = emptyMap(),
-    /** What each pane's program says it is doing, summarized; kept current by Rex's events. */
+    /**
+     * What each pane's program says it is doing, summed up in Rex's Activity order (see
+     * [summarizeStatus]); kept current by Rex's events.
+     */
     val blockStatus: Map<String, ProgramRecord> = emptyMap(),
     /**
-     * When the phone saw each pane's summarized state begin, in [System.currentTimeMillis] time:
-     * only for a change Rex told as it happened. A state already there when the pane was read has
-     * no time, because Rex's records carry none.
+     * The panes with a program at work or waiting: any record `working` or `blocked`, whatever the
+     * summary shows. A pane whose child record is done while its root still works is both done in
+     * Activity and busy here.
+     */
+    val busy: Set<String> = emptySet(),
+    /**
+     * When each pane's summarized state began, in [System.currentTimeMillis] time: the `updated_at`
+     * Rex stamps on the record that speaks for the pane (no later than now, as clocks differ), or,
+     * from a Rex that sends none, when the phone saw the change.
      */
     val statusSince: Map<String, Long> = emptyMap(),
     /** The shown pane's working directory. */
@@ -293,10 +302,11 @@ class PocketSession(
 
     /**
      * Drops the connection and makes a new one at once: the network it ran on went away, and a
-     * socket on a vanished network can take a minute of pings to notice. Rex resumes it.
+     * socket on a vanished network can take a minute of pings to notice. Rex resumes it: the drop
+     * sends no close frame, which would end the client and close its streams with 1001.
      */
     fun reconnectNow() {
-        clientRef.get()?.close()
+        clientRef.get()?.drop()
         // The pane streams ran on the same network, so they are as dead as the control connection.
         streams.forEach { it.reconnectNow() }
         retry.trySend(Unit)
@@ -954,15 +964,22 @@ class PocketSession(
      */
     private fun changeStatus(block: String, change: (Map<String, ProgramRecord>) -> Map<String, ProgramRecord>) {
         var before: String? = null
-        var after: String? = null
+        var after: ProgramRecord? = null
         statusRecords.compute(block) { _, old ->
             before = summarizeStatus(old.orEmpty().values.toList())?.state
-            change(old.orEmpty()).also { after = summarizeStatus(it.values.toList())?.state }
+            change(old.orEmpty()).also { after = summarizeStatus(it.values.toList()) }
         }
+        val now = after
         when {
-            after == null -> sinceOf -= block
-            after != before -> sinceOf[block] = clock()
+            now == null -> sinceOf -= block
+            now.state != before -> sinceOf[block] = sinceFor(now)
         }
+    }
+
+    /** When [record]'s state began: Rex's stamp on it, or now when it has none. */
+    private fun sinceFor(record: ProgramRecord): Long {
+        val now = clock()
+        return record.updatedAt?.coerceAtMost(now) ?: now
     }
 
     private fun publishStatus() {
@@ -974,8 +991,10 @@ class PocketSession(
             for (block in statusRecords.keys + foregrounds.keys) {
                 paneProgram(summary[block], foregrounds[block])?.let { programs[block] = it }
             }
+            val busy = statusRecords.filterValues { records -> records.values.any { it.state == "working" || it.state == "blocked" } }.keys
             st.copy(
                 blockStatus = summary,
+                busy = HashSet(busy),
                 statusSince = HashMap(sinceOf),
                 pwd = st.view?.focusedBlock()?.id?.let { pwds[it] },
                 programs = programs,
@@ -1577,9 +1596,14 @@ class PocketSession(
                 val named = title.await()?.let { programTitle(it) }
                 // An event that landed while this was in flight is newer than the answer; it wins.
                 if (block !in reportedDuringRead) {
-                    // Read again after a reconnect: when a state that changed meanwhile began, nobody knows.
+                    // The time a state began comes with its record; from a Rex that stamps none, a
+                    // state that was already there (or changed while the phone was away) has no time.
                     val before = statusRecords[block]?.let { summarizeStatus(it.values.toList())?.state }
-                    if (before != summarizeStatus(records.values.toList())?.state) sinceOf -= block
+                    val now = summarizeStatus(records.values.toList())
+                    when {
+                        now?.updatedAt != null -> sinceOf[block] = sinceFor(now)
+                        before != now?.state -> sinceOf -= block
+                    }
                     statusRecords[block] = records
                     if (dir != null) pwds[block] = dir
                     if (program != null) foregrounds[block] = program

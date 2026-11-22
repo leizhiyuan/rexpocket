@@ -198,6 +198,8 @@
     <string name="closed_body">It was closed on the desktop or another device, or the program in it exited. Nothing you type goes anywhere until you choose what to show.</string>
     <string name="closed_show">Show %1$s</string>
     <string name="closed_sessions">Back to sessions</string>
+    <string name="empty_session_title">No tabs in this session</string>
+    <string name="empty_session_body">Its last tab was closed. The session is still on the host; open a new tab to use it.</string>
     <string name="action_show_active">Activity</string>
     <string name="no_activity">No program is waiting, failed, done or running</string>
     <string name="activity_offline">Connect to a host to see its activity</string>

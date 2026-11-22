@@ -22,7 +22,7 @@ class ActivityTest {
     private val clock = AtomicLong(1_000_000)
 
     private fun withRex(body: suspend (ScriptedRex, Desk, PocketSession, List<Pair<String, List<Pair<String, String>>>>) -> Unit) = runBlocking {
-        val rex = ScriptedRex()
+        val rex = ScriptedRex(clock = { clock.get() })
         val desk = Desk(rex.endpoint)
         val phone = PocketSession(rex.endpoint, clock = { clock.get() })
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -103,7 +103,7 @@ class ActivityTest {
     }
 
     @Test
-    fun theNewestNewsComesFirstAndAStateFoundOnReadingHasNoAge() = withRex { rex, _, phone, sessions ->
+    fun theNewestNewsComesFirstAndAStateFoundOnReadingHasRexsAge() = withRex { rex, _, phone, sessions ->
         val tabs = sessions[0].second
         rex.report(tabs[0].second, "done")
         phone.until("the first done") { activitySections(it).isNotEmpty() }
@@ -113,19 +113,23 @@ class ActivityTest {
         assertEquals(listOf(tabs[1].first, tabs[0].first), activitySections(st)[0].items.map { it.window.id })
         assertEquals(1_060_000L, activitySections(st)[0].items[0].since)
 
-        // A record that was there before the phone looked is read with no time to it.
-        val rex2 = ScriptedRex()
+        // A record that was there before the phone looked is read with the time Rex stamped on it
+        // (`updated_at`, sent by Rex 0.1.0-preview.22), so its age is known from the first read.
+        val rex2 = ScriptedRex(clock = { clock.get() })
         try {
             val desk = Desk(rex2.endpoint)
             desk.connect()
             val (sid, fresh) = desk.newSession(tabs = 1)
             rex2.report(fresh[0].second, "error")
+            val reportedAt = clock.get()
+            clock.addAndGet(9 * 60_000L)
             val late = PocketSession(rex2.endpoint, clock = { clock.get() })
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             late.start(scope, preferredSessionId = sid)
             late.setActive(true)
             val read = late.until("read") { activitySections(it).isNotEmpty() }
-            assertNull(activitySections(read)[0].items[0].since)
+            assertEquals(reportedAt, activitySections(read)[0].items[0].since)
+            assertEquals("9m", activityAge(activitySections(read)[0].items[0].since!!, clock.get()))
             late.stop()
             scope.cancel()
             desk.close()
@@ -138,7 +142,7 @@ class ActivityTest {
     fun aStatusReportedBeforeThePhoneLookedShowsForASessionItHasNotOpened() = runBlocking {
         // Rex lets a connection that bootstrapped call methods on any session (API reference,
         // session.bootstrap), so the first read finds a record in a session the phone never opened.
-        val rex = ScriptedRex()
+        val rex = ScriptedRex(clock = { clock.get() })
         val desk = Desk(rex.endpoint)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val phone = PocketSession(rex.endpoint, clock = { clock.get() })

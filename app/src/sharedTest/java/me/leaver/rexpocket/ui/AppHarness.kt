@@ -41,6 +41,11 @@ internal class RexOnDesk(sessions: Int = 2) : AutoCloseable {
         }
     }
 
+    /** Closes every tab of [session] at the desk; Rex keeps the session, with no windows. */
+    fun closeEveryTab(session: String) = runBlocking {
+        desk.view(session).windows.forEach { desk.closeTab(session, it.id) }
+    }
+
     val host = SavedHost(id = "desk-host", label = "desk", host = "127.0.0.1", port = rex.endpoint.port, plaintext = true)
 
     /**

@@ -116,9 +116,19 @@ class RexClient(
         return ws.send(msg.toString())
     }
 
-    fun close() {
+    fun close() = end(frame = true)
+
+    /**
+     * Ends the connection without a close frame, as a network that went away does. Rex then keeps
+     * the client for a minute - its id, its sessions, its panes (handed back when it resumes) and its
+     * streams - for a hello with the reconnect token; a close frame ends the client at once and
+     * closes its streams with 1001 (seen on Rex 0.1.0-preview.22, and its reference says so).
+     */
+    fun drop() = end(frame = false)
+
+    private fun end(frame: Boolean) {
         if (!closed.compareAndSet(false, true)) return
-        socket?.close(1000, "bye")
+        if (frame) socket?.close(1000, "bye") else socket?.cancel()
         failPending(ConnectionDroppedException("Connection closed", null))
         if (!opened.isCompleted) opened.completeExceptionally(IllegalStateException("Connection closed"))
         finish(null)

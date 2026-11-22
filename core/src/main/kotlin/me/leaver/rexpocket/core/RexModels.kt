@@ -129,12 +129,32 @@ data class ProgramRecord(
     val title: String?,
     val msg: String?,
     val progress: Int?,
+    /**
+     * When the report arrived, by Rex's clock, in epoch milliseconds: the record's `updated_at`.
+     * Rex 0.1.0-preview.22 sends it at every API revision the app speaks; null if a Rex leaves it out.
+     */
+    val updatedAt: Long? = null,
 )
 
+/**
+ * The order Rex's Activity puts states in, most pressing first: "blocked failed done working idle"
+ * (Show Activity by Priority, Mac Actions reference). A state Rex's reference does not know counts
+ * as idle, as the `program_status_changed` schema says to treat it.
+ */
+private val STATUS_PRIORITY = mapOf("blocked" to 0, "error" to 1, "done" to 2, "working" to 3, "idle" to 4)
+
+/** Where [state] stands in Rex's Activity order; lower is more pressing. */
+fun statusPriority(state: String): Int = STATUS_PRIORITY[state] ?: STATUS_PRIORITY.getValue("idle")
+
+/**
+ * A pane's records summed up to the one that speaks for it: the most pressing in Rex's Activity
+ * order. Rex itself keeps every record and sums nothing up (`program_status` lists them all, root
+ * first), so the order is the one its Activity shows: a pane whose root is working while a child
+ * record is done reads as done, the result waiting to be looked at.
+ */
 fun summarizeStatus(records: List<ProgramRecord>): ProgramRecord? {
     if (records.isEmpty()) return null
-    val rank = mapOf("blocked" to 0, "error" to 1, "working" to 2, "done" to 3, "idle" to 4)
-    return records.minBy { rank[it.state] ?: 9 }
+    return records.minBy { statusPriority(it.state) }
 }
 
 fun parseView(obj: JSONObject): SessionView {
@@ -214,6 +234,7 @@ private fun parseProgramRecord(o: JSONObject, id: String) = ProgramRecord(
     title = o.optNullableString("title"),
     msg = o.optNullableString("msg"),
     progress = if (o.has("progress") && !o.isNull("progress")) o.optInt("progress") else null,
+    updatedAt = o.optNullableString("updated_at")?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() },
 )
 
 /**

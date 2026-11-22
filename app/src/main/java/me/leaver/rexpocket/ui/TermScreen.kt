@@ -306,7 +306,10 @@ internal fun TermScreen(
     // bottom chrome rise over it. A program is therefore
     // never resized by the screen keyboard opening, so it never redraws or reflows for it.
     val hardwareKeys = rememberHardwareKeyboard()
-    val dock = chrome.keyBar(keyBarShown(hardwareKeys, keyBarWithKeyboard)) && closed == null
+    // Rex keeps a session whose last tab closed, with no windows at all (seen on 0.1.0-preview.22):
+    // there is no pane to type into, so the screen says so and offers a new tab, without keys.
+    val empty = closed == null && view != null && view.windows.isEmpty()
+    val dock = chrome.keyBar(keyBarShown(hardwareKeys, keyBarWithKeyboard)) && closed == null && !empty
     var bottomPx by remember { mutableIntStateOf(0) }
     var panePx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -346,6 +349,7 @@ internal fun TermScreen(
                                 tab = tab,
                                 focused = focused,
                                 status = state.blockStatus,
+                                busyPanes = state.busy,
                                 programs = state.programs,
                                 onSelect = { block -> onAct { focusBlock(block.id) } },
                                 modifier = Modifier.widthIn(max = 420.dp),
@@ -370,6 +374,12 @@ internal fun TermScreen(
                         closed = closed,
                         next = view.activeWindow()?.let { tabTitle(view, it, state) },
                         onShowNext = { onAct { leaveClosedPane() } },
+                        onNewTab = { onAct { newWindow() } },
+                        onSessions = onBack.takeIf { !embedded },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else if (empty) {
+                    EmptySessionNote(
                         onNewTab = { onAct { newWindow() } },
                         onSessions = onBack.takeIf { !embedded },
                         modifier = Modifier.fillMaxSize(),
@@ -439,6 +449,7 @@ internal fun TermScreen(
                             tab = tab,
                             focused = focused,
                             status = state.blockStatus,
+                            busyPanes = state.busy,
                             programs = state.programs,
                             onSelect = { block -> onAct { focusBlock(block.id) } },
                         )
@@ -461,7 +472,7 @@ internal fun TermScreen(
                     ReachableWidth {
                         KeyBar(
                             mods = mods,
-                            busy = status?.state == "working" || status?.state == "blocked",
+                            busy = focused?.id?.let { it in state.busy } == true,
                             imeUp = imeShown(),
                             onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
                             onKey = { key, own -> press(key, own) },
@@ -982,6 +993,58 @@ private fun ClosedPaneNote(
 }
 
 /**
+ * In place of a pane when the session has no tab: Rex keeps a session after its last tab closes, so
+ * opening it from the list lands here. A new tab, or back to the sessions.
+ */
+@Composable
+private fun EmptySessionNote(
+    onNewTab: () -> Unit,
+    /** Null where the list already stands beside the pane. */
+    onSessions: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier.padding(horizontal = 32.dp).testTag(EMPTY_SESSION_TAG),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            stringResource(R.string.empty_session_title),
+            color = Colors.ink,
+            fontSize = TextStyles.title,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 360.dp),
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.empty_session_body),
+            color = Colors.muted,
+            fontSize = TextStyles.label,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 360.dp),
+        )
+        Spacer(Modifier.height(24.dp))
+        Column(Modifier.widthIn(max = 360.dp)) {
+            PrimaryButton(stringResource(R.string.menu_new_tab), onClick = onNewTab)
+            if (onSessions != null) {
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(Radius.card))
+                        .clickable(role = Role.Button, onClick = onSessions),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(stringResource(R.string.closed_sessions), color = Colors.accent, fontSize = TextStyles.body)
+                }
+            }
+        }
+    }
+}
+
+/** The note shown for a session with no tabs. */
+internal const val EMPTY_SESSION_TAG = "empty-session"
+
+/**
  * Who holds the pane, and the one tap that changes it. While the desk holds it the chip is the
  * action colour and says "Take over"; while this phone does it is quiet and says so, and tapping
  * it hands the pane back. The pane has the holder's size, so this is what decides how it looks.
@@ -1018,6 +1081,7 @@ private fun PaneBar(
     tab: WindowInfo?,
     focused: BlockInfo?,
     status: Map<String, ProgramRecord>,
+    busyPanes: Set<String>,
     programs: Map<String, String>,
     onSelect: (BlockInfo) -> Unit,
     modifier: Modifier = Modifier,
@@ -1032,7 +1096,7 @@ private fun PaneBar(
         blocks.forEachIndexed { index, block ->
             val on = block.id == focused?.id
             val record = status[block.id]
-            val busy = record?.state == "working" || record?.state == "blocked"
+            val busy = block.id in busyPanes
             Box(
                 Modifier.height(48.dp)
                     .clickable(role = Role.Tab) { if (!on) onSelect(block) }
@@ -1057,7 +1121,7 @@ private fun PaneBar(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.widthIn(max = 104.dp),
                     )
-                    if (busy) {
+                    if (busy && record != null) {
                         Spacer(Modifier.width(6.dp))
                         Dot(statusTint(record), 6.dp)
                     }

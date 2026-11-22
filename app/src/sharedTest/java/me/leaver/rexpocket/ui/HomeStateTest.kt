@@ -82,7 +82,8 @@ class HomeStateTest {
      * on [other] - then goes back the way the person does.
      */
     private fun toTerminalAndBack(m: RexViewModel) {
-        compose.onAllNodes(hasText("shell") and hasClickAction())[0].performClick()
+        // Rex names a new tab "Window" and its id; the list calls it by its place, as the app does.
+        compose.onAllNodes(hasText(compose.activity.getString(R.string.tab_number, 1)) and hasClickAction())[0].performClick()
         compose.awaitThat { m.route.value == Route.Term && m.pocket.value.activeSessionId == other }
         compose.waitForIdle()
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }

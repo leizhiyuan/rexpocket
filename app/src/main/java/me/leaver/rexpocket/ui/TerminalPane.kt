@@ -141,6 +141,10 @@ internal fun TerminalPane(
             throw e
         } catch (e: Exception) {
             onError(e)
+        } catch (e: LinkageError) {
+            // libghostty is not there to draw: a JVM test on a computer that did not build it, or a
+            // broken install. The pane stays blank rather than taking the app down with it.
+            Diagnostics.event(CONN_TAG, "pane $blockId: no emulator to draw it: ${e.message}")
         }
     }
 

@@ -172,12 +172,17 @@ class ForegroundStreamTest {
                 }
                 id
             }
+            val pictured = java.util.concurrent.atomic.AtomicBoolean(false)
             val watcher = scope.launch {
                 session.watchPane(block).collect { feed ->
                     if (feed is TerminalFeed.Output) synchronized(seen) { seen.append(feed.bytes.toString(Charsets.UTF_8)) }
+                    if (feed is TerminalFeed.Snapshot) pictured.set(true)
                 }
             }
             try {
+                // Output from before the stream opened is in its snapshot, not in what follows it:
+                // the command is typed once the stream is open, or a quick shell answers inside it.
+                withTimeout(10_000) { while (!pictured.get()) delay(20) }
                 // Wait for the stream to carry output, so it is flowing when the network goes.
                 session.writeBytesAwaitable("echo ready-\$((1+1))\r".toByteArray()).await()
                 withTimeout(10_000) { while (!synchronized(seen) { "ready-2" in seen }) delay(50) }

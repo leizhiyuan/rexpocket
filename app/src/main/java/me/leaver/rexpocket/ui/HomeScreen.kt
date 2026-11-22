@@ -128,9 +128,9 @@ private data class HomeSession(
     val activity: Boolean,
 )
 
-/** A pane that is working or waiting is what the eye filters on. */
+/** A pane that is working or waiting is what the eye filters on; its record is the pane's summary. */
 private fun PocketState.activityOf(block: BlockInfo): ProgramRecord? =
-    blockStatus[block.id]?.takeIf { it.state == "working" || it.state == "blocked" }
+    blockStatus[block.id]?.takeIf { block.id in busy }
 
 @Composable
 internal fun HomeScreen(

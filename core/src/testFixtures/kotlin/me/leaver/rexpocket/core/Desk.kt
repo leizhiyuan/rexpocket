@@ -89,6 +89,22 @@ class Desk(private val endpoint: Endpoint) : AutoCloseable {
             .optNullableString("owner")
     }
 
+    /** Types [text] into [block] as a person at the desk would: on a real Rex its shell runs it. */
+    suspend fun type(sid: String, block: String, text: String) {
+        attach(sid)
+        client.call(
+            "com.superlogical.terminal.write",
+            JSONObject().put("session_id", sid).put("block_id", block).put("args", JSONObject().put("data", text)),
+        )
+    }
+
+    /** The records the program in [block] reported, as Rex lists them. */
+    suspend fun programStatus(sid: String, block: String): JSONArray {
+        attach(sid)
+        return client.call("com.superlogical.terminal.program_status", JSONObject().put("session_id", sid).put("block_id", block))
+            .optJSONArray("records") ?: JSONArray()
+    }
+
     suspend fun destroy(sid: String) {
         runCatching { client.call("session.destroy", JSONObject().put("session_id", sid)) }
     }

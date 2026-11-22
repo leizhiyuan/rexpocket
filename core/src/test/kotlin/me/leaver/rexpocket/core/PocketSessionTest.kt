@@ -54,19 +54,19 @@ class PocketSessionTest {
                 blockId = view.focusedBlock()?.id
                 assertTrue("focused block missing", blockId.orEmpty().startsWith("block:"))
 
-                val owned = withTimeout(15_000) {
-                    while (true) {
-                        val owner = session.state.value.view?.focusedBlock()?.owner
-                        if (owner == created.clientId) return@withTimeout owner
-                        delay(50)
-                    }
-                    null
-                }
-                assertEquals(created.clientId, owned)
-
                 val stream = StringBuilder()
                 val feeder = collectPane(scope, session, blockId!!, stream)
                 try {
+                    // Watching the pane takes it: Rex starts a new session's panes with no owner.
+                    val owned = withTimeout(15_000) {
+                        while (true) {
+                            val owner = session.state.value.view?.focusedBlock()?.owner
+                            if (owner == created.clientId) return@withTimeout owner
+                            delay(50)
+                        }
+                        null
+                    }
+                    assertEquals(created.clientId, owned)
                     val token = "rexpocket-ok-" + System.nanoTime()
                     session.sendText("printf '$token\\n'\n")
                     val seen = withTimeoutOrNull(15_000) {
@@ -114,7 +114,7 @@ class PocketSessionTest {
                 session.setSize(200, 24, 8, 16)
                 session.createShell("rexpocket-test-order-" + System.currentTimeMillis())
                 sessionId = session.state.value.activeSessionId
-                val block = awaitOwnedFocus(session)
+                val block = awaitShownPane(session)
                 val stream = StringBuilder()
                 val feeder = collectPane(scope, session, block, stream)
 
@@ -168,7 +168,7 @@ class PocketSessionTest {
                 session.setSize(80, 24, 8, 16)
                 session.createShell("rexpocket-test-again-" + System.currentTimeMillis())
                 sessionId = session.state.value.activeSessionId
-                val block = awaitOwnedFocus(session)
+                val block = awaitShownPane(session)
 
                 val first = StringBuilder()
                 val feeder = collectPane(scope, session, block, first)
@@ -253,7 +253,7 @@ class PocketSessionTest {
                 session.setSize(52, 21, 8, 16)
                 session.createShell("rexpocket-test-owner-" + System.currentTimeMillis())
                 sessionId = session.state.value.activeSessionId!!
-                val blockId = awaitOwnedFocus(session)
+                val blockId = awaitShownPane(session)
 
                 val watched = StringBuilder()
                 val watcher = collectPane(scope, session, blockId, watched)
@@ -318,7 +318,7 @@ class PocketSessionTest {
                 session.createShell("rexpocket-test-reconnect-" + System.currentTimeMillis())
                 val sid = session.state.value.activeSessionId!!
                 sessionId = sid
-                val blockId = awaitOwnedFocus(session)
+                val blockId = awaitShownPane(session)
                 val watcher = collectPane(scope, session, blockId, StringBuilder())
                 try {
                     withTimeout(15_000) { while (columnsOnServer(endpoint, sid, blockId) != 52) delay(100) }
@@ -375,7 +375,7 @@ class PocketSessionTest {
                 session.setSize(52, 21, 8, 16)
                 session.createShell("rexpocket-test-release-" + System.currentTimeMillis())
                 sessionId = session.state.value.activeSessionId!!
-                val blockId = awaitOwnedFocus(session)
+                val blockId = awaitShownPane(session)
 
                 val watched = StringBuilder()
                 val watcher = collectPane(scope, session, blockId, watched)
@@ -431,7 +431,7 @@ class PocketSessionTest {
                 session.createShell("rexpocket-test-sticky-release-" + System.currentTimeMillis())
                 sessionId = session.state.value.activeSessionId!!
                 val mine = session.state.value.clientId
-                val blockA = awaitOwnedFocus(session)
+                val blockA = awaitShownPane(session)
 
                 val firstWatch = collectPane(scope, session, blockA, StringBuilder())
                 try {
@@ -505,7 +505,7 @@ class PocketSessionTest {
                 session.setSize(80, 24, 8, 16)
                 session.createShell("rexpocket-test-events-" + System.currentTimeMillis())
                 sessionId = session.state.value.activeSessionId
-                val block = awaitOwnedFocus(session)
+                val block = awaitShownPane(session)
                 // The first read of each pane is allowed; after that the screen only listens.
                 delay(1_500)
                 calls.clear()
@@ -513,7 +513,10 @@ class PocketSessionTest {
                 val polls = calls.filter { it == "com.superlogical.terminal.program_status" || it == "com.superlogical.terminal.pwd" }
                 assertTrue("an idle pane was polled: $polls", polls.isEmpty())
 
-                session.sendText("printf '\\033]7501;state=working\\007'; cd /tmp\n")
+                // Rex's pwd is the directory a program last reported (OSC 7); a stock bash, as on
+                // a Linux runner, reports none, so the shell here says where it went, as zsh's and
+                // fish's integrations do.
+                session.sendText("printf '\\033]7501;state=working\\007'; cd /tmp; printf '\\033]7;file://%s%s\\007' \"\$(hostname)\" \"\$PWD\"\n")
                 withTimeout(5_000) { while (session.state.value.blockStatus[block]?.state != "working") delay(50) }
                 withTimeout(5_000) { while (session.state.value.pwd?.trimEnd('/')?.endsWith("tmp") != true) delay(50) }
 
@@ -724,7 +727,7 @@ private suspend fun columnsOnServer(endpoint: Endpoint, sessionId: String, block
 
 /** Watches the shown pane until its snapshot arrives, and returns the block it is. */
 private suspend fun awaitWatchedPane(scope: CoroutineScope, session: PocketSession): String {
-    val block = awaitOwnedFocus(session)
+    val block = awaitShownPane(session)
     val seen = StringBuilder()
     val feeder = collectPane(scope, session, block, seen)
     try {
@@ -738,14 +741,15 @@ private suspend fun awaitWatchedPane(scope: CoroutineScope, session: PocketSessi
 }
 
 /**
- * Waits until the shown pane belongs to this client, and returns its id. Creating a session already
- * makes the creator the owner, so this alone does not prove the phone took it.
+ * Waits until the open session shows a pane, and returns its id. Nobody holds it yet: Rex starts the
+ * panes of `session.create`'s first windows with no owner (seen on Rex 0.1.0-preview.22, and its API
+ * reference says so), and the phone takes a pane only while it watches it.
  */
-private suspend fun awaitOwnedFocus(session: PocketSession): String = withTimeout(15_000) {
+private suspend fun awaitShownPane(session: PocketSession): String = withTimeout(15_000) {
     while (true) {
         val st = session.state.value
         val block = st.view?.takeIf { it.sessionId == st.activeSessionId }?.focusedBlock()
-        if (block != null && block.owner == st.clientId) return@withTimeout block.id
+        if (block != null) return@withTimeout block.id
         delay(50)
     }
     error("unreachable")

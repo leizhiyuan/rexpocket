@@ -1,0 +1,114 @@
+# What the phone receives from Rex 0.1.0-preview.22 (api revision 19; the phone speaks 7) in
+# RexShapeTest's script. Recorded with REX_RECORD_SHAPES=1 against that Rex; see docs/design/rex-parity.md.
+## phone hello
+welcome {api_revision:num,api_server_revision:num,client:{id:<client>,reconnect_token:str},limits:{max_message_bytes:num},protocol:"rex.control.v1",type:str}
+## phone bootstrap, nothing on the server
+response session.bootstrap {attach_all:{sessions:[]},client_id:<client>,selected_session:null}
+## desk creates a session with one tab
+event session_created {session:{label:str,session_id:<session>}}
+## phone reads a pane of a session it has not attached
+response com.superlogical.terminal.program_status {records:[]}
+response com.superlogical.terminal.size {cell_height_px:num,cell_width_px:num,columns:num,desired:[],owner:null,rows:num}
+response session.own_block error bad_request 400 "the caller must be a client attached to the session"
+response data.connect error conflict 409 "stream is not attached to session <session>"
+## phone attaches
+response session.attach {client_id:<client>,view:{active_window_id:<window>,label:str,revision:num,session_id:<session>,windows:[{focused_block_id:<block>,label:str,layers:[{blocks:[{block_id:<block>,creator_name:str,flavor:str,label:str}],kind:"tiled",layer_id:<layer>}],window_id:<window>}]}}
+## desk makes a tab
+event block_created {block_id:<block>}
+event block_owner_changed {block_id:<block>,owner:<client>,reason:"create"}
+event window_created {label:str,window_id:<window>}
+event session_view_changed {revision:num}
+## desk splits the first pane
+event block_created {block_id:<block>}
+event block_owner_changed {block_id:<block>,owner:<client>,reason:"create"}
+event session_view_changed {revision:num}
+## phone views the session
+response session.view {active_window_id:<window>,label:str,revision:num,session_id:<session>,windows:[{focused_block_id:<block>,label:str,layers:[{blocks:[{block_id:<block>,creator_name:str,flavor:str,label:str}|{block_id:<block>,creator_name:str,flavor:str,label:str,owner:<client>}],kind:"tiled",layer_id:<layer>}],window_id:<window>}|{focused_block_id:<block>,label:str,layers:[{blocks:[{block_id:<block>,creator_name:str,flavor:str,label:str,owner:<client>}],kind:"tiled",layer_id:<layer>}],window_id:<window>}]}
+## phone takes the first pane
+event block_owner_changed {block_id:<block>,owner:<client>,reason:"take"}
+event session_view_changed {revision:num}
+response session.own_block {blocks:[{block_id:<block>,owner:<client>}]}
+## desk takes it back
+event block_owner_changed {block_id:<block>,owner:<client>,previous:<client>,reason:"take"}
+event session_view_changed {revision:num}
+## phone disowns a pane the desk holds
+response session.disown_block {blocks:[{block_id:<block>,owner:<client>}]}
+## phone opens the second pane's stream
+response data.connect {expires_in_ms:num,ticket:str}
+stream welcome 32 bytes, kept 60000 ms
+stream starts with GHOSTSNP, then a rex1 resize
+## a second stream of the same pane
+response data.connect {expires_in_ms:num,ticket:str}
+stream reject 0x02
+stream closed 1008 "data handshake rejected"
+## phone takes the split pane, then its network drops
+desk: event block_owner_changed {block_id:<block>,owner:<client>,previous:<client>,reason:"take"}
+desk: event session_view_changed {revision:num}
+desk: event block_owner_changed {block_id:<block>,owner:<client>,previous:<client>,reason:"lost"}
+desk: event session_view_changed {revision:num}
+## phone resumes with its reconnect token
+welcome {api_revision:num,api_server_revision:num,client:{id:<client>,reconnect_token:str,resumed:true},limits:{max_message_bytes:num},protocol:"rex.control.v1",type:str}
+desk: event block_owner_changed {block_id:<block>,owner:<client>,previous:<client>,reason:"restore"}
+desk: event session_view_changed {revision:num}
+## a program reports done, then a failed child record
+response com.superlogical.terminal.write {bytes_written:num}
+event block_event program_status_changed {id:"",reason:"report",record:{app:str,effective_app:str,msg:str,owner:{name:str,pid:num},state:"done",updated_at:<time>}}
+response com.superlogical.terminal.write {bytes_written:num}
+event block_event program_status_changed {id:"build/test",reason:"report",record:{effective_app:str,id:"build/test",msg:str,owner:{name:str,pid:num},state:"error",updated_at:<time>}}
+response com.superlogical.terminal.program_status {records:[{app:str,effective_app:str,msg:str,owner:{name:str,pid:num},state:"done",updated_at:<time>}|{effective_app:str,id:"build/test",msg:str,owner:{name:str,pid:num},state:"error",updated_at:<time>}]}
+## the program clears its records
+response com.superlogical.terminal.write {bytes_written:num}
+event block_event program_status_removed {ids:[""|"build/test"],reason:"clear"}
+## desk closes the tab whose stream the phone has open
+event window_closed {window_id:<window>}
+event session_view_changed {revision:num}
+event block_closed {block_id:<block>}
+stream closed 4000 "block closed"
+## phone calls on the pane and tab that are gone
+response block.close error not_found 404 "block not found: <block>"
+response com.superlogical.terminal.write error not_found 404 "block not found: <block>"
+response com.superlogical.terminal.program_status error not_found 404 "block not found: <block>"
+response session.own_block error bad_request 400 "block <block> is not in the session"
+response session.disown_block error bad_request 400 "block <block> is not in the session"
+response session.close_window error not_found 404 "window <window> not found"
+response session.set_block_label error not_found 404 "block not found"
+response data.connect error not_found 404 "block not found: <block>"
+## a program working in the split pane exits with 3
+response com.superlogical.terminal.write {bytes_written:num}
+event block_event program_status_changed {id:"",reason:"report",record:{msg:str,owner:{name:str,pid:num},state:"working",updated_at:<time>}}
+response com.superlogical.terminal.write {bytes_written:num}
+event block_event program_status_removed {ids:[""],reason:"child_exited"}
+event block_event child_exited {error:"exit status 3",exit_code:num}
+event block_closed {block_id:<block>}
+event session_view_changed {revision:num}
+## desk closes the last pane of the last tab
+event block_closed {block_id:<block>}
+event window_closed {window_id:<window>}
+event active_window_changed {}
+event session_view_changed {revision:num}
+## phone views the session with no tabs
+response session.view {label:str,revision:num,session_id:<session>}
+## phone bootstraps again, with a session there
+response session.bootstrap {attach_all:{sessions:[{label:str,session_id:<session>}]},client_id:<client>,selected_session:{session:{label:str,session_id:<session>},view:{label:str,revision:num,session_id:<session>}}}
+## phone makes a session of its own
+event session_created {session:{label:str,session_id:<session>}}
+response session.create {initial_windows:[{block_ids:[<block>],revision:num,window_id:<window>}],session_id:<session>}
+## phone holds and streams its pane
+response session.attach {client_id:<client>,view:{active_window_id:<window>,label:str,revision:num,session_id:<session>,windows:[{focused_block_id:<block>,label:str,layers:[{blocks:[{block_id:<block>,creator_name:str,flavor:str,label:str}],kind:"tiled",layer_id:<layer>}],window_id:<window>}]}}
+event block_owner_changed {block_id:<block>,owner:<client>,reason:"take"}
+event session_view_changed {revision:num}
+response session.own_block {blocks:[{block_id:<block>,owner:<client>}]}
+response data.connect {expires_in_ms:num,ticket:str}
+stream welcome 32 bytes, kept 60000 ms
+stream starts with GHOSTSNP, then a rex1 resize
+## phone closes its connection with a close frame
+stream closed 1001 "data provider canceled"
+desk: event block_owner_changed {block_id:<block>,previous:<client>,reason:"disconnect"}
+desk: event session_view_changed {revision:num}
+## desk destroys the sessions
+desk: event block_closed {block_id:<block>}
+desk: event session_view_changed {revision:num}
+desk: event session_destroyed {session_id:<session>}
+desk: response session.destroy {}
+desk: event session_destroyed {session_id:<session>}
+desk: response session.destroy {}
