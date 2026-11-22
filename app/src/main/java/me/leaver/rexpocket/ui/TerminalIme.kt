@@ -79,9 +79,11 @@ internal class TerminalImeView(context: Context) : View(context) {
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
         // A plain text field, with no suggestions: a shell command is not prose, and nothing here
         // may be learned or corrected. Neither flag hides the keyboard's own layouts, which is the
-        // point - TYPE_NULL and the password variations do.
+        // point - TYPE_NULL and the password variations do. A password typed at a sudo or ssh
+        // prompt comes through here too, so the keyboard is told not to learn from any of it.
         outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE or
+            EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING or
             EditorInfo.IME_FLAG_NO_EXTRACT_UI or
             EditorInfo.IME_FLAG_NO_FULLSCREEN
         outAttrs.initialCapsMode = 0
