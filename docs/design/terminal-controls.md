@@ -344,6 +344,11 @@ bars now follows full screen itself: none in full screen, and otherwise the bars
 shown or not (`statusBarsIgnoringVisibility`, `navigationBarsIgnoringVisibility`), which do not
 change as the bars hide and show. Entering and leaving lay the screen out at once.
 
+The window must be allowed into the camera cutout (`enableEdgeToEdge` in MainActivity's onCreate
+sets it to always, from Android 11): in the default mode a window with its status bar hidden is
+moved off the cutout's band, and full screen loses that band at the top. `TermFullScreenTest`
+sets the same mode on its already-shown test window.
+
 ## 7. Haptics
 
 The long press on the pane and the held keys of the bar buzz as they do today. A switch for it is

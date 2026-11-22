@@ -2,7 +2,6 @@ package me.leaver.rexpocket.ui
 
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -48,7 +47,7 @@ class TermMenuTest {
      */
     @Before
     fun edgeToEdge() {
-        compose.runOnUiThread { compose.activity.enableEdgeToEdge() }
+        compose.runOnUiThread { compose.activity.edgeToEdgeAsTheApp() }
     }
 
     private val acts = mutableListOf<suspend PocketSession.() -> Unit>()

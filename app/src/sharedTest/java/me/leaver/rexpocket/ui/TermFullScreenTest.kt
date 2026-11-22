@@ -3,7 +3,6 @@ package me.leaver.rexpocket.ui
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -53,7 +52,7 @@ class TermFullScreenTest {
     private var statusPx = 0
 
     private fun show() {
-        compose.runOnUiThread { compose.activity.enableEdgeToEdge() }
+        compose.runOnUiThread { compose.activity.edgeToEdgeAsTheApp() }
         val model = termModel()
         compose.setContent {
             TermOnModel(model, liveState())
@@ -153,7 +152,7 @@ class TermFullScreenTest {
     /** Back in full screen brings the bars back and stays on the terminal; the next Back leaves it. */
     @Test
     fun backLeavesFullScreenFirstAndThenTheTerminal() {
-        compose.runOnUiThread { compose.activity.enableEdgeToEdge() }
+        compose.runOnUiThread { compose.activity.edgeToEdgeAsTheApp() }
         val model = termModel()
         compose.setContent { TermOnModel(model, liveState()) }
         compose.waitForIdle()

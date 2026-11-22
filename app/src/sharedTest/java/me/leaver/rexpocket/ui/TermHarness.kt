@@ -3,6 +3,7 @@ package me.leaver.rexpocket.ui
 import android.graphics.Typeface
 import android.os.Build
 import android.view.View
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.ime
@@ -151,4 +152,15 @@ internal fun composeInsets(): String {
     return "ime=${w.ime.getBottom(d)} imeVisible=${w.isImeVisible} nav=${w.navigationBars.getBottom(d)} " +
         "navAlways=${w.navigationBarsIgnoringVisibility.getBottom(d)} status=${w.statusBars.getTop(d)} " +
         "statusAlways=${w.statusBarsIgnoringVisibility.getTop(d)} cutoutBottom=${w.displayCutout.getBottom(d)}"
+}
+
+/**
+ * Edge to edge as MainActivity is, for an activity that is already on screen. MainActivity calls
+ * enableEdgeToEdge before its window is added; here the window is up, and the camera cutout mode
+ * it writes into the window's attributes (ALWAYS from Android 11) only applies once they are set
+ * again. Without it the window shrinks off the cutout's band as the status bar hides.
+ */
+internal fun androidx.activity.ComponentActivity.edgeToEdgeAsTheApp() {
+    enableEdgeToEdge()
+    window.attributes = window.attributes
 }
