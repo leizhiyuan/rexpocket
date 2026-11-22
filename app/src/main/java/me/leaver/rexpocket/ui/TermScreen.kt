@@ -646,6 +646,17 @@ internal fun TermScreen(
                     if (panes.size > 1) {
                         action(stringResource(R.string.menu_close_pane), paneGroup, "Close Pane pane.close") { confirm = Confirm(Level.Pane, focused.id, focused.label) }
                     }
+                    // Rex's own two Pane actions (client.keymap): the pane's terminal methods.
+                    action(
+                        stringResource(R.string.palette_clear_terminal),
+                        paneGroup,
+                        "Clear Terminal com.superlogical.terminal.clear screen scrollback erase cmd+k ctrl+l",
+                    ) { onAct { clearPane() } }
+                    action(
+                        stringResource(R.string.palette_reset_terminal),
+                        paneGroup,
+                        "Reset Terminal com.superlogical.terminal.reset clear scrollback emulator ris",
+                    ) { onAct { resetPane() } }
                     action(stringResource(R.string.palette_copy_pane_id), paneGroup, "Copy Block ID pane.copy_id") {
                         clipboardSet(context, focused.id)
                         toast(context, copied)

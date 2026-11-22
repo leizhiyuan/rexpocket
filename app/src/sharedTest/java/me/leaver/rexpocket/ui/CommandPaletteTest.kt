@@ -28,6 +28,7 @@ import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.SessionView
 import me.leaver.rexpocket.terminal.TerminalView
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -127,6 +128,19 @@ class CommandPaletteTest {
         assertEquals(listOf(string(R.string.menu_split_right), string(R.string.menu_split_below)), rows())
         type(" bel")
         assertEquals(listOf(string(R.string.menu_split_below)), rows())
+    }
+
+    @Test
+    fun clearAndResetAreRexsOwnPaneActions() {
+        show()
+        openFromMenu()
+        // Found by Rex's own words for them too: cmd+k, scrollback.
+        type("scrollback")
+        assertEquals(listOf(string(R.string.palette_clear_terminal), string(R.string.palette_reset_terminal)), rows())
+        compose.onNodeWithText(string(R.string.palette_reset_terminal)).performClick()
+        compose.waitForIdle()
+        assertEquals("the row goes to the pane", 1, acts.size)
+        assertFalse(paletteOpen())
     }
 
     @Test

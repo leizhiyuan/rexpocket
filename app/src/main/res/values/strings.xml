@@ -223,6 +223,8 @@
     <string name="palette_next_pane">Next pane</string>
     <string name="palette_previous_pane">Previous pane</string>
     <string name="palette_copy_pane_id">Copy pane ID</string>
+    <string name="palette_clear_terminal">Clear terminal</string>
+    <string name="palette_reset_terminal">Reset terminal</string>
     <string name="palette_next_tab">Next tab</string>
     <string name="palette_previous_tab">Previous tab</string>
     <string name="palette_next_session">Next session</string>

@@ -105,6 +105,15 @@ class Desk(private val endpoint: Endpoint) : AutoCloseable {
             .optJSONArray("records") ?: JSONArray()
     }
 
+    /** What [block] shows, screen and scrollback, as Rex's `format` gives it as plain text. */
+    suspend fun text(sid: String, block: String): String {
+        attach(sid)
+        return client.call(
+            "block.method",
+            JSONObject().put("session_id", sid).put("block_id", block).put("method", "format").put("args", JSONObject().put("format", "text")),
+        ).optString("content")
+    }
+
     suspend fun destroy(sid: String) {
         runCatching { client.call("session.destroy", JSONObject().put("session_id", sid)) }
     }

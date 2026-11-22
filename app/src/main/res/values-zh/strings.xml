@@ -221,6 +221,8 @@
     <string name="palette_next_pane">下一个窗格</string>
     <string name="palette_previous_pane">上一个窗格</string>
     <string name="palette_copy_pane_id">复制窗格 ID</string>
+    <string name="palette_clear_terminal">清除终端</string>
+    <string name="palette_reset_terminal">重置终端</string>
     <string name="palette_next_tab">下一个标签页</string>
     <string name="palette_previous_tab">上一个标签页</string>
     <string name="palette_next_session">下一个会话</string>

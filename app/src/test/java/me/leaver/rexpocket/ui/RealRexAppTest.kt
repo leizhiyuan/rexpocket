@@ -212,6 +212,23 @@ class RealRexAppTest {
         assertEquals(listOf(first, split).sorted(), deskView().windows.first { it.id == tab }.blocks.map { it.id }.sorted())
     }
 
+    /** Clear terminal and Reset terminal in the palette empty the real pane on the phone's screen. */
+    @Test
+    fun thePalettesClearAndResetEmptyTheRealPane() {
+        val m = launch(onTerminal = true)
+        compose.awaitThat { m.route.value == Route.Term }
+        awaitHeld(m)
+        val pane = shown(m)
+        // The command line says $((40+2)); only its output reads end-42-mark.
+        for (label in listOf(R.string.palette_clear_terminal, R.string.palette_reset_terminal)) {
+            runBlocking { desk.type(sid, pane, "seq 1 30; echo end-\$((40+2))-mark\n") }
+            compose.awaitThat { runBlocking { desk.text(sid, pane) }.contains("\nend-42-mark") }
+            palette(string(label))
+            compose.awaitThat { !runBlocking { desk.text(sid, pane) }.contains("end-42-mark") }
+        }
+        assertEquals(null, m.pocket.value.notice)
+    }
+
     /** The desk closes the tab on the phone's screen: the screen says so, with no error, and moves on when asked. */
     @Test
     fun aTabClosedAtTheDeskIsSaidCalmly() {

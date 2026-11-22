@@ -11,4 +11,6 @@
     <string name="upload_error_empty">這個檔案是空的</string>
     <string name="upload_error_unreadable">無法讀取這個檔案</string>
     <string name="upload_error_failed">傳送失敗</string>
+    <string name="palette_clear_terminal">清除終端機</string>
+    <string name="palette_reset_terminal">重設終端機</string>
 </resources>

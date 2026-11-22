@@ -43,6 +43,7 @@ own connection) and keeps the welcome's client id, reconnect token, `resumed`, `
 | `session.own_block`, `session.disown_block` | used | the phone's size for the pane on screen; Release / Take over |
 | `block.event` (`paste`), `client.key` | used | paste, keys |
 | `block.method` by full name: terminal `write`, `resize`, `size`, `program_status`, `pwd`, `process`, `title`, `upload_begin`, `clipboard_read` | used | typing, sizing, status, directory, program, title, Send a file, a program's large copy |
+| `block.method` by short name: terminal `clear`, `reset`, `format` (`text`, `trim`, `unwrap`, `max_bytes`), `blob_read` | used | the palette's Clear terminal and Reset terminal; Copy output and Share output |
 | `data.connect` | used | the pane's stream (**fixture**) |
 | `session.focus_block`, `session.focus_window`, `session.focus_next_*`, `session.focus_previous_*`, `focus_history.reverse` | not used, on purpose | moving between tabs and panes is the phone's own; Rex's focus is the desktop's (README, "Ownership") |
 | `session.zoom_block`, `session.swap_blocks`, `session.move_block`, `session.move_window`, `session.move`, `session.resize_pane` | not used | see the verdicts below |
@@ -217,11 +218,18 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
   the pane gets `block_event` `clipboard_written` `{text: "hi", id, bytes: 2}` (at the app's API
   revision 7 too), and `clipboard_read` (`{}` args: the newest copy) answers `{id, data, total, eof:
   true}`.
+- **Clear, Reset and the pane as text.** `block.method` `clear` and `reset` answer `{}`; Rex then
+  sends the clients' streams what redoes it on their own terminals: for `clear`
+  `ESC 7 ESC[H ESC[<n>M ESC 8 ESC[<n>A ESC[3J` (the lines above the cursor deleted, the scrollback
+  erased), for `reset` `ESC c`. `format` with `{format: "text", trim: true, unwrap: true}` answers
+  `{content}`; with `max_bytes` set and more left, `{content, id, total}` (no `eof`, though the docs
+  say it is sent with `max_bytes`), and `blob_read` with that `id` and `offset` then answers `{id,
+  data, total, eof}`.
 - **`client.keymap`.** On a server with no configuration file: `bindings: []`, `diagnostics: []`,
   `config` (path, exists, generation, hash) and 22 `actions`, all `kind: block`, each with `name`,
   `description` and `args` (a JSON Schema); only `com.superlogical.terminal.clear` ("Clear Terminal")
   and `…reset` ("Reset Terminal") have a `title`, `category` (`Pane`) and `keywords` - the ones a
-  palette would list. Custom `rex.action`s need an `init.lua`, which was not tried. Saved in
+  palette would list (the phone's palette has both, as `block.method` `clear` and `reset`). Custom `rex.action`s need an `init.lua`, which was not tried. Saved in
   `rex-protocol/client-keymap.json`.
 - **A tab closed from another client.** `session.close_window` (or `rex window close`): the phone gets
   `window_closed`, `active_window_changed` (when it was the active tab; `{}` when no tab is left),

@@ -107,6 +107,9 @@ enum class Holder { Phone, Desk }
  */
 data class ClosedPane(val sessionId: String, val blockId: String, val tabClosed: Boolean)
 
+/** A pane's output as text; [cut] when it was longer than asked for and only its newest part is here. */
+data class PaneText(val text: String, val cut: Boolean)
+
 /** Text the program in pane [blockId] copied to the clipboard with OSC 52; see [PocketSession.copies]. */
 data class PaneCopy(val blockId: String, val text: String)
 
@@ -694,6 +697,70 @@ class PocketSession(
             ).await()
         }
     }
+
+    /**
+     * Rex's Clear Terminal (`com.superlogical.terminal.clear`): the screen and scrollback go, the
+     * line being typed stays at the top. Nothing changes under a full-screen program.
+     */
+    suspend fun clearPane() {
+        val (sid, block) = requireBlock()
+        paneMethod(sid, block, "clear")
+    }
+
+    /** Rex's Reset Terminal (`…reset`): the terminal starts over, cleared; the program keeps running. */
+    suspend fun resetPane() {
+        val (sid, block) = requireBlock()
+        paneMethod(sid, block, "reset")
+    }
+
+    /**
+     * The pane on screen's output, screen and scrollback, as plain text with each line as the
+     * program wrote it (`format` with `trim` and `unwrap`). Rex hands a large one over in parts
+     * (`blob_read`); past [maxBytes] only the newest output is kept, from the start of a line.
+     * Null when the pane went away meanwhile.
+     */
+    suspend fun paneText(maxBytes: Int = MAX_TEXT_BYTES): PaneText? {
+        val (sid, block) = requireBlock()
+        val args = JSONObject().put("format", "text").put("trim", true).put("unwrap", true).put("max_bytes", TEXT_PART_BYTES)
+        val first = paneMethod(sid, block, "format", args) ?: return null
+        val head = first.optString("content").toByteArray()
+        val id = first.optLong("id")
+        if (id <= 0) return PaneText(String(head, Charsets.UTF_8), cut = false)
+        val total = first.optLong("total", -1)
+        val cut = total > maxBytes
+        val text = java.io.ByteArrayOutputStream()
+        var offset: Long
+        if (cut) {
+            offset = total - maxBytes
+        } else {
+            text.write(head)
+            offset = head.size.toLong()
+        }
+        while (true) {
+            val part = paneMethod(
+                sid,
+                block,
+                "blob_read",
+                JSONObject().put("id", id).put("offset", offset).put("max_bytes", TEXT_PART_BYTES),
+            ) ?: return null
+            val data = part.optString("data").toByteArray()
+            text.write(data)
+            offset += data.size
+            if (part.optBoolean("eof", true) || data.isEmpty()) break
+        }
+        var out = text.toString(Charsets.UTF_8.name())
+        // Read from the middle, the first line may start part-way, even part-way through a character.
+        if (cut) out = out.substringAfter('\n', out)
+        return PaneText(out, cut)
+    }
+
+    private suspend fun paneMethod(sid: String, block: String, method: String, args: JSONObject? = null): JSONObject? =
+        onPane(sid, block) {
+            rpc(
+                "block.method",
+                JSONObject().put("session_id", sid).put("block_id", block).put("method", method).apply { args?.let { put("args", it) } },
+            )
+        }
 
     suspend fun sendKey(
         code: String,
@@ -1761,6 +1828,12 @@ private const val LIVENESS_MS = 4_000L
 
 /** The largest copy put on the phone's clipboard: Android hands a clip to other apps through Binder, which takes about 1 MB. */
 private const val MAX_COPY_BYTES = 512 * 1024L
+
+/** The most of a pane's output Copy output and Share output take: what a clip or a share can carry. */
+const val MAX_TEXT_BYTES = 512 * 1024
+
+/** How much of a pane's text one call reads: Rex's default for blob_read. */
+private const val TEXT_PART_BYTES = 48 * 1024
 
 private const val WRITE_METHOD = "com.superlogical.terminal.write"
 

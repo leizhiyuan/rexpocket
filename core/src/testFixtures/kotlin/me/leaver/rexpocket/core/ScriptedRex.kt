@@ -256,6 +256,11 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
         }
     }
 
+    /** The program in [block] prints [text]: it is on the pane's screen, for `format`. */
+    fun print(block: String, text: String) {
+        synchronized(this) { screens.getOrPut(block) { StringBuilder() }.append(text) }
+    }
+
     /** What [block] shows, as Rex's `format` gives it as text: what was written to it, which a shell echoes. */
     fun screenOf(block: String): String = synchronized(this) { screens[block]?.toString().orEmpty() }
 
