@@ -315,7 +315,10 @@
     <string name="update_available">%1$s is available</string>
     <string name="update_downloading">Downloading %1$s · %2$d%%</string>
     <string name="update_ready">%1$s is downloaded</string>
-    <string name="update_failed">Could not check or download</string>
+    <string name="update_failed">Could not check or download. Tap to retry</string>
+    <string name="update_failed_offline">Offline. Tap to retry</string>
+    <string name="update_failed_rate_limited">GitHub is limiting requests. Tap to retry</string>
+    <string name="update_failed_checksum">The download did not match its checksum. Tap to retry</string>
     <string name="update_available_title">RexPocket %1$s is available</string>
     <string name="update_available_body">This build is published on GitHub. Downloading it installs nothing: the APK is checked, and Android asks again before anything is replaced.</string>
     <string name="update_download">Download</string>

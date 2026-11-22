@@ -42,7 +42,38 @@ sealed interface UpdateState {
     }
 
     data class Ready(val tag: String, val file: File) : UpdateState
-    data class Failed(val detail: String) : UpdateState
+
+    /** [detail] is for Diagnostics; [cause] is what the settings row says. */
+    data class Failed(val detail: String, val cause: UpdateFailure = UpdateFailure.Other) : UpdateState
+}
+
+/** Why a check or a download failed, as far as the settings row tells it. */
+enum class UpdateFailure {
+    /** No network, or GitHub could not be reached. */
+    Offline,
+
+    /** GitHub refused for now: its limit on requests without an account (403 or 429). */
+    RateLimited,
+
+    /** The APK was not the size or the SHA-256 the feed gave. */
+    Checksum,
+    Other,
+}
+
+/** GitHub answered [code]. */
+internal class HttpStatusException(val code: Int, what: String) : IOException("$what answered HTTP $code")
+
+/** The download is not the file the feed describes. */
+internal class ChecksumException(message: String) : IOException(message)
+
+/** What [e] means for the person: no network, GitHub's limit, a bad download, or something else. */
+internal fun updateFailure(e: IOException): UpdateFailure = when (e) {
+    is HttpStatusException -> if (e.code == 403 || e.code == 429) UpdateFailure.RateLimited else UpdateFailure.Other
+    is ChecksumException -> UpdateFailure.Checksum
+    is java.net.UnknownHostException, is java.net.SocketException, is java.net.SocketTimeoutException,
+    is javax.net.ssl.SSLException,
+    -> UpdateFailure.Offline
+    else -> UpdateFailure.Other
 }
 
 /** What became of a tap on Install. */
@@ -120,12 +151,12 @@ class Updater(context: Context) {
         _state.value = UpdateState.Checking
         val release = try {
             val feed = get(FEED)
-            if (!feed.isSuccessful) throw IOException("releases answered HTTP ${feed.code}")
+            if (!feed.isSuccessful) throw HttpStatusException(feed.code, "releases")
             AppRelease.parseFeed(feed.body?.string().orEmpty()).newestFor(running, _channel.value)
         } catch (e: IOException) {
             // Offline or GitHub is down: nothing to say while it is only the app starting up.
-            Diagnostics.event(TAG, "check failed: ${e.message}")
-            _state.value = UpdateState.Failed(e.message ?: "unreachable")
+            Diagnostics.event(TAG, "check failed: ${e.javaClass.simpleName}: ${e.message}")
+            _state.value = UpdateState.Failed(e.message ?: "unreachable", updateFailure(e))
             return@withContext
         }
         remember()
@@ -180,7 +211,7 @@ class Updater(context: Context) {
         var received = 0L
         try {
             get(apk.url).use { response ->
-                if (!response.isSuccessful) throw IOException("download answered HTTP ${response.code}")
+                if (!response.isSuccessful) throw HttpStatusException(response.code, "download")
                 val body = response.body ?: throw IOException("download has no body")
                 val total = body.contentLength().takeIf { it > 0 } ?: apk.size
                 part.outputStream().use { out ->
@@ -198,10 +229,10 @@ class Updater(context: Context) {
                     }
                 }
             }
-            if (apk.size > 0 && received != apk.size) throw IOException("got $received of ${apk.size} bytes")
+            if (apk.size > 0 && received != apk.size) throw ChecksumException("got $received of ${apk.size} bytes")
             val wanted = apk.sha256?.removePrefix("sha256:")?.lowercase()
             if (wanted != null && digest.digest().joinToString("") { "%02x".format(it) } != wanted) {
-                throw IOException("checksum does not match")
+                throw ChecksumException("checksum does not match")
             }
             val file = File(dir, apk.name)
             if (!part.renameTo(file)) throw IOException("cannot keep the download")
@@ -215,8 +246,8 @@ class Updater(context: Context) {
             throw e
         } catch (e: IOException) {
             part.delete()
-            Diagnostics.event(TAG, "download failed: ${e.message}")
-            _state.value = UpdateState.Failed(e.message ?: "download failed")
+            Diagnostics.event(TAG, "download failed: ${e.javaClass.simpleName}: ${e.message}")
+            _state.value = UpdateState.Failed(e.message ?: "download failed", updateFailure(e))
         }
     }
 
