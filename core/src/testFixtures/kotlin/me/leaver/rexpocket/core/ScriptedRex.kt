@@ -34,7 +34,8 @@ import java.util.concurrent.atomic.AtomicLong
  *   `bad_request` for own and disown. [paneRefusal] is that message.
  * - Every change is told to every client as an event, the asking one included, after its answer.
  * - A closed pane's streams are closed with 4000; a HELLO or RESUME for it is refused with 0x03.
- * - Closing a tab's last pane closes the tab; closing a session's last tab destroys the session.
+ * - Closing a tab's last pane closes the tab. Closing a session's last tab leaves it with no
+ *   windows; only `session.destroy` ends a session.
  *
  * Any client - the phone under test or a [Desk] - changes it through the protocol, so a scenario
  * written against this runs unchanged against a real Rex. [refuse] makes one method fail, for the
@@ -294,7 +295,9 @@ class ScriptedRex : AutoCloseable {
         s.tabs.remove(tab)
         if (s.activeTab == window) s.activeTab = s.tabs.firstOrNull()?.id
         sessionEvent(s.id, "window_closed", JSONObject().put("window_id", window))
-        if (s.tabs.isEmpty()) destroy(s) else changed(s)
+        // A session with no windows is still a session (session.create makes one with none); Rex's
+        // reference has no close that ends the session with its last window.
+        changed(s)
     }
 
     private fun destroy(s: Session) {

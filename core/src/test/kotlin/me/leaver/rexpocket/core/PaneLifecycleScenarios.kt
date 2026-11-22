@@ -76,6 +76,26 @@ abstract class PaneLifecycleScenarios {
     }
 
     @Test
+    fun theDeskClosesTheSessionsOnlyTabAndThePhoneMakesANewOne() = scenario {
+        // A session outlives its last window (Rex's reference: session.create makes one with no
+        // windows, and no close ends the session), so the note stands and a new tab goes there.
+        val (sid, tabs) = desk.newSession(tabs = 1)
+        phone.openSession(sid)
+        showsAndHolds(sid, tabs[0].second)
+
+        desk.closeTab(sid, tabs[0].first)
+        val closed = until("the closed note") { it.closed != null }.closed
+        assertEquals(ClosedPane(sid, tabs[0].second, tabClosed = true), closed)
+        quietFor(500)
+
+        phone.newWindow()
+        val made = until("the new tab on screen") { st -> screen.shown(st).let { it != null && it != tabs[0].second } }
+        assertEquals(sid, made.activeSessionId)
+        showsAndHolds(sid, screen.shown(made)!!)
+        quietFor()
+    }
+
+    @Test
     fun theDeskClosesAReleasedPaneAndThePhoneTakesTheNextTabOnSight() = scenario {
         val (sid, tabs) = desk.newSession(tabs = 2)
         val (window2, block2) = tabs[1]
