@@ -74,6 +74,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import me.leaver.rexpocket.terminal.TerminalSession
 import kotlinx.coroutines.delay
+import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import androidx.lifecycle.Lifecycle
@@ -799,6 +800,18 @@ internal fun TermScreen(
 
     rename?.let { target ->
         var text by remember(target) { mutableStateOf(target.current) }
+        fun save() {
+            rename = null
+            val label = text.trim()
+            if (label.isEmpty() || label == target.current) return
+            onAct {
+                when (target.kind) {
+                    Level.Tab -> renameWindow(label, target.id)
+                    Level.Pane -> renameBlock(label, target.id)
+                    Level.Session -> renameSession(label)
+                }
+            }
+        }
         AlertDialog(
             onDismissRequest = { rename = null },
             containerColor = Colors.surface,
@@ -812,20 +825,10 @@ internal fun TermScreen(
                     color = Colors.ink,
                 )
             },
-            text = { Field(stringResource(R.string.field_name), text, autoFocus = true) { text = it } },
+            // Enter on the keyboard saves, as the button does.
+            text = { Field(stringResource(R.string.field_name), text, autoFocus = true, imeAction = ImeAction.Done, onDone = ::save) { text = it } },
             confirmButton = {
-                TextButton(onClick = {
-                    rename = null
-                    val label = text.trim()
-                    if (label.isEmpty() || label == target.current) return@TextButton
-                    onAct {
-                        when (target.kind) {
-                            Level.Tab -> renameWindow(label, target.id)
-                            Level.Pane -> renameBlock(label, target.id)
-                            Level.Session -> renameSession(label)
-                        }
-                    }
-                }) { Text(stringResource(R.string.action_save), color = Colors.accent) }
+                TextButton(onClick = ::save) { Text(stringResource(R.string.action_save), color = Colors.accent) }
             },
             dismissButton = {
                 TextButton(onClick = { rename = null }) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }

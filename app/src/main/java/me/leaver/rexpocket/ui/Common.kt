@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +43,10 @@ import androidx.compose.ui.semantics.Role
 
 
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -90,11 +95,25 @@ internal fun Field(
     minLines: Int = 1,
     /** What an empty field says inside the box, so it is clear what belongs in it. */
     placeholder: String? = null,
+    /**
+     * The keyboard for what goes in: [KeyboardType.Uri] for an address, [KeyboardType.Ascii] for a
+     * user name. A password field always gets the password keyboard.
+     */
+    keyboardType: KeyboardType = KeyboardType.Text,
+    /** False for what is not prose - an address, a user name - which a keyboard must not "correct". */
+    autoCorrect: Boolean = true,
+    /** The keyboard's action key: [ImeAction.Next] moves to the next field, [ImeAction.Done] runs [onDone]. */
+    imeAction: ImeAction = ImeAction.Default,
+    onDone: (() -> Unit)? = null,
+    /** This field, for another field's [next]. */
+    focusRequester: FocusRequester? = null,
+    /** Where [ImeAction.Next] goes when it is not simply the next thing that takes focus, such as past a row of buttons. */
+    next: FocusRequester? = null,
     onChange: (String) -> Unit,
 ) {
     // With autoFocus the field opens focused with its text selected, so a rename can be typed over.
     var field by remember { mutableStateOf(TextFieldValue(value, if (autoFocus) TextRange(0, value.length) else TextRange(value.length))) }
-    val focus = remember { FocusRequester() }
+    val focus = focusRequester ?: remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     if (autoFocus) {
         LaunchedEffect(Unit) {
@@ -107,7 +126,8 @@ internal fun Field(
         if (field.text != value) field = TextFieldValue(value, TextRange(value.length))
     }
     Column {
-        Text(hint, color = Colors.muted, fontSize = TextStyles.label)
+        // The hint is the field's name for TalkBack too: it is said with the field, not as a line of its own.
+        Text(hint, color = Colors.muted, fontSize = TextStyles.label, modifier = Modifier.clearAndSetSemantics {})
         // The placeholder is painted behind the field, which stays the thing that takes the tap.
         Box(Modifier.fillMaxWidth().padding(top = 4.dp)) {
             if (placeholder != null && field.text.isEmpty()) {
@@ -130,10 +150,19 @@ internal fun Field(
                 singleLine = singleLine,
                 minLines = minLines,
                 visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else KeyboardType.Text),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (password) KeyboardType.Password else keyboardType,
+                    autoCorrectEnabled = autoCorrect && !password,
+                    imeAction = imeAction,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = onDone?.let { done -> { done() } },
+                    onNext = next?.let { field -> { field.requestFocus() } },
+                ),
                 modifier = Modifier.fillMaxWidth().border(1.dp, Colors.line, RoundedCornerShape(Radius.chip))
                     .padding(horizontal = 12.dp, vertical = 12.dp)
-                    .focusRequester(focus),
+                    .focusRequester(focus)
+                    .semantics { contentDescription = hint },
             )
         }
     }

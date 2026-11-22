@@ -71,6 +71,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1173,6 +1175,16 @@ internal fun HostDialog(
         )
     }
 
+    val passwordField = remember { FocusRequester() }
+    val keyField = remember { FocusRequester() }
+
+    /** Saves the host, from the button or Enter on the last field; nothing while it is not ready. */
+    fun save() {
+        val address = parsed ?: return
+        if (!canSave) return
+        savedHost(viaTailscale = address.viaTailscale)?.let(onSave)
+    }
+
     val pickKey = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
@@ -1208,11 +1220,17 @@ internal fun HostDialog(
                     stringResource(R.string.field_name),
                     label,
                     placeholder = stringResource(R.string.field_name_optional),
+                    imeAction = ImeAction.Next,
                 ) { label = it }
+                // Enter goes on to the next field, and on the last one saves, as the button does.
                 Field(
                     stringResource(R.string.field_address),
                     address,
                     placeholder = stringResource(R.string.field_address_placeholder),
+                    keyboardType = KeyboardType.Uri,
+                    autoCorrect = false,
+                    imeAction = if (ssh) ImeAction.Next else ImeAction.Done,
+                    onDone = ::save,
                 ) { address = it }
                 if (parsed != null) {
                     Text(
@@ -1238,7 +1256,15 @@ internal fun HostDialog(
                 }
                 if (ssh) {
                     Text(stringResource(R.string.ssh_address_hint), color = Colors.muted, fontSize = TextStyles.label)
-                    Field(stringResource(R.string.ssh_user), sshUser) { sshUser = it }
+                    Field(
+                        stringResource(R.string.ssh_user),
+                        sshUser,
+                        keyboardType = KeyboardType.Ascii,
+                        autoCorrect = false,
+                        imeAction = ImeAction.Next,
+                        // Past the password and key buttons, to the field that is shown.
+                        next = if (useKey) keyField else passwordField,
+                    ) { sshUser = it }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { useKey = false }) {
                             Text(
@@ -1256,7 +1282,7 @@ internal fun HostDialog(
                         }
                     }
                     if (useKey) {
-                        Field(stringResource(R.string.ssh_private_key), privateKey, password = true, singleLine = false, minLines = 3) { privateKey = it }
+                        Field(stringResource(R.string.ssh_private_key), privateKey, password = true, singleLine = false, minLines = 3, focusRequester = keyField) { privateKey = it }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TextButton(onClick = { pickKey.launch(arrayOf("*/*")) }) {
                                 Text(stringResource(R.string.ssh_key_file), color = Colors.accent)
@@ -1265,9 +1291,16 @@ internal fun HostDialog(
                                 Text(stringResource(R.string.ssh_key_loaded), color = Colors.ok, fontSize = TextStyles.label)
                             }
                         }
-                        Field(stringResource(R.string.ssh_passphrase), passphrase, password = true) { passphrase = it }
+                        Field(stringResource(R.string.ssh_passphrase), passphrase, password = true, imeAction = ImeAction.Done, onDone = ::save) { passphrase = it }
                     } else {
-                        Field(stringResource(R.string.ssh_password), password, password = true) { password = it }
+                        Field(
+                            stringResource(R.string.ssh_password),
+                            password,
+                            password = true,
+                            imeAction = ImeAction.Done,
+                            onDone = ::save,
+                            focusRequester = passwordField,
+                        ) { password = it }
                     }
                     if (!identityReady) {
                         Text(
@@ -1298,13 +1331,7 @@ internal fun HostDialog(
         },
         confirmButton = {
             // Nothing to save until the address says where to connect and how to get in.
-            TextButton(
-                enabled = canSave,
-                onClick = {
-                    val address = parsed ?: return@TextButton
-                    savedHost(viaTailscale = address.viaTailscale)?.let(onSave)
-                },
-            ) { Text(stringResource(R.string.action_save), color = if (canSave) Colors.accent else Colors.muted) }
+            TextButton(enabled = canSave, onClick = ::save) { Text(stringResource(R.string.action_save), color = if (canSave) Colors.accent else Colors.muted) }
         },
         dismissButton = {
             Row {
