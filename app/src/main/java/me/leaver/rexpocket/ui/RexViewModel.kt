@@ -183,6 +183,15 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
      */
     private var resumePending = false
 
+    /**
+     * Whether the connection now open (or failed) was asked to go back to the terminal. A retry or
+     * a confirmed host key connects again with the same wish, or with the terminal when it is on
+     * screen: tapping Retry on the list is not a continuation, and must not jump into a tab.
+     */
+    private var connectedToResume = false
+
+    private fun resumeAgain(): Boolean = connectedToResume || route.value == Route.Term
+
     /** Whether the launch reopens the last tab even after a fresh start. Off by default. */
     val reopenLastTab = MutableStateFlow(store.reopenLastTab())
 
@@ -466,7 +475,7 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
         saveHost(updated)
         host = updated
         Diagnostics.event(CONN_TAG, "ssh host key confirmed for ${current.host}")
-        connect(updated, resume = true)
+        connect(updated, resume = resumeAgain())
     }
 
     /**
@@ -480,6 +489,7 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
         val previousSession = store.lastSession(target.id)
         route.value = Route.Home
         resumePending = resume
+        connectedToResume = resume
         val settings = store.tailnet()
         val endpoint = target.endpoint()
         if (target.viaTailscale && !settings.enabled) {
@@ -862,7 +872,7 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
         // A connection stopped by a wrong key or an unconfirmed host key has no loop left to wake.
         // The retry starts a new one from the host as it is saved now, after an edit.
         if (open != null && finished) {
-            connect(hosts.value.firstOrNull { it.id == open.id } ?: open, resume = true)
+            connect(hosts.value.firstOrNull { it.id == open.id } ?: open, resume = resumeAgain())
             return
         }
         session?.retryNow()

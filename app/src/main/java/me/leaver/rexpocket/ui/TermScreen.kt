@@ -639,7 +639,7 @@ internal fun TermScreen(
                 if (focused != null) {
                     action(stringResource(R.string.key_paste), phoneGroup, "Paste into Pane pane.paste") { pasteClipboard() }
                     if (upload?.running != true) action(stringResource(R.string.upload_attach), phoneGroup, "Insert File pane.insert_file") { filePicker.launch("*/*") }
-                    action(stringResource(if (imeUp) R.string.menu_hide_keyboard else R.string.menu_show_keyboard), phoneGroup, "Show Keyboard Hide Keyboard client.keyboard.show") { toggleKeyboard() }
+                    action(stringResource(if (imeUp) R.string.menu_hide_keyboard else R.string.menu_show_keyboard), phoneGroup, "Show Keyboard client.keyboard.show Hide Keyboard client.keyboard.hide") { toggleKeyboard() }
                 }
                 action(stringResource(if (chrome.fullScreen) R.string.palette_leave_full_screen else R.string.action_full_screen), phoneGroup, "Toggle Full Screen client.window.fullscreen.toggle") { toggleFullScreen() }
                 action(stringResource(R.string.palette_font_bigger), phoneGroup, "Increase Font Size client.font.increase") { onFont(fontScale + FONT_STEP) }

@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.Trouble
 import me.leaver.rexpocket.data.HostStore
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -95,6 +96,26 @@ class LaunchTest {
         compose.awaitThat { m.route.value == Route.Term }
         compose.waitForIdle()
         assertEquals(desk.ids[1], m.pocket.value.activeSessionId)
+    }
+
+    @Test
+    fun retryOnTheListAfterAFailedConnectStaysOnTheList() {
+        // A plain launch whose connection failed for good (here: a tailnet host with no tailnet
+        // joined). The person fixes the host and taps Retry on the list: the connection comes up
+        // and they stay on the list, as on any launch that is not a continuation.
+        val app = freshApp()
+        val store = desk.saveFor(app, lastSession = desk.ids[1])
+        store.upsert(desk.host.copy(viaTailscale = true))
+        val m = launchedModel(compose, app)
+        model = m
+        compose.setContent { RexPocketApp(m) }
+        compose.awaitThat { m.pocket.value.problem?.trouble == Trouble.TailnetNotJoined }
+        compose.runOnUiThread {
+            m.saveHost(desk.host)
+            m.retryNow()
+        }
+        compose.awaitLive(m, desk.ids[1])
+        compose.assertStaysHome(m)
     }
 
     @Test
