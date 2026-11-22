@@ -1,6 +1,8 @@
 package me.leaver.rexpocket.ui
 
 import android.view.ViewConfiguration
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -95,31 +97,30 @@ internal fun ControlsSheet(
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.controls_title)) {
         Group(stringResource(R.string.controls_group_gestures)) {
             // Each row steps through its choices and stays open, as the C-c row does: the detail is
-            // the one place the change shows.
+            // the one place the change shows, and the icon is the action chosen, not the gesture, so
+            // it changes with it (choice(), below).
+            ChoiceItem(R.string.gesture_tap, choice(gestures.tap)) {
+                onGestures(gestures.copy(tap = next(TapAction.entries, gestures.tap)))
+            }
+            ChoiceItem(R.string.gesture_double_tap, choice(gestures.doubleTap)) {
+                onGestures(gestures.copy(doubleTap = next(DoubleTapAction.entries, gestures.doubleTap)))
+            }
+            ChoiceItem(R.string.gesture_long_press, choice(gestures.longPress)) {
+                onGestures(gestures.copy(longPress = next(LongPressAction.entries, gestures.longPress)))
+            }
+            // The rest are about time: an hourglass for the wait, a timer for the two durations.
             SheetItem(
-                label = stringResource(R.string.gesture_tap), icon = R.drawable.ic_keyboard,
-                detail = stringResource(tapLabel(gestures.tap)), keepOpen = true,
-            ) { onGestures(gestures.copy(tap = next(TapAction.entries, gestures.tap))) }
-            SheetItem(
-                label = stringResource(R.string.gesture_double_tap), icon = R.drawable.ic_fullscreen,
-                detail = stringResource(doubleTapLabel(gestures.doubleTap)), keepOpen = true,
-            ) { onGestures(gestures.copy(doubleTap = next(DoubleTapAction.entries, gestures.doubleTap))) }
-            SheetItem(
-                label = stringResource(R.string.gesture_long_press), icon = R.drawable.ic_edit,
-                detail = stringResource(longPressLabel(gestures.longPress)), keepOpen = true,
-            ) { onGestures(gestures.copy(longPress = next(LongPressAction.entries, gestures.longPress))) }
-            SheetItem(
-                label = stringResource(R.string.gesture_wait), icon = R.drawable.ic_settings,
+                label = stringResource(R.string.gesture_wait), icon = R.drawable.ic_hourglass,
                 supporting = stringResource(if (gestures.waitForDoubleTap) R.string.gesture_wait_on else R.string.gesture_wait_off),
                 detail = stringResource(if (gestures.waitForDoubleTap) R.string.gesture_on else R.string.gesture_off),
                 keepOpen = true,
             ) { onGestures(gestures.copy(waitForDoubleTap = !gestures.waitForDoubleTap)) }
             SheetItem(
-                label = stringResource(R.string.gesture_double_tap_time), icon = R.drawable.ic_settings,
+                label = stringResource(R.string.gesture_double_tap_time), icon = R.drawable.ic_timer,
                 detail = msLabel(gestures.doubleTapMs, systemDoubleTap), keepOpen = true,
             ) { timing = Timing.DoubleTap }
             SheetItem(
-                label = stringResource(R.string.gesture_long_press_time), icon = R.drawable.ic_settings,
+                label = stringResource(R.string.gesture_long_press_time), icon = R.drawable.ic_timer,
                 detail = msLabel(gestures.longPressMs, systemLongPress), keepOpen = true,
             ) { timing = Timing.LongPress }
         }
@@ -139,14 +140,9 @@ internal fun ControlsSheet(
             )
             // A tap steps between the two: tapped, and held unless the program is busy. Whether the
             // key shows at all is Arrange keys'.
-            SheetItem(
-                label = stringResource(R.string.keybar_ctrl_c), icon = R.drawable.ic_keyboard,
-                detail = stringResource(
-                    if (keyBarCtrlC == CtrlCKey.Hold) R.string.keybar_ctrl_c_hold else R.string.keybar_ctrl_c_tap,
-                ),
-                keepOpen = true,
-                onClick = { onKeyBarCtrlC(if (keyBarCtrlC == CtrlCKey.Hold) CtrlCKey.Tap else CtrlCKey.Hold) },
-            )
+            ChoiceItem(R.string.keybar_ctrl_c, choice(keyBarCtrlC)) {
+                onKeyBarCtrlC(if (keyBarCtrlC == CtrlCKey.Hold) CtrlCKey.Tap else CtrlCKey.Hold)
+            }
         }
     }
     when (timing) {
@@ -176,22 +172,51 @@ internal fun ControlsSheet(
 private fun msLabel(ms: Int, system: Int): String =
     if (ms <= 0) stringResource(R.string.gesture_time_system, system) else stringResource(R.string.gesture_time_ms, ms)
 
-internal fun tapLabel(action: TapAction) = when (action) {
-    TapAction.Keyboard -> R.string.gesture_open_keyboard
-    TapAction.Toggle -> R.string.gesture_toggle_keyboard
-    TapAction.Nothing -> R.string.gesture_nothing
+/**
+ * What a choice row shows for its value: the words and the icon of the action chosen. One function
+ * per setting, so a row's detail and its icon come from the same place and cannot disagree. An
+ * action that does nothing has the neutral "block" mark rather than no icon, so the group's labels
+ * keep their keyline.
+ */
+internal data class Choice(@StringRes val label: Int, @DrawableRes val icon: Int)
+
+internal fun choice(action: TapAction): Choice = when (action) {
+    TapAction.Keyboard -> Choice(R.string.gesture_open_keyboard, R.drawable.ic_keyboard)
+    TapAction.Toggle -> Choice(R.string.gesture_toggle_keyboard, R.drawable.ic_keyboard)
+    TapAction.Nothing -> Choice(R.string.gesture_nothing, R.drawable.ic_block)
 }
 
-internal fun doubleTapLabel(action: DoubleTapAction) = when (action) {
-    DoubleTapAction.FullScreen -> R.string.action_full_screen
-    DoubleTapAction.Keyboard -> R.string.gesture_toggle_keyboard
-    DoubleTapAction.Nothing -> R.string.gesture_nothing
+internal fun choice(action: DoubleTapAction): Choice = when (action) {
+    DoubleTapAction.FullScreen -> Choice(R.string.action_full_screen, R.drawable.ic_fullscreen)
+    DoubleTapAction.Keyboard -> Choice(R.string.gesture_toggle_keyboard, R.drawable.ic_keyboard)
+    DoubleTapAction.Nothing -> Choice(R.string.gesture_nothing, R.drawable.ic_block)
 }
 
-internal fun longPressLabel(action: LongPressAction) = when (action) {
-    LongPressAction.Select -> R.string.gesture_select
-    LongPressAction.FullScreen -> R.string.action_full_screen
-    LongPressAction.Keyboard -> R.string.gesture_toggle_keyboard
+internal fun choice(action: LongPressAction): Choice = when (action) {
+    LongPressAction.Select -> Choice(R.string.gesture_select, R.drawable.ic_text_select)
+    LongPressAction.FullScreen -> Choice(R.string.action_full_screen, R.drawable.ic_fullscreen)
+    LongPressAction.Keyboard -> Choice(R.string.gesture_toggle_keyboard, R.drawable.ic_keyboard)
+}
+
+/**
+ * The C-c key: a finger tapping, or a finger held. Hidden is no choice of this row (whether the key
+ * shows is Arrange keys'): a key stored hidden from an old build is shown as the tap it sends.
+ */
+internal fun choice(key: CtrlCKey): Choice = when (key) {
+    CtrlCKey.Hold -> Choice(R.string.keybar_ctrl_c_hold, R.drawable.ic_touch_long)
+    CtrlCKey.Tap, CtrlCKey.Hidden -> Choice(R.string.keybar_ctrl_c_tap, R.drawable.ic_touch_app)
+}
+
+/** A row that steps through a setting's choices: [choice] gives its detail and its icon. */
+@Composable
+private fun SheetScope.ChoiceItem(@StringRes label: Int, choice: Choice, onClick: () -> Unit) {
+    SheetItem(
+        label = stringResource(label),
+        icon = choice.icon,
+        detail = stringResource(choice.label),
+        keepOpen = true,
+        onClick = onClick,
+    )
 }
 
 /**

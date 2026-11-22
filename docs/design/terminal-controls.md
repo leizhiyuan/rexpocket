@@ -366,8 +366,16 @@ sheet with two groups:
   under its label ("A tap waits in case a second follows" / "A tap acts at once"), its detail
   just On or Off. Every sheet row wraps - a label to three lines, a detail to two, at most 152 dp
   wide - so nothing is cut off on a narrow phone or with large text.
-- **Key bar**: With a desk keyboard, Arrange keys › (the key pill, key groups, right pill; 4.1), C-c
-  (tap · hold unless busy).
+- **Key bar**: With a desk keyboard (Key bar hidden · Key bar shown), Arrange keys › (the key
+  pill, key groups, right pill; 4.1), C-c (tap · hold unless busy).
+
+**Icons.** A choice row's icon is the action it is set to, not a picture of the gesture, so it
+changes with the setting: a keyboard for Open keyboard and for Open or close keyboard, the four
+corners for Full screen, a text cursor and selection for Select text, the "block" mark for Nothing
+(a neutral mark rather than no icon, so the group keeps one keyline); C-c is a finger tapping or a
+finger held. The detail and the icon come from one function per setting (`choice` in Controls.kt,
+JVM-tested in `ChoiceTest`), so they cannot disagree. Rows about time have time icons: an hourglass
+for the wait, a timer for both durations. Icons are Material Symbols Rounded.
 
 Stored in the app's shared preferences beside the existing keys:
 

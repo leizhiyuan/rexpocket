@@ -263,9 +263,9 @@
     <string name="key_arrows">Arrow keys</string>
     <string name="arrows_pinned">Pinned</string>
     <string name="key_keyboard">Keyboard</string>
-    <string name="keybar_title">Key bar</string>
-    <string name="keybar_auto">Hidden with a keyboard</string>
-    <string name="keybar_always">Always shown</string>
+    <string name="keybar_title">With a desk keyboard</string>
+    <string name="keybar_auto">Key bar hidden</string>
+    <string name="keybar_always">Key bar shown</string>
     <string name="error_operation_failed">Operation failed</string>
     <string name="state_folded">Folded</string>
     <string name="filter_on">On</string>

@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.assert
@@ -64,6 +65,11 @@ class TerminalControlsTest {
         row(label).assert(hasText(detail))
     }
 
+    /** The row's icon is [icon]: the action it is set to, not a picture of the gesture. */
+    private fun assertRowShows(label: Int, icon: Int) {
+        row(label).assert(SemanticsMatcher.expectValue(Drawable, icon))
+    }
+
     private fun stored(): GestureSettings = HostStore(compose.activity).gestures()
 
     private fun reopen() {
@@ -102,6 +108,36 @@ class TerminalControlsTest {
         reopen()
         assertRowSays(R.string.gesture_tap, string(R.string.gesture_toggle_keyboard))
         assertRowSays(R.string.gesture_wait, string(R.string.gesture_on))
+    }
+
+    @Test
+    fun eachRowsIconIsTheActionItIsSetTo() {
+        assertRowShows(R.string.gesture_tap, R.drawable.ic_keyboard)
+        assertRowShows(R.string.gesture_double_tap, R.drawable.ic_fullscreen)
+        assertRowShows(R.string.gesture_long_press, R.drawable.ic_text_select)
+        assertRowShows(R.string.keybar_ctrl_c, R.drawable.ic_touch_app)
+
+        tapRow(R.string.gesture_tap)
+        tapRow(R.string.gesture_tap)
+        assertRowSays(R.string.gesture_tap, string(R.string.gesture_nothing))
+        assertRowShows(R.string.gesture_tap, R.drawable.ic_block)
+        tapRow(R.string.gesture_double_tap)
+        assertRowShows(R.string.gesture_double_tap, R.drawable.ic_keyboard)
+        tapRow(R.string.gesture_double_tap)
+        assertRowShows(R.string.gesture_double_tap, R.drawable.ic_block)
+        tapRow(R.string.gesture_long_press)
+        assertRowShows(R.string.gesture_long_press, R.drawable.ic_fullscreen)
+        tapRow(R.string.keybar_ctrl_c)
+        assertRowShows(R.string.keybar_ctrl_c, R.drawable.ic_touch_long)
+
+        // The times are times, not more gears.
+        assertRowShows(R.string.gesture_wait, R.drawable.ic_hourglass)
+        assertRowShows(R.string.gesture_double_tap_time, R.drawable.ic_timer)
+        assertRowShows(R.string.gesture_long_press_time, R.drawable.ic_timer)
+
+        reopen()
+        assertRowShows(R.string.gesture_tap, R.drawable.ic_block)
+        assertRowShows(R.string.keybar_ctrl_c, R.drawable.ic_touch_long)
     }
 
     @Test
