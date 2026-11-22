@@ -854,6 +854,7 @@ class PocketSession(
                 closed = view?.let { v -> closedBy(it, v) } ?: it.closed,
             )
         }
+        view?.let(::forgetClosedHere)
         preferred = active
     }
 
@@ -1081,6 +1082,14 @@ class PocketSession(
                 closed = if (active) closedBy(it, view) else it.closed,
             )
         }
+        forgetClosedHere(view)
+    }
+
+    /** The panes this phone closed that [view] no longer has: their close has been seen through. */
+    private fun forgetClosedHere(view: SessionView) {
+        val left = view.allBlocks().map { it.id }.toSet()
+        val inOtherSessions = _state.value.views.filterKeys { it != view.sessionId }.values.flatMap { v -> v.allBlocks().map { it.id } }.toSet()
+        closingHere.removeAll { it.startsWith("block:") && it !in left && it !in inOtherSessions && _state.value.closed?.blockId != it }
     }
 
     /**
@@ -1142,7 +1151,10 @@ class PocketSession(
         if (st.closed?.sessionId == next.sessionId) return st.closed
         val shown = before.focusedBlock() ?: return st.closed
         if (next.allBlocks().any { it.id == shown.id }) return st.closed
-        if (closingHere.remove(shown.id)) return st.closed
+        // Only looked at: this runs inside a state update, which can run more than once when two
+        // changes race - Rex tells a close before it answers it - and a second run must still know
+        // the phone closed the pane itself. [forgetClosedHere] drops it once the view has it gone.
+        if (shown.id in closingHere) return st.closed
         val tab = before.activeWindow()?.id
         return ClosedPane(next.sessionId, shown.id, tabClosed = next.windows.none { it.id == tab })
     }
