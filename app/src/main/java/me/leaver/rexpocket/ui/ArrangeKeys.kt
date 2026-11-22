@@ -24,6 +24,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -77,7 +78,8 @@ internal fun ArrangeKeysSheet(arrangement: KeyArrangement, onArrangement: (KeyAr
 @Composable
 private fun ArrangeRow(barKey: BarKey, shown: Boolean, first: Boolean, last: Boolean, onMove: (Int) -> Unit, onShow: (Boolean) -> Unit) {
     val name = barKeyLabel(barKey)
-    val rowPx = with(LocalDensity.current) { ROW_HEIGHT.toPx() }
+    // A place in the list: the row and the hairline under it.
+    val rowPx = with(LocalDensity.current) { (ROW_HEIGHT + 1.dp).toPx() }
     var offset by remember { mutableFloatStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
     val move by rememberUpdatedState(onMove)
@@ -85,12 +87,15 @@ private fun ArrangeRow(barKey: BarKey, shown: Boolean, first: Boolean, last: Boo
     val canDown by rememberUpdatedState(!last)
     Row(
         Modifier.fillMaxWidth().height(ROW_HEIGHT)
+            .zIndex(if (dragging) 1f else 0f)
             .graphicsLayer { translationY = if (dragging) offset else 0f }
             .testTag("arrange-${barKey.pref}")
             .padding(start = 4.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Dragged, the row follows the finger and takes the place of each row it passes half of.
+        // Dragged, the row follows the finger and takes the place of each row it passes half of. The
+        // handle takes the drag as soon as it passes the touch slop, before the sheet's scroll or its
+        // drag to close can: those see the movement already used.
         val dragLabel = stringResource(R.string.arrange_drag, name)
         Box(
             Modifier.size(48.dp)

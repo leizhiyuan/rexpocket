@@ -23,18 +23,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
 import me.leaver.rexpocket.core.PocketState
@@ -166,26 +173,41 @@ internal fun SheetScope.Group(
     }
 }
 
-/** Lays the rows of a group out with a hairline between each pair. */
+/**
+ * Lays the rows of a group out with a hairline between each pair. A plain layout of the rows as
+ * they are composed: a row that moves (Arrange keys' rows, by key) moves on screen at once. It was a
+ * SubcomposeLayout before, which recomposed a moved row in its slot without measuring the group
+ * again, so the list kept its old order on screen while the setting changed underneath.
+ */
 @Composable
 private fun GroupRows(scope: SheetScope, inset: Dp, content: @Composable SheetScope.() -> Unit) {
-    androidx.compose.ui.layout.SubcomposeLayout { constraints ->
-        val rows = subcompose("rows") { scope.content() }.map { it.measure(constraints.copy(minHeight = 0)) }
+    // Where each hairline goes, from the last layout; drawn behind the rows, in the gaps between them.
+    var lines by remember { mutableStateOf(IntArray(0)) }
+    val color = Colors.line
+    Layout(
+        content = { scope.content() },
+        modifier = Modifier.drawBehind {
+            val start = inset.toPx()
+            val thickness = 1.dp.toPx()
+            val (from, to) = if (layoutDirection == LayoutDirection.Rtl) 0f to size.width - start else start to size.width
+            for (y in lines) drawRect(color, topLeft = Offset(from, y.toFloat()), size = Size(to - from, thickness))
+        },
+    ) { measurables, constraints ->
+        val rows = measurables.map { it.measure(constraints.copy(minHeight = 0)) }
         val line = 1.dp.roundToPx()
         val height = rows.sumOf { it.height } + line * (rows.size - 1).coerceAtLeast(0)
-        val divider = subcompose("lines") {
-            repeat((rows.size - 1).coerceAtLeast(0)) { Box(Modifier.fillMaxWidth().height(1.dp).background(Colors.line)) }
-        }.map { it.measure(constraints.copy(minHeight = 0, minWidth = 0, maxWidth = constraints.maxWidth - inset.roundToPx())) }
         layout(constraints.maxWidth, height) {
+            val at = IntArray((rows.size - 1).coerceAtLeast(0))
             var y = 0
             rows.forEachIndexed { i, row ->
                 if (i > 0) {
-                    divider[i - 1].place(inset.roundToPx(), y)
+                    at[i - 1] = y
                     y += line
                 }
                 row.place(0, y)
                 y += row.height
             }
+            if (!at.contentEquals(lines)) lines = at
         }
     }
 }
