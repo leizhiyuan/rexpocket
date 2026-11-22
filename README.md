@@ -134,8 +134,15 @@ own SSH daemon. How the transport works is described in
    - The ⋮ menu repeats the key bar's phone actions - Paste, Send a file, Show or Hide keyboard,
      Full screen - whatever the bar shows, then Pane (Release / Take over, new panes, rename, close),
      Tab (new, rename, close) and Session (sessions, rename, end).
-5. **On the home screen,** the eye keeps only the tabs with a program working or waiting, and
-   search filters hosts, sessions and tabs. A folded host or session stays folded - after a trip to
+   - **Command palette** - the ⋮ menu's first row, or Ctrl+Shift+P (Cmd+Shift+P on a Mac keyboard):
+     type to find any of those actions, every tab of the host and every session, as in Rex's own
+     palette (Rex's names, such as "Split Pane Right", find them too). Arrows, Return and Escape work
+     from a keyboard. See [docs/design/command-palette.md](docs/design/command-palette.md).
+5. **On the home screen,** the eye shows the connected host's Activity, as Rex does: the tabs whose
+   program reported its status, grouped Waiting, Failed, Done and Running, each with its session,
+   how long ago the phone saw it change, and the program's message; tap one to open that pane. Search
+   filters hosts, sessions and tabs (or the Activity rows while the eye is on). What comes from Rex
+   and what does not: [docs/design/rex-parity.md](docs/design/rex-parity.md). A folded host or session stays folded - after a trip to
    a terminal, a rotation or a restart.
    - At launch the app connects to the host it had open and shows this list. It goes back into the
      terminal only when Android closed the app while a terminal was on screen, or with

@@ -29,7 +29,7 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 ## Where the tests run
 
 - `app/src/sharedTest` holds the screen tests (`ArrangeKeysTest`, `TerminalControlsTest`, `TermMenuTest`,
-  `TermFullScreenTest`). They are
+  `TermFullScreenTest`, `CommandPaletteTest`, `ActivityViewTest`). They are
   compiled into both the JVM unit tests and the instrumented tests:
   - on the JVM with Robolectric, in seconds on any computer:
     `./gradlew -x :app:buildGhostty -x :app:buildGhosttyHost :app:testDebugUnitTest --tests 'me.leaver.rexpocket.ui.*'`
@@ -41,7 +41,8 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 ## Screenshots
 
 `ScreenshotsTest` (JVM, Roborazzi) captures the terminal screen with the key bar, Terminal controls
-and Arrange keys, the terminal's ⋮ menu and full screen right after entering it, in portrait and
+and Arrange keys, the terminal's ⋮ menu, the command palette, the home screen's Activity view (on
+ScriptedRex, its programs reporting statuses) and full screen right after entering it, in portrait and
 landscape on a Pixel 6-sized screen (the JVM tests' default too, in `robolectric.properties`), and Arrange keys before and
 after a move. They land in `app/build/outputs/roborazzi/`; `device-test` uploads them as the
 **screenshots** artifact of each run, with the JVM test report. They are for review: look at them
@@ -83,7 +84,9 @@ classes below then run instead of skipping.
   closed, is refused with `block … is not in the session`; every change is told to every client
   after its answer; a closed pane's streams close with 4000 and a HELLO for it is refused with
   0x03; a tab's last pane closing closes the tab, a session's last tab its session. `refuse(method)`
-  makes a method fail, for the errors that must still show; `hold(method)` keeps its answers back
+  makes a method fail, for the errors that must still show; `report(block, state, …)` is a program
+  reporting its status (OSC 7501), told as `program_status_changed`, or `program_status_removed` for
+  a null state, with the shapes of Rex's events reference; `hold(method)` keeps its answers back
   until `release`, a slow network for a test to act in; `pictures = false` sends no snapshot.
 - **`Desk`** is a second client that changes sessions only through the protocol - new session,
   new tab, split, close a tab or pane, take a pane, ask who holds one - so a scenario means the
