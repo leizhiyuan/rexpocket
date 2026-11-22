@@ -70,7 +70,17 @@ data class PocketState(
      * exiting. The screen says so in its place until the person moves on; see [ClosedPane].
      */
     val closed: ClosedPane? = null,
-)
+) {
+    /**
+     * Who the screen says holds the shown pane. A pane is taken on sight, so it is the phone's from
+     * the moment it is shown - also while that take is on its way - unless the person handed it
+     * back or the desk took it: then it is the desk's until Take over. Saying "Take over" for a pane
+     * that is about to be taken anyway asked for a tap nothing needed.
+     */
+    val holder: Holder get() = if (released) Holder.Desk else Holder.Phone
+}
+
+enum class Holder { Phone, Desk }
 
 /**
  * A pane that was on the phone's screen and is gone from its session. [tabClosed] is true when its
@@ -206,7 +216,7 @@ class PocketSession(
                     trace("connection ended: " + generateSequence(e as Throwable) { it.cause }.joinToString(" <- ") { "${it.javaClass.simpleName}: ${it.message}" })
                     // A connection that was up starts over from the shortest wait.
                     if (_state.value.phase == Phase.Live) backoff = MIN_BACKOFF_MS
-                    _state.update {
+                    updateState {
                         it.copy(
                             phase = if (it.phase == Phase.Live) Phase.Reconnecting else Phase.Connecting,
                             problem = e.toProblem(),
@@ -282,13 +292,44 @@ class PocketSession(
         retry.trySend(Unit)
     }
 
-    fun note(problem: Problem) {
-        val notice = Notice(noticeIds.incrementAndGet(), problem)
-        _state.update { it.copy(notice = notice) }
+    /**
+     * Shows [problem] for a moment. With [blockId] it is that pane's: it goes as soon as the pane is
+     * no longer the one on screen, or recovers - see [settled].
+     */
+    fun note(problem: Problem, blockId: String? = null) {
+        note(problem, blockId, PaneTrouble.Other)
+    }
+
+    private fun note(problem: Problem, blockId: String?, about: PaneTrouble) {
+        val notice = Notice(noticeIds.incrementAndGet(), problem, blockId)
+        noticeAbout = notice.id to about
+        updateState { it.copy(notice = notice) }
+    }
+
+    /**
+     * What on [blockId] works again - its stream, or the phone holding it - so a failure of that
+     * is over and its notice goes. A failure of the other stays: a picture that arrives does not
+     * mean Rex let the phone have the pane.
+     */
+    private fun resolved(blockId: String, about: PaneTrouble) {
+        updateState {
+            val notice = it.notice
+            if (notice?.blockId == blockId && noticeAbout == notice.id to about) it.copy(notice = null) else it
+        }
+    }
+
+    /** What a pane's notice is about, so only that working again clears it. */
+    private enum class PaneTrouble { Stream, Hold, Other }
+
+    @Volatile private var noticeAbout: Pair<Long, PaneTrouble>? = null
+
+    /** Every change to the state goes through here, so no state keeps a notice its pane outlived. */
+    private inline fun updateState(change: (PocketState) -> PocketState) {
+        _state.update { settled(change(it)) }
     }
 
     fun dismissNotice(id: Long) {
-        _state.update { if (it.notice?.id == id) it.copy(notice = null) else it }
+        updateState { if (it.notice?.id == id) it.copy(notice = null) else it }
     }
 
     /**
@@ -304,7 +345,7 @@ class PocketSession(
         // Clearing clientRef first would skip the disown, so the join comes first.
         if (job != null) withTimeoutOrNull(4_000) { job.join() }
         clientRef.getAndSet(null)?.close()
-        _state.update { it.copy(phase = Phase.Idle, resumed = false) }
+        updateState { it.copy(phase = Phase.Idle, resumed = false) }
     }
 
     fun setSize(cols: Int, rows: Int, cellWidthPx: Int, cellHeightPx: Int) {
@@ -331,7 +372,7 @@ class PocketSession(
         // The pane left behind goes back to the desktop, or it stays at the phone's size.
         if (ownedSession != sessionId) disownQuietly()
         // Released panes stay released across sessions; only the shown pane's state is reset here.
-        _state.update { it.copy(owning = false, released = false) }
+        updateState { it.copy(owning = false, released = false) }
         val payload = rpc("session.attach", JSONObject().put("session_id", sessionId))
         var view = parseView(payload.getJSONObject("view"))
         // The phone's own place: the asked-for tab, else where it was last time. Rex's focus is not
@@ -342,13 +383,15 @@ class PocketSession(
         // applyView only replaces the shown view when this session is already active.
         // Opening another session has to force it, or the old view stays on screen.
         applyView(view)
-        val shownPwd = view.focusedBlock()?.id?.let { pwds[it] }
-        _state.update {
+        val shown = view.focusedBlock()?.id
+        val shownPwd = shown?.let { pwds[it] }
+        updateState {
             it.copy(
                 activeSessionId = sessionId,
                 view = view,
                 pwd = shownPwd,
                 closed = null,
+                released = shown != null && shown in releasedBlocks,
                 views = if (view.sessionId.isEmpty()) it.views else it.views + (view.sessionId to view),
                 sessions = mergeSession(it.sessions, ListedSession(sessionId, view.label)),
             )
@@ -372,7 +415,7 @@ class PocketSession(
         val payload = rpc("session.create", body)
         val id = payload.getString("session_id")
         val createdLabel = label?.trim().takeUnless { it.isNullOrEmpty() } ?: id
-        _state.update { it.copy(sessions = mergeSession(it.sessions, ListedSession(id, createdLabel))) }
+        updateState { it.copy(sessions = mergeSession(it.sessions, ListedSession(id, createdLabel))) }
         openSession(id)
     }
 
@@ -394,7 +437,7 @@ class PocketSession(
         )
         val block = made.optJSONArray("block_ids")?.optString(0)?.takeIf { it.isNotEmpty() } ?: return
         places[sid] = block
-        _state.update { it.copy(closed = null) }
+        updateState { it.showing(block) }
         // The view event that announces the tab may already have come; this one surely has it.
         refreshView(sid)
     }
@@ -420,7 +463,7 @@ class PocketSession(
         // The new pane is shown here; the desktop keeps the focus it has.
         val block = made.optJSONArray("block_ids")?.optString(0)?.takeIf { it.isNotEmpty() } ?: return
         places[sid] = block
-        _state.update { it.copy(closed = null) }
+        updateState { it.showing(block) }
         refreshView(sid)
     }
 
@@ -432,19 +475,31 @@ class PocketSession(
     suspend fun focusBlock(blockId: String) {
         val sid = requireSession()
         places[sid] = blockId
-        _state.update { it.copy(closed = null) }
+        updateState { it.showing(blockId) }
         showLocally { it.placedAt(blockId) }
     }
+
+    /**
+     * The screen moves to [block]: no closed note any more, and the holder says what that pane's
+     * state is - the phone's unless it was handed back - not what the pane before it had.
+     */
+    private fun PocketState.showing(block: String): PocketState = copy(
+        closed = null,
+        owning = ownedBlock == block,
+        released = block in releasedBlocks,
+    )
 
     /**
      * Leaves the note that the shown pane was closed, for the pane the view moved to: the one Rex
      * shows in that session. It becomes the phone's own place there.
      */
     fun leaveClosedPane() {
-        _state.update { st ->
-            val sid = st.closed?.sessionId ?: return@update st
-            st.view?.takeIf { it.sessionId == sid }?.focusedBlock()?.id?.let { places[sid] = it }
-            st.copy(closed = null)
+        updateState { st ->
+            val sid = st.closed?.sessionId ?: return@updateState st
+            val next = st.view?.takeIf { it.sessionId == sid }?.focusedBlock()?.id
+                ?: return@updateState st.copy(closed = null)
+            places[sid] = next
+            st.showing(next)
         }
     }
 
@@ -462,7 +517,7 @@ class PocketSession(
         val block = blockId ?: _state.value.view?.focusedBlock()?.id ?: return
         closingHere += block
         try {
-            rpc("block.close", JSONObject().put("session_id", sid).put("block_id", block))
+            onPane(sid, block) { rpc("block.close", JSONObject().put("session_id", sid).put("block_id", block)) }
         } catch (e: Exception) {
             closingHere -= block
             throw e
@@ -479,6 +534,11 @@ class PocketSession(
         closingHere += blocks
         try {
             rpc("session.close_window", body)
+        } catch (e: RexCallException) {
+            // Closed already, elsewhere: what was asked for has happened.
+            if (window != null && windowGone(sid, window)) return
+            closingHere -= blocks.toSet()
+            throw e
         } catch (e: Exception) {
             closingHere -= blocks.toSet()
             throw e
@@ -495,7 +555,7 @@ class PocketSession(
             closingHere -= sid
             throw e
         }
-        _state.update {
+        updateState {
             val rest = it.sessions.filter { s -> s.id != sid }
             it.copy(
                 sessions = rest,
@@ -529,16 +589,20 @@ class PocketSession(
     suspend fun renameBlock(label: String, blockId: String? = null) {
         val sid = requireSession()
         val block = blockId ?: _state.value.view?.focusedBlock()?.id ?: return
-        rpc(
-            "session.set_block_label",
-            JSONObject().put("session_id", sid).put("block_id", block).put("label", label),
-        )
+        onPane(sid, block) {
+            rpc(
+                "session.set_block_label",
+                JSONObject().put("session_id", sid).put("block_id", block).put("label", label),
+            )
+        }
     }
 
     /** Types [text] into the shown pane, after everything typed before it. */
     suspend fun sendText(text: String) {
         if (text.isEmpty()) return
-        input(write(text)).await()
+        val call = write(text)
+        val (sid, block) = call.target()
+        onPane(sid, block) { input(call).await() }
     }
 
     /**
@@ -582,15 +646,17 @@ class PocketSession(
     suspend fun paste(text: String) {
         if (text.isEmpty()) return
         val (sid, block) = requireBlock()
-        input(
-            InputCall(
-                "block.event",
+        onPane(sid, block) {
+            input(
+                InputCall(
+                    "block.event",
                 JSONObject()
                     .put("session_id", sid)
                     .put("block_id", block)
                     .put("event", JSONObject().put("type", "paste").put("payload", JSONObject().put("text", text))),
-            ),
-        ).await()
+                ),
+            ).await()
+        }
     }
 
     suspend fun sendKey(
@@ -601,9 +667,10 @@ class PocketSession(
         consumedMods: String = "",
     ) {
         val (sid, block) = requireBlock()
-        input(
-            InputCall(
-                "client.key",
+        onPane(sid, block) {
+            input(
+                InputCall(
+                    "client.key",
                 JSONObject()
                     .put("session_id", sid)
                     .put("block_id", block)
@@ -618,8 +685,9 @@ class PocketSession(
                             .put("composing", false)
                             .put("action", "press"),
                     ),
-            ),
-        ).await()
+                ),
+            ).await()
+        }
     }
 
     private fun write(text: String): InputCall {
@@ -691,7 +759,7 @@ class PocketSession(
         clientRef.set(client)
         // The last failure stays on screen while the next attempt runs: a picker that only says
         // "connecting" while a tunnel is down gives no way to tell retrying from hanging.
-        _state.update {
+        updateState {
             it.copy(phase = Phase.Connecting, endpointLabel = endpoint.label())
         }
         try {
@@ -699,7 +767,7 @@ class PocketSession(
             reconnectToken = welcome.reconnectToken
             // Events sent while the connection was down are lost, so every pane is read again.
             statusRead.clear()
-            _state.update { it.copy(clientId = welcome.clientId, resumed = welcome.resumed) }
+            updateState { it.copy(clientId = welcome.clientId, resumed = welcome.resumed) }
             coroutineScope {
                 launch {
                     client.events.collect { event ->
@@ -714,7 +782,7 @@ class PocketSession(
                 }
                 bootstrap()
                 if (!ready.isCompleted) ready.complete(Unit)
-                _state.update { it.copy(phase = Phase.Live, problem = null) }
+                updateState { it.copy(phase = Phase.Live, problem = null) }
                 // bootstrap is what attaches this connection to its session; only after it are pane
                 // calls taken. Panes that came back meanwhile start watching at once.
                 attached.value = true
@@ -756,7 +824,7 @@ class PocketSession(
         val selected = payload.optJSONObject("selected_session")
         val view = selected?.optJSONObject("view")?.let { parseView(it) }?.let { it.placedAt(places[it.sessionId]) }
         val active = view?.sessionId ?: selected?.optJSONObject("session")?.optNullableString("session_id")
-        _state.update {
+        updateState {
             it.copy(
                 sessions = sessions,
                 activeSessionId = active,
@@ -788,7 +856,7 @@ class PocketSession(
                 val session = event.optJSONObject("payload")?.optJSONObject("session") ?: return
                 val id = session.optNullableString("session_id") ?: return
                 val label = session.optNullableString("label") ?: shortId(id)
-                _state.update { it.copy(sessions = mergeSession(it.sessions, ListedSession(id, label))) }
+                updateState { it.copy(sessions = mergeSession(it.sessions, ListedSession(id, label))) }
                 runCatching { refreshView(id) }
             }
             "session_destroyed" -> {
@@ -817,7 +885,7 @@ class PocketSession(
             }
             "session_label_changed" -> {
                 val label = payload.optNullableString("label") ?: return
-                _state.update {
+                updateState {
                     it.copy(
                         sessions = it.sessions.map { s -> if (s.id == sid) s.copy(label = label) else s },
                         view = if (it.view?.sessionId == sid) it.view.copy(label = label) else it.view,
@@ -864,7 +932,7 @@ class PocketSession(
     }
 
     private fun publishStatus() {
-        _state.update { st ->
+        updateState { st ->
             val summary = LinkedHashMap<String, ProgramRecord>()
             for ((block, records) in statusRecords) summarizeStatus(records.values.toList())?.let { summary[block] = it }
             // A program that reported itself names the pane; otherwise the foreground process does.
@@ -891,7 +959,8 @@ class PocketSession(
     private fun dropSession(id: String) {
         val ours = id in closingHere
         places.remove(id)
-        _state.update {
+        forgetGonePanes(SessionView(Long.MAX_VALUE, id, "", null, emptyList()))
+        updateState {
             val rest = it.sessions.filter { s -> s.id != id }
             val view = if (it.view?.sessionId == id) null else it.view
             val active = when {
@@ -912,7 +981,7 @@ class PocketSession(
     private suspend fun refreshSessionList() {
         val payload = rpc("session.list", null)
         val sessions = parseSessions(payload.optJSONArray("sessions"))
-        _state.update { it.copy(sessions = sessions) }
+        updateState { it.copy(sessions = sessions) }
         val known = _state.value.views.keys
         loadSessionViews(sessions.map { it.id }.filter { it !in known }, skip = _state.value.activeSessionId)
     }
@@ -927,8 +996,8 @@ class PocketSession(
      * returned, so a view fetched before it cannot overwrite it, while any later change still does.
      */
     private fun showLocally(change: (SessionView) -> SessionView?) {
-        _state.update { st ->
-            val next = st.view?.let(change) ?: return@update st
+        updateState { st ->
+            val next = st.view?.let(change) ?: return@updateState st
             // The directory belongs to the pane on screen, so it moves with the focus.
             val pwd = next.focusedBlock()?.id?.let { pwds[it] }
             st.copy(view = next, views = st.views + (next.sessionId to next), pwd = pwd)
@@ -941,10 +1010,11 @@ class PocketSession(
         // A pane the phone was on that has closed gives the place back to Rex's choice.
         val place = places[fromRex.sessionId]
         if (place != null && fromRex.allBlocks().none { it.id == place }) places.remove(fromRex.sessionId)
+        forgetGonePanes(fromRex)
         val view = fromRex.placedAt(places[fromRex.sessionId])
-        _state.update {
+        updateState {
             val known = it.views[view.sessionId]?.revision ?: -1
-            if (view.revision < known) return@update it
+            if (view.revision < known) return@updateState it
             val views = it.views + (view.sessionId to view)
             // Only the session this connection attached is shown. A view of another one, adopted
             // while none was active, put panes on screen that Rex does not count as in the session,
@@ -957,6 +1027,55 @@ class PocketSession(
                 closed = if (active) closedBy(it, view) else it.closed,
             )
         }
+    }
+
+    /**
+     * What the phone remembers about panes of [view]'s session that are gone from it now. The pane
+     * it held has nobody to hand back to: asking Rex to disown it is refused, and that refusal,
+     * met on the way to the next pane, was the error that stayed until Take over. A release
+     * belongs to its pane and goes with it.
+     */
+    private fun forgetGonePanes(view: SessionView) {
+        val present = view.allBlocks().mapTo(HashSet()) { it.id }
+        val owned = ownedBlock
+        if (owned != null && ownedSession == view.sessionId && owned !in present) {
+            trace("pane $owned: gone while held; forgotten")
+            ownedBlock = null
+            ownedSession = null
+            lastResize = null
+        }
+        if (releasedBlocks.isEmpty()) return
+        val known = HashSet(present)
+        _state.value.views.forEach { (sid, v) -> if (sid != view.sessionId) v.allBlocks().forEach { known += it.id } }
+        releasedBlocks.retainAll(known)
+    }
+
+    /**
+     * Runs [call] on [block]. When Rex refuses it because the pane is no longer there - closed on
+     * the desk, by another client or by its program - nothing is left to do and nothing failed: the
+     * screen says the pane closed instead. A refusal for a pane that is still there is an error.
+     */
+    private suspend fun <T> onPane(sid: String, block: String, call: suspend () -> T): T? = try {
+        call()
+    } catch (e: RexCallException) {
+        if (paneGone(sid, block)) {
+            trace("pane $block: ${e.message}; it is gone, so nothing to report")
+            null
+        } else {
+            throw e
+        }
+    }
+
+    /** True when [windowId] is no longer in [sid], read again from Rex. */
+    private suspend fun windowGone(sid: String, windowId: String): Boolean {
+        try {
+            refreshView(sid)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return _state.value.sessions.none { it.id == sid }
+        }
+        return _state.value.views[sid]?.windows?.none { it.id == windowId } == true
     }
 
     /**
@@ -1035,8 +1154,17 @@ class PocketSession(
                         if (blockId in releasedBlocks) {
                             if (_state.value.owning || !_state.value.released) markReleased()
                         } else {
-                            if (_state.value.released) _state.update { it.copy(released = false) }
-                            ensureOwned(sid, blockId)
+                            if (_state.value.released) updateState { it.copy(released = false) }
+                            try {
+                                ensureOwned(sid, blockId)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                // The picture does not wait on the pane being held: the stream
+                                // goes on, and the ownership loop below takes the pane again.
+                                trace("pane $blockId: not taken: ${e.message}")
+                                if (!paneGone(sid, blockId)) note(e.toProblem(), blockId, PaneTrouble.Hold)
+                            }
                         }
                         launch { sizeLoop(sid, blockId) }
                         ownershipLoop(sid, blockId)
@@ -1044,7 +1172,15 @@ class PocketSession(
                     val stream = TerminalStream(endpoint, httpFactory, trace) { ticket(sid, blockId) }
                     streams += stream
                     try {
-                        stream.feeds().collect { emit(it) }
+                        var flowing = false
+                        stream.feeds().collect {
+                            // Bytes on screen are the pane working; whatever failed before is over.
+                            if (!flowing) {
+                                flowing = true
+                                resolved(blockId, PaneTrouble.Stream)
+                            }
+                            emit(it)
+                        }
                     } finally {
                         streams -= stream
                         stream.close()
@@ -1064,12 +1200,18 @@ class PocketSession(
                     trace("pane $blockId: closed")
                     return@flow
                 }
-                note(e.toProblem())
+                note(e.toProblem(), blockId, PaneTrouble.Stream)
                 // The pane or its session is gone; watching it again cannot help.
                 if (e.code == "not_found" || e.code == "session_not_found") return@flow
             } catch (e: Exception) {
                 trace("pane $blockId: ${e.javaClass.simpleName}: ${e.message}")
-                note(e.toProblem())
+                // Rex ends a closed pane's stream (close 4000, or a refused HELLO) at about the
+                // time its news comes; whichever comes first, a pane that is gone is not an error.
+                if (paneGone(sid, blockId)) {
+                    trace("pane $blockId: closed")
+                    return@flow
+                }
+                note(e.toProblem(), blockId, PaneTrouble.Stream)
             }
             delay(backoff)
             backoff = (backoff * 2).coerceAtMost(PANE_RETRY_MAX_MS)
@@ -1156,10 +1298,19 @@ class PocketSession(
             val previous = ownedBlock
             val previousSession = ownedSession
             if (previous != null && previous != block) {
-                rpc(
-                    "session.disown_block",
-                    JSONObject().put("session_id", previousSession ?: sid).put("block_ids", JSONArray().put(previous)),
-                )
+                try {
+                    rpc(
+                        "session.disown_block",
+                        JSONObject().put("session_id", previousSession ?: sid).put("block_ids", JSONArray().put(previous)),
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // A pane that closed has nobody to hand back to, and Rex refuses the disown.
+                    // Neither that nor any other failure here is a reason to keep the pane asked
+                    // for off this phone: that refusal is what stayed on screen until Take over.
+                    trace("pane $previous: not handed back: ${e.message}")
+                }
                 ownedBlock = null
                 ownedSession = null
             }
@@ -1203,6 +1354,7 @@ class PocketSession(
         // The new owner has to ask for its size again; Rex does not carry the old one over.
         lastResize = null
         markOwned()
+        resolved(block, PaneTrouble.Hold)
     }
 
     /**
@@ -1218,10 +1370,12 @@ class PocketSession(
         releasedBlocks.add(block)
         markReleased()
         ownership.withLock {
-            rpc(
-                "session.disown_block",
-                JSONObject().put("session_id", sid).put("block_ids", JSONArray().put(block)),
-            )
+            onPane(sid, block) {
+                rpc(
+                    "session.disown_block",
+                    JSONObject().put("session_id", sid).put("block_ids", JSONArray().put(block)),
+                )
+            }
             if (ownedBlock == block) {
                 ownedBlock = null
                 ownedSession = null
@@ -1236,17 +1390,17 @@ class PocketSession(
         val (sid, block) = requireBlock()
         trace("pane $block: take over asked")
         releasedBlocks.remove(block)
-        takePane(sid, block)
+        onPane(sid, block) { takePane(sid, block) }
     }
 
     private fun markOwned() {
         trace("pane: owned")
-        _state.update { it.copy(owning = true, released = false) }
+        updateState { it.copy(owning = true, released = false) }
     }
 
     private fun markReleased() {
         if (!_state.value.released) trace("pane: released")
-        _state.update { it.copy(owning = false, released = true) }
+        updateState { it.copy(owning = false, released = true) }
     }
 
     /**
@@ -1279,7 +1433,7 @@ class PocketSession(
             val owner = ownerOnServer(sid, blockId)
             if (owner != null && mine != null) {
                 val owning = owner == Owner.Client(mine)
-                if (_state.value.owning != owning) _state.update { it.copy(owning = owning) }
+                if (_state.value.owning != owning) updateState { it.copy(owning = owning) }
             }
             if (owner == null || mine == null || owner == Owner.Client(mine)) {
                 wait = 0L
@@ -1477,3 +1631,14 @@ private const val MAX_WRITE_BATCH = 8_000
 
 private fun String.firstCodePoint(): Int =
     if (isEmpty()) 0 else codePointAt(0)
+
+/**
+ * The state as the screen may show it. A notice that belongs to a pane lasts only while that pane
+ * is the one on screen: once it closes, is replaced or is left, its failure means nothing to the
+ * person - it was the stale line that stayed over the next tab until Take over.
+ */
+internal fun settled(st: PocketState): PocketState {
+    val pane = st.notice?.blockId ?: return st
+    val shown = if (st.closed != null) null else st.view?.takeIf { it.sessionId == st.activeSessionId }?.focusedBlock()?.id
+    return if (shown == pane) st else st.copy(notice = null)
+}

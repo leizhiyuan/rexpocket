@@ -144,7 +144,7 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再�
 APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 会构建一个用发布密钥签名的版本（见下文「发布」）。只构建
 arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这个 Go 模块构建，包含 `tailscale.com` 的 tsnet 库
 （版本由其 `go.mod` 锁定）和 `tailnet/netbird` 中的 Netbird 嵌入式客户端；要重新构建，运行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。Netbird 需要单独选择打包：`REXPOCKET_NETBIRD=1 tools/build-tailnet.sh` 会生成 `app/libs/tailnet-netbird.aar`，再用 `./gradlew -Prexpocket.netbird=true :app:assembleRelease` 链接进 App。它会让 APK 增加约 30 MB（29 MB 增至 59 MB），所以默认构建不包含它；没有它时，设置 › Tailnet 只提供 Tailscale。`core` 里的集成测试连接 `127.0.0.1:7297` 上的 Rex
-（可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），没有 Rex 时会跳过。 SSH 测试需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台机器，并用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 给出凭据才会运行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可选。
+（可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），没有 Rex 时会跳过。窗格生命周期场景（在电脑或手机上关闭标签页和窗格、交还与接管、重连）每次构建都会对测试 JVM 里的 `ScriptedRex` 运行，有真实 Rex 在监听时也会对它运行，见 [docs/design/testing.md](docs/design/testing.md#rex-integration)。 SSH 测试需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台机器，并用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 给出凭据才会运行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可选。
 
 ### 发布
 

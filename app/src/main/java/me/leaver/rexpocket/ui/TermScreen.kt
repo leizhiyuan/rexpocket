@@ -92,6 +92,7 @@ import me.leaver.rexpocket.core.ProgramMark
 import me.leaver.rexpocket.core.programMark
 import me.leaver.rexpocket.core.ProgramRecord
 import me.leaver.rexpocket.core.SessionView
+import me.leaver.rexpocket.core.Holder
 import me.leaver.rexpocket.core.TerminalFeed
 import me.leaver.rexpocket.core.UploadPhase
 import me.leaver.rexpocket.core.WindowInfo
@@ -314,7 +315,7 @@ internal fun TermScreen(
                     onBack = onBack,
                     showBack = !embedded,
                     onNavigate = { if (view != null) sheet = Sheet.Navigator },
-                    onHolder = { if (state.owning) onAct { releasePane() } else onAct { takeOver() } },
+                    onHolder = { if (state.holder == Holder.Phone) onAct { releasePane() } else onAct { takeOver() } },
                     onMore = { sheet = Sheet.Actions },
                     panes = if (chrome.panesInTopBar && panes.size > 1) {
                         {
@@ -757,7 +758,7 @@ private fun SessionTopBar(
         }
         // Who holds the pane, while there is one on screen to hold.
         if (state.phase == Phase.Live && tab != null) {
-            HolderChip(state.owning, onHolder)
+            HolderChip(state.holder == Holder.Phone, onHolder)
             Spacer(Modifier.width(4.dp))
         }
         RoundButton(R.drawable.ic_more, stringResource(R.string.action_more), onMore, plate = Colors.key, size = 40.dp)

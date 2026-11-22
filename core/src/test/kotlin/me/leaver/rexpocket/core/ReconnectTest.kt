@@ -23,7 +23,7 @@ class ReconnectTest {
     @Test
     fun aConnectThatNeverAnswersKeepsRetrying() = runBlocking {
         ServerSocket(0).use { server ->
-            val held = ArrayList<Socket>()
+            val held = java.util.concurrent.CopyOnWriteArrayList<Socket>()
             thread(isDaemon = true) { runCatching { while (true) held += server.accept() } }
             val attempts = AtomicInteger()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

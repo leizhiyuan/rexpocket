@@ -40,8 +40,12 @@ enum class Trouble {
 
 data class Problem(val trouble: Trouble, val detail: String?)
 
-/** An action failed while the connection itself is fine. [id] tells two equal failures apart. */
-data class Notice(val id: Long, val problem: Problem)
+/**
+ * An action failed while the connection itself is fine. [id] tells two equal failures apart.
+ * [blockId] is the pane the failure belongs to, when it belongs to one: such a notice lasts only
+ * while that pane is the one on screen, and goes once the pane closes, is left, or recovers.
+ */
+data class Notice(val id: Long, val problem: Problem, val blockId: String? = null)
 
 /** Rex took the request, or the connection, and did not answer in time. Not a cancellation. */
 class RexTimeoutException(message: String) : Exception(message)

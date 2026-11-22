@@ -207,7 +207,10 @@ tools/build-tailnet.sh` writes `app/libs/tailnet-netbird.aar`, and `./gradlew -P
 :app:assembleRelease` links it in. It adds about 30 MB to the APK (29 MB to 59 MB), so the default build leaves it
 out; without it the Settings › Tailnet screen offers Tailscale only. The integration
 tests in `core` run against a Rex on `127.0.0.1:7297` (set `REX_TEST_HOST` / `REX_TEST_PORT`) and
-are skipped without one. The SSH test runs only when `REX_SSH_HOST` and `REX_SSH_USER` name a
+are skipped without one. The pane lifecycle scenarios - tabs and panes closed on the desk or the
+phone, release and take over, reconnects - run on every build against `ScriptedRex`, a Rex in the
+test JVM, and against a real one as well when it listens; see
+[docs/design/testing.md](docs/design/testing.md#rex-integration). The SSH test runs only when `REX_SSH_HOST` and `REX_SSH_USER` name a
 machine and `REX_SSH_KEY` or `REX_SSH_PASSWORD` gives a credential; `REX_SSH_PORT`,
 `REX_SSH_HOST_KEY`, `REX_SSH_KEY_PASSPHRASE` and `REX_SSH_SOCKS` are optional.
 

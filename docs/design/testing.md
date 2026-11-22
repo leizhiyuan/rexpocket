@@ -49,3 +49,78 @@ committed and verified with Roborazzi's compare mode.
 
 A new screen or settings page gets: a shared screen test following the rules above, and a
 screenshot in portrait and landscape.
+
+## Rex integration
+
+The app is a client of Rex's control (`/api/control`) and data (`/api/data`) connections, and its
+worst bugs live in the order things happen between the phone, Rex and the desk: a tab closed on the
+desk while the phone holds its pane, then another tab shown. Those are tested as **scenarios** in
+`core`, written once and run against two servers.
+
+### Can a real Rex run in CI?
+
+No. Rex is proprietary and in a beta that hands out its builds after a sign-in (a Discord login on
+superlogical.com); Linux and FreeBSD get a server-only build, but its install commands sit behind
+that login, and nothing says it may be redistributed or fetched by a robot. rex.app answers
+automated requests with a challenge page. So a GitHub runner has no lawful, repeatable way to get
+the binary, and no CI job downloads one. If Superlogical publishes a Linux server build that may be
+fetched without an account, `rex-integration.yml` can start it with
+`rex server start --extra-listen :7297 --allow-anonymous` and set `REX_TEST_HOST`; the real-Rex
+classes below then run instead of skipping.
+
+### What replaces it
+
+- **`ScriptedRex`** (`core/src/test/.../ScriptedRex.kt`) is a Rex in the test JVM, on
+  MockWebServer. It speaks the protocol the app speaks - hello and welcome with a client id and
+  reconnect token, request and response, events wrapped as `session_event`, tickets from
+  `data.connect`, and on `/api/data` the HELLO/RESUME handshake, a 32-byte WELCOME, a `GHOSTSNP`
+  snapshot and then output - with the shapes taken from `RexClient`, `parseView`, `TerminalStream`
+  and the stream fixture `app/src/test/resources/rex-stream.bin`. It keeps Rex's rules that the
+  real-Rex tests rely on: each connection is a new client whose panes are let go when it ends; a
+  pane call (own, disown, size, resize, write, ticket) on a pane outside the attached session, or
+  closed, is refused with `block … is not in the session`; every change is told to every client
+  after its answer; a closed pane's streams close with 4000 and a HELLO for it is refused with
+  0x03; a tab's last pane closing closes the tab, a session's last tab its session. `refuse(method)`
+  makes a method fail, for the errors that must still show.
+- **`Desk`** is a second client that changes sessions only through the protocol - new session,
+  new tab, split, close a tab or pane, take a pane, ask who holds one - so a scenario means the
+  same against `ScriptedRex` and a real Rex.
+- **`Screen`** does what `TermScreen` does with a `PocketSession`: it streams the pane on screen
+  (none while the closed note stands in for it) and starts over when that changes, and it records
+  every notice that reached the banner, so "no error flashed" can be asserted.
+- **`PaneLifecycleScenarios`** are the sequences: the desk closes the shown tab or the shown pane
+  of a split, then the phone shows the tab that is left, picks another from the list, or makes a
+  new one; the same with the pane released, and taken by the desk first; the phone closes the
+  shown tab or pane itself, or one the desk closed first; a reconnect. Each asserts the screen: the
+  closed note, the next pane on screen with its picture and held by the phone on Rex without a Take
+  over, and an empty banner for a while after.
+
+`ScriptedRexLifecycleTest` runs them on every push, in the `rex-integration` workflow with the rest
+of `:core:test`. `RealRexLifecycleTest` runs the same scenarios against a real Rex and is skipped
+when none listens.
+
+### Against a real Rex, on your computer
+
+On the Mac (or Linux machine) with Rex installed:
+
+```sh
+rex server start --extra-listen 127.0.0.1:7297 --allow-anonymous
+./gradlew :core:test --tests '*RealRexLifecycleTest*' --tests '*PocketSessionTest*'
+```
+
+`REX_TEST_HOST` and `REX_TEST_PORT` point the tests at another machine; listen only on a network
+you trust, since an anonymous plaintext listener has full access to that Rex. Each scenario makes
+its own session, named `rexpocket-scenario-…`, and destroys it at the end. A scenario that passes
+on `ScriptedRex` and fails on the real Rex is a difference to copy into `ScriptedRex`.
+
+### The model the scenarios hold the app to
+
+- A notice that belongs to a pane carries its id (`Notice.blockId`) and lasts only while that pane
+  is on screen: `settled` drops it when the pane closes, is replaced or is left, and it goes when
+  what failed works again (the stream flows, or the phone holds the pane).
+- A pane is taken on sight unless it was handed back; the holder chip says "This phone" while that
+  take is on its way, and "Take over" only for a released pane (`PocketState.holder`).
+- What the phone remembers about a pane - that it holds it, that it released it - goes with the
+  pane. Handing back a pane that closed is not attempted, and its refusal never stops the next pane.
+- A call on a pane that is gone - closing it, typing into it, renaming, release, take over - is
+  not an error: the pane closed, and the screen already says so.
