@@ -10,6 +10,7 @@ import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -23,8 +24,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Full screen on the terminal screen, on a device: the button and a double tap on the pane hide the
- * top bar and the key bar together, and the corner button, a second double tap or Back bring them back.
+ * Full screen on the terminal screen, on a device: the menu's item and a double tap on the pane hide
+ * the top bar and the key bar together, and the corner button, a second double tap or Back bring them
+ * back. The top bar has no full-screen button: on a phone it has no room for one.
  */
 @RunWith(AndroidJUnit4::class)
 class FullScreenTest {
@@ -68,9 +70,16 @@ class FullScreenTest {
         val bars = if (shown) 1 else 0
         // The top bar's menu, the key bar's keyboard key, and the way out of full screen.
         compose.onAllNodesWithContentDescription(string(R.string.action_more)).assertCountEquals(bars)
-        compose.onAllNodesWithContentDescription(string(R.string.action_full_screen)).assertCountEquals(bars)
+        compose.onAllNodesWithContentDescription(string(R.string.action_full_screen)).assertCountEquals(0)
         compose.onAllNodesWithContentDescription(string(R.string.key_keyboard)).assertCountEquals(bars)
         compose.onAllNodesWithContentDescription(string(R.string.action_exit_full_screen)).assertCountEquals(1 - bars)
+    }
+
+    /** Full screen as a person finds it: the top bar's menu, then its item. */
+    private fun fullScreenFromMenu() {
+        compose.onNodeWithContentDescription(string(R.string.action_more)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(string(R.string.action_full_screen)).performClick()
     }
 
     /** A double tap in the upper part of the pane, clear of the bars and of the line it waits with. */
@@ -79,11 +88,11 @@ class FullScreenTest {
     }
 
     @Test
-    fun theButtonHidesBothBarsAndTheCornerButtonBringsThemBack() {
+    fun theMenuItemHidesBothBarsAndTheCornerButtonBringsThemBack() {
         show()
         assertBars(shown = true)
 
-        compose.onNodeWithContentDescription(string(R.string.action_full_screen)).performClick()
+        fullScreenFromMenu()
         assertBars(shown = false)
 
         compose.onNodeWithContentDescription(string(R.string.action_exit_full_screen)).performClick()
@@ -93,7 +102,7 @@ class FullScreenTest {
     @Test
     fun backLeavesFullScreenBeforeItLeavesTheTerminal() {
         show()
-        compose.onNodeWithContentDescription(string(R.string.action_full_screen)).performClick()
+        fullScreenFromMenu()
         assertBars(shown = false)
 
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
@@ -116,13 +125,13 @@ class FullScreenTest {
     }
 
     @Test
-    fun withTheSettingOffADoubleTapLeavesTheBarsAndTheButtonStillWorks() {
+    fun withTheSettingOffADoubleTapLeavesTheBarsAndTheMenuItemStillWorks() {
         doubleTap = false
         show()
         doubleTapPane()
         assertBars(shown = true)
 
-        compose.onNodeWithContentDescription(string(R.string.action_full_screen)).performClick()
+        fullScreenFromMenu()
         assertBars(shown = false)
     }
 }

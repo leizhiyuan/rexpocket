@@ -65,7 +65,19 @@ data class PocketState(
     val owning: Boolean = false,
     /** True after the pane was handed back to the desktop, so taking it again has to be asked for. */
     val released: Boolean = false,
+    /**
+     * The pane the phone showed, closed by someone else: the desktop, another client, or its program
+     * exiting. The screen says so in its place until the person moves on; see [ClosedPane].
+     */
+    val closed: ClosedPane? = null,
 )
+
+/**
+ * A pane that was on the phone's screen and is gone from its session. [tabClosed] is true when its
+ * whole tab went with it. The view has already moved to what Rex shows instead; the screen holds
+ * that back, so nobody types into a pane they did not pick, until the person moves on.
+ */
+data class ClosedPane(val sessionId: String, val blockId: String, val tabClosed: Boolean)
 
 /**
  * Phone-side session: bootstrap, sidebar model, and a polled VT screen.
@@ -126,6 +138,12 @@ class PocketSession(
 
     /** Panes Rex reported on while a read of them was in flight; that read is older and must not win. */
     private val reportedDuringRead: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /**
+     * Panes and sessions this phone is closing itself. Their going is what was asked for, so the
+     * screen moves on to what is left rather than saying the pane was closed.
+     */
+    private val closingHere: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /** Wakes the status reader when a pane it has not read yet comes into view. */
     private val statusWake = Channel<Unit>(Channel.CONFLATED)
@@ -330,6 +348,7 @@ class PocketSession(
                 activeSessionId = sessionId,
                 view = view,
                 pwd = shownPwd,
+                closed = null,
                 views = if (view.sessionId.isEmpty()) it.views else it.views + (view.sessionId to view),
                 sessions = mergeSession(it.sessions, ListedSession(sessionId, view.label)),
             )
@@ -375,6 +394,7 @@ class PocketSession(
         )
         val block = made.optJSONArray("block_ids")?.optString(0)?.takeIf { it.isNotEmpty() } ?: return
         places[sid] = block
+        _state.update { it.copy(closed = null) }
         // The view event that announces the tab may already have come; this one surely has it.
         refreshView(sid)
     }
@@ -400,6 +420,7 @@ class PocketSession(
         // The new pane is shown here; the desktop keeps the focus it has.
         val block = made.optJSONArray("block_ids")?.optString(0)?.takeIf { it.isNotEmpty() } ?: return
         places[sid] = block
+        _state.update { it.copy(closed = null) }
         refreshView(sid)
     }
 
@@ -411,7 +432,20 @@ class PocketSession(
     suspend fun focusBlock(blockId: String) {
         val sid = requireSession()
         places[sid] = blockId
+        _state.update { it.copy(closed = null) }
         showLocally { it.placedAt(blockId) }
+    }
+
+    /**
+     * Leaves the note that the shown pane was closed, for the pane the view moved to: the one Rex
+     * shows in that session. It becomes the phone's own place there.
+     */
+    fun leaveClosedPane() {
+        _state.update { st ->
+            val sid = st.closed?.sessionId ?: return@update st
+            st.view?.takeIf { it.sessionId == sid }?.focusedBlock()?.id?.let { places[sid] = it }
+            st.copy(closed = null)
+        }
     }
 
     /** Shows a tab on the phone, on the pane the phone last showed there or the tab's own focus. */
@@ -426,7 +460,13 @@ class PocketSession(
     suspend fun closeBlock(blockId: String? = null) {
         val sid = requireSession()
         val block = blockId ?: _state.value.view?.focusedBlock()?.id ?: return
-        rpc("block.close", JSONObject().put("session_id", sid).put("block_id", block))
+        closingHere += block
+        try {
+            rpc("block.close", JSONObject().put("session_id", sid).put("block_id", block))
+        } catch (e: Exception) {
+            closingHere -= block
+            throw e
+        }
     }
 
     /** Closes a tab and every pane in it, the shown tab by default. */
@@ -435,20 +475,36 @@ class PocketSession(
         val window = windowId ?: _state.value.view?.activeWindow()?.id
         val body = JSONObject().put("session_id", sid)
         if (window != null) body.put("window_id", window)
-        rpc("session.close_window", body)
+        val blocks = _state.value.view?.windows?.firstOrNull { it.id == window }?.blocks.orEmpty().map { it.id }
+        closingHere += blocks
+        try {
+            rpc("session.close_window", body)
+        } catch (e: Exception) {
+            closingHere -= blocks.toSet()
+            throw e
+        }
     }
 
     suspend fun destroySession() {
         val sid = requireSession()
-        rpc("session.destroy", JSONObject().put("session_id", sid))
+        // Rex's news of it can come before its answer; this phone asked for it, so it moves on.
+        closingHere += sid
+        try {
+            rpc("session.destroy", JSONObject().put("session_id", sid))
+        } catch (e: Exception) {
+            closingHere -= sid
+            throw e
+        }
         _state.update {
             val rest = it.sessions.filter { s -> s.id != sid }
             it.copy(
                 sessions = rest,
                 activeSessionId = rest.firstOrNull()?.id,
                 view = null,
+                closed = null,
             )
         }
+        closingHere -= sid
         // Its blocks are gone with it; there is nothing left to disown.
         ownedBlock = null
         ownedSession = null
@@ -706,6 +762,8 @@ class PocketSession(
                 activeSessionId = active,
                 view = view,
                 views = if (view != null && view.sessionId.isNotEmpty()) it.views + (view.sessionId to view) else it.views,
+                // A pane that closed while the connection was down is as closed as any other.
+                closed = view?.let { v -> closedBy(it, v) } ?: it.closed,
             )
         }
         preferred = active
@@ -823,15 +881,30 @@ class PocketSession(
         }
     }
 
+    /**
+     * A session that is gone from Rex. When it is the one on screen there is nothing left to show,
+     * so no session is active, which takes the app back to the list. Moving to another session here
+     * put that session on screen without attaching it, and Rex then refused every call on its panes
+     * with "block ... is not in the session". A session this phone destroyed moves on in
+     * [destroySession], which opens the next one properly.
+     */
     private fun dropSession(id: String) {
+        val ours = id in closingHere
+        places.remove(id)
         _state.update {
             val rest = it.sessions.filter { s -> s.id != id }
             val view = if (it.view?.sessionId == id) null else it.view
+            val active = when {
+                it.activeSessionId != id -> it.activeSessionId
+                ours -> rest.firstOrNull()?.id
+                else -> null
+            }
             it.copy(
                 sessions = rest,
                 views = it.views - id,
                 view = view,
-                activeSessionId = if (it.activeSessionId == id) rest.firstOrNull()?.id else it.activeSessionId,
+                activeSessionId = active,
+                closed = it.closed?.takeIf { c -> c.sessionId != id },
             )
         }
     }
@@ -873,14 +946,59 @@ class PocketSession(
             val known = it.views[view.sessionId]?.revision ?: -1
             if (view.revision < known) return@update it
             val views = it.views + (view.sessionId to view)
-            val active = it.activeSessionId == view.sessionId || it.activeSessionId == null
+            // Only the session this connection attached is shown. A view of another one, adopted
+            // while none was active, put panes on screen that Rex does not count as in the session,
+            // and refused every call on them.
+            val active = it.activeSessionId == view.sessionId
             it.copy(
                 views = views,
                 view = if (active) view else it.view,
-                activeSessionId = it.activeSessionId ?: view.sessionId,
                 sessions = mergeSession(it.sessions, ListedSession(view.sessionId, view.label)),
+                closed = if (active) closedBy(it, view) else it.closed,
             )
         }
+    }
+
+    /**
+     * What the screen says once [next] replaces the shown view: that the pane it showed is gone,
+     * when nobody here asked for that. A pane the phone closed itself moves on to what is left.
+     */
+    private fun closedBy(st: PocketState, next: SessionView): ClosedPane? {
+        val before = st.view?.takeIf { it.sessionId == next.sessionId } ?: return st.closed
+        // Already closed: the note stays until the person moves on, whatever Rex shows meanwhile.
+        if (st.closed?.sessionId == next.sessionId) return st.closed
+        val shown = before.focusedBlock() ?: return st.closed
+        if (next.allBlocks().any { it.id == shown.id }) return st.closed
+        if (closingHere.remove(shown.id)) return st.closed
+        val tab = before.activeWindow()?.id
+        return ClosedPane(next.sessionId, shown.id, tabClosed = next.windows.none { it.id == tab })
+    }
+
+    /**
+     * True when [blockId] is no longer in [sid] as Rex has it now. The view is read again, since the
+     * event that said so may not have come yet, and a session whose view cannot be read is looked
+     * for in the list. A refusal for a pane that is still there is a real error, and stays one.
+     */
+    private suspend fun paneGone(sid: String, blockId: String): Boolean {
+        try {
+            refreshView(sid)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RexCallException) {
+            try {
+                refreshSessionList()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return false
+            }
+            if (_state.value.sessions.any { it.id == sid }) return false
+            dropSession(sid)
+            return true
+        } catch (_: Exception) {
+            return false
+        }
+        return _state.value.views[sid]?.allBlocks()?.none { it.id == blockId } == true
     }
 
     /**
@@ -894,7 +1012,9 @@ class PocketSession(
             // A data connection needs a ticket from the control connection: while that one is down,
             // asking for a pane only spins. This waits for it to come back.
             val live = _state.first { it.phase == Phase.Live }
-            val sid = live.activeSessionId
+            // The pane belongs to one session, which is not always the active one by now.
+            val sid = live.views.entries.firstOrNull { (_, v) -> v.allBlocks().any { it.id == blockId } }?.key
+                ?: live.activeSessionId
             if (sid == null) {
                 // Nothing to watch until a session is open; the connection may still be coming up.
                 delay(backoff)
@@ -933,14 +1053,20 @@ class PocketSession(
             } catch (e: CancellationException) {
                 trace("pane $blockId: no longer watched")
                 throw e
+            } catch (e: PaneClosedException) {
+                // Not a failure: the pane was closed, and the screen says so in its place.
+                trace("pane $blockId: closed")
+                return@flow
             } catch (e: RexCallException) {
                 trace("pane $blockId: ${e.code} ${e.message}")
-                // The pane or its session is gone; watching it again cannot help.
-                if (e.code == "not_found" || e.code == "session_not_found") {
-                    note(e.toProblem())
+                // Whatever Rex calls the refusal, the view is what says whether the pane is gone.
+                if (paneGone(sid, blockId)) {
+                    trace("pane $blockId: closed")
                     return@flow
                 }
                 note(e.toProblem())
+                // The pane or its session is gone; watching it again cannot help.
+                if (e.code == "not_found" || e.code == "session_not_found") return@flow
             } catch (e: Exception) {
                 trace("pane $blockId: ${e.javaClass.simpleName}: ${e.message}")
                 note(e.toProblem())
@@ -996,14 +1122,20 @@ class PocketSession(
      */
     private suspend fun ticket(sid: String, blockId: String): String {
         attached.first { it }
-        val payload = rpc(
-            "data.connect",
-            JSONObject()
-                .put("session_id", sid)
-                .put("block_id", blockId)
-                .put("data_ref_id", "terminal")
-                .put("subprotocol", TerminalStream.PROTOCOL),
-        )
+        val payload = try {
+            rpc(
+                "data.connect",
+                JSONObject()
+                    .put("session_id", sid)
+                    .put("block_id", blockId)
+                    .put("data_ref_id", "terminal")
+                    .put("subprotocol", TerminalStream.PROTOCOL),
+            )
+        } catch (e: RexCallException) {
+            // A closed pane ends its stream, and asking again would only be refused again.
+            if (paneGone(sid, blockId)) throw PaneClosedException("$blockId was closed")
+            throw e
+        }
         return payload.getString("ticket")
     }
 

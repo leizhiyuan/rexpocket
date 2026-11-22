@@ -109,7 +109,7 @@ own SSH daemon. How the transport works is described in
 4. **In the terminal:**
    - Tap the pane to type. Drag to scroll back, pinch to change the font size, long-press to
      select, or long-press a link to open it.
-   - For more room, tap the full-screen button in the top bar or double-tap the pane: the top bar,
+   - For more room, pick Full screen from the ⋮ menu or double-tap the pane: the top bar,
      the key bar and the phone's status and navigation bars go away (swipe from the edge to see the
      phone's bars for a moment). The corner button, another double tap or Back brings them back.
      An open keyboard stays open and keeps typing. Settings › Terminal can turn the double tap off.

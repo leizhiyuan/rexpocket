@@ -89,6 +89,9 @@ class TerminalStream(
                 continue
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: PaneClosedException) {
+                // There is nothing left to open: the pane is gone.
+                throw e
             } catch (e: Exception) {
                 trace("stream open failed after ${elapsed(openedAt)}ms: ${e.javaClass.simpleName}: ${e.message}")
                 if (++attempt > MAX_ATTEMPTS) throw e

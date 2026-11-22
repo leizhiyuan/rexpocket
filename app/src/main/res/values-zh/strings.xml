@@ -189,6 +189,11 @@
     <string name="no_tabs">没有标签页</string>
     <string name="pane_none_title">没有打开的窗格</string>
     <string name="pane_none_body">在左侧选一个标签页：它的终端在这里打开，列表仍留在旁边。</string>
+    <string name="closed_tab_title">这个标签页已关闭</string>
+    <string name="closed_pane_title">这个窗格已关闭</string>
+    <string name="closed_body">它在桌面或另一台设备上被关闭，或者其中的程序已退出。在你选择要显示的内容之前，输入不会发送到任何地方。</string>
+    <string name="closed_show">显示 %1$s</string>
+    <string name="closed_sessions">返回会话列表</string>
     <string name="action_show_active">只看有活动的</string>
     <string name="no_activity">现在没有正在运行的任务</string>
     <string name="action_more">更多操作</string>

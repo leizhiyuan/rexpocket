@@ -59,6 +59,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -70,6 +71,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlin.math.roundToInt
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.BlockInfo
+import me.leaver.rexpocket.core.ClosedPane
 import me.leaver.rexpocket.core.CtrlCKey
 import me.leaver.rexpocket.core.DeskKey
 import me.leaver.rexpocket.core.KeyModifiers
@@ -161,7 +163,7 @@ internal fun TermScreen(
     keyBarShift: Boolean = false,
     keyBarAlt: Boolean = false,
     keyBarCtrlC: CtrlCKey = CtrlCKey.Tap,
-    /** True when a double tap on the pane goes in and out of full screen; the button always does. */
+    /** True when a double tap on the pane goes in and out of full screen; the menu item always does. */
     doubleTapFullScreen: Boolean = true,
     /** True when this pane shares the window with the list, which is then the way back. */
     embedded: Boolean = false,
@@ -180,8 +182,11 @@ internal fun TermScreen(
     // The pane's editor: what the keyboard key raises, and what Back and the session list drop.
     var keyboard by remember { mutableStateOf<TerminalImeView?>(null) }
     val view = state.view
-    val tab = view?.activeWindow()
-    val focused = view?.focusedBlock()
+    // The pane on screen was closed elsewhere. The view has moved on to what Rex shows instead, but
+    // that is held back behind a note - no pane, no keys, no tab - until the person chooses it.
+    val closed = state.closed?.takeIf { view != null && it.sessionId == view.sessionId }
+    val tab = if (closed != null) null else view?.activeWindow()
+    val focused = if (closed != null) null else view?.focusedBlock()
     val status = focused?.let { state.blockStatus[it.id] }
     val panes = tab?.blocks.orEmpty()
 
@@ -272,7 +277,7 @@ internal fun TermScreen(
     // it was - while the dock and the rest of the bottom chrome rise over it. A program is therefore
     // never resized by the screen keyboard opening, so it never redraws or reflows for it.
     val hardwareKeys = rememberHardwareKeyboard()
-    val dock = chrome.keyBar(keyBarShown(hardwareKeys, keyBarWithKeyboard))
+    val dock = chrome.keyBar(keyBarShown(hardwareKeys, keyBarWithKeyboard)) && closed == null
     var bottomPx by remember { mutableIntStateOf(0) }
     var panePx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -292,7 +297,6 @@ internal fun TermScreen(
                     showBack = !embedded,
                     onNavigate = { if (view != null) sheet = Sheet.Navigator },
                     onHolder = { if (state.owning) onAct { releasePane() } else onAct { takeOver() } },
-                    onFullScreen = { fullScreen = TermChrome(fullScreen).toggled().fullScreen },
                     onMore = { sheet = Sheet.Actions },
                 )
             }
@@ -301,7 +305,16 @@ internal fun TermScreen(
             // way a terminal fills the screen.
             Box(Modifier.weight(1f).fillMaxWidth().background(Colors.terminal).clipToBounds()) {
                 val shown = focused?.id
-                key(shown) {
+                if (closed != null && view != null) {
+                    ClosedPaneNote(
+                        closed = closed,
+                        next = view.activeWindow()?.let { tabTitle(view, it, state) },
+                        onShowNext = { onAct { leaveClosedPane() } },
+                        onNewTab = { onAct { newWindow() } },
+                        onSessions = onBack.takeIf { !embedded },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else key(shown) {
                     TerminalPane(
                         blockId = shown.orEmpty(),
                         feeds = watchPane,
@@ -414,6 +427,13 @@ internal fun TermScreen(
             onCreate = { onAct { createShell(null) } },
         )
         Sheet.Actions -> ActionSheet(onDismiss = { sheet = null }) {
+            // Full screen: the top bar, the key bar and the phone's bars go, and the pane takes their
+            // room. It lives here rather than on the top bar, which has no room to spare on a phone.
+            Group {
+                SheetItem(stringResource(R.string.action_full_screen), icon = R.drawable.ic_fullscreen) {
+                    fullScreen = TermChrome(fullScreen).toggled().fullScreen
+                }
+            }
             Group(stringResource(R.string.level_pane)) {
                 SheetItem(stringResource(R.string.menu_split_right), icon = R.drawable.ic_split_right) { onAct { split(vertical = false) } }
                 SheetItem(stringResource(R.string.menu_split_below), icon = R.drawable.ic_split_below) { onAct { split(vertical = true) } }
@@ -426,11 +446,13 @@ internal fun TermScreen(
             }
             // Paste is here as well as on the key bar, because a keyboard on the desk takes the bar
             // away and a chord only reaches the program, never the phone's clipboard.
-            Group {
-                if (upload?.running != true) {
-                    SheetItem(stringResource(R.string.upload_attach), icon = R.drawable.ic_attach_file) { filePicker.launch("*/*") }
+            if (focused != null) {
+                Group {
+                    if (upload?.running != true) {
+                        SheetItem(stringResource(R.string.upload_attach), icon = R.drawable.ic_attach_file) { filePicker.launch("*/*") }
+                    }
+                    SheetItem(stringResource(R.string.key_paste), icon = R.drawable.ic_paste) { pasteClipboard() }
                 }
-                SheetItem(stringResource(R.string.key_paste), icon = R.drawable.ic_paste) { pasteClipboard() }
             }
             Group(stringResource(R.string.level_tab)) {
                 SheetItem(stringResource(R.string.menu_new_tab), icon = R.drawable.ic_add) { onAct { newWindow() } }
@@ -466,7 +488,7 @@ internal fun TermScreen(
                             detail = window.blocks.size.takeIf { it > 1 }?.let { pluralStringResource(R.plurals.pane_count, it, it) },
                             marked = window.id == tab?.id,
                         ) {
-                            if (window.id != view.activeWindowId) onAct { focusWindow(window.id) }
+                            if (window.id != tab?.id) onAct { focusWindow(window.id) }
                         }
                     }
                 }
@@ -625,7 +647,6 @@ private fun SessionTopBar(
     showBack: Boolean,
     onNavigate: () -> Unit,
     onHolder: () -> Unit,
-    onFullScreen: () -> Unit,
     onMore: () -> Unit,
 ) {
     val title = when {
@@ -682,13 +703,71 @@ private fun SessionTopBar(
                 }
             }
         }
-        if (state.phase == Phase.Live) {
+        // Who holds the pane, while there is one on screen to hold.
+        if (state.phase == Phase.Live && tab != null) {
             HolderChip(state.owning, onHolder)
             Spacer(Modifier.width(4.dp))
         }
-        // Full screen: this bar, the key bar and the phone's bars go, and the pane takes their room.
-        RoundButton(R.drawable.ic_fullscreen, stringResource(R.string.action_full_screen), onFullScreen, size = 40.dp)
         RoundButton(R.drawable.ic_more, stringResource(R.string.action_more), onMore, plate = Colors.key, size = 40.dp)
+    }
+}
+
+/**
+ * In place of a pane that was closed elsewhere: what happened, in calm words, and where to go next -
+ * the tab Rex shows now, a new tab when the session has none left, or back to the sessions.
+ */
+@Composable
+private fun ClosedPaneNote(
+    closed: ClosedPane,
+    /** The title of the tab the session shows now; null when it has no tab left. */
+    next: String?,
+    onShowNext: () -> Unit,
+    onNewTab: () -> Unit,
+    /** Null where the list already stands beside the pane. */
+    onSessions: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier.padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Glyph(R.drawable.ic_close, Colors.muted, size = 36.dp)
+        Spacer(Modifier.height(16.dp))
+        Text(
+            stringResource(if (closed.tabClosed) R.string.closed_tab_title else R.string.closed_pane_title),
+            color = Colors.ink,
+            fontSize = TextStyles.title,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 360.dp),
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.closed_body),
+            color = Colors.muted,
+            fontSize = TextStyles.label,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 360.dp),
+        )
+        Spacer(Modifier.height(24.dp))
+        Column(Modifier.widthIn(max = 360.dp)) {
+            if (next != null) {
+                PrimaryButton(stringResource(R.string.closed_show, next), onClick = onShowNext)
+            } else {
+                PrimaryButton(stringResource(R.string.menu_new_tab), onClick = onNewTab)
+            }
+            if (onSessions != null) {
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(Radius.card))
+                        .clickable(role = Role.Button, onClick = onSessions),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(stringResource(R.string.closed_sessions), color = Colors.accent, fontSize = TextStyles.body)
+                }
+            }
+        }
     }
 }
 

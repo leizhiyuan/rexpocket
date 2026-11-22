@@ -191,6 +191,11 @@
     <string name="no_tabs">No tabs</string>
     <string name="pane_none_title">No pane open</string>
     <string name="pane_none_body">Choose a tab on the left: its terminal opens here, and the list stays beside it.</string>
+    <string name="closed_tab_title">This tab was closed</string>
+    <string name="closed_pane_title">This pane was closed</string>
+    <string name="closed_body">It was closed on the desktop or another device, or the program in it exited. Nothing you type goes anywhere until you choose what to show.</string>
+    <string name="closed_show">Show %1$s</string>
+    <string name="closed_sessions">Back to sessions</string>
     <string name="action_show_active">Show active only</string>
     <string name="no_activity">Nothing is running right now</string>
     <string name="action_more">More actions</string>

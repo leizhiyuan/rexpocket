@@ -49,6 +49,9 @@ class RexTimeoutException(message: String) : Exception(message)
 /** The control connection closed after it was up. */
 class ConnectionDroppedException(message: String, cause: Throwable?) : Exception(message, cause)
 
+/** The pane being watched is gone from its session: closed, not failed, so its stream stops. */
+class PaneClosedException(message: String) : Exception(message)
+
 /** An action that needs a connection, a session or a pane before there is one. */
 class NotReadyException(message: String) : IllegalStateException(message)
 
