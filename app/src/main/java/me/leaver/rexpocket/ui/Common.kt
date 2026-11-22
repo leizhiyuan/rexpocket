@@ -30,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -115,6 +116,7 @@ internal fun Field(
     // With autoFocus the field opens focused with its text selected, so a rename can be typed over.
     var field by remember { mutableStateOf(TextFieldValue(value, if (autoFocus) TextRange(0, value.length) else TextRange(value.length))) }
     val focus = focusRequester ?: remember { FocusRequester() }
+    val currentDone = rememberUpdatedState(onDone)
     val keyboard = LocalSoftwareKeyboardController.current
     if (autoFocus) {
         LaunchedEffect(Unit) {
@@ -157,7 +159,9 @@ internal fun Field(
                     imeAction = imeAction,
                 ),
                 keyboardActions = KeyboardActions(
-                    onDone = onDone?.let { done -> { done() } },
+                    // The field keeps the actions it was first given, so Done calls the newest onDone:
+                    // a dialog's save reads what was typed since.
+                    onDone = if (onDone != null) { { currentDone.value?.invoke() } } else null,
                     onNext = next?.let { field -> { field.requestFocus() } },
                 ),
                 modifier = Modifier.fillMaxWidth().border(1.dp, Colors.line, RoundedCornerShape(Radius.chip))

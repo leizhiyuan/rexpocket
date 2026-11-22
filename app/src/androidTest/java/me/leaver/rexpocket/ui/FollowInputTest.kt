@@ -23,7 +23,6 @@ import me.leaver.rexpocket.core.TerminalFeed
 import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.terminal.TerminalSession
 import me.leaver.rexpocket.terminal.TerminalView
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -101,9 +100,11 @@ class FollowInputTest {
     @Test
     fun aKeyOnTheBarBringsThePaneToTheNewestOutput() {
         val session = scrollBack()
+        // The pane's own resizes go through the session too: count from here.
+        val before = acts
         compose.onNode(hasContentDescription(string(R.string.key_tab)) and hasClickAction() and inBar).performClick()
         compose.waitForIdle()
-        assertEquals("the key went to Rex", 1, acts)
+        assertTrue("the key went to Rex", acts > before)
         assertTrue("the pane follows the key to the bottom", requireNotNull(session.frame()).atBottom)
     }
 
@@ -111,12 +112,13 @@ class FollowInputTest {
     fun pasteBringsThePaneToTheNewestOutput() {
         compose.runOnUiThread { clipboardSet(compose.activity, "echo hi") }
         val session = scrollBack()
+        val before = acts
         // The ⋮ menu's Paste: the same paste as the bar's, which may be scrolled out of the pill.
         compose.onNodeWithContentDescription(string(R.string.action_more)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(string(R.string.key_paste)).performClick()
         compose.waitForIdle()
-        assertEquals("the paste went to Rex", 1, acts)
+        assertTrue("the paste went to Rex", acts > before)
         assertTrue("the pane follows the paste to the bottom", requireNotNull(session.frame()).atBottom)
     }
 
