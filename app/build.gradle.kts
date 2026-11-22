@@ -47,6 +47,18 @@ android {
         }
     }
 
+    // CI's phone builds: -Prexpocket.debugKeystore names a debug key kept between runs, so each debug
+    // APK installs over the last. Without it a debug build signs with this computer's own debug key.
+    (findProperty("rexpocket.debugKeystore") as String?)?.let { path ->
+        signingConfigs.create("ciDebug") {
+            storeFile = file(path)
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+        buildTypes.getByName("debug").signingConfig = signingConfigs.getByName("ciDebug")
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

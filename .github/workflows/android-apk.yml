@@ -64,7 +64,7 @@ jobs:
         run: keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 "SHA256:"
 
       - name: Build the default debug APK
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" :app:assembleDebug
 
       - name: Keep the default APK aside
         run: |
@@ -75,10 +75,19 @@ jobs:
         run: REXPOCKET_NETBIRD=1 sh tools/build-tailnet.sh
 
       - name: Build the debug APK with Netbird
-        run: ./gradlew --no-daemon -Prexpocket.netbird=true :app:assembleDebug
+        run: ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" -Prexpocket.netbird=true :app:assembleDebug
 
       - name: Keep the Netbird APK aside
         run: cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket-debug-netbird.apk
+
+      - name: Check both APKs carry the kept key
+        run: |
+          WANT=$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 "SHA256:" | awk '{print $2}' | tr -d ':' | tr 'A-F' 'a-f')
+          for apk in out/*.apk; do
+            GOT=$("$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --print-certs "$apk" | grep -m1 "SHA-256 digest" | awk '{print $NF}')
+            echo "$apk $GOT"
+            [ "$GOT" = "$WANT" ] || { echo "signed with another key than the kept one"; exit 1; }
+          done
 
       - name: Sizes
         run: ls -l out/
