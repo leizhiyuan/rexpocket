@@ -152,6 +152,8 @@ internal fun HomeScreen(
     onConnect: (SavedHost) -> Unit,
     onOpenSession: (SavedHost, String) -> Unit,
     onOpenTab: (SavedHost, String, String) -> Unit,
+    /** Opens one pane of a tab: an activity row opens the pane whose program reported. */
+    onOpenPane: (SavedHost, String, String, String) -> Unit = { host, session, window, _ -> onOpenTab(host, session, window) },
     onNewSession: (SavedHost) -> Unit,
     onNewTab: (SavedHost, String) -> Unit,
     onDisconnect: () -> Unit,
@@ -258,6 +260,10 @@ internal fun HomeScreen(
             host to sessions
         }
         val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        // The eye shows the connected host's activity, as Rex's Activity does. A host the phone is
+        // not connected to has none to show: only a live connection hears its programs.
+        val liveHost = connected?.takeIf { state.phase == Phase.Live }
+        val activity = if (activeOnly && liveHost != null) activityShown(state, query) else emptyList()
         Column(Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().imePadding()) {
             if (searchOpen) {
                 SearchBar(query = query, focus = focus, onQuery = { query = it }, onClose = closeSearch)
@@ -273,7 +279,15 @@ internal fun HomeScreen(
                         bottom = if (searchOpen) 16.dp else navBottom + 104.dp,
                     ),
                 ) {
-                    rows.forEachIndexed { index, (host, sessions) ->
+                    if (activeOnly) {
+                        if (activity.isEmpty() || liveHost == null) {
+                            item(key = "activity-empty") { ActivityEmpty(live = liveHost != null, searching = query.isNotBlank()) }
+                        } else {
+                            activityItems(activity, state) { item ->
+                                onOpenPane(liveHost, item.sessionId, item.window.id, item.block.id)
+                            }
+                        }
+                    } else rows.forEachIndexed { index, (host, sessions) ->
                         val live = connected?.id == host.id
                         val hostExpanded = host.id !in collapsedHosts || searchOpen
                         item(key = "host-${host.id}") {
@@ -344,12 +358,12 @@ internal fun HomeScreen(
                             }
                         }
                     }
-                    if (rows.isEmpty()) {
-                        item { NotFound(activeOnly = activeOnly) }
+                    if (!activeOnly && rows.isEmpty()) {
+                        item { NotFound() }
                     }
                     // The list is the only place a host is added from, so the way to add one is at
                     // the end of it - above it, there is nothing until a host exists.
-                    if (!searchOpen && hosts.isNotEmpty()) {
+                    if (!searchOpen && !activeOnly && hosts.isNotEmpty()) {
                         item(key = "add-host") {
                             Spacer(Modifier.height(12.dp))
                             AddHostRow(onClick = { creating = true })
@@ -736,9 +750,9 @@ private fun EmptyTabs(text: String, canOpen: Boolean, onOpen: () -> Unit) {
 }
 
 @Composable
-private fun NotFound(activeOnly: Boolean) {
+private fun NotFound() {
     Text(
-        stringResource(if (activeOnly) R.string.no_activity else R.string.search_none),
+        stringResource(R.string.search_none),
         color = Colors.muted,
         fontSize = TextStyles.subhead,
         modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),

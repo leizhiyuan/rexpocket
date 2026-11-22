@@ -198,8 +198,14 @@
     <string name="closed_body">It was closed on the desktop or another device, or the program in it exited. Nothing you type goes anywhere until you choose what to show.</string>
     <string name="closed_show">Show %1$s</string>
     <string name="closed_sessions">Back to sessions</string>
-    <string name="action_show_active">Show active only</string>
-    <string name="no_activity">Nothing is running right now</string>
+    <string name="action_show_active">Activity</string>
+    <string name="no_activity">No program is waiting, failed, done or running</string>
+    <string name="activity_offline">Connect to a host to see its activity</string>
+    <string name="activity_waiting">Waiting</string>
+    <string name="activity_failed">Failed</string>
+    <string name="activity_done">Done</string>
+    <string name="activity_running">Running</string>
+    <string name="activity_now">now</string>
     <string name="action_more">More actions</string>
     <string name="action_full_screen">Full screen</string>
     <string name="action_exit_full_screen">Exit full screen</string>

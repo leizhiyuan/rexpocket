@@ -227,6 +227,18 @@ fun applyStatusEvent(records: Map<String, ProgramRecord>, event: JSONObject): Ma
 }
 
 /**
+ * A pane's status records after Rex's `program_status_removed` [event], which lists the `ids` of
+ * the records it dropped: on a `clear`, or a working or blocked record when the program exits or the
+ * shell prompts again (OSC 7501, "Lifetime"). The root record's id is the empty string, as in
+ * [applyStatusEvent]. An event without `ids` removes them all.
+ */
+fun removeStatusRecords(records: Map<String, ProgramRecord>, event: JSONObject): Map<String, ProgramRecord> {
+    val ids = event.optJSONArray("ids") ?: return emptyMap()
+    val gone = (0 until ids.length()).mapTo(HashSet()) { if (ids.isNull(it)) "" else ids.optString(it) }
+    return records - gone
+}
+
+/**
  * The program in a terminal's foreground, from Rex's `process` answer or `process_changed` event.
  * The name it was started by comes first: an agent written for node runs as `node` but is started
  * as `pi`, and that is the name a person knows it by. A login shell's leading dash is dropped.

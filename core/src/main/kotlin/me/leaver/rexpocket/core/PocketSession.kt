@@ -55,6 +55,12 @@ data class PocketState(
     val views: Map<String, SessionView> = emptyMap(),
     /** What each pane's program says it is doing, summarized; kept current by Rex's events. */
     val blockStatus: Map<String, ProgramRecord> = emptyMap(),
+    /**
+     * When the phone saw each pane's summarized state begin, in [System.currentTimeMillis] time:
+     * only for a change Rex told as it happened. A state already there when the pane was read has
+     * no time, because Rex's records carry none.
+     */
+    val statusSince: Map<String, Long> = emptyMap(),
     /** The shown pane's working directory. */
     val pwd: String? = null,
     /** What each pane runs, by name - an agent such as `pi`, an editor, or a shell. */
@@ -106,6 +112,8 @@ class PocketSession(
     private val httpFactory: () -> OkHttpClient = { RexClient.defaultHttp(socksPort) },
     /** Uploads speak API revision 11 on their own connection, so the live one keeps its contract. */
     private val uploadClientFactory: () -> RexClient = { RexClient(httpFactory(), apiRevision = FileUpload.API_REVISION) },
+    /** The time a state change is stamped with; a test's own clock in tests. */
+    private val clock: () -> Long = System::currentTimeMillis,
     private val clientFactory: () -> RexClient = { RexClient(httpFactory()) },
 ) {
     private val _state = MutableStateFlow(PocketState(sessions = cachedSessions))
@@ -137,6 +145,8 @@ class PocketSession(
     private val foregrounds = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val titleOf = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val statusRead: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    /** When each pane's summarized state began, as far as the phone saw it; see [PocketState.statusSince]. */
+    private val sinceOf = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /**
      * The pane the phone shows in each session. Rex has one active tab and pane per session for all
@@ -906,7 +916,14 @@ class PocketSession(
         val body = event.optJSONObject("payload") ?: return
         when (event.optString("name")) {
             "program_status_changed" -> {
-                statusRecords.compute(block) { _, old -> applyStatusEvent(old.orEmpty(), body) }
+                changeStatus(block) { applyStatusEvent(it, body) }
+                reportedDuringRead += block
+                publishStatus()
+            }
+            // Rex drops records on its own - working and blocked ones when the program exits or the
+            // shell prompts again - and says so with this event, not with a changed record.
+            "program_status_removed" -> {
+                changeStatus(block) { removeStatusRecords(it, body) }
                 reportedDuringRead += block
                 publishStatus()
             }
@@ -931,6 +948,23 @@ class PocketSession(
         }
     }
 
+    /**
+     * Applies [change] to [block]'s records, stamping the time when the state they sum up to is a
+     * new one: that is when, say, a program failed, as far as anyone on the phone can know.
+     */
+    private fun changeStatus(block: String, change: (Map<String, ProgramRecord>) -> Map<String, ProgramRecord>) {
+        var before: String? = null
+        var after: String? = null
+        statusRecords.compute(block) { _, old ->
+            before = summarizeStatus(old.orEmpty().values.toList())?.state
+            change(old.orEmpty()).also { after = summarizeStatus(it.values.toList())?.state }
+        }
+        when {
+            after == null -> sinceOf -= block
+            after != before -> sinceOf[block] = clock()
+        }
+    }
+
     private fun publishStatus() {
         updateState { st ->
             val summary = LinkedHashMap<String, ProgramRecord>()
@@ -942,6 +976,7 @@ class PocketSession(
             }
             st.copy(
                 blockStatus = summary,
+                statusSince = HashMap(sinceOf),
                 pwd = st.view?.focusedBlock()?.id?.let { pwds[it] },
                 programs = programs,
                 titles = HashMap(titleOf),
@@ -1542,6 +1577,9 @@ class PocketSession(
                 val named = title.await()?.let { programTitle(it) }
                 // An event that landed while this was in flight is newer than the answer; it wins.
                 if (block !in reportedDuringRead) {
+                    // Read again after a reconnect: when a state that changed meanwhile began, nobody knows.
+                    val before = statusRecords[block]?.let { summarizeStatus(it.values.toList())?.state }
+                    if (before != summarizeStatus(records.values.toList())?.state) sinceOf -= block
                     statusRecords[block] = records
                     if (dir != null) pwds[block] = dir
                     if (program != null) foregrounds[block] = program

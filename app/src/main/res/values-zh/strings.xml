@@ -196,8 +196,14 @@
     <string name="closed_body">它在桌面或另一台设备上被关闭，或者其中的程序已退出。在你选择要显示的内容之前，输入不会发送到任何地方。</string>
     <string name="closed_show">显示 %1$s</string>
     <string name="closed_sessions">返回会话列表</string>
-    <string name="action_show_active">只看有活动的</string>
-    <string name="no_activity">现在没有正在运行的任务</string>
+    <string name="action_show_active">活动</string>
+    <string name="no_activity">没有等待中、失败、完成或运行中的程序</string>
+    <string name="activity_offline">连接到主机后可查看它的活动</string>
+    <string name="activity_waiting">等待中</string>
+    <string name="activity_failed">失败</string>
+    <string name="activity_done">完成</string>
+    <string name="activity_running">运行中</string>
+    <string name="activity_now">刚刚</string>
     <string name="action_more">更多操作</string>
     <string name="action_full_screen">全屏</string>
     <string name="action_exit_full_screen">退出全屏</string>

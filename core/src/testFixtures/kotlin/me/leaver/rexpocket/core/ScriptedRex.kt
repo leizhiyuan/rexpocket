@@ -64,6 +64,7 @@ class ScriptedRex : AutoCloseable {
     private val tokens = ConcurrentHashMap.newKeySet<String>()
     private val refusals = ConcurrentHashMap<String, String>()
     private val holds = ConcurrentHashMap<String, CountDownLatch>()
+    private val statuses = HashMap<String, JSONObject>()
 
     /**
      * False for a Rex whose panes send no picture: a stream opens and is welcomed, then stays
@@ -118,6 +119,35 @@ class ScriptedRex : AutoCloseable {
     /** Ends [clientId]'s control connection, as its network going away; it resumes on a new one. */
     fun drop(clientId: String) {
         clients.filterValues { it.id == clientId }.keys.forEach { runCatching { it.close(1001, "network gone") } }
+    }
+
+    /**
+     * The program in [block] reports [state] (`working`, `blocked`, `error`, `done`, `idle`), as a
+     * Rex-aware program does: its record is what `program_status` answers from now on, and every
+     * client is told with a `program_status_changed` block event. Null [state] is Rex dropping the
+     * record - a `clear`, or the program exiting while working - told with `program_status_removed`.
+     * The shapes are the events reference's (superlogical.com/rex/docs/reference/events).
+     */
+    fun report(block: String, state: String?, kind: String? = null, msg: String? = null, app: String? = null, title: String? = null) {
+        synchronized(this) {
+            val session = sessions.values.firstOrNull { it.tabOf(block) != null } ?: return
+            val event = JSONObject().put("block_id", block).put("creator_name", "com.superlogical.terminal")
+            if (state == null) {
+                if (statuses.remove(block) == null) return
+                event.put("name", "program_status_removed")
+                    .put("payload", JSONObject().put("ids", JSONArray().put(STATUS_ID)))
+            } else {
+                val record = JSONObject().put("state", state)
+                kind?.let { record.put("kind", it) }
+                msg?.let { record.put("msg", it) }
+                app?.let { record.put("app", it) }
+                title?.let { record.put("title", it) }
+                statuses[block] = record
+                event.put("name", "program_status_changed")
+                    .put("payload", JSONObject().put("id", STATUS_ID).put("record", record))
+            }
+            sessionEvent(session.id, "block_event", event)
+        }
     }
 
     /** The client that holds [block], as Rex has it. */
@@ -229,6 +259,7 @@ class ScriptedRex : AutoCloseable {
     /** The pane is gone: nobody holds it, and its streams end the way Rex ends them. */
     private fun endPane(block: String) {
         owners -= block
+        statuses -= block
         streams.filter { it.block == block }.forEach { stream ->
             stream.socket?.close(4000, "block closed")
             streams -= stream
@@ -334,8 +365,11 @@ class ScriptedRex : AutoCloseable {
                 JSONObject()
             }
             "com.superlogical.terminal.program_status" -> {
-                pane(client, payload)
-                JSONObject().put("records", JSONArray())
+                val (_, block) = pane(client, payload)
+                JSONObject().put(
+                    "records",
+                    JSONArray().apply { statuses[block]?.let { put(JSONObject(it.toString()).put("id", STATUS_ID)) } },
+                )
             }
             "com.superlogical.terminal.pwd", "com.superlogical.terminal.process", "com.superlogical.terminal.title" -> {
                 pane(client, payload)
@@ -486,6 +520,9 @@ class ScriptedRex : AutoCloseable {
     }
 
     private companion object {
+        /** The one status record a scripted program reports under. */
+        const val STATUS_ID = "agent"
+
         /** The smallest snapshot there is: the magic, a version, and the record that ends it. */
         val SNAPSHOT = "GHOSTSNP".toByteArray() + byteArrayOf(1, 0) + byteArrayOf(6, 0, 0, 0, 0, 0, 0, 0, 0, 0)
     }

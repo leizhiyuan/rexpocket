@@ -149,6 +149,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onConnect = { model.connect(it) },
                     onOpenSession = model::openSessionOn,
                     onOpenTab = model::openTabOn,
+                    onOpenPane = model::openPaneOn,
                     onNewSession = model::createSessionOn,
                     onNewTab = model::newTabOn,
                     onDisconnect = model::disconnect,

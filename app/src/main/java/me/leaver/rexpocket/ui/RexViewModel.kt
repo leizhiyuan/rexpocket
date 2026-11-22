@@ -747,6 +747,20 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
         enterSession(Opening.Existing(sessionId)) { openSession(sessionId, rememberedPane(sessionId), windowId) }
     }
 
+    /**
+     * Opens [blockId] in its tab [windowId] of [target]'s session: what an activity row does, so
+     * the pane whose program reported is the one on screen, not the tab's other pane.
+     */
+    fun openPaneOn(target: SavedHost, sessionId: String, windowId: String, blockId: String) {
+        if (host?.id != target.id) connect(target)
+        enterSession(Opening.Existing(sessionId)) { openSession(sessionId, blockId, windowId) }
+    }
+
+    /** Opens a tab of the session on screen, or of another session of this host. */
+    fun openTab(sessionId: String, windowId: String) {
+        enterSession(Opening.Existing(sessionId)) { openSession(sessionId, rememberedPane(sessionId), windowId) }
+    }
+
     /** Adds a tab to [target]'s session and shows it; connects to the host first when needed. */
     fun newTabOn(target: SavedHost, sessionId: String) {
         if (host?.id != target.id) connect(target)
