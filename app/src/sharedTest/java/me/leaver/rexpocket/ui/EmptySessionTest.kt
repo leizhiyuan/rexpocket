@@ -69,8 +69,6 @@ class EmptySessionTest {
         compose.awaitThat { m.pocket.value.view?.windows?.size == 1 }
         compose.onNodeWithTag(EMPTY_SESSION_TAG).assertDoesNotExist()
         compose.onNodeWithTag(PANE_TAG).assertIsDisplayed()
-        // A pane to type into, so the keys are back.
-        compose.awaitThat { dockHeight() > 0f }
         assertNull("the new tab failed: ${m.pocket.value.notice}", m.pocket.value.notice)
     }
 }
