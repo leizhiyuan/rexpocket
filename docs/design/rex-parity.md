@@ -17,10 +17,13 @@ names its source; anything taken only from a screenshot is marked **unconfirmed*
 | **code** | This repository: `RexClient.kt`, `RexModels.kt`, `PocketSession.kt`, `Attention.kt`, `Upload.kt` |
 | **fixture** | `app/src/test/resources/rex-stream.bin`, recorded from a real Rex (data connection only) |
 | **screenshot** | The user's Mac, Rex's Activity sidebar with a Failed and a Done group (November 2026) |
+| **real** | Rex 0.1.0-preview.22 (api revision 19) on Linux, driven by RexPocket's code, probes and the `rex` CLI as the desk; see "Real Rex" below. Marked **verified on preview.22 / api 19** |
 
 All docs pages were read on 2026-11-22 from `superlogical.com/rex/docs`, which serves every page as
-Markdown (`/rex/docs/llms-full.txt`). rex.app was not used. Nothing here was checked against a running
-Rex: no CI runner can get one (see testing.md), and the user's Mac was not reachable from this session.
+Markdown (`/rex/docs/llms-full.txt`). rex.app was not used. The claims marked **verified on
+preview.22 / api 19** were then checked against a real Rex; "Real Rex" lists what was seen, and where
+it differs from the docs, real Rex wins. Rex's own catalogue of its API and CLI, taken from that
+server, is in [rex-protocol/](rex-protocol/README.md).
 
 ## What Rex sends and what the app does with it
 
@@ -59,7 +62,7 @@ own connection) and keeps the welcome's client id, reconnect token, `resumed`, `
 | `block_owner_changed`, `block_closed`, `window_closed`, `window_created`, `active_window_changed` | used: the view is read again |
 | `window_label_changed`, `block_created` | not handled by name; the `session_view_changed` that follows them is (docs:events: it "follows almost every other event") |
 | `client_connected`, `client_disconnected`, `client_connection_changed`, `client_joined`, `client_left`, `client_changed`, `creator_changed`, `keymap_changed`, `hosts_changed`, `tailscale_status_changed`, `client_performed`, `client_call_requested`, `client_perform_requested`, `client_prompt_requested`, `client_prompt_ended` | ignored |
-| `terminal.program_status_changed` (`id`, `record`, `reason`) | used: Activity, tab dots, alerts. `reason` is not read |
+| `terminal.program_status_changed` (`id`, `record`, `reason`) | used: Activity, tab dots, alerts. `reason` is always `report` (verified on preview.22 / api 19) and is not read; the record's `updated_at` gives Activity its ages |
 | `terminal.program_status_removed` (`ids`, `reason`) | **was ignored, now used** (this change): Rex drops working and blocked records when the program exits or the shell prompts again (docs:program-status, "Lifetime"), and a `clear` removes records; the phone kept them, so a pane stayed "running" |
 | `terminal.pwd_changed`, `terminal.process_changed`, `terminal.title_changed` | used |
 | `terminal.child_exited` (`exit_code`, `error`) | ignored |
@@ -71,6 +74,17 @@ own connection) and keeps the welcome's client id, reconnect token, `resumed`, `
 (`permission`, `question`, `auth`, with `blocked` only), `progress` (0-100, with `working` or
 `blocked`), `app`, `title`, `msg`. **There is no time in a record, and the events carry none.** The app
 reads all of them (`parseProgramRecord`); a pane's records are summed up to one by `summarizeStatus`.
+
+**Correction (verified on preview.22 / api 19):** a record does carry a time. Rex adds `updated_at`
+(when the report arrived, by the server's clock), `effective_app` (the `app` inherited from the
+nearest parent record) and `owner` (the foreground process, `pid` and `name`), at the app's API
+revision 7 too. The app now takes a state's age from `updated_at`, so a state found on the first read
+has its age (capped at now, as the phone's clock may differ). Rex itself sums nothing up:
+`program_status` lists every record, root first, and the summary is the app's. It follows Activity's
+order, blocked, error, done, working, idle (`statusPriority`), so a pane whose root works while a child
+record is done shows as done, everywhere the summary is shown (Activity, tab and pane dots, the eye's
+filter). Whether a program is still busy - for the key bar's C-c and the running dots - is asked of
+every record instead (`PocketState.busy`).
 
 ## Activity
 
@@ -105,9 +119,8 @@ off the host, the eye says to connect.
 
 What the desktop shows that the phone cannot get from Rex:
 
-- **The age** (`48m`, `9m` in the screenshot). Records carry no time. The phone shows the time since
-  it saw the state begin, from the event; a state that was already there when the phone read the
-  pane has no age. The desktop has been watching all along, so its ages are complete.
+- **The age** (`48m`, `9m` in the screenshot) is no longer one of them: records carry `updated_at`
+  (verified on preview.22 / api 19), and the phone uses it.
 - **Seen and unseen.** Done and failed tabs stay on the phone until Rex drops the record or the
   program reports something else. Idle tabs are left out, since showing them "until seen" needs a
   seen state Rex does not share. See the verdicts.
@@ -165,15 +178,92 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 | Server and Tailscale management (`server.*`) | Skip | administration of the computer; the desktop app's job |
 | Clients list, perform on another client (`client.list`, `client.perform`) | Skip | nothing a phone user asked for |
 
-## Not verified
+## Real Rex
 
-- No change here was run against a real Rex or on the user's phone; ScriptedRex sends the event
-  shapes of docs:events, but `program_status_removed`'s `ids` for the root record (taken here as an
-  empty or null id, as the app already keys the root record) and the values of `reason` were not
-  seen from a real Rex.
-- Whether a real Rex answers `program_status` for a pane of a session the connection has not
-  attached. Rex's API reference says it does: after `session.bootstrap` "the connection can then
-  call methods on any session"; only `data.connect`, `session.own_block` and `session.disown_block`
-  need `session.attach`. ScriptedRex now follows that (it used to refuse every pane call outside the
-  one session last attached), and `ActivityTest` checks that a record set before the phone connected
-  shows for a session the phone never opened. Not yet seen on a real Rex.
+Rex 0.1.0-preview.22 (`rex version`: `api: revision 19 (supports 0 to 19)`), the amd64 package from
+`pkgs.superlogical.com/rex/apt` (archive key `E28636AC71905C6DDE40C1EDFAA6B80F641307A7`, package
+SHA256 as pinned in `tools/rex/pin.env`), run as `rex server run --listen unix://… --extra-listen
+http://127.0.0.1:7297 --allow-anonymous`. The phone side spoke API revision 7, as the app does. Every
+point below is **verified on preview.22 / api 19**; `RexShapeTest` replays most of them against both
+this Rex and ScriptedRex (`core/src/test/resources/rex-shapes/preview.22.txt`), and the `rex-real`
+workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every push.
+
+### The open questions, answered
+
+- **`program_status_removed`.** The root record's id is the empty string, in `ids` and in
+  `program_status_changed`'s `id` (whose `record` then has no `id`). `reason` seen: `clear` (a
+  `state=clear` report; with no `id` it removes every record at once, all ids in one event) and
+  `child_exited` (the terminal's program exited while working; sent before `child_exited` itself).
+  The schema (`block_creator.list`) also names `reset`, `prompt`, `foreground` and `evicted`; a stock
+  Ubuntu bash, with no shell integration, produced neither `prompt` nor `foreground`: a `working`
+  record outlived the prompt and Ctrl+C while bash was the record's `owner`. The app removes the
+  listed ids whatever the reason.
+- **`program_status` for a session not attached.** It answers, as the docs say: a connection that
+  bootstrapped (`event_scope: all`) may call `program_status`, `size`, `session.view` and the other
+  pane methods on any session; only `session.own_block` (`bad_request`, "the caller must be a client
+  attached to the session") and `data.connect` (`conflict`, "stream is not attached to session …")
+  need `session.attach`. Without a bootstrap every call is `conflict` "stream is not attached to
+  session …". The bootstrapped connection also gets every session's `block_event`s, so Activity
+  keeps failed and done tabs of other sessions current without attaching them (`ActivityTest`,
+  `RealRexAppTest.activityShowsWhatRealProgramsReported`).
+- **A program that fails.** Rex makes no status record of an exit code: `sh -c 'exit 3'` gives only
+  `child_exited` (`exit_code: 3`, `error: "exit status 3"`), `process`'s `last_exit`, and on the
+  stream an APC `{"type":"child_exited","exit_code":3}`. Activity's Failed group comes only from a
+  program that reports `state=error`, which then outlives its exit. A shell pane's program exiting
+  closes the pane (and its tab, if it was the last), unless it failed within 250 ms (`exit.
+  quick_exit_threshold_ms`) or the block was made with `exit.on_completion: false`.
+- **`client.keymap`.** On a server with no configuration file: `bindings: []`, `diagnostics: []`,
+  `config` (path, exists, generation, hash) and 22 `actions`, all `kind: block`, each with `name`,
+  `description` and `args` (a JSON Schema); only `com.superlogical.terminal.clear` ("Clear Terminal")
+  and `…reset` ("Reset Terminal") have a `title`, `category` (`Pane`) and `keywords` - the ones a
+  palette would list. Custom `rex.action`s need an `init.lua`, which was not tried. Saved in
+  `rex-protocol/client-keymap.json`.
+- **A tab closed from another client.** `session.close_window` (or `rex window close`): the phone gets
+  `window_closed`, `active_window_changed` (when it was the active tab; `{}` when no tab is left),
+  `session_view_changed`, and only then `block_closed` for each of its panes; the pane's stream closes
+  with 4000 `block closed`. `block.close` of a tab's last pane: `block_closed`, `window_closed`,
+  (`active_window_changed`), `session_view_changed`. A pane of a split: `block_closed`,
+  `session_view_changed`. Refusals afterwards: `block.close`, every terminal method and `data.connect`
+  are `not_found` "block not found: <id>"; `session.own_block`/`disown_block` are `bad_request` "block
+  <id> is not in the session"; `session.close_window` and `set_window_label` are `not_found` "window
+  <id> not found"; `set_block_label` is `not_found` "block not found".
+- **Stream ends.** 4000 `block closed` when the pane closes (also for each pane of a destroyed
+  session); 1001 `data provider canceled` when the client that opened it ends with a close frame;
+  a second HELLO for a pane the same client already streams is refused with `0x02` and closed with
+  1008 `data handshake rejected`; a stream the client closes with 1000 ends, any other close waits 60 s
+  for a RESUME (the WELCOME says 60000 ms). A stream opens with the `GHOSTSNP` snapshot and then a
+  `rex1` `resize` APC carrying the owner. A control connection that drops without a close frame
+  leaves the stream open.
+
+### Other differences found, and fixed
+
+| Seen on real Rex | ScriptedRex before | App before | Now |
+| --- | --- | --- | --- |
+| A resumed hello keeps the client: same id, `resumed: true`, still attached; its panes come back (`block_owner_changed` reason `restore`) | every connection a new client | `reconnectNow` closed with a close frame, which ends the client, its ownership and its streams (1001) - though its comment said Rex resumes it | fake resumes; `RexClient.drop` ends the socket without a close frame, which `reconnectNow` uses |
+| A drop passes the panes at once to the next client in line (`lost`, to the desk that made the pane); a close frame passes them with `disconnect` | panes simply let go | - | fake keeps Rex's line: take beats request, most recent first |
+| Panes of `session.create`'s first windows have no owner; `new_window` and `new_split` make the caller the owner (`create`) | nobody owned anything | `PocketSessionTest` assumed the creator owned a new session's pane, and 9 of its tests timed out before doing anything | fake as Rex; tests wait for the pane, which the phone takes by watching it |
+| `block_owner_changed` carries `block_id`, `owner` (left out for none), `previous`, `reason`; disowning a pane another client holds changes nothing | empty payload, always sent | - | fake as Rex |
+| Events of a change come before the response to the call that made it; every event and response has a `seq` | after, no `seq` | - | fake as Rex |
+| Events go only to clients that may see them: attached sessions, or bootstrapped with a scope | to everyone | - | fake as Rex |
+| Records: root id `""`, `updated_at`, `effective_app`, `owner`, event `reason` | id `agent`, no time | no ages for a state found on reading | fake and app as Rex |
+| A session's last tab closing leaves the session, with no `windows` and no `active_window_id` in its view | (already, from the docs) | the screen showed a blank pane, typing failed with "No terminal in this window" | "No tabs in this session" with New tab, no key bar (`EmptySessionTest`) |
+| New tabs are labelled `Window <last 8 of the id>`, panes `shell`; ids are `kind:<uuid>` | `shell`, `kind:N` | - | fake as Rex |
+| `session.create`, `new_window`, `new_split`, `close_window`, `block.close` answer with ids and `revision`; `data.connect` with `expires_in_ms` | bare | - | fake as Rex |
+| Rex's `pwd` is only what a program reported (OSC 7); a stock bash reports none | - | `statusAndDirectoryFollowEventsWithoutPolling` assumed the shell reports it | the test's shell reports its directory, as zsh's and fish's integrations do |
+| Output written before a pane's stream opens is in the snapshot | - | `ForegroundStreamTest` typed before the stream opened and waited for the output after the snapshot | the test waits for the snapshot first |
+
+### Where the docs and real Rex disagree
+
+- None of substance at preview.22: the API reference served by the server (`/llms.txt`, saved in
+  `rex-protocol/`) matched what was seen, including the attachment rules and the empty session.
+  The website's events reference, which this document first followed, does not list `updated_at`,
+  `effective_app` or `owner` on a record, nor the `reason` values; the server's own
+  `block_creator.list` does.
+
+### Not verified
+
+- `program_status_removed` with `reason` `prompt`, `foreground`, `reset` or `evicted` (they need shell
+  integration, a reset, or 64 records); a configuration file's own actions in `client.keymap`;
+  prompts from actions; anything over Tailscale or TLS (the tests use the anonymous loopback listener).
+- The rename dialog's text field on Robolectric: Compose never goes idle with it focused, so
+  `RealRexAppTest` sends the rename as the dialog's Save does instead of typing into it.

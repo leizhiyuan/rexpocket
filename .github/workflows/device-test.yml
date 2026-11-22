@@ -101,6 +101,7 @@ jobs:
               me.leaver.rexpocket.ui.LaunchTest \
               me.leaver.rexpocket.ui.HomeStateTest \
               me.leaver.rexpocket.ui.ActivityViewTest \
+              me.leaver.rexpocket.ui.EmptySessionTest \
               me.leaver.rexpocket.ui.CommandPaletteTest; do
             adb logcat -c || true
             if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \
@@ -161,6 +162,7 @@ jobs:
             --tests 'me.leaver.rexpocket.ui.TerminalControlsTest' \
             --tests 'me.leaver.rexpocket.ui.TermMenuTest' \
             --tests 'me.leaver.rexpocket.ui.TermFullScreenTest' \
+            --tests 'me.leaver.rexpocket.ui.EmptySessionTest' \
             --tests 'me.leaver.rexpocket.ui.ScreenshotsTest'
 
       - uses: actions/upload-artifact@v4

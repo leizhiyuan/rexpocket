@@ -60,38 +60,36 @@ worst bugs live in the order things happen between the phone, Rex and the desk: 
 desk while the phone holds its pane, then another tab shown. Those are tested as **scenarios** in
 `core`, written once and run against two servers.
 
-### Can a real Rex run in CI?
+### A real Rex in CI
 
-No. Rex is proprietary and in a beta that hands out its builds after a sign-in (a Discord login on
-superlogical.com); Linux and FreeBSD get a server-only build, but its install commands sit behind
-that login, and nothing says it may be redistributed or fetched by a robot. rex.app answers
-automated requests with a challenge page. So a GitHub runner has no lawful, repeatable way to get
-the binary, and no CI job downloads one. If Superlogical publishes a Linux server build that may be
-fetched without an account, `rex-integration.yml` can start it with
-`rex server start --extra-listen :7297 --allow-anonymous` and set `REX_TEST_HOST`; the real-Rex
-classes below then run instead of skipping.
+Yes. Superlogical publishes a Linux server build in a public apt repository
+(`pkgs.superlogical.com/rex/apt`, suite `preview`), so the `rex-real` workflow installs the version
+pinned in `tools/rex/pin.env` with `tools/rex/install-rex.sh` - the archive key's fingerprint and the
+package's SHA256 checked, apt pinned to Superlogical's origin (Debian and Ubuntu have an unrelated
+`rex`) - starts it on loopback (`rex server run --listen unix://… --extra-listen
+http://127.0.0.1:7297 --allow-anonymous`), and runs everything that needs a real Rex: `:core:test`
+(the scenarios, `PocketSessionTest`, the reconnect tests, `RexShapeTest`) and the app's
+`RealRexAppTest`, then fails if any of them was skipped. Rex is proprietary: nothing of it is
+committed, cached or uploaded, only the test reports. To move to a new Rex, bump `pin.env`; see its
+comment.
 
 ### What replaces it
 
 - **`ScriptedRex`** (`core/src/testFixtures/.../ScriptedRex.kt`) is a Rex in the test JVM, on
-  MockWebServer. It speaks the protocol the app speaks - hello and welcome with a client id and
-  reconnect token, request and response, events wrapped as `session_event`, tickets from
-  `data.connect`, and on `/api/data` the HELLO/RESUME handshake, a 32-byte WELCOME, a `GHOSTSNP`
-  snapshot and then output - with the shapes taken from `RexClient`, `parseView`, `TerminalStream`
-  and the stream fixture `app/src/test/resources/rex-stream.bin`. It keeps Rex's rules that the
-  real-Rex tests rely on, checked against Rex's API reference: each connection is a new client whose
-  panes are let go when it ends; it stays in every session it attached, and after
-  `session.bootstrap` it may call methods on any session, while a ticket and own/disown need the
-  session attached; a pane call (own, disown, size, resize, write, ticket) on a pane not in the
-  session, or closed, is refused with `block … is not in the session` (`not_found`, or
-  `bad_request` for own and disown); every change is told to every client after its answer; a
-  closed pane's streams close with 4000 and a HELLO for it is refused with 0x03; a tab's last pane
-  closing closes the tab, and a session's last tab closing leaves the session with no tabs (only
-  `session.destroy` ends it). `refuse(method)`
-  makes a method fail, for the errors that must still show; `report(block, state, …)` is a program
-  reporting its status (OSC 7501), told as `program_status_changed`, or `program_status_removed` for
-  a null state, with the shapes of Rex's events reference; `hold(method)` keeps its answers back
-  until `release`, a slow network for a test to act in; `pictures = false` sends no snapshot.
+  MockWebServer, for every run that has no real Rex (and the app's screen tests, which want one they
+  can script). It speaks the protocol the app speaks and does what Rex 0.1.0-preview.22 does, as
+  recorded in rex-parity.md, "Real Rex": clients that resume with their token, the line a pane passes
+  down when its owner goes, who owns a new pane, events before the answer and only to clients that
+  may see them, the refusals' codes and words, the order of a closed tab's events, a session that
+  outlives its tabs, the stream's end codes and its one-per-client rule, program status with `""` for
+  the root record and `updated_at`. **`RexShapeTest`** holds it to that: one script runs against
+  ScriptedRex on every build and against the shapes recorded from the real Rex
+  (`core/src/test/resources/rex-shapes/preview.22.txt`), and in `rex-real` against the real Rex
+  too. `refuse(method)` makes a method fail, for the errors that must still show; `report(block,
+  state, …)` is a program reporting its status (OSC 7501), `report(block, null)` a clear, and
+  `exit(block, code)` its program ending; `hold(method)` keeps its answers back until `release`, a
+  slow network for a test to act in; `drop(client)` is a network outage; `pictures = false` sends no
+  snapshot.
 - **`Desk`** is a second client that changes sessions only through the protocol - new session,
   new tab, split, close a tab or pane, take a pane, ask who holds one - so a scenario means the
   same against `ScriptedRex` and a real Rex.
@@ -112,16 +110,21 @@ the JVM without libghostty's host build the panes send no picture (`pictures = f
 terminal screen opens on its pane with nothing to draw.
 
 `ScriptedRexLifecycleTest` runs them on every push, in the `rex-integration` workflow with the rest
-of `:core:test`. `RealRexLifecycleTest` runs the same scenarios against a real Rex and is skipped
-when none listens.
+of `:core:test`. `RealRexLifecycleTest` runs the same scenarios against a real Rex: in the `rex-real`
+workflow, and skipped where none listens.
 
 ### Against a real Rex, on your computer
 
 On the Mac (or Linux machine) with Rex installed:
 
 ```sh
-rex server start --extra-listen 127.0.0.1:7297 --allow-anonymous
-./gradlew :core:test --tests '*RealRexLifecycleTest*' --tests '*PocketSessionTest*'
+tools/rex/install-rex.sh          # Debian or Ubuntu amd64; on a Mac, Rex's own installer
+rex server run --listen unix:///tmp/rex-dbg.sock --extra-listen http://127.0.0.1:7297 \
+  --allow-anonymous --state-dir /tmp/rex-dbg-state &
+REX_TEST_HOST=127.0.0.1 REX_TEST_PORT=7297 ./gradlew :core:test
+mkdir -p native/.build/host && ./gradlew -x :app:buildGhostty -x :app:buildGhosttyHost \
+  :app:testDebugUnitTest --tests 'me.leaver.rexpocket.ui.RealRexAppTest'
+REX_RECORD_SHAPES=1 ./gradlew :core:test --tests '*RexShapeTest*'   # after a Rex bump: record its shapes
 ```
 
 `REX_TEST_HOST` and `REX_TEST_PORT` point the tests at another machine; listen only on a network
