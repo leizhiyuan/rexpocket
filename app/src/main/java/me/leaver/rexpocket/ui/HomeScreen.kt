@@ -81,6 +81,7 @@ import me.leaver.rexpocket.core.BlockInfo
 import me.leaver.rexpocket.core.HostAddress
 import me.leaver.rexpocket.core.HostAddressParser
 import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketState
@@ -168,8 +169,8 @@ internal fun HomeScreen(
     onKeyBarAlt: (Boolean) -> Unit,
     keyBarCtrlC: CtrlCKey,
     onKeyBarCtrlC: (CtrlCKey) -> Unit,
-    doubleTapFullScreen: Boolean,
-    onDoubleTapFullScreen: (Boolean) -> Unit,
+    gestures: GestureSettings,
+    onGestures: (GestureSettings) -> Unit,
     /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
     keyBar: Boolean,
     onKeyBar: (Boolean) -> Unit,
@@ -202,6 +203,7 @@ internal fun HomeScreen(
     var editing by remember { mutableStateOf<SavedHost?>(null) }
     var creating by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
+    var controls by remember { mutableStateOf(false) }
     var diagnostics by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(Diagnostics.capture(context) != null) }
     var menuHost by remember { mutableStateOf<SavedHost?>(null) }
@@ -416,16 +418,10 @@ internal fun HomeScreen(
             },
             alerts = alerts,
             onAlerts = toggleAlerts,
-            keyBarShift = keyBarShift,
-            keyBarAlt = keyBarAlt,
-            onKeyBarShift = onKeyBarShift,
-            onKeyBarAlt = onKeyBarAlt,
-            keyBarCtrlC = keyBarCtrlC,
-            onKeyBarCtrlC = onKeyBarCtrlC,
-            doubleTapFullScreen = doubleTapFullScreen,
-            onDoubleTapFullScreen = onDoubleTapFullScreen,
-            keyBar = keyBar,
-            onKeyBar = onKeyBar,
+            onControls = {
+                settings = false
+                controls = true
+            },
             onFontSettings = onFontSettings,
             recording = recording,
             onDiagnostics = {
@@ -436,6 +432,22 @@ internal fun HomeScreen(
             onUpdate = { onUpdate() },
             channel = updateChannel,
             onChannel = onUpdateChannel,
+        )
+    }
+
+    if (controls) {
+        ControlsSheet(
+            onDismiss = { controls = false },
+            gestures = gestures,
+            onGestures = onGestures,
+            keyBar = keyBar,
+            onKeyBar = onKeyBar,
+            keyBarShift = keyBarShift,
+            keyBarAlt = keyBarAlt,
+            onKeyBarShift = onKeyBarShift,
+            onKeyBarAlt = onKeyBarAlt,
+            keyBarCtrlC = keyBarCtrlC,
+            onKeyBarCtrlC = onKeyBarCtrlC,
         )
     }
 
@@ -816,17 +828,8 @@ private fun SettingsSheet(
     onTailnet: () -> Unit,
     alerts: Boolean,
     onAlerts: () -> Unit,
-    keyBarShift: Boolean,
-    keyBarAlt: Boolean,
-    onKeyBarShift: (Boolean) -> Unit,
-    onKeyBarAlt: (Boolean) -> Unit,
-    keyBarCtrlC: CtrlCKey,
-    onKeyBarCtrlC: (CtrlCKey) -> Unit,
-    doubleTapFullScreen: Boolean,
-    onDoubleTapFullScreen: (Boolean) -> Unit,
-    /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
-    keyBar: Boolean,
-    onKeyBar: (Boolean) -> Unit,
+    /** Opens the terminal's controls: its gestures and its key bar. */
+    onControls: () -> Unit,
     onFontSettings: () -> Unit,
     recording: Boolean,
     onDiagnostics: () -> Unit,
@@ -867,42 +870,8 @@ private fun SettingsSheet(
             )
         }
         Group(stringResource(R.string.settings_group_terminal)) {
-            SheetItem(
-                label = stringResource(R.string.keybar_title),
-                icon = R.drawable.ic_keyboard,
-                detail = stringResource(if (keyBar) R.string.keybar_always else R.string.keybar_auto),
-                keepOpen = true,
-                onClick = { onKeyBar(!keyBar) },
-            )
-            SheetItem(
-                label = stringResource(R.string.keybar_shift), icon = R.drawable.ic_keyboard,
-                detail = stringResource(if (keyBarShift) R.string.keybar_visible else R.string.keybar_hidden),
-                keepOpen = true, onClick = { onKeyBarShift(!keyBarShift) },
-            )
-            SheetItem(
-                label = stringResource(R.string.keybar_alt), icon = R.drawable.ic_keyboard,
-                detail = stringResource(if (keyBarAlt) R.string.keybar_visible else R.string.keybar_hidden),
-                keepOpen = true, onClick = { onKeyBarAlt(!keyBarAlt) },
-            )
-            // A tap steps through the three: tapped, held unless the program is busy, and gone.
-            SheetItem(
-                label = stringResource(R.string.keybar_ctrl_c), icon = R.drawable.ic_keyboard,
-                detail = stringResource(
-                    when (keyBarCtrlC) {
-                        CtrlCKey.Tap -> R.string.keybar_ctrl_c_tap
-                        CtrlCKey.Hold -> R.string.keybar_ctrl_c_hold
-                        CtrlCKey.Hidden -> R.string.keybar_hidden
-                    },
-                ),
-                keepOpen = true, onClick = { onKeyBarCtrlC(keyBarCtrlC.next()) },
-            )
-            // Off for whoever taps the pane quickly or wants a program's double click: the button
-            // on the terminal's bar still goes to full screen, and its corner button back.
-            SheetItem(
-                label = stringResource(R.string.double_tap_full_screen), icon = R.drawable.ic_fullscreen,
-                detail = stringResource(if (doubleTapFullScreen) R.string.double_tap_full_screen_on else R.string.double_tap_full_screen_off),
-                keepOpen = true, onClick = { onDoubleTapFullScreen(!doubleTapFullScreen) },
-            )
+            // Gestures and keys have a sheet of their own, so this one stays a list of places to go.
+            SheetItem(stringResource(R.string.controls_title), icon = R.drawable.ic_keyboard, onClick = onControls)
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
         }
         Group(stringResource(R.string.settings_group_version)) {

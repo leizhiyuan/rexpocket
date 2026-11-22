@@ -28,7 +28,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.DoubleTapAction
+import me.leaver.rexpocket.core.GestureSettings
+import me.leaver.rexpocket.core.LongPressAction
 import me.leaver.rexpocket.core.TerminalFeed
+import me.leaver.rexpocket.core.keyboardAfterDoubleTap
+import me.leaver.rexpocket.core.keyboardAfterTap
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.terminal.TerminalSession
 import me.leaver.rexpocket.terminal.TerminalView
@@ -72,11 +77,12 @@ internal fun TerminalPane(
     hardwareKeyboard: Boolean = false,
     /** A horizontal swipe across the pane: forward means towards the next pane. */
     onSwipe: ((forward: Boolean) -> Unit)? = null,
-    /**
-     * A double tap on the pane; null leaves a second tap an ordinary tap. The keyboard the first tap
-     * raised goes away again before this is called, so a double tap changes nothing else.
-     */
-    onDoubleTap: (() -> Unit)? = null,
+    /** What a tap, a double tap and a long press on the pane do, and their times. */
+    gestures: GestureSettings = GestureSettings(),
+    /** True in full screen, where there is no keyboard key: a tap that opens the keyboard closes it too. */
+    fullScreen: Boolean = false,
+    /** Goes in or out of full screen, for a gesture set to do that. */
+    onFullScreen: () -> Unit = {},
     onError: (Exception) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -153,26 +159,43 @@ internal fun TerminalPane(
     LaunchedEffect(hardwareKeyboard) {
         if (hardwareKeyboard && !keyboard.hasFocus()) pane.requestFocus()
     }
-    // A tap on the pane is a tap on its text: it raises the keyboard, which the pane never asks for
-    // itself - it is no text editor, and its input connection would answer with no text type at all.
+    // A tap on the pane is a tap on its text: by default it raises the keyboard, which the pane
+    // never asks for itself - it is no text editor, and its input connection would answer with no
+    // text type at all. What each gesture does is the person's choice; see terminal-controls.md.
     //
-    // A tap does that at once, even when a double tap is listened for: waiting to see whether a
-    // second tap follows would make every tap feel slow. So the first tap of a double tap has raised
-    // the keyboard by the time the second lands, and the double tap puts it back the way it was.
+    // Unless the person asked to wait, a tap acts at once even when a double tap is listened for, so
+    // the first tap of a double tap may have moved the keyboard by the time the second lands; the
+    // double tap then sets it from where it was before that first tap.
     val taps = remember { TapMemory() }
-    val currentDoubleTap = rememberUpdatedState(onDoubleTap)
-    val listening = onDoubleTap != null
+    val currentFullScreen = rememberUpdatedState(onFullScreen)
+    val currentGestures = rememberUpdatedState(gestures)
+    val inFullScreen = rememberUpdatedState(fullScreen)
+    val viewConfig = remember(context) { android.view.ViewConfiguration.get(context) }
     SideEffect {
         keyboard.pane = pane
+        pane.gestureTiming = gestures.timing(
+            systemDoubleTapMs = android.view.ViewConfiguration.getDoubleTapTimeout(),
+            systemLongPressMs = android.view.ViewConfiguration.getLongPressTimeout(),
+            touchSlop = viewConfig.scaledTouchSlop.toFloat(),
+            doubleTapSlop = viewConfig.scaledDoubleTapSlop.toFloat(),
+        )
         pane.onTap = {
-            taps.keyboardUpBeforeTap = keyboard.imeUp()
-            keyboard.showIme()
+            val up = keyboard.imeUp()
+            taps.keyboardUpBeforeTap = up
+            keyboardAfterTap(currentGestures.value.tap, up, inFullScreen.value)?.let { keyboard.setIme(it) }
         }
-        pane.onDoubleTap = if (!listening) null else {
-            {
-                if (!keyboardStaysAfterDoubleTap(upBeforeFirstTap = taps.keyboardUpBeforeTap)) keyboard.hideIme()
-                currentDoubleTap.value?.invoke()
+        pane.onDoubleTap = if (gestures.doubleTap == DoubleTapAction.Nothing) null else {
+            { firstTapActed ->
+                val action = currentGestures.value.doubleTap
+                val before = if (firstTapActed) taps.keyboardUpBeforeTap else keyboard.imeUp()
+                keyboard.setIme(keyboardAfterDoubleTap(before, action))
+                if (action == DoubleTapAction.FullScreen) currentFullScreen.value()
             }
+        }
+        pane.onLongPress = when (gestures.longPress) {
+            LongPressAction.Select -> null
+            LongPressAction.FullScreen -> { { currentFullScreen.value() } }
+            LongPressAction.Keyboard -> { { keyboard.setIme(!keyboard.imeUp()) } }
         }
     }
     // Published before the terminal view exists, so the key row can raise the keyboard at once.
@@ -214,7 +237,7 @@ internal fun TerminalPane(
 
 /** What the pane remembers from one tap to the next; plain fields, since nothing draws from them. */
 private class TapMemory {
-    /** Whether the keyboard was up before the last tap raised it. */
+    /** Whether the keyboard was up before the last tap moved it. */
     var keyboardUpBeforeTap = false
 }
 
@@ -339,4 +362,9 @@ private class InputBatcher(private val send: (ByteArray) -> Unit) {
          */
         const val WINDOW_MS = 16L
     }
+}
+
+/** Raises the keyboard for the pane, or puts it away. */
+private fun TerminalImeView.setIme(up: Boolean) {
+    if (up) showIme() else hideIme()
 }

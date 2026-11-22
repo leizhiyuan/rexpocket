@@ -202,6 +202,68 @@ class TerminalViewTest {
     }
 
     @Test
+    fun waitingForADoubleTapHoldsATapUntilItsTimeHasPassed() {
+        var tapped = 0
+        val doubles = mutableListOf<Boolean>()
+        onMain {
+            view.gestureTiming = view.gestureTiming.copy(waitForDoubleTap = true, doubleTapMs = 250)
+            view.onTap = { tapped++ }
+            view.onDoubleTap = { doubles += it }
+        }
+        tap(40f, 40f)
+        assertEquals("a tap waits to see whether a second follows", 0, tapped)
+        Thread.sleep(250L + 300L)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        assertEquals(1, tapped)
+
+        // The first tap of a double tap never acts on its own.
+        tap(40f, 40f)
+        Thread.sleep(DOUBLE_TAP_GAP_MS)
+        tap(41f, 40f)
+        Thread.sleep(250L + 300L)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        assertEquals(1, tapped)
+        assertEquals(listOf(false), doubles)
+    }
+
+    @Test
+    fun theLongPressTimeIsThePersons() {
+        feed("alpha beta gamma")
+        onMain { view.gestureTiming = view.gestureTiming.copy(longPressMs = 1_400) }
+        // Held for less than the person's time: still a press, nothing selected yet.
+        val down = SystemClock.uptimeMillis()
+        touch(MotionEvent.ACTION_DOWN, down, 3f, 10f)
+        Thread.sleep(800)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        assertEquals("", session.selectionText())
+        Thread.sleep(1_000)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        assertEquals("alpha", session.selectionText())
+        touch(MotionEvent.ACTION_UP, down, 3f, 10f)
+    }
+
+    @Test
+    fun aLongPressSetToActDoesThatButStillOffersALink() {
+        feed("alpha beta gamma")
+        var pressed = 0
+        var link: String? = null
+        onMain {
+            view.onLongPress = { pressed++ }
+            view.onLink = { link = it }
+        }
+        longPress(x = 3f, y = 10f)
+        touch(MotionEvent.ACTION_UP, SystemClock.uptimeMillis(), 3f, 10f)
+        assertEquals("the long press acted", 1, pressed)
+        assertEquals("and selected nothing", "", session.selectionText())
+
+        feed("\u001b[2J\u001b[Hopen https://example.com/pull/7 now")
+        longPress(x = 12f * 8, y = 10f)
+        touch(MotionEvent.ACTION_UP, SystemClock.uptimeMillis(), 12f * 8, 10f)
+        assertEquals("https://example.com/pull/7", link)
+        assertEquals("a link is offered, not acted on", 1, pressed)
+    }
+
+    @Test
     fun draggingOverAProgramThatReadsTheMouseSendsItsWheel() {
         feed("\u001b[?1049h\u001b[?1000h\u001b[?1006h")
         drag(fromY = 600f, toY = 100f)

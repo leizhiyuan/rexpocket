@@ -2,6 +2,7 @@ package me.leaver.rexpocket.data
 
 import android.content.Context
 import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.TailnetBackend
 import org.json.JSONArray
@@ -187,13 +188,29 @@ class HostStore(context: Context) {
     }
 
     /**
-     * Whether a double tap on the terminal goes in and out of full screen. On unless turned off: it
-     * is what was asked for, and the bars' own button does the same either way.
+     * What a tap, a double tap and a long press on the terminal do, and their times. The double tap
+     * was a switch for full screen before it had choices; that switch decides it until one is made,
+     * and is left in place for an older build to read.
      */
-    fun doubleTapFullScreen(): Boolean = prefs.getBoolean(KEY_DOUBLE_TAP_FULL_SCREEN, true)
+    fun gestures(): GestureSettings = GestureSettings.fromStored(
+        tap = prefs.getString(KEY_GESTURE_TAP, null),
+        doubleTap = prefs.getString(KEY_GESTURE_DOUBLE_TAP, null),
+        longPress = prefs.getString(KEY_GESTURE_LONG_PRESS, null),
+        waitForDoubleTap = prefs.getBoolean(KEY_GESTURE_WAIT, false),
+        doubleTapMs = prefs.getInt(KEY_GESTURE_DOUBLE_TAP_MS, 0),
+        longPressMs = prefs.getInt(KEY_GESTURE_LONG_PRESS_MS, 0),
+        legacyDoubleTapFullScreen = if (prefs.contains(KEY_DOUBLE_TAP_FULL_SCREEN)) prefs.getBoolean(KEY_DOUBLE_TAP_FULL_SCREEN, true) else null,
+    )
 
-    fun setDoubleTapFullScreen(on: Boolean) {
-        prefs.edit().putBoolean(KEY_DOUBLE_TAP_FULL_SCREEN, on).apply()
+    fun setGestures(gestures: GestureSettings) {
+        prefs.edit()
+            .putString(KEY_GESTURE_TAP, gestures.tap.pref)
+            .putString(KEY_GESTURE_DOUBLE_TAP, gestures.doubleTap.pref)
+            .putString(KEY_GESTURE_LONG_PRESS, gestures.longPress.pref)
+            .putBoolean(KEY_GESTURE_WAIT, gestures.waitForDoubleTap)
+            .putInt(KEY_GESTURE_DOUBLE_TAP_MS, gestures.doubleTapMs)
+            .putInt(KEY_GESTURE_LONG_PRESS_MS, gestures.longPressMs)
+            .apply()
     }
 
     /** How the C-c key behaves; a tap sends it unless the person chose otherwise. */
@@ -247,6 +264,12 @@ class HostStore(context: Context) {
         private const val KEY_KEY_BAR_ALT = "keybar_alt"
         private const val KEY_KEY_BAR_CTRL_C = "keybar_ctrl_c"
         private const val KEY_DOUBLE_TAP_FULL_SCREEN = "double_tap_full_screen"
+        private const val KEY_GESTURE_TAP = "gesture_tap"
+        private const val KEY_GESTURE_DOUBLE_TAP = "gesture_double_tap"
+        private const val KEY_GESTURE_LONG_PRESS = "gesture_long_press"
+        private const val KEY_GESTURE_WAIT = "gesture_wait_double_tap"
+        private const val KEY_GESTURE_DOUBLE_TAP_MS = "gesture_double_tap_ms"
+        private const val KEY_GESTURE_LONG_PRESS_MS = "gesture_long_press_ms"
         private const val KEY_TAILSCALE_ENABLED = "tailscale_enabled"
         private const val KEY_TAILSCALE_HOSTNAME = "tailscale_hostname"
         private const val KEY_TAILNET_BACKEND = "tailnet_backend"

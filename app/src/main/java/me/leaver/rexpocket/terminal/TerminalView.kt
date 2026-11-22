@@ -21,6 +21,9 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.widget.OverScroller
+import me.leaver.rexpocket.core.Gesture
+import me.leaver.rexpocket.core.TapGestures
+import me.leaver.rexpocket.core.TapTiming
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -92,20 +95,31 @@ internal class TerminalView(context: Context) : View(context) {
     var onTap: (() -> Unit)? = null
 
     /**
-     * A second tap soon after a first, in the same place. The first tap is still a tap, at once - a
-     * single tap never waits to see whether a second follows - and the second one is this instead
-     * of another tap. Null, the default, leaves every tap a tap, as before there was one.
+     * A second tap soon after a first, in the same place; true when the first one already went out
+     * as a tap, which it does unless [gestureTiming] waits for a second. Null, the default, leaves
+     * every tap a tap, at once, as before there was one.
      */
-    var onDoubleTap: (() -> Unit)? = null
+    var onDoubleTap: ((firstTapActed: Boolean) -> Unit)? = null
         set(value) {
-            val listening = field != null
             field = value
-            // Set again on every recomposition: only a change between listening and not touches the
-            // detector, so a double tap under way is not lost to a new callback.
-            if (listening != (value != null)) {
-                doubleTapArmed = false
-                gestures.setOnDoubleTapListener(if (value != null) doubleTaps else null)
-            }
+            applyTiming()
+        }
+
+    /**
+     * A press held still, when it is not to select: a link under the finger is still offered first.
+     * Null, the default, selects the word under it, as a long press always did.
+     */
+    var onLongPress: (() -> Unit)? = null
+
+    /**
+     * How taps, double taps and long presses are told apart: the person's times, or the phone's.
+     * Its double taps count only while [onDoubleTap] listens for them.
+     */
+    var gestureTiming: TapTiming = systemTiming()
+        set(value) {
+            if (field == value) return
+            field = value
+            applyTiming()
         }
 
     /** A horizontal swipe; true when it went towards the next pane. */
@@ -154,34 +168,60 @@ internal class TerminalView(context: Context) : View(context) {
 
     private enum class Axis { None, Vertical, Horizontal }
 
-    /** True from a double tap's second press until it lifts, unless it became something else. */
-    private var doubleTapArmed = false
-    private val touchSlop = android.view.ViewConfiguration.get(context).scaledTouchSlop
-
     /**
-     * The double tap acts when its second finger lifts, not when it lands: a second press that is
-     * held becomes a long press (a selection, a link), and one that moves or turns into a pinch is
-     * not a tap at all.
+     * Taps, double taps and long presses, told apart by [TapGestures] from the touches and the
+     * time; the detector below keeps drags and flings. A double tap acts when its second finger
+     * lifts, so a second press held becomes a long press and one that moves is a drag.
      */
-    private val doubleTaps = object : GestureDetector.OnDoubleTapListener {
-        override fun onSingleTapConfirmed(e: MotionEvent): Boolean = false
+    private val taps = TapGestures()
 
-        override fun onDoubleTap(e: MotionEvent): Boolean {
-            doubleTapArmed = true
-            return true
-        }
+    /** True after a long press until the finger lifts: the rest of that touch is not a drag. */
+    private var longPressed = false
 
-        override fun onDoubleTapEvent(e: MotionEvent): Boolean {
-            when (e.actionMasked) {
-                MotionEvent.ACTION_MOVE ->
-                    if (abs(e.x - downX) > touchSlop || abs(e.y - downY) > touchSlop) doubleTapArmed = false
-                MotionEvent.ACTION_UP -> if (doubleTapArmed) {
-                    doubleTapArmed = false
-                    onDoubleTap?.invoke()
+    private val tapTimer = Runnable {
+        dispatch(taps.timer(SystemClock.uptimeMillis()))
+        scheduleTaps()
+    }
+
+    private fun systemTiming(): TapTiming {
+        val config = android.view.ViewConfiguration.get(context)
+        return TapTiming(
+            doubleTapMs = android.view.ViewConfiguration.getDoubleTapTimeout().toLong(),
+            longPressMs = android.view.ViewConfiguration.getLongPressTimeout().toLong(),
+            touchSlop = config.scaledTouchSlop.toFloat(),
+            doubleTapSlop = config.scaledDoubleTapSlop.toFloat(),
+        )
+    }
+
+    private fun applyTiming() {
+        taps.timing = gestureTiming.copy(doubleTaps = gestureTiming.doubleTaps && onDoubleTap != null)
+    }
+
+    private fun scheduleTaps() {
+        removeCallbacks(tapTimer)
+        val at = taps.deadline ?: return
+        postDelayed(tapTimer, (at - SystemClock.uptimeMillis() + 1).coerceAtLeast(0))
+    }
+
+    private fun dispatch(gestures: List<Gesture>) {
+        for (gesture in gestures) {
+            when (gesture) {
+                is Gesture.Tap -> {
+                    val frame = currentFrame()
+                    val active = session
+                    // A program that reads the mouse gets its click, whatever the tap does for the app.
+                    if (frame != null && active != null && frame.mouseTracking && frame.atBottom) {
+                        val (column, row) = cellAt(gesture.x, gesture.y)
+                        active.sendRaw(active.encodeClick(column, row, cellWidth.roundToInt(), cellHeight.roundToInt()))
+                    }
+                    onTap?.invoke()
                 }
-                MotionEvent.ACTION_CANCEL -> doubleTapArmed = false
+                is Gesture.DoubleTap -> onDoubleTap?.invoke(gesture.firstTapActed)
+                is Gesture.LongPress -> {
+                    longPressed = true
+                    longPress(gesture.x, gesture.y)
+                }
             }
-            return true
         }
     }
 
@@ -215,26 +255,11 @@ internal class TerminalView(context: Context) : View(context) {
                 return true
             }
 
-            override fun onSingleTapUp(e: MotionEvent): Boolean {
-                val frame = currentFrame()
-                val active = session
-                if (frame != null && active != null && frame.mouseTracking && frame.atBottom) {
-                    val (column, row) = cellAt(e.x, e.y)
-                    active.sendRaw(active.encodeClick(column, row, cellWidth.roundToInt(), cellHeight.roundToInt()))
-                }
-                onTap?.invoke()
-                return true
-            }
-
-            override fun onLongPress(e: MotionEvent) {
-                doubleTapArmed = false
-                longPress(e)
-            }
         },
     ).apply {
-        // SimpleOnGestureListener is a double-tap listener too, which would swallow every second
-        // tap: double taps are listened for only while someone asked for them.
+        // Taps, double taps and long presses are TapGestures' own, with the person's times.
         setOnDoubleTapListener(null)
+        setIsLongpressEnabled(false)
     }
 
     private val pinch = ScaleGestureDetector(
@@ -257,6 +282,7 @@ internal class TerminalView(context: Context) : View(context) {
         isFocusable = false
         isFocusableInTouchMode = false
         isLongClickable = true
+        applyTiming()
         measureFont()
     }
 
@@ -645,7 +671,7 @@ internal class TerminalView(context: Context) : View(context) {
         touchX = event.x
         touchY = event.y
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-            doubleTapArmed = false
+            longPressed = false
             downX = event.x
             downY = event.y
             val (column, row) = cellAt(event.x, event.y)
@@ -655,11 +681,22 @@ internal class TerminalView(context: Context) : View(context) {
             parent?.requestDisallowInterceptTouchEvent(true)
         }
         pinch.onTouchEvent(event)
+        // Timed by the clock the timer runs on, not the event's own stamp, which a test or an
+        // injected event may take from another clock.
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> dispatch(taps.down(SystemClock.uptimeMillis(), event.x, event.y))
+            MotionEvent.ACTION_MOVE -> dispatch(taps.move(SystemClock.uptimeMillis(), event.x, event.y))
+            MotionEvent.ACTION_UP -> dispatch(taps.up(SystemClock.uptimeMillis(), event.x, event.y))
+            else -> taps.cancel()
+        }
+        scheduleTaps()
         if (pinch.isInProgress) {
             axis = Axis.None
-            doubleTapArmed = false
+            taps.cancel()
             return true
         }
+        // A long press that offered a link or acted is the whole of its touch: no drag after it.
+        if (longPressed) return true
         val consumed = gestures.onTouchEvent(event)
         if (event.actionMasked == MotionEvent.ACTION_UP && axis == Axis.Horizontal) {
             val dx = event.x - downX
@@ -669,17 +706,27 @@ internal class TerminalView(context: Context) : View(context) {
         return consumed || super.onTouchEvent(event)
     }
 
-    private fun longPress(e: MotionEvent) {
-        val active = session ?: return
-        val frame = currentFrame() ?: return
-        val (column, row) = cellAt(e.x, e.y)
-        // An agent prints the pull requests and sign-in pages it wants opened: offer them rather than their text.
-        val url = active.hyperlinkAt(column, row)?.let(TerminalLinks::webUrl) ?: TerminalLinks.urlAt(frame, column, row)
+    private fun longPress(x: Float, y: Float) {
+        val active = session
+        val frame = currentFrame()
+        val (column, row) = cellAt(x, y)
+        // An agent prints the pull requests and sign-in pages it wants opened: offer them rather
+        // than their text, whatever a long press is set to do.
+        val url = if (active != null && frame != null) {
+            active.hyperlinkAt(column, row)?.let(TerminalLinks::webUrl) ?: TerminalLinks.urlAt(frame, column, row)
+        } else {
+            null
+        }
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         if (url != null) {
             onLink?.invoke(url)
             return
         }
+        onLongPress?.let {
+            it()
+            return
+        }
+        if (active == null || frame == null) return
         selection = TerminalSelection(frame, column, row).also { it.word() }
         // The finger that held the press carries on, and it moves the end of the word it selected.
         selectionDrag = true
@@ -774,6 +821,8 @@ internal class TerminalView(context: Context) : View(context) {
     }
 
     override fun onDetachedFromWindow() {
+        removeCallbacks(tapTimer)
+        taps.cancel()
         clearSelection()
         dropBitmaps()
         scroller.abortAnimation()

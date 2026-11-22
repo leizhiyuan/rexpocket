@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.Endpoint
 import me.leaver.rexpocket.core.AttentionLedger
 import me.leaver.rexpocket.core.FileUpload
@@ -219,8 +220,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     val keyBarShift = MutableStateFlow(store.keyBarShift())
     val keyBarAlt = MutableStateFlow(store.keyBarAlt())
     val keyBarCtrlC = MutableStateFlow(store.keyBarCtrlC())
-    /** True when a double tap on the terminal toggles full screen, which is the default. */
-    val doubleTapFullScreen = MutableStateFlow(store.doubleTapFullScreen())
+    /** What the terminal's tap, double tap and long press do, and their times. */
+    val gestures = MutableStateFlow(store.gestures())
     private val attention = AttentionLedger()
     var host: SavedHost? = null
         private set
@@ -319,9 +320,9 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         keyBarCtrlC.value = choice
     }
 
-    fun setDoubleTapFullScreen(on: Boolean) {
-        store.setDoubleTapFullScreen(on)
-        doubleTapFullScreen.value = on
+    fun setGestures(next: GestureSettings) {
+        store.setGestures(next)
+        gestures.value = next
     }
 
     fun setAlerts(on: Boolean) {

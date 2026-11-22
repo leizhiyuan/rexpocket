@@ -123,6 +123,8 @@ internal fun KeyBar(
     showAlt: Boolean = false,
     ctrlC: CtrlCKey = CtrlCKey.Tap,
     onDeskKey: (DeskKey) -> Unit = {},
+    /** Full screen, from the key just past the keyboard key; null leaves the key out. */
+    onFullScreen: (() -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
@@ -211,16 +213,41 @@ internal fun KeyBar(
                 )
             }
         }
-        Row(
-            Modifier.height(BAR_HEIGHT).floating(pill).padding(horizontal = PILL_PAD),
-            verticalAlignment = Alignment.CenterVertically,
+        // The stick and the keyboard key, as always; past them the full-screen key, a part of it
+        // showing at the edge as the wide pill shows its further keys, a swipe away. The stick takes
+        // its own drags before this scroll sees them, so steering never scrolls the pill.
+        val rest = rememberScrollState()
+        Box(
+            Modifier.height(BAR_HEIGHT)
+                .then(if (onFullScreen != null) Modifier.width(KEY_SIZE * 2 + PILL_PAD * 2 + PEEK) else Modifier)
+                .floating(pill),
         ) {
-            ArrowStick(Modifier.size(KEY_SIZE)) { code -> onKey(KeyPress(code, 0), "") }
-            Key(
-                stringResource(R.string.key_keyboard),
-                Modifier.size(KEY_SIZE),
-                icon = if (imeUp) R.drawable.ic_keyboard_hide else R.drawable.ic_keyboard,
-            ) { onKeyboard() }
+            Row(
+                Modifier.fillMaxHeight().horizontalScroll(rest).padding(horizontal = PILL_PAD),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ArrowStick(Modifier.size(KEY_SIZE)) { code -> onKey(KeyPress(code, 0), "") }
+                Key(
+                    stringResource(R.string.key_keyboard),
+                    Modifier.size(KEY_SIZE),
+                    icon = if (imeUp) R.drawable.ic_keyboard_hide else R.drawable.ic_keyboard,
+                ) { onKeyboard() }
+                if (onFullScreen != null) {
+                    Key(stringResource(R.string.action_full_screen), Modifier.size(KEY_SIZE), icon = R.drawable.ic_fullscreen) { onFullScreen() }
+                }
+            }
+            if (rest.canScrollForward) {
+                Box(
+                    Modifier.align(Alignment.CenterEnd).width(16.dp).fillMaxHeight()
+                        .background(Brush.horizontalGradient(listOf(Colors.clear, Colors.raised))),
+                )
+            }
+            if (rest.canScrollBackward) {
+                Box(
+                    Modifier.align(Alignment.CenterStart).width(16.dp).fillMaxHeight()
+                        .background(Brush.horizontalGradient(listOf(Colors.raised, Colors.clear))),
+                )
+            }
         }
     }
 }
@@ -578,6 +605,9 @@ private val KEY_SIZE = 48.dp
 private val KEY_HEIGHT = KEY_SIZE
 private val PILL_PAD = 4.dp
 private val GROUP_GAP = 8.dp
+
+/** How much of the full-screen key shows past the keyboard key: enough to read as more to swipe to. */
+private val PEEK = 18.dp
 private val KEY_PAD = 2.dp
 
 private val STICK_FACE = 96.dp

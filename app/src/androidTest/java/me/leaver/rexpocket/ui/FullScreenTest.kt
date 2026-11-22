@@ -13,9 +13,12 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.DoubleTapAction
+import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.PocketState
 import kotlinx.coroutines.flow.emptyFlow
 import org.junit.Assert.assertEquals
@@ -24,9 +27,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Full screen on the terminal screen, on a device: the menu's item and a double tap on the pane hide
- * the top bar and the key bar together, and the corner button, a second double tap or Back bring them
- * back. The top bar has no full-screen button: on a phone it has no room for one.
+ * Full screen on the terminal screen, on a device: the menu's item, the key in the small pill and a
+ * double tap on the pane hide the top bar and the key bar together, and the corner button, a second
+ * double tap or Back bring them back. The top bar has no full-screen button: it has no room for one.
  */
 @RunWith(AndroidJUnit4::class)
 class FullScreenTest {
@@ -57,7 +60,7 @@ class FullScreenTest {
                     onCancelUpload = {},
                     onDismissUpload = {},
                     onRetryUpload = {},
-                    doubleTapFullScreen = doubleTap,
+                    gestures = GestureSettings(doubleTap = if (doubleTap) DoubleTapAction.FullScreen else DoubleTapAction.Nothing),
                     // The emulator reports a keyboard on the desk, which would take the key bar away.
                     keyBarWithKeyboard = true,
                 )
@@ -70,7 +73,8 @@ class FullScreenTest {
         val bars = if (shown) 1 else 0
         // The top bar's menu, the key bar's keyboard key, and the way out of full screen.
         compose.onAllNodesWithContentDescription(string(R.string.action_more)).assertCountEquals(bars)
-        compose.onAllNodesWithContentDescription(string(R.string.action_full_screen)).assertCountEquals(0)
+        // The full-screen key, past the keyboard key in the small pill; the top bar has none.
+        compose.onAllNodesWithContentDescription(string(R.string.action_full_screen)).assertCountEquals(bars)
         compose.onAllNodesWithContentDescription(string(R.string.key_keyboard)).assertCountEquals(bars)
         compose.onAllNodesWithContentDescription(string(R.string.action_exit_full_screen)).assertCountEquals(1 - bars)
     }
@@ -80,6 +84,11 @@ class FullScreenTest {
         compose.onNodeWithContentDescription(string(R.string.action_more)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(string(R.string.action_full_screen)).performClick()
+    }
+
+    /** Full screen from the key bar: the small pill scrolls to the key just past the keyboard key. */
+    private fun fullScreenFromPill() {
+        compose.onNodeWithContentDescription(string(R.string.action_full_screen)).performScrollTo().performClick()
     }
 
     /** A double tap in the upper part of the pane, clear of the bars and of the line it waits with. */
@@ -93,6 +102,16 @@ class FullScreenTest {
         assertBars(shown = true)
 
         fullScreenFromMenu()
+        assertBars(shown = false)
+
+        compose.onNodeWithContentDescription(string(R.string.action_exit_full_screen)).performClick()
+        assertBars(shown = true)
+    }
+
+    @Test
+    fun theKeyInThePillGoesToFullScreenToo() {
+        show()
+        fullScreenFromPill()
         assertBars(shown = false)
 
         compose.onNodeWithContentDescription(string(R.string.action_exit_full_screen)).performClick()

@@ -42,8 +42,41 @@ class TermChromeTest {
     }
 
     @Test
-    fun `a double tap puts away only the keyboard its own first tap raised`() {
-        assertFalse(keyboardStaysAfterDoubleTap(upBeforeFirstTap = false))
-        assertTrue("a keyboard that was up keeps typing", keyboardStaysAfterDoubleTap(upBeforeFirstTap = true))
+    fun `a tall window keeps its bars and its pane switcher below the pane`() {
+        for (ime in listOf(false, true)) {
+            val chrome = TermChrome(short = false, imeUp = ime)
+            assertTrue(chrome.topBar)
+            assertFalse(chrome.cornerMenu)
+            assertTrue(chrome.panesBelow)
+            assertFalse(chrome.panesInTopBar)
+        }
+    }
+
+    @Test
+    fun `a short window moves the panes up and gives the top bar to the keyboard`() {
+        val closed = TermChrome(short = true, imeUp = false)
+        assertTrue(closed.topBar)
+        assertTrue("never over the pane's text", closed.panesInTopBar)
+        assertFalse(closed.panesBelow)
+        assertFalse(closed.cornerMenu)
+
+        val typing = TermChrome(short = true, imeUp = true)
+        assertFalse("the key bar keeps its height", typing.topBar)
+        assertFalse(typing.panesInTopBar)
+        assertFalse(typing.panesBelow)
+        assertTrue("the menu stays one tap away", typing.cornerMenu)
+        assertTrue(typing.keyBar(dockWanted = true))
+    }
+
+    @Test
+    fun `full screen hides everything whatever the window`() {
+        for (short in listOf(false, true)) for (ime in listOf(false, true)) {
+            val chrome = TermChrome(fullScreen = true, short = short, imeUp = ime)
+            assertFalse(chrome.topBar)
+            assertFalse(chrome.cornerMenu)
+            assertFalse(chrome.panesBelow)
+            assertFalse(chrome.panesInTopBar)
+            assertFalse(chrome.keyBar(dockWanted = true))
+        }
     }
 }

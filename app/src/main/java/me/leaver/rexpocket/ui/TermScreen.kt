@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -49,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -74,6 +78,7 @@ import me.leaver.rexpocket.core.BlockInfo
 import me.leaver.rexpocket.core.ClosedPane
 import me.leaver.rexpocket.core.CtrlCKey
 import me.leaver.rexpocket.core.DeskKey
+import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.KeyModifiers
 import me.leaver.rexpocket.core.metaState
 import me.leaver.rexpocket.core.KeyPress
@@ -163,8 +168,8 @@ internal fun TermScreen(
     keyBarShift: Boolean = false,
     keyBarAlt: Boolean = false,
     keyBarCtrlC: CtrlCKey = CtrlCKey.Tap,
-    /** True when a double tap on the pane goes in and out of full screen; the menu item always does. */
-    doubleTapFullScreen: Boolean = true,
+    /** What a tap, a double tap and a long press on the pane do; full screen is in the menu and the pill either way. */
+    gestures: GestureSettings = GestureSettings(),
     /** True when this pane shares the window with the list, which is then the way back. */
     embedded: Boolean = false,
 ) {
@@ -252,7 +257,9 @@ internal fun TermScreen(
 
     // Full screen is this screen's own: it survives a rotation, and is gone once the terminal is left.
     var fullScreen by rememberSaveable { mutableStateOf(false) }
-    val chrome = TermChrome(fullScreen)
+    val toggleFullScreen = { fullScreen = TermChrome(fullScreen).toggled().fullScreen }
+    val short = LocalConfiguration.current.screenHeightDp < SHORT_WINDOW_DP
+    val chrome = TermChrome(fullScreen, short = short, imeUp = imeShown())
     SystemBars(shown = chrome.systemBars)
 
     // An open sheet handles Back itself and closes. In full screen Back first brings the bars back:
@@ -283,9 +290,11 @@ internal fun TermScreen(
     val density = LocalDensity.current
     val slide = imeShift(imeHeight(), panePx)
 
-    // With the phone's bars hidden their insets are nothing, so the pane reaches the edges; a camera
-    // cutout still keeps the text out from under it.
-    Box(Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().navigationBarsPadding().displayCutoutPadding()) {
+    // With the phone's bars hidden their insets are nothing, so the pane reaches the edges. A camera
+    // cutout keeps the text out from under it at the sides, where it would hide the start of every
+    // line; at the top of a phone held upright it would cost a whole band of rows for a punch hole.
+    val cutout = if (chrome.fullScreen) WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal) else WindowInsets.displayCutout
+    Box(Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().navigationBarsPadding().windowInsetsPadding(cutout)) {
         Column(Modifier.fillMaxSize().padding(bottom = with(density) { bottomPx.toDp() })) {
             if (chrome.topBar) {
                 SessionTopBar(
@@ -298,7 +307,25 @@ internal fun TermScreen(
                     onNavigate = { if (view != null) sheet = Sheet.Navigator },
                     onHolder = { if (state.owning) onAct { releasePane() } else onAct { takeOver() } },
                     onMore = { sheet = Sheet.Actions },
+                    panes = if (chrome.panesInTopBar && panes.size > 1) {
+                        {
+                            PaneBar(
+                                tab = tab,
+                                focused = focused,
+                                status = state.blockStatus,
+                                programs = state.programs,
+                                onSelect = { block -> onAct { focusBlock(block.id) } },
+                                modifier = Modifier.widthIn(max = 420.dp),
+                            )
+                        }
+                    } else {
+                        null
+                    },
                 )
+            } else if (chrome.cornerMenu) {
+                // The bar steps aside for the key bar, but its room is kept: the pane keeps its
+                // grid, so the program is not resized each time the keyboard comes and goes.
+                Spacer(Modifier.height(TOP_BAR_HEIGHT))
             }
             TermBanner(state, onRetry = onRetry, onDismiss = onDismissNotice)
             // The pane sits on its own paper: white in the day, the page at night, edge to edge, the
@@ -337,11 +364,9 @@ internal fun TermScreen(
                                 if (next != index) onAct { focusBlock(panes[next].id) }
                             }
                         },
-                        onDoubleTap = if (doubleTapFullScreen) {
-                            { fullScreen = TermChrome(fullScreen).toggled().fullScreen }
-                        } else {
-                            null
-                        },
+                        gestures = gestures,
+                        fullScreen = chrome.fullScreen,
+                        onFullScreen = toggleFullScreen,
                         onError = { onAct { note(it.toProblem()) } },
                         modifier = Modifier.fillMaxSize()
                             // Moved, not resized: see imeShift. An offset keeps the pane's measured size
@@ -370,7 +395,7 @@ internal fun TermScreen(
         // keyboard can lift this stack without the terminal ever changing shape.
         Box(Modifier.align(Alignment.BottomCenter).imePadding()) {
             Column(Modifier.onSizeChanged { bottomPx = it.height }) {
-                if (panes.size > 1) {
+                if (panes.size > 1 && chrome.panesBelow) {
                     Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp), contentAlignment = Alignment.Center) {
                         PaneBar(
                             tab = tab,
@@ -411,10 +436,24 @@ internal fun TermScreen(
                             onAttach = { filePicker.launch("*/*") },
                             attachReady = upload?.running != true,
                             onKeyboard = { toggleKeyboard() },
+                            onFullScreen = toggleFullScreen,
                         )
                     }
                 }
             }
+        }
+        // A short window typing has given the top bar's place to the key bar; its menu stays here,
+        // over everything, in the corner the exit-full-screen button uses.
+        if (chrome.cornerMenu) {
+            RoundButton(
+                R.drawable.ic_more,
+                stringResource(R.string.action_more),
+                { sheet = Sheet.Actions },
+                modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                plate = Colors.key.copy(alpha = 0.85f),
+                size = 36.dp,
+                iconSize = 20.dp,
+            )
         }
     }
 
@@ -430,9 +469,7 @@ internal fun TermScreen(
             // Full screen: the top bar, the key bar and the phone's bars go, and the pane takes their
             // room. It lives here rather than on the top bar, which has no room to spare on a phone.
             Group {
-                SheetItem(stringResource(R.string.action_full_screen), icon = R.drawable.ic_fullscreen) {
-                    fullScreen = TermChrome(fullScreen).toggled().fullScreen
-                }
+                SheetItem(stringResource(R.string.action_full_screen), icon = R.drawable.ic_fullscreen) { toggleFullScreen() }
             }
             Group(stringResource(R.string.level_pane)) {
                 SheetItem(stringResource(R.string.menu_split_right), icon = R.drawable.ic_split_right) { onAct { split(vertical = false) } }
@@ -648,6 +685,8 @@ private fun SessionTopBar(
     onNavigate: () -> Unit,
     onHolder: () -> Unit,
     onMore: () -> Unit,
+    /** The pane switcher, where a short window puts it: in this row rather than over the pane. */
+    panes: (@Composable () -> Unit)? = null,
 ) {
     val title = when {
         view == null -> state.endpointLabel.ifBlank { stringResource(R.string.app_name) }
@@ -656,7 +695,7 @@ private fun SessionTopBar(
     }
     val path = state.pwd?.takeIf { it.isNotBlank() }?.let { shortPath(it) }
     Row(
-        Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
+        Modifier.fillMaxWidth().height(TOP_BAR_HEIGHT).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showBack) {
@@ -702,6 +741,10 @@ private fun SessionTopBar(
                     Glyph(R.drawable.ic_expand, Colors.muted, size = 18.dp)
                 }
             }
+        }
+        if (panes != null) {
+            panes()
+            Spacer(Modifier.width(8.dp))
         }
         // Who holds the pane, while there is one on screen to hold.
         if (state.phase == Phase.Live && tab != null) {
@@ -1029,3 +1072,6 @@ internal fun shortPath(path: String): String {
 internal const val NOTICE_MS = 4_000L
 
 internal val GENERATED_WINDOW_LABEL = Regex("Window [0-9a-f]{6,}")
+
+/** The top bar's height, which a short window keeps as room while the bar steps aside. */
+private val TOP_BAR_HEIGHT = 64.dp

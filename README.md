@@ -109,10 +109,19 @@ own SSH daemon. How the transport works is described in
 4. **In the terminal:**
    - Tap the pane to type. Drag to scroll back, pinch to change the font size, long-press to
      select, or long-press a link to open it.
-   - For more room, pick Full screen from the ⋮ menu or double-tap the pane: the top bar,
-     the key bar and the phone's status and navigation bars go away (swipe from the edge to see the
-     phone's bars for a moment). The corner button, another double tap or Back brings them back.
-     An open keyboard stays open and keeps typing. Settings › Terminal can turn the double tap off.
+   - For more room, double-tap the pane, pick Full screen from the ⋮ menu, or scroll the small
+     pill beside the keyboard key to its full-screen key: the top bar, the key bar and the phone's
+     status and navigation bars go away (swipe from the edge to see the phone's bars for a moment).
+     The corner button, another double tap or Back brings them back. In full screen a tap opens the
+     keyboard and a second tap closes it.
+   - **Settings › Terminal controls** chooses what each gesture does and how long it takes: tap
+     (open keyboard, open or close it, nothing), double tap (full screen, keyboard, nothing), long
+     press (select text, full screen, keyboard; a link is always offered), whether a tap waits to
+     see if a second follows (off by default, so a tap acts at once), and the double-tap and
+     long-press times (the phone's own by default). The key bar's Shift, Alt and `C-c` choices are
+     there too. See [docs/design/terminal-controls.md](docs/design/terminal-controls.md).
+   - On a phone held sideways the pane switcher sits in the top bar, and while the keyboard is up
+     the top bar steps aside so the key bar keeps its height; a ⋮ in the corner keeps the menu.
    - Scroll the wide pill to reach more keys. Tap a modifier for the next key, twice quickly to
      lock it, and once again to release it. Hold Return for Shift+Enter. Hold `ctrl` and slide to
      a chord. Locked Shift applies to all repeated arrows; one-shot Shift applies only to the first.

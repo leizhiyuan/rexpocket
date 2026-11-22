@@ -106,6 +106,30 @@ class ClosedPaneTest {
         assertNull(session.state.value.activeSessionId)
     }
 
+    /**
+     * Entering full screen grows the pane while the bars go away, so its size changes several times
+     * within one round trip. The last size set while a resize was out was dropped, and the pane kept
+     * the grid of the bars until the next size came - a rotation.
+     */
+    @Test
+    fun aSizeSetWhileAResizeIsOutIsSentWhenItIsAnswered() = withRex { rex, session ->
+        session.openSession("session:a", rememberedBlock = "block:a1")
+        rex.resizeDelayMs = 400
+        session.setSize(80, 24, 8, 16)
+        val watching = launch(Dispatchers.Default) { session.watchPane("block:a1").collect { } }
+        try {
+            withTimeout(5_000) { while (80 !in rex.resizes) delay(10) }
+            // While that resize is out, the bars go: two more sizes, the last one the one that counts.
+            session.setSize(90, 30, 8, 16)
+            delay(50)
+            session.setSize(100, 40, 8, 16)
+            withTimeout(5_000) { while (rex.resizes.lastOrNull() != 100) delay(20) }
+            assertEquals(100, rex.resizes.last())
+        } finally {
+            watching.cancel()
+        }
+    }
+
     private fun withRex(body: suspend CoroutineScope.(FakeRex, PocketSession) -> Unit) = runBlocking {
         FakeRex().use { rex ->
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -150,6 +174,12 @@ private class FakeRex : AutoCloseable {
     @Volatile private var control: WebSocket? = null
     @Volatile private var attached: String? = null
     @Volatile var refuseTickets = false
+
+    /** The columns of every resize asked for, in the order they were asked. */
+    val resizes = java.util.concurrent.CopyOnWriteArrayList<Int>()
+
+    /** How long a resize takes to be answered, as over a slow tailnet. */
+    @Volatile var resizeDelayMs = 0L
 
     private val server = MockWebServer()
     val endpoint: Endpoint
@@ -257,6 +287,10 @@ private class FakeRex : AutoCloseable {
                 s.revision++
                 JSONObject() to null
             }
+            "com.superlogical.terminal.resize" -> {
+                resizes += payload.getJSONObject("args").getInt("columns")
+                JSONObject() to null
+            }
             "data.connect" -> {
                 val block = payload.optString("block_id")
                 tickets.computeIfAbsent(block) { AtomicInteger() }.incrementAndGet()
@@ -303,6 +337,14 @@ private class FakeRex : AutoCloseable {
                         payload != null -> reply.put("payload", payload)
                         // A ticket for a pane that is there is left unanswered: no stream is needed.
                         else -> return
+                    }
+                    if (method == "com.superlogical.terminal.resize" && resizeDelayMs > 0) {
+                        val wait = resizeDelayMs
+                        kotlin.concurrent.thread(isDaemon = true) {
+                            Thread.sleep(wait)
+                            webSocket.send(reply.toString())
+                        }
+                        return
                     }
                     webSocket.send(reply.toString())
                     // Rex tells every client about a change it made, the asking one included.

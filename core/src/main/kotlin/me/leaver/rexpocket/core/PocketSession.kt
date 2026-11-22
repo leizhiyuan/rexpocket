@@ -1110,8 +1110,11 @@ class PocketSession(
                     continue
                 }
             }
-            // setSize forgets lastResize; nothing else changes it, so this is the wait for a new size.
-            while (lastResize == size) delay(100)
+            // The wait for a new size. It is compared with the size wanted now, not with lastResize
+            // alone: a size set while the call above was out is forgotten by setSize before the
+            // answer lands, and the answer then records the older size as sent. Waiting on that
+            // left the pane at the old grid - full screen's bands - until the next size, a rotation.
+            while (lastResize != null && lastResize == sizeRef.get()) delay(100)
         }
     }
 
