@@ -134,8 +134,8 @@ class CommandPaletteTest {
     fun clearAndResetAreRexsOwnPaneActions() {
         show()
         openFromMenu()
-        // Found by Rex's own words for them too: cmd+k, scrollback.
-        type("scrollback")
+        // Reset is found by Rex's own words for it too, which name clearing.
+        type("clear")
         assertEquals(listOf(string(R.string.palette_clear_terminal), string(R.string.palette_reset_terminal)), rows())
         compose.onNodeWithText(string(R.string.palette_reset_terminal)).performClick()
         compose.waitForIdle()

@@ -1,5 +1,6 @@
 package me.leaver.rexpocket.terminal
 
+import me.leaver.rexpocket.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -90,6 +91,12 @@ internal class TerminalView(context: Context) : View(context) {
 
     /** A web link the user long-pressed. */
     var onLink: ((String) -> Unit)? = null
+
+    /** Paste in the selection's menu: what the clipboard holds goes to the program, as the bar's Paste. */
+    var onPaste: (() -> Unit)? = null
+
+    /** Share in the selection's menu: the selected text, offered to another app. */
+    var onShare: ((String) -> Unit)? = null
 
     /** A tap that was not the start of anything else. */
     var onTap: (() -> Unit)? = null
@@ -817,7 +824,9 @@ internal class TerminalView(context: Context) : View(context) {
             object : ActionMode.Callback2() {
                 override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                     menu.add(0, android.R.id.copy, 0, android.R.string.copy).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                    menu.add(0, android.R.id.selectAll, 1, android.R.string.selectAll).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                    if (onShare != null) menu.add(0, android.R.id.shareText, 1, R.string.selection_share).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                    if (onPaste != null) menu.add(0, android.R.id.paste, 2, android.R.string.paste).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                    menu.add(0, android.R.id.selectAll, 3, android.R.string.selectAll).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                     return true
                 }
 
@@ -829,6 +838,17 @@ internal class TerminalView(context: Context) : View(context) {
                         context.getSystemService(ClipboardManager::class.java)
                             ?.setPrimaryClip(ClipData.newPlainText("Terminal selection", text))
                         mode.finish()
+                        true
+                    }
+                    android.R.id.shareText -> {
+                        val text = selection?.text().orEmpty()
+                        mode.finish()
+                        if (text.isNotEmpty()) onShare?.invoke(text)
+                        true
+                    }
+                    android.R.id.paste -> {
+                        mode.finish()
+                        onPaste?.invoke()
                         true
                     }
                     android.R.id.selectAll -> {

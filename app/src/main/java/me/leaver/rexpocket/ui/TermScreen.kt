@@ -425,6 +425,8 @@ internal fun TermScreen(
                         onInput = { bytes -> onAct { writeBytes(bytes) } },
                         onTyped = ::typed,
                         onLink = { link = it },
+                        onPaste = { pasteClipboard() },
+                        onShare = { shareText(context, it) },
                         onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
                         onSession = { termSession = it },
                         onKeyboard = { keyboard = it },
@@ -657,6 +659,30 @@ internal fun TermScreen(
                         paneGroup,
                         "Reset Terminal com.superlogical.terminal.reset clear scrollback emulator ris",
                     ) { onAct { resetPane() } }
+                    // The whole output, screen and scrollback, each line as the program wrote it.
+                    action(stringResource(R.string.palette_copy_output), paneGroup, "Copy Output terminal format text scrollback") {
+                        onAct {
+                            val out = paneText() ?: return@onAct
+                            when {
+                                out.text.isBlank() -> toast(context, context.getString(R.string.toast_output_empty))
+                                else -> {
+                                    clipboardSet(context, out.text)
+                                    // Android 13 and later say a copy was made themselves.
+                                    if (out.cut) {
+                                        toast(context, context.getString(R.string.toast_output_copied_cut))
+                                    } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                                        toast(context, context.getString(R.string.toast_output_copied))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    action(stringResource(R.string.palette_share_output), paneGroup, "Share Output terminal format text scrollback send") {
+                        onAct {
+                            val out = paneText() ?: return@onAct
+                            if (out.text.isBlank()) toast(context, context.getString(R.string.toast_output_empty)) else shareText(context, out.text)
+                        }
+                    }
                     action(stringResource(R.string.palette_copy_pane_id), paneGroup, "Copy Block ID pane.copy_id") {
                         clipboardSet(context, focused.id)
                         toast(context, copied)

@@ -25,6 +25,7 @@ import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.SavedHost
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotEquals
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -210,6 +211,32 @@ class RealRexAppTest {
 
         compose.awaitThat { m.pocket.value.view?.windows?.size == 2 }
         assertEquals(listOf(first, split).sorted(), deskView().windows.first { it.id == tab }.blocks.map { it.id }.sorted())
+    }
+
+    /** Copy output and Share output in the palette take the real pane's whole output, as its program wrote it. */
+    @Test
+    fun thePalettesCopyAndShareTakeTheRealPanesOutput() {
+        val m = launch(onTerminal = true)
+        compose.awaitThat { m.route.value == Route.Term }
+        awaitHeld(m)
+        val pane = shown(m)
+        // Longer than a line of the pane, so unwrap has a line to join; and $((40+2)) so only the output reads end-42-mark.
+        val long = "x".repeat(150)
+        runBlocking { desk.type(sid, pane, "seq 1 12000; echo $long; echo end-\$((40+2))-mark\n") }
+        compose.awaitThat { runBlocking { desk.text(sid, pane) }.contains("\nend-42-mark") }
+
+        palette(string(R.string.palette_copy_output))
+        compose.awaitThat { compose.runOnUiThread<String?> { clipboard(compose.activity) }.orEmpty().contains("\nend-42-mark") }
+        val copied = compose.runOnUiThread<String?> { clipboard(compose.activity) }!!
+        assertTrue("the scrollback came too, past Rex's first part", copied.contains("\n11999\n12000\n"))
+        assertTrue("a wrapped line is one line again", copied.contains("\n$long\n"))
+
+        palette(string(R.string.palette_share_output))
+        compose.awaitThat { org.robolectric.Shadows.shadowOf(compose.activity).peekNextStartedActivity() != null }
+        val chooser = org.robolectric.Shadows.shadowOf(compose.activity).nextStartedActivity
+        @Suppress("DEPRECATION")
+        val sent = chooser.getParcelableExtra<android.content.Intent>(android.content.Intent.EXTRA_INTENT)!!
+        assertTrue(sent.getStringExtra(android.content.Intent.EXTRA_TEXT).orEmpty().contains("\nend-42-mark"))
     }
 
     /** Clear terminal and Reset terminal in the palette empty the real pane on the phone's screen. */

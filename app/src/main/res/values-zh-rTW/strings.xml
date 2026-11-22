@@ -20,4 +20,10 @@
     <string name="update_failed_offline">沒有網路。輕觸以重試</string>
     <string name="update_failed_rate_limited">GitHub 暫時限制了請求。輕觸以重試</string>
     <string name="update_failed_checksum">下載的檔案校驗不符。輕觸以重試</string>
+    <string name="palette_copy_output">複製輸出</string>
+    <string name="palette_share_output">分享輸出</string>
+    <string name="toast_output_copied">已複製窗格的輸出</string>
+    <string name="toast_output_copied_cut">已複製窗格輸出的最新部分</string>
+    <string name="toast_output_empty">窗格沒有輸出</string>
+    <string name="selection_share">分享</string>
 </resources>

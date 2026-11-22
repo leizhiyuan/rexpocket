@@ -225,6 +225,12 @@
     <string name="palette_copy_pane_id">复制窗格 ID</string>
     <string name="palette_clear_terminal">清除终端</string>
     <string name="palette_reset_terminal">重置终端</string>
+    <string name="palette_copy_output">复制输出</string>
+    <string name="palette_share_output">分享输出</string>
+    <string name="toast_output_copied">已复制窗格的输出</string>
+    <string name="toast_output_copied_cut">已复制窗格输出的最新部分</string>
+    <string name="toast_output_empty">窗格没有输出</string>
+    <string name="selection_share">分享</string>
     <string name="palette_next_tab">下一个标签页</string>
     <string name="palette_previous_tab">上一个标签页</string>
     <string name="palette_next_session">下一个会话</string>

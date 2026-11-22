@@ -70,6 +70,9 @@ internal fun TerminalPane(
     onTyped: (ByteArray, () -> Unit) -> Boolean = { _, _ -> false },
     /** A link the user long-pressed in the pane: a hyperlink the program set, or a URL in its text. */
     onLink: (String) -> Unit = {},
+    /** Paste and Share in the menu over a selection. */
+    onPaste: () -> Unit = {},
+    onShare: (String) -> Unit = {},
     onSession: (TerminalSession?) -> Unit = {},
     /** The pane's editor, which is what raises and drops the keyboard for it. */
     onKeyboard: (TerminalImeView?) -> Unit = {},
@@ -97,6 +100,8 @@ internal fun TerminalPane(
     val currentInput = rememberUpdatedState(onInput)
     val currentTyped = rememberUpdatedState(onTyped)
     val currentLink = rememberUpdatedState(onLink)
+    val currentPaste = rememberUpdatedState(onPaste)
+    val currentShare = rememberUpdatedState(onShare)
     val currentResize = rememberUpdatedState(onResize)
     val currentSwipe = rememberUpdatedState(onSwipe)
     val currentKeyboard = rememberUpdatedState(onKeyboard)
@@ -158,6 +163,8 @@ internal fun TerminalPane(
             // A long press on a link offers it instead of selecting its text: agents print the pull
             // requests and sign-in pages they want you to open.
             view.onLink = { currentLink.value(it) }
+            view.onPaste = { currentPaste.value() }
+            view.onShare = { currentShare.value(it) }
             // A horizontal swipe moves between the panes of a split, which is what the dots under
             // the card promise. Vertical drags stay the pane's own: history, or the program's wheel.
             view.onSwipe = { forward -> currentSwipe.value?.invoke(forward) }

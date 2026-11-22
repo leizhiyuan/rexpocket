@@ -227,6 +227,12 @@
     <string name="palette_copy_pane_id">Copy pane ID</string>
     <string name="palette_clear_terminal">Clear terminal</string>
     <string name="palette_reset_terminal">Reset terminal</string>
+    <string name="palette_copy_output">Copy output</string>
+    <string name="palette_share_output">Share output</string>
+    <string name="toast_output_copied">Copied the pane\'s output</string>
+    <string name="toast_output_copied_cut">Copied the newest part of the pane\'s output</string>
+    <string name="toast_output_empty">The pane has no output</string>
+    <string name="selection_share">Share</string>
     <string name="palette_next_tab">Next tab</string>
     <string name="palette_previous_tab">Previous tab</string>
     <string name="palette_next_session">Next session</string>
