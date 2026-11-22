@@ -156,7 +156,8 @@ class RexShapeTest {
                 ).getJSONObject("payload").getJSONArray("block_ids").getString(0)
             }
             step("phone views the session") { phone.call("session.view", JSONObject().put("session_id", s)) }
-            step("phone takes the first pane") {
+            // On a loaded machine Rex's answer can overtake the events the take caused.
+            step("phone takes the first pane", unordered = true) {
                 phone.call("session.own_block", JSONObject().put("session_id", s).put("block_ids", JSONArray().put(first)).put("mode", "take"))
             }
             step("desk takes it back") {
@@ -177,6 +178,8 @@ class RexShapeTest {
             }
             step("phone takes the split pane, then its network drops", deskToo = true) {
                 phone.call("session.own_block", JSONObject().put("session_id", s).put("block_ids", JSONArray().put(split)).put("mode", "take"))
+                // The take's own events may come after its answer: let them in before forgetting them.
+                Thread.sleep(quiet)
                 phone.take()
                 phone.drop()
             }
