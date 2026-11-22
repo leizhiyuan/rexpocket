@@ -111,6 +111,9 @@ class FollowInputTest {
     @Test
     fun pasteBringsThePaneToTheNewestOutput() {
         compose.runOnUiThread { clipboardSet(compose.activity, "echo hi") }
+        // From Android 13 the system's copied overlay takes the focus for a few seconds, and only an
+        // app in focus may read the clipboard, as Paste does: wait for the focus to come back.
+        compose.waitUntil(30_000) { compose.runOnUiThread<Boolean> { compose.activity.hasWindowFocus() } }
         val session = scrollBack()
         val before = acts
         // The ⋮ menu's Paste: the same paste as the bar's, which may be scrolled out of the pill.
