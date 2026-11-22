@@ -2,6 +2,7 @@ package me.leaver.rexpocket.ui
 
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -22,6 +23,7 @@ import me.leaver.rexpocket.core.UploadPhase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -39,6 +41,15 @@ class TermMenuTest {
     val compose = createAndroidComposeRule<ComponentActivity>()
 
     private fun string(id: Int) = compose.activity.getString(id)
+
+    /**
+     * Edge to edge, as MainActivity is. Otherwise the window keeps its insets from Compose, which
+     * then takes the keyboard for up and the row would read Hide keyboard on a phone with none.
+     */
+    @Before
+    fun edgeToEdge() {
+        compose.runOnUiThread { compose.activity.enableEdgeToEdge() }
+    }
 
     private val acts = mutableListOf<suspend PocketSession.() -> Unit>()
 

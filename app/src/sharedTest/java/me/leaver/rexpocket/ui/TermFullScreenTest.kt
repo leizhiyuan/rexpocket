@@ -45,6 +45,9 @@ class TermFullScreenTest {
 
     private val content: View get() = compose.activity.findViewById<ViewGroup>(android.R.id.content)
 
+    /** What Compose's own insets said at the last composition, for a failure to explain itself. */
+    private var probe = ""
+
     /** The navigation bar's height, shown or not. */
     private var navPx = 0
     private var statusPx = 0
@@ -52,7 +55,10 @@ class TermFullScreenTest {
     private fun show() {
         compose.runOnUiThread { compose.activity.enableEdgeToEdge() }
         val model = termModel()
-        compose.setContent { TermOnModel(model, liveState()) }
+        compose.setContent {
+            TermOnModel(model, liveState())
+            probe = composeInsets()
+        }
         compose.waitForIdle()
         if (onRobolectric) {
             statusPx = 72
@@ -87,7 +93,13 @@ class TermFullScreenTest {
 
         // Right after entering, before any keyboard or later insets: no band at either end.
         val pane = compose.bounds(PANE_TAG)
-        val seen = describe()
+        var seen = describe()
+        if (!onRobolectric && abs(pane.bottom - root.bottom) > 1f) {
+            // Whether it settles by itself, and how long that takes, says what held it.
+            Thread.sleep(3000)
+            compose.waitForIdle()
+            seen += " | after 3 s: " + describe()
+        }
         assertNear("pane top ($seen)", root.top, pane.top)
         assertNear("pane bottom ($seen)", root.bottom, pane.bottom)
     }
@@ -105,7 +117,10 @@ class TermFullScreenTest {
             "$name=${insets?.getInsets(type)} visible=${insets?.isVisible(type)}"
         }
         val docks = compose.onAllNodes(androidx.compose.ui.test.hasTestTag(DOCK_TAG)).fetchSemanticsNodes().map { it.boundsInRoot }
-        return "pane=${compose.bounds(PANE_TAG)} dock=$docks $bars"
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val decor = compose.activity.window.decorView
+        return "pane=${compose.bounds(PANE_TAG)} dock=$docks root=$root content=${content.height} decor=${decor.height} " +
+            "compose=[$probe] window=[$bars]"
     }
 
     @Test

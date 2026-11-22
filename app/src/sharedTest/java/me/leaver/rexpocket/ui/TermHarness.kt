@@ -3,6 +3,14 @@ package me.leaver.rexpocket.ui
 import android.graphics.Typeface
 import android.os.Build
 import android.view.View
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -133,3 +141,14 @@ internal fun ComposeTestRule.sheetLines(): List<SheetLine> =
 
 internal fun ComposeTestRule.bounds(tag: String): Rect =
     onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().single().boundsInRoot
+
+/** Compose's own view of the window's insets, as a composable reads them, in pixels. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun composeInsets(): String {
+    val d = androidx.compose.ui.platform.LocalDensity.current
+    val w = androidx.compose.foundation.layout.WindowInsets
+    return "ime=${w.ime.getBottom(d)} imeVisible=${w.isImeVisible} nav=${w.navigationBars.getBottom(d)} " +
+        "navAlways=${w.navigationBarsIgnoringVisibility.getBottom(d)} status=${w.statusBars.getTop(d)} " +
+        "statusAlways=${w.statusBarsIgnoringVisibility.getTop(d)} cutoutBottom=${w.displayCutout.getBottom(d)}"
+}
