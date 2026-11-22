@@ -40,6 +40,7 @@ class TextFieldsTest {
 
     private fun string(id: Int) = compose.activity.getString(id)
 
+    // Clicked first, as a person does: a field takes its keyboard's action only while it has the focus.
     private fun field(hint: Int) = compose.onNode(hasSetTextAction() and hasContentDescription(string(hint)))
 
     private fun ime(action: ImeAction) = SemanticsMatcher.expectValue(SemanticsProperties.ImeAction, action)
@@ -86,7 +87,7 @@ class TextFieldsTest {
     fun enterOnTheAddressSavesAHostThatNeedsNothingMore() {
         hostDialog()
         field(R.string.field_name).assert(ime(ImeAction.Next))
-        field(R.string.field_address).performTextReplacement("ws://127.0.0.1:7297")
+        field(R.string.field_address).performClick().performTextReplacement("ws://127.0.0.1:7297")
         compose.waitForIdle()
         field(R.string.field_address).assert(ime(ImeAction.Done)).performImeAction()
         compose.waitForIdle()
@@ -96,14 +97,14 @@ class TextFieldsTest {
     @Test
     fun anSshHostGoesOnToItsAccountAndSavesFromThePassword() {
         hostDialog()
-        field(R.string.field_address).performTextReplacement("ssh://desk.example")
+        field(R.string.field_address).performClick().performTextReplacement("ssh://desk.example")
         compose.waitForIdle()
         field(R.string.field_address).assert(ime(ImeAction.Next)).performImeAction()
         compose.waitForIdle()
         assertTrue("nothing is saved before the account", saved.isEmpty())
-        field(R.string.ssh_user).performTextReplacement("me")
+        field(R.string.ssh_user).performClick().performTextReplacement("me")
         field(R.string.ssh_user).assert(ime(ImeAction.Next))
-        field(R.string.ssh_password).performTextReplacement("secret")
+        field(R.string.ssh_password).performClick().performTextReplacement("secret")
         compose.waitForIdle()
         field(R.string.ssh_password).assert(ime(ImeAction.Done)).performImeAction()
         compose.waitForIdle()

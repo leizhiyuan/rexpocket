@@ -1339,7 +1339,7 @@ internal fun HostDialog(
                     keyboardType = KeyboardType.Uri,
                     autoCorrect = false,
                     imeAction = if (ssh) ImeAction.Next else ImeAction.Done,
-                    onDone = ::save,
+                    onDone = { save() },
                 ) { address = it }
                 if (parsed != null) {
                     Text(
@@ -1400,14 +1400,14 @@ internal fun HostDialog(
                                 Text(stringResource(R.string.ssh_key_loaded), color = Colors.ok, fontSize = TextStyles.label)
                             }
                         }
-                        Field(stringResource(R.string.ssh_passphrase), passphrase, password = true, imeAction = ImeAction.Done, onDone = ::save) { passphrase = it }
+                        Field(stringResource(R.string.ssh_passphrase), passphrase, password = true, imeAction = ImeAction.Done, onDone = { save() }) { passphrase = it }
                     } else {
                         Field(
                             stringResource(R.string.ssh_password),
                             password,
                             password = true,
                             imeAction = ImeAction.Done,
-                            onDone = ::save,
+                            onDone = { save() },
                             focusRequester = passwordField,
                         ) { password = it }
                     }
@@ -1440,7 +1440,7 @@ internal fun HostDialog(
         },
         confirmButton = {
             // Nothing to save until the address says where to connect and how to get in.
-            TextButton(enabled = canSave, onClick = ::save) { Text(stringResource(R.string.action_save), color = if (canSave) Colors.accent else Colors.muted) }
+            TextButton(enabled = canSave, onClick = { save() }) { Text(stringResource(R.string.action_save), color = if (canSave) Colors.accent else Colors.muted) }
         },
         dismissButton = {
             Row {

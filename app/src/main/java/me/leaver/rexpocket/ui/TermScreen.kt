@@ -863,9 +863,9 @@ internal fun TermScreen(
                 )
             },
             // Enter on the keyboard saves, as the button does.
-            text = { Field(stringResource(R.string.field_name), text, autoFocus = true, imeAction = ImeAction.Done, onDone = ::save) { text = it } },
+            text = { Field(stringResource(R.string.field_name), text, autoFocus = true, imeAction = ImeAction.Done, onDone = { save() }) { text = it } },
             confirmButton = {
-                TextButton(onClick = ::save) { Text(stringResource(R.string.action_save), color = Colors.accent) }
+                TextButton(onClick = { save() }) { Text(stringResource(R.string.action_save), color = Colors.accent) }
             },
             dismissButton = {
                 TextButton(onClick = { rename = null }) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
