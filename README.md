@@ -97,8 +97,11 @@ own SSH daemon. How the transport works is described in
    - `192.0.2.10` - plaintext on port 7297
    - `192.0.2.10:7300` - another port
    - `my-mac.tail1234.ts.net` or a `100.x` address - through Tailscale, on 443 with TLS
-   - `my-pc.netbird.cloud` - through Netbird, on 443 with TLS (a self-hosted Netbird's peers are
-     reached by their `100.x` address)
+   - `ssh://my-pc.netbird.cloud`, or `my-pc.netbird.cloud:7297` - through Netbird (a self-hosted
+     Netbird's peers are reached by their `100.x` address). Rex serves TLS on 443 only through
+     Tailscale Serve, and over Netbird it cannot tell callers apart, so Rex's own port there is a
+     plain listener started with `--allow-anonymous` (Rex's Remote Access docs, "Plain HTTP"); over
+     SSH nothing has to be opened
    - `ssh://192.0.2.10` or `ssh://my-mac.tail1234.ts.net` - through that machine's SSH daemon;
      type the account and a password or a private key, and the first connection asks you to
      confirm its host key
