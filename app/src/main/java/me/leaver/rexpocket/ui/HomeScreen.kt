@@ -892,13 +892,13 @@ private fun SettingsSheet(
         }
         Group(stringResource(R.string.settings_group_terminal)) {
             // Gestures and keys have a sheet of their own, so this one stays a list of places to go.
-            SheetItem(stringResource(R.string.controls_title), icon = R.drawable.ic_keyboard, onClick = onControls)
-            SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
+            SheetItem(stringResource(R.string.controls_title), icon = R.drawable.ic_touch_app, onClick = onControls)
+            SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_text_fields, onClick = onFontSettings)
             // Off, a fresh start shows this list; Android killing the app on the terminal still
             // comes back to it, since that is the person's own place rather than a pick.
             SheetItem(
                 label = stringResource(R.string.reopen_last_tab),
-                icon = R.drawable.ic_sessions,
+                icon = R.drawable.ic_history,
                 detail = stringResource(if (reopenLastTab) R.string.reopen_last_tab_on else R.string.reopen_last_tab_off),
                 keepOpen = true,
                 onClick = onReopenLastTab,
@@ -921,7 +921,7 @@ private fun SettingsSheet(
             )
             SheetItem(
                 label = stringResource(R.string.update_title),
-                icon = R.drawable.ic_arrow_down,
+                icon = R.drawable.ic_system_update,
                 detail = updateDetail(update),
                 keepOpen = true,
                 onClick = onUpdate,

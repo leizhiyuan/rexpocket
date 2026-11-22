@@ -41,7 +41,8 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 ## Screenshots
 
 `ScreenshotsTest` (JVM, Roborazzi) captures the terminal screen with the key bar, Terminal controls
-and Arrange keys, the terminal's ⋮ menu, the command palette, the home screen's Activity view (on
+(as it comes, and with every choice changed, so its icons show the change) and Arrange keys,
+Settings and Diagnostics (on ScriptedRex), the terminal's ⋮ menu, the command palette, the home screen's Activity view (on
 ScriptedRex, its programs reporting statuses) and full screen right after entering it, in portrait and
 landscape on a Pixel 6-sized screen (the JVM tests' default too, in `robolectric.properties`), and Arrange keys before and
 after a move. They land in `app/build/outputs/roborazzi/`; `device-test` uploads them as the

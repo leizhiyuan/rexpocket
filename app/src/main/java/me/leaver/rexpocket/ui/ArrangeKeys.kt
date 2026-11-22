@@ -231,7 +231,7 @@ private fun MainPage(
             }
         }
         Group {
-            SheetItem(stringResource(R.string.arrange_reset), Colors.accent, keepOpen = true) {
+            SheetItem(stringResource(R.string.arrange_reset), Colors.accent, icon = R.drawable.ic_restart, keepOpen = true) {
                 // Groups the person made would go: ask first. A bar with only Fn resets at once.
                 if (arrangement.groups.any { it.id != BarKey.FN_GROUP }) onDialog(ArrangeDialog.Reset) else change { KeyArrangement() }
             }
@@ -425,7 +425,7 @@ private fun ArrangeRow(
     ) {
         val dragLabel = stringResource(R.string.arrange_drag, name)
         Box(
-            Modifier.size(44.dp)
+            Modifier.size(TOUCH)
                 .testTag("arrange-handle-${barKey.pref}")
                 .semantics { contentDescription = dragLabel }
                 .pointerInput(Unit) {
@@ -464,7 +464,7 @@ private fun ArrangeRow(
         if (barKey.removable) {
             val label = stringResource(R.string.arrange_remove, name)
             Box(
-                Modifier.size(44.dp).clickable(role = Role.Button, onClick = onRemove).semantics { contentDescription = label },
+                Modifier.size(TOUCH).clickable(role = Role.Button, onClick = onRemove).semantics { contentDescription = label },
                 contentAlignment = Alignment.Center,
             ) { Glyph(R.drawable.ic_remove_circle, Colors.muted) }
         } else {
@@ -495,7 +495,7 @@ private fun WhyNot(description: String, reason: String, tag: String) {
         state = state,
     ) {
         Box(
-            Modifier.size(44.dp)
+            Modifier.size(TOUCH)
                 .clickable(role = Role.Button) { scope.launch { state.show() } }
                 .semantics { contentDescription = description }
                 .testTag(tag),
@@ -524,7 +524,7 @@ private fun UnavailableItem(label: String, icon: Int, reason: String) {
 @Composable
 private fun StepButton(icon: Int, label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(40.dp)
+        Modifier.size(TOUCH)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
@@ -551,7 +551,7 @@ private fun NamePage(title: String, initial: String, onBack: () -> Unit, onName:
         }
         Group {
             if (clean != null) {
-                SheetItem(stringResource(R.string.action_save), Colors.accent, keepOpen = true) { onName(clean) }
+                SheetItem(stringResource(R.string.action_save), Colors.accent, icon = R.drawable.ic_check, keepOpen = true) { onName(clean) }
             } else {
                 UnavailableItem(stringResource(R.string.action_save), R.drawable.ic_check, stringResource(R.string.arrange_name_needed))
             }
@@ -642,3 +642,9 @@ internal fun keyName(key: BarKey, arrangement: KeyArrangement? = null): String =
 }
 
 private val ROW_HEIGHT = 56.dp
+
+/**
+ * A row's handle, up, down and remove: the platform's 48 dp touch target each. It also puts the
+ * handle's mark on the same 16 dp keyline as the icons of the Add keys row under the list.
+ */
+private val TOUCH = 48.dp

@@ -16,6 +16,10 @@ import com.github.takahirom.roborazzi.captureScreenRoboImage
 import kotlinx.coroutines.flow.emptyFlow
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.BarKey
+import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.DoubleTapAction
+import me.leaver.rexpocket.core.LongPressAction
+import me.leaver.rexpocket.core.TapAction
 import me.leaver.rexpocket.core.DeskKey
 import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.KeyArrangement
@@ -158,6 +162,43 @@ class ScreenshotsTest {
             compose.runOnUiThread { model.disconnect() }
         }
     }
+
+    /** Terminal controls with every choice row moved off its default, so its icons show the change. */
+    private fun controlsChanged(name: String) {
+        val model = RexViewModel(freshApp())
+        compose.runOnUiThread {
+            model.setGestures(
+                GestureSettings(tap = TapAction.Nothing, doubleTap = DoubleTapAction.Keyboard, longPress = LongPressAction.FullScreen),
+            )
+            model.setKeyBarCtrlC(CtrlCKey.Hold)
+        }
+        compose.setContent { ControlsOnModel(model, ControlsPage.Controls, onPage = {}, bar = false) }
+        compose.waitForIdle()
+        captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    /** Settings, and with [row] the sheet that row opens, from the home screen of a connected app. */
+    private fun settings(name: String, row: Int? = null) {
+        RexOnDesk(sessions = 1).use { desk ->
+            val app = freshApp()
+            desk.saveFor(app, lastSession = desk.ids[0])
+            val model = launchedModel(compose, app)
+            compose.setContent { RexPocketApp(model) }
+            compose.awaitLive(model, desk.ids[0])
+            compose.onNodeWithContentDescription(compose.activity.getString(R.string.settings)).performClick()
+            compose.waitForIdle()
+            if (row != null) open(compose.activity.getString(row))
+            captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+            compose.runOnUiThread { model.disconnect() }
+        }
+    }
+
+    @Test fun controlsChangedPortrait() = controlsChanged("controls-changed-portrait")
+    @Test fun controlsChangedLandscape() { landscape(); controlsChanged("controls-changed-landscape") }
+    @Test fun settingsPortrait() = settings("settings-portrait")
+    @Test fun settingsLandscape() { landscape(); settings("settings-landscape") }
+    @Test fun diagnosticsPortrait() = settings("diagnostics-portrait", R.string.diagnostics)
+    @Test fun groupNamePortrait() = arrangePage("group-name-portrait", R.string.arrange_new_group, R.string.arrange_empty_group)
 
     @Test fun palettePortrait() = palette("command-palette-portrait")
     @Test fun paletteLandscape() { landscape(); palette("command-palette-landscape") }
