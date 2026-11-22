@@ -64,6 +64,7 @@ class RexShapeTest {
     private interface Programs {
         fun report(probe: Probe, sid: String, block: String, body: String, state: String?, id: String = "", app: String? = null, msg: String? = null)
         fun exit(probe: Probe, sid: String, block: String, code: Int)
+        fun copy(probe: Probe, sid: String, block: String, text: String)
     }
 
     private class FakePrograms(val rex: ScriptedRex) : Programs {
@@ -77,6 +78,11 @@ class RexShapeTest {
             ShellPrograms().exit(probe, sid, block, code)
             rex.exit(block, code)
         }
+
+        override fun copy(probe: Probe, sid: String, block: String, text: String) {
+            ShellPrograms().copy(probe, sid, block, text)
+            rex.copy(block, text)
+        }
     }
 
     private class ShellPrograms : Programs {
@@ -86,6 +92,10 @@ class RexShapeTest {
 
         override fun exit(probe: Probe, sid: String, block: String, code: Int) {
             probe.call("com.superlogical.terminal.write", pane(sid, block).put("args", JSONObject().put("data", "exit $code\n")))
+        }
+
+        override fun copy(probe: Probe, sid: String, block: String, text: String) {
+            probe.call("com.superlogical.terminal.write", pane(sid, block).put("args", JSONObject().put("data", "printf '\\033]52;c;%s\\a' ${b64(text)}\n")))
         }
     }
 
@@ -194,11 +204,37 @@ class RexShapeTest {
                 phone.call("session.set_block_label", pane(s, second).put("label", "x"))
                 phone.call("data.connect", ticket(s, second))
             }
+            step("a program copies to the clipboard with OSC 52") { programs.copy(phone, s, split, "hi") }
+            step("phone reads the copy back") {
+                phone.call("com.superlogical.terminal.clipboard_read", pane(s, split).put("args", JSONObject()))
+            }
+            step("phone formats the pane as text, whole and in parts") {
+                val text = JSONObject().put("format", "text").put("trim", true).put("unwrap", true)
+                phone.call("block.method", pane(s, split).put("method", "format").put("args", text))
+                val part = phone.call("block.method", pane(s, split).put("method", "format").put("args", JSONObject(text.toString()).put("max_bytes", 4)))
+                    .getJSONObject("payload")
+                phone.call(
+                    "block.method",
+                    pane(s, split).put("method", "blob_read")
+                        .put("args", JSONObject().put("id", part.getLong("id")).put("offset", part.getString("content").toByteArray().size)),
+                )
+            }
+            step("phone clears the pane, then resets it") {
+                phone.call("block.method", pane(s, split).put("method", "clear"))
+                phone.call("block.method", pane(s, split).put("method", "reset"))
+            }
             step("a program working in the split pane exits with 3") {
                 programs.report(phone, s, split, "state=working:msg=" + b64("busy"), "working", msg = "busy")
                 Thread.sleep(quiet)
                 programs.exit(phone, s, split, 3)
             }
+            lateinit var lone: String
+            step("desk makes another tab") {
+                lone = desk.call("session.new_window", JSONObject().put("session_id", s).put("focus", false).put("layout", SHELL))
+                    .getJSONObject("payload").getJSONArray("block_ids").getString(0)
+            }
+            if (fake == null) Thread.sleep(1_500)
+            step("the program in a tab of one pane exits with 0") { programs.exit(phone, s, lone, 0) }
             step("desk closes the last pane of the last tab") { desk.call("block.close", pane(s, first)) }
             step("phone views the session with no tabs") { phone.call("session.view", JSONObject().put("session_id", s)) }
             step("phone bootstraps again, with a session there") {

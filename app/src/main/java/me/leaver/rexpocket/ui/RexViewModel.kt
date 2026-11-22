@@ -865,6 +865,10 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
     /** The shown pane's bytes for as long as the screen collects them; see [PocketSession.watchPane]. */
     fun watchPane(blockId: String): Flow<TerminalFeed> = session?.watchPane(blockId) ?: emptyFlow()
 
+    /** What the program in the shown pane copies with OSC 52; see [PocketSession.copies]. */
+    fun paneCopies(blockId: String): Flow<String> =
+        session?.copies?.filter { it.blockId == blockId }?.map { it.text } ?: emptyFlow()
+
     fun retryNow() {
         Diagnostics.event(CONN_TAG, "retry asked for")
         val open = host

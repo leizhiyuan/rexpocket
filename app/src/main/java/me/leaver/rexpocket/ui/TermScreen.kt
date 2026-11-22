@@ -1,5 +1,6 @@
 package me.leaver.rexpocket.ui
 
+import android.os.Build
 import android.os.SystemClock
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.BackHandler
@@ -74,6 +75,9 @@ import androidx.core.view.WindowInsetsCompat
 import me.leaver.rexpocket.terminal.TerminalSession
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlin.math.roundToInt
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.BlockInfo
@@ -181,6 +185,8 @@ internal fun TermScreen(
     embedded: Boolean = false,
     /** Shows a tab of this host: of the session on screen, or of another one, which is opened on it. */
     onOpenTab: (sessionId: String, windowId: String) -> Unit = { sessionId, _ -> onOpenSession(sessionId) },
+    /** What the program in a pane copies with OSC 52; see [PocketSession.copies]. */
+    paneCopies: (String) -> Flow<String> = { emptyFlow() },
 ) {
     val context = LocalContext.current
     val ime = LocalSoftwareKeyboardController.current
@@ -206,6 +212,19 @@ internal fun TermScreen(
     val focused = if (closed != null) null else view?.focusedBlock()
     val status = focused?.let { state.blockStatus[it.id] }
     val panes = tab?.blocks.orEmpty()
+
+    // A program's OSC 52 copy goes on the phone's clipboard, from the pane on screen only and only
+    // while the app is in front: a copy is the program speaking for the person at the keyboard.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(focused?.id) {
+        val pane = focused?.id ?: return@LaunchedEffect
+        paneCopies(pane).collect { text ->
+            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@collect
+            clipboardSet(context, text)
+            // Android 13 and later say so themselves.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) toast(context, context.getString(R.string.toast_program_copied))
+        }
+    }
 
     /**
      * A key or a paste that goes to the program through Rex rather than through the pane's own

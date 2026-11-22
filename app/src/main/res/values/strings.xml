@@ -140,6 +140,7 @@
     <string name="state_idle">idle</string>
 
     <string name="toast_clipboard_empty">Clipboard is empty</string>
+    <string name="toast_program_copied">The program copied text to the clipboard</string>
     <string name="toast_copied">Copied</string>
     <string name="problem_unreachable">Cannot reach %1$s. Check that Rex is running and the phone is on its network.</string>
     <string name="problem_timed_out">%1$s took the connection but did not answer.</string>

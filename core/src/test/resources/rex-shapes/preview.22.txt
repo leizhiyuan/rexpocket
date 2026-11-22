@@ -73,6 +73,18 @@ response session.disown_block error bad_request 400 "block <block> is not in the
 response session.close_window error not_found 404 "window <window> not found"
 response session.set_block_label error not_found 404 "block not found"
 response data.connect error not_found 404 "block not found: <block>"
+## a program copies to the clipboard with OSC 52
+response com.superlogical.terminal.write {bytes_written:num}
+event block_event clipboard_written {bytes:num,id:num,text:str}
+## phone reads the copy back
+response com.superlogical.terminal.clipboard_read {data:str,eof:true,id:num,total:num}
+## phone formats the pane as text, whole and in parts
+response block.method {content:str}
+response block.method {content:str,id:num,total:num}
+response block.method {data:str,eof:true,id:num,total:num}
+## phone clears the pane, then resets it
+response block.method {}
+response block.method {}
 ## a program working in the split pane exits with 3
 response com.superlogical.terminal.write {bytes_written:num}
 event block_event program_status_changed {id:"",reason:"report",record:{msg:str,owner:{name:str,pid:num},state:"working",updated_at:<time>}}
@@ -80,6 +92,17 @@ response com.superlogical.terminal.write {bytes_written:num}
 event block_event program_status_removed {ids:[""],reason:"child_exited"}
 event block_event child_exited {error:"exit status 3",exit_code:num}
 event block_closed {block_id:<block>}
+event session_view_changed {revision:num}
+## desk makes another tab
+event block_created {block_id:<block>}
+event block_owner_changed {block_id:<block>,owner:<client>,reason:"create"}
+event window_created {label:str,window_id:<window>}
+event session_view_changed {revision:num}
+## the program in a tab of one pane exits with 0
+response com.superlogical.terminal.write {bytes_written:num}
+event block_event child_exited {exit_code:num}
+event block_closed {block_id:<block>}
+event window_closed {window_id:<window>}
 event session_view_changed {revision:num}
 ## desk closes the last pane of the last tab
 event block_closed {block_id:<block>}

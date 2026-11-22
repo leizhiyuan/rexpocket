@@ -139,6 +139,7 @@
     <string name="state_idle">空闲</string>
 
     <string name="toast_clipboard_empty">剪贴板是空的</string>
+    <string name="toast_program_copied">程序已将文本复制到剪贴板</string>
     <string name="toast_copied">已复制</string>
     <string name="problem_unreachable">连不上 %1$s。确认 Rex 在运行，手机和它在同一网络。</string>
     <string name="problem_timed_out">%1$s 接受了连接，但没有响应。</string>

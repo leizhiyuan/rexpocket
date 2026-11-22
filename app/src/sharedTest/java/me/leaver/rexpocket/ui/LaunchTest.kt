@@ -91,6 +91,17 @@ class LaunchTest {
     }
 
     @Test
+    fun aProgramsCopyInThePaneOnScreenGoesOnTheClipboard() {
+        // OSC 52: Rex tells the clients with clipboard_written, and only the phone can put it on its clipboard.
+        val m = launch(killedOnTerminal = true)
+        compose.awaitThat { m.route.value == Route.Term && m.pocket.value.view?.focusedBlock() != null }
+        compose.waitForIdle()
+        val pane = m.pocket.value.view!!.focusedBlock()!!.id
+        desk.rex.copy(pane, "copied by vim")
+        compose.awaitThat { compose.runOnUiThread<String?> { clipboard(compose.activity) } == "copied by vim" }
+    }
+
+    @Test
     fun reopenLastTabBringsItBackOnAFreshStart() {
         val m = launch(reopenLastTab = true)
         compose.awaitThat { m.route.value == Route.Term }

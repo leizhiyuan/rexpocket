@@ -42,7 +42,7 @@ own connection) and keeps the welcome's client id, reconnect token, `resumed`, `
 | `session.set_label`, `session.set_window_label`, `session.set_block_label` | used | rename |
 | `session.own_block`, `session.disown_block` | used | the phone's size for the pane on screen; Release / Take over |
 | `block.event` (`paste`), `client.key` | used | paste, keys |
-| `block.method` by full name: terminal `write`, `resize`, `size`, `program_status`, `pwd`, `process`, `title`, `upload_begin` | used | typing, sizing, status, directory, program, title, Send a file |
+| `block.method` by full name: terminal `write`, `resize`, `size`, `program_status`, `pwd`, `process`, `title`, `upload_begin`, `clipboard_read` | used | typing, sizing, status, directory, program, title, Send a file, a program's large copy |
 | `data.connect` | used | the pane's stream (**fixture**) |
 | `session.focus_block`, `session.focus_window`, `session.focus_next_*`, `session.focus_previous_*`, `focus_history.reverse` | not used, on purpose | moving between tabs and panes is the phone's own; Rex's focus is the desktop's (README, "Ownership") |
 | `session.zoom_block`, `session.swap_blocks`, `session.move_block`, `session.move_window`, `session.move`, `session.resize_pane` | not used | see the verdicts below |
@@ -66,7 +66,8 @@ own connection) and keeps the welcome's client id, reconnect token, `resumed`, `
 | `terminal.program_status_removed` (`ids`, `reason`) | **was ignored, now used** (this change): Rex drops working and blocked records when the program exits or the shell prompts again (docs:program-status, "Lifetime"), and a `clear` removes records; the phone kept them, so a pane stayed "running" |
 | `terminal.pwd_changed`, `terminal.process_changed`, `terminal.title_changed` | used |
 | `terminal.child_exited` (`exit_code`, `error`) | ignored |
-| `terminal.bell`, `terminal.desktop_notification` (`title`, `body`), `terminal.progress_report` (`state`, `progress`), `terminal.clipboard_written` (`text`) | ignored |
+| `terminal.clipboard_written` (`text`, `id`, `bytes`) | used: an OSC 52 copy goes on the phone's clipboard, from the pane on screen while the app is in front (`PocketSession.copies`); when `text` is left out the copy is read with `clipboard_read` |
+| `terminal.bell`, `terminal.desktop_notification` (`title`, `body`), `terminal.progress_report` (`state`, `progress`) | ignored |
 
 ### A status record (docs:program-status, "Keys")
 
@@ -212,6 +213,10 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
   program that reports `state=error`, which then outlives its exit. A shell pane's program exiting
   closes the pane (and its tab, if it was the last), unless it failed within 250 ms (`exit.
   quick_exit_threshold_ms`) or the block was made with `exit.on_completion: false`.
+- **OSC 52.** `printf '\e]52;c;%s\a' $(printf hi | base64)` in a pane: every client that may see
+  the pane gets `block_event` `clipboard_written` `{text: "hi", id, bytes: 2}` (at the app's API
+  revision 7 too), and `clipboard_read` (`{}` args: the newest copy) answers `{id, data, total, eof:
+  true}`.
 - **`client.keymap`.** On a server with no configuration file: `bindings: []`, `diagnostics: []`,
   `config` (path, exists, generation, hash) and 22 `actions`, all `kind: block`, each with `name`,
   `description` and `args` (a JSON Schema); only `com.superlogical.terminal.clear` ("Clear Terminal")

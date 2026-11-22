@@ -108,6 +108,10 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
     private val refusals = ConcurrentHashMap<String, String>()
     private val holds = ConcurrentHashMap<String, CountDownLatch>()
     private val statuses = HashMap<String, LinkedHashMap<String, JSONObject>>()
+    private val screens = HashMap<String, StringBuilder>()
+    private val copies = HashMap<String, Pair<Long, String>>()
+    private val blobs = HashMap<Long, String>()
+    private val blobIds = java.util.concurrent.atomic.AtomicLong()
 
     /**
      * False for a Rex whose panes send no picture: a stream opens and is welcomed, then stays
@@ -232,6 +236,28 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
             closeBlock(session, block)
         }
     }
+
+    /**
+     * The program in [block] copies [text] with OSC 52: Rex keeps the copy for `clipboard_read` and
+     * tells every client that may see the pane with `clipboard_written`, the text in it unless
+     * [inline] is false (Rex leaves out a copy too large for an event).
+     */
+    fun copy(block: String, text: String, inline: Boolean = true) {
+        synchronized(this) {
+            val session = sessions.values.firstOrNull { it.tabOf(block) != null } ?: return
+            val id = blobIds.incrementAndGet()
+            copies[block] = id to text
+            val event = JSONObject().put("id", id)
+            if (text.isNotEmpty()) {
+                event.put("bytes", text.toByteArray().size)
+                if (inline) event.put("text", text)
+            }
+            blockEvent(session.id, block, "clipboard_written", event)
+        }
+    }
+
+    /** What [block] shows, as Rex's `format` gives it as text: what was written to it, which a shell echoes. */
+    fun screenOf(block: String): String = synchronized(this) { screens[block]?.toString().orEmpty() }
 
     /** The client that holds [block], as Rex has it. */
     fun ownerOf(block: String): String? = synchronized(this) { owners[block] }
@@ -428,6 +454,8 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
         owners -= block
         claims -= block
         statuses -= block
+        screens -= block
+        copies -= block
         streams.filter { it.block == block }.forEach { stream ->
             stream.socket?.close(4000, "block closed")
             streams -= stream
@@ -588,8 +616,47 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
                     .put("owner", owners[block] ?: JSONObject.NULL).put("desired", JSONArray())
             }
             "com.superlogical.terminal.write" -> {
-                pane(client, payload)
-                JSONObject().put("bytes_written", payload.optJSONObject("args")?.optString("data")?.toByteArray()?.size ?: 0)
+                val (_, block) = pane(client, payload)
+                val data = payload.optJSONObject("args")?.optString("data").orEmpty()
+                screens.getOrPut(block) { StringBuilder() }.append(data)
+                JSONObject().put("bytes_written", data.toByteArray().size)
+            }
+            "block.method" -> answer(client, "com.superlogical.terminal." + payload.optString("method"), payload)
+            "com.superlogical.terminal.clear", "com.superlogical.terminal.reset" -> {
+                val (_, block) = pane(client, payload)
+                screens -= block
+                JSONObject()
+            }
+            "com.superlogical.terminal.format" -> {
+                val (_, block) = pane(client, payload)
+                val args = payload.optJSONObject("args") ?: JSONObject()
+                var text = screens[block]?.toString().orEmpty()
+                if (args.optBoolean("trim")) text = text.lines().joinToString("\n") { it.trimEnd() }
+                val max = args.optInt("max_bytes")
+                val bytes = text.toByteArray()
+                if (max <= 0 || bytes.size <= max) {
+                    JSONObject().put("content", text).apply { if (max > 0) put("total", bytes.size).put("eof", true) }
+                } else {
+                    val id = blobIds.incrementAndGet()
+                    blobs[id] = text
+                    JSONObject().put("content", String(bytes, 0, max)).put("id", id).put("total", bytes.size)
+                }
+            }
+            "com.superlogical.terminal.blob_read", "com.superlogical.terminal.clipboard_read" -> {
+                val (_, block) = pane(client, payload)
+                val args = payload.optJSONObject("args") ?: JSONObject()
+                val copy = method.endsWith("clipboard_read")
+                val asked = args.optLong("id")
+                val (id, text) = when {
+                    copy && asked == 0L -> copies[block]
+                    copy -> copies[block]?.takeIf { it.first == asked }
+                    else -> blobs[asked]?.let { asked to it }
+                } ?: throw Refused("not_found", 404, "not found")
+                val bytes = text.toByteArray()
+                val offset = args.optInt("offset").coerceIn(0, bytes.size)
+                val max = args.optInt("max_bytes").takeIf { it > 0 } ?: 49_152
+                val end = minOf(bytes.size, offset + max)
+                JSONObject().put("id", id).put("data", String(bytes, offset, end - offset)).put("total", bytes.size).put("eof", end == bytes.size)
             }
             "com.superlogical.terminal.resize", "client.key", "block.event" -> {
                 pane(client, payload)

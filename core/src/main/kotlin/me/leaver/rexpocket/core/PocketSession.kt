@@ -14,7 +14,10 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
@@ -104,6 +107,9 @@ enum class Holder { Phone, Desk }
  */
 data class ClosedPane(val sessionId: String, val blockId: String, val tabClosed: Boolean)
 
+/** Text the program in pane [blockId] copied to the clipboard with OSC 52; see [PocketSession.copies]. */
+data class PaneCopy(val blockId: String, val text: String)
+
 /**
  * Phone-side session: bootstrap, sidebar model, and a polled VT screen.
  * Owning the focused block makes Rex use this client's size, the same way a
@@ -127,6 +133,16 @@ class PocketSession(
 ) {
     private val _state = MutableStateFlow(PocketState(sessions = cachedSessions))
     val state: StateFlow<PocketState> = _state
+
+    private val _copies = MutableSharedFlow<PaneCopy>(extraBufferCapacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /**
+     * What a program copied with OSC 52 (`clipboard_written`), for the phone's clipboard: Rex may run
+     * on another machine, so only the client can put it there. Only copies made in the pane on
+     * screen while the app is in the foreground come through; a pane in the background, or a
+     * program running while the phone is in a pocket, does not get to change the clipboard.
+     */
+    val copies: SharedFlow<PaneCopy> = _copies
 
     private val clientRef = AtomicReference<RexClient?>(null)
     private val sizeRef = AtomicReference(TermSize(80, 24, 8, 16))
@@ -956,6 +972,54 @@ class PocketSession(
                 reportedDuringRead += block
                 publishStatus()
             }
+            "clipboard_written" -> onCopied(block, body)
+        }
+    }
+
+    /**
+     * A program in [block] copied text. The event carries it unless it is too large, and then Rex
+     * keeps the copy for `clipboard_read` for about a minute.
+     */
+    private fun onCopied(block: String, body: JSONObject) {
+        val now = _state.value
+        val view = now.view ?: return
+        if (!active.value || now.closed?.sessionId == view.sessionId || view.focusedBlock()?.id != block) return
+        body.optNullableString("text")?.let {
+            _copies.tryEmit(PaneCopy(block, it))
+            return
+        }
+        val size = body.optLong("bytes")
+        if (size <= 0) return
+        if (size > MAX_COPY_BYTES) {
+            trace("pane $block: a copy of $size bytes is too large for the clipboard")
+            return
+        }
+        val scope = runnerScope ?: return
+        scope.launch {
+            try {
+                _copies.emit(PaneCopy(block, readCopy(view.sessionId, block, body.optLong("id"))))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                trace("pane $block: clipboard_read failed: ${e.message}")
+            }
+        }
+    }
+
+    /** The whole of copy [id], read in parts from Rex's `clipboard_read`. */
+    private suspend fun readCopy(sid: String, block: String, id: Long): String {
+        val text = java.io.ByteArrayOutputStream()
+        var copy = id
+        while (true) {
+            val args = JSONObject().put("offset", text.size())
+            if (copy > 0) args.put("id", copy)
+            val part = rpc(
+                "com.superlogical.terminal.clipboard_read",
+                JSONObject().put("session_id", sid).put("block_id", block).put("args", args),
+            )
+            copy = part.optLong("id", copy)
+            text.write(part.optString("data").toByteArray())
+            if (part.optBoolean("eof", true) || text.size() > MAX_COPY_BYTES) return text.toString(Charsets.UTF_8.name())
         }
     }
 
@@ -1694,6 +1758,9 @@ private const val PANE_RETRY_MAX_MS = 5_000L
  * half-minute a dead socket takes to be noticed otherwise.
  */
 private const val LIVENESS_MS = 4_000L
+
+/** The largest copy put on the phone's clipboard: Android hands a clip to other apps through Binder, which takes about 1 MB. */
+private const val MAX_COPY_BYTES = 512 * 1024L
 
 private const val WRITE_METHOD = "com.superlogical.terminal.write"
 
