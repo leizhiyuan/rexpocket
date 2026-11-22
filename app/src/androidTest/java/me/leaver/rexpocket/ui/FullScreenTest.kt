@@ -56,6 +56,8 @@ class FullScreenTest {
                     onDismissUpload = {},
                     onRetryUpload = {},
                     doubleTapFullScreen = doubleTap,
+                    // The emulator reports a keyboard on the desk, which would take the key bar away.
+                    keyBarWithKeyboard = true,
                 )
             }
         }
