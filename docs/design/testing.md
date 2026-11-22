@@ -79,11 +79,15 @@ classes below then run instead of skipping.
   `data.connect`, and on `/api/data` the HELLO/RESUME handshake, a 32-byte WELCOME, a `GHOSTSNP`
   snapshot and then output - with the shapes taken from `RexClient`, `parseView`, `TerminalStream`
   and the stream fixture `app/src/test/resources/rex-stream.bin`. It keeps Rex's rules that the
-  real-Rex tests rely on: each connection is a new client whose panes are let go when it ends; a
-  pane call (own, disown, size, resize, write, ticket) on a pane outside the attached session, or
-  closed, is refused with `block … is not in the session`; every change is told to every client
-  after its answer; a closed pane's streams close with 4000 and a HELLO for it is refused with
-  0x03; a tab's last pane closing closes the tab, a session's last tab its session. `refuse(method)`
+  real-Rex tests rely on, checked against Rex's API reference: each connection is a new client whose
+  panes are let go when it ends; it stays in every session it attached, and after
+  `session.bootstrap` it may call methods on any session, while a ticket and own/disown need the
+  session attached; a pane call (own, disown, size, resize, write, ticket) on a pane not in the
+  session, or closed, is refused with `block … is not in the session` (`not_found`, or
+  `bad_request` for own and disown); every change is told to every client after its answer; a
+  closed pane's streams close with 4000 and a HELLO for it is refused with 0x03; a tab's last pane
+  closing closes the tab, and a session's last tab closing leaves the session with no tabs (only
+  `session.destroy` ends it). `refuse(method)`
   makes a method fail, for the errors that must still show; `report(block, state, …)` is a program
   reporting its status (OSC 7501), told as `program_status_changed`, or `program_status_removed` for
   a null state, with the shapes of Rex's events reference; `hold(method)` keeps its answers back
