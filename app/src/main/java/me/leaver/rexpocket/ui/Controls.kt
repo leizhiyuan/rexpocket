@@ -41,12 +41,10 @@ internal fun ControlsSheet(
     onGestures: (GestureSettings) -> Unit,
     keyBar: Boolean,
     onKeyBar: (Boolean) -> Unit,
-    keyBarShift: Boolean,
-    keyBarAlt: Boolean,
-    onKeyBarShift: (Boolean) -> Unit,
-    onKeyBarAlt: (Boolean) -> Unit,
     keyBarCtrlC: CtrlCKey,
     onKeyBarCtrlC: (CtrlCKey) -> Unit,
+    /** Opens Arrange keys, where the bar's keys are ordered, shown and hidden. */
+    onArrangeKeys: () -> Unit,
 ) {
     var timing by remember { mutableStateOf<Timing?>(null) }
     val systemDoubleTap = ViewConfiguration.getDoubleTapTimeout()
@@ -90,27 +88,21 @@ internal fun ControlsSheet(
                 keepOpen = true,
                 onClick = { onKeyBar(!keyBar) },
             )
+            // Which keys show - Shift, Alt and C-c among them - and in what order.
             SheetItem(
-                label = stringResource(R.string.keybar_shift), icon = R.drawable.ic_keyboard,
-                detail = stringResource(if (keyBarShift) R.string.keybar_visible else R.string.keybar_hidden),
-                keepOpen = true, onClick = { onKeyBarShift(!keyBarShift) },
+                label = stringResource(R.string.arrange_title), icon = R.drawable.ic_drag_handle,
+                supporting = stringResource(R.string.arrange_hint),
+                onClick = onArrangeKeys,
             )
-            SheetItem(
-                label = stringResource(R.string.keybar_alt), icon = R.drawable.ic_keyboard,
-                detail = stringResource(if (keyBarAlt) R.string.keybar_visible else R.string.keybar_hidden),
-                keepOpen = true, onClick = { onKeyBarAlt(!keyBarAlt) },
-            )
-            // A tap steps through the three: tapped, held unless the program is busy, and gone.
+            // A tap steps between the two: tapped, and held unless the program is busy. Whether the
+            // key shows at all is Arrange keys'.
             SheetItem(
                 label = stringResource(R.string.keybar_ctrl_c), icon = R.drawable.ic_keyboard,
                 detail = stringResource(
-                    when (keyBarCtrlC) {
-                        CtrlCKey.Tap -> R.string.keybar_ctrl_c_tap
-                        CtrlCKey.Hold -> R.string.keybar_ctrl_c_hold
-                        CtrlCKey.Hidden -> R.string.keybar_hidden
-                    },
+                    if (keyBarCtrlC == CtrlCKey.Hold) R.string.keybar_ctrl_c_hold else R.string.keybar_ctrl_c_tap,
                 ),
-                keepOpen = true, onClick = { onKeyBarCtrlC(keyBarCtrlC.next()) },
+                keepOpen = true,
+                onClick = { onKeyBarCtrlC(if (keyBarCtrlC == CtrlCKey.Hold) CtrlCKey.Tap else CtrlCKey.Hold) },
             )
         }
     }

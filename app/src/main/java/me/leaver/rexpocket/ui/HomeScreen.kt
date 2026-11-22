@@ -81,6 +81,7 @@ import me.leaver.rexpocket.core.BlockInfo
 import me.leaver.rexpocket.core.HostAddress
 import me.leaver.rexpocket.core.HostAddressParser
 import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.KeyArrangement
 import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.Phase
@@ -163,10 +164,8 @@ internal fun HomeScreen(
     onTailnet: () -> Unit,
     alerts: Boolean,
     onAlerts: (Boolean) -> Unit,
-    keyBarShift: Boolean,
-    keyBarAlt: Boolean,
-    onKeyBarShift: (Boolean) -> Unit,
-    onKeyBarAlt: (Boolean) -> Unit,
+    keyArrangement: KeyArrangement,
+    onKeyArrangement: (KeyArrangement) -> Unit,
     keyBarCtrlC: CtrlCKey,
     onKeyBarCtrlC: (CtrlCKey) -> Unit,
     gestures: GestureSettings,
@@ -204,6 +203,7 @@ internal fun HomeScreen(
     var creating by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
     var controls by remember { mutableStateOf(false) }
+    var arrange by remember { mutableStateOf(false) }
     var diagnostics by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(Diagnostics.capture(context) != null) }
     var menuHost by remember { mutableStateOf<SavedHost?>(null) }
@@ -442,12 +442,24 @@ internal fun HomeScreen(
             onGestures = onGestures,
             keyBar = keyBar,
             onKeyBar = onKeyBar,
-            keyBarShift = keyBarShift,
-            keyBarAlt = keyBarAlt,
-            onKeyBarShift = onKeyBarShift,
-            onKeyBarAlt = onKeyBarAlt,
             keyBarCtrlC = keyBarCtrlC,
             onKeyBarCtrlC = onKeyBarCtrlC,
+            onArrangeKeys = {
+                controls = false
+                arrange = true
+            },
+        )
+    }
+
+    // Arranging the keys goes back to the controls it was opened from.
+    if (arrange) {
+        ArrangeKeysSheet(
+            arrangement = keyArrangement,
+            onArrangement = onKeyArrangement,
+            onDismiss = {
+                arrange = false
+                controls = true
+            },
         )
     }
 

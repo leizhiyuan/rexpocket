@@ -57,8 +57,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val opening by model.opening.collectAsState()
     val tailnetPath by model.tailnetPath.collectAsState()
     val alerts by model.alerts.collectAsState()
-    val keyBarShift by model.keyBarShift.collectAsState()
-    val keyBarAlt by model.keyBarAlt.collectAsState()
+    val keyArrangement by model.keyArrangement.collectAsState()
     val keyBarCtrlC by model.keyBarCtrlC.collectAsState()
     val gestures by model.gestures.collectAsState()
     val keyBar by model.keyBar.collectAsState()
@@ -130,10 +129,8 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onTailnet = { tailnetOpen = true },
                     alerts = alerts,
                     onAlerts = model::setAlerts,
-                    keyBarShift = keyBarShift,
-                    keyBarAlt = keyBarAlt,
-                    onKeyBarShift = model::setKeyBarShift,
-                    onKeyBarAlt = model::setKeyBarAlt,
+                    keyArrangement = keyArrangement,
+                    onKeyArrangement = model::setKeyArrangement,
                     keyBarCtrlC = keyBarCtrlC,
                     onKeyBarCtrlC = model::setKeyBarCtrlC,
                     gestures = gestures,
@@ -152,8 +149,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                 TermScreen(
                     embedded = embedded,
                     keyBarWithKeyboard = keyBar,
-                    keyBarShift = keyBarShift,
-                    keyBarAlt = keyBarAlt,
+                    keyArrangement = keyArrangement,
                     keyBarCtrlC = keyBarCtrlC,
                     gestures = gestures,
                     state = pocket,

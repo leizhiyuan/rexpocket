@@ -90,9 +90,8 @@ the pane and needs no screen keyboard.
 
 ## 4. The key bar
 
-Today's settings stay, and move into the controls screen: keep the key bar with a desk keyboard,
-show Shift, show Alt, and C-c (tap · hold unless busy · hidden). The small pill gains the
-full-screen key, just past the keyboard key. The stick takes its own drags on the initial pass,
+The controls screen keeps "with a desk keyboard" and C-c (tap · hold unless busy), and opens
+**Arrange keys** (4.1). The small pill gains the full-screen key, just past the keyboard key. The stick takes its own drags on the initial pass,
 before the scroll sees them, so scrolling never steals a stick gesture.
 
 How the two pills share the width (`keyBarWidths`, JVM-tested at phone widths):
@@ -108,15 +107,41 @@ How the two pills share the width (`keyBarWidths`, JVM-tested at phone widths):
    full-screen key then shows in part (22 to 50 dp), scrolled to on a swipe: both pills hint at
    once (393 dp: 4 keys and 20 dp; 45 dp of the full-screen key).
 
-Only the bar's width and the set of keys (Shift, Alt, C-c shown or not) decide it, never typing or
-the keyboard, so the bar moves only on a rotation or a settings change.
+Only the bar's width and how many keys each pill shows decide it, never typing or the keyboard,
+so the bar moves only on a rotation or a settings change. The order does not matter: whichever key
+is last in the small pill is the one that gives way. A small pill of one or two keys (the
+full-screen key or the stick hidden) never gives way: it stays whole, and the wide pill shrinks to
+its 20 dp hint instead. A wide pill with every key hidden is not drawn; the small pill keeps its
+place at the right.
 
 The ⋮ menu keeps "Full screen": the pill key is a quick way for people who use the bar; the menu
 is where people look for what a screen can do, and it stays reachable when the bar is hidden by a
 desk keyboard.
 
-Later: choosing and ordering the keys of the wide pill, key size, a second row. These need a key
-model the bar is built from; the current bar is fixed code.
+### 4.1 Arrange keys
+
+Settings › Terminal controls › Arrange keys lists each pill's keys in their order: the wide pill's
+Esc, C-c, Tab, Return, Ctrl, Shift, Alt, Fn, Paste, Attach, `/`, and the small pill's arrow stick,
+keyboard key and full-screen key. Each row has a handle to drag it to its place, up and down buttons
+for one step (and for TalkBack, where a drag is awkward), and an eye to show or hide the key.
+Changes apply at once; "Reset to default" brings back the bar as it first came (Shift and Alt
+hidden, everything else shown, the default order).
+
+- The keyboard key cannot be hidden: once the phone keyboard is down it is the one way back. With
+  everything else hidden the bar is the keyboard key alone.
+- Keys stay in their pill. The small pill is the thumb's fixed place, and its width rule assumes its
+  own few keys; a wide-pill key moved there would make it a second scrolling row and starve the
+  wide pill, and the stick moved into a scrolling row would fight the scroll for its drags.
+- Shift, Alt and C-c's "hidden" were separate settings; they are now rows here. The first read
+  after an upgrade builds the arrangement from them and stores it, so nobody's bar changes. A
+  stored C-c "hidden" then reads as "tap".
+- A key the model does not know (from a later build) is dropped; a key the stored order lacks (new
+  since) goes back after the key that precedes it by default; a stored hidden set keeps new keys
+  shown.
+
+The pure model is `KeyArrangement` (core): `move`, `moveTo`, `show`, `fromStored`, the stored form.
+
+Later: key size, a second row, keys of one's own.
 
 ## 5. Short windows and landscape
 
@@ -164,7 +189,7 @@ sheet with two groups:
   under its label ("A tap waits in case a second follows" / "A tap acts at once"), its detail
   just On or Off. Every sheet row wraps - a label to three lines, a detail to two, at most 152 dp
   wide - so nothing is cut off on a narrow phone or with large text.
-- **Key bar**: With a desk keyboard, Shift, Alt, C-c.
+- **Key bar**: With a desk keyboard, Arrange keys ›, C-c (tap · hold unless busy).
 
 Stored in the app's shared preferences beside the existing keys:
 
@@ -175,6 +200,8 @@ Stored in the app's shared preferences beside the existing keys:
 | `gesture_long_press` | `select`, `full_screen`, `keyboard` | `select` |
 | `gesture_wait_double_tap` | boolean | false |
 | `gesture_double_tap_ms`, `gesture_long_press_ms` | int; 0 = the phone's | 0 |
+| `keybar_order` | both pills' keys, comma-separated (`escape,ctrl_c,...,arrows,keyboard,full_screen`) | built once from the old keys, below |
+| `keybar_hidden` | the hidden keys, comma-separated | built once: `shift` unless `keybar_shift`, `alt` unless `keybar_alt`, `ctrl_c` if `keybar_ctrl_c` was `hidden` |
 
 Migration: `gesture_double_tap` missing and the old `double_tap_full_screen` false gives
 `nothing`; otherwise `full_screen`. The old key is left in place, so going back to an older build
@@ -187,11 +214,17 @@ keeps its own setting. Values out of range are clamped; unknown strings fall bac
   the keyboard rules for taps and double taps.
 - Migration (core, JVM, `GestureSettings.fromStored`, which the store calls): old key true, false
   and missing; a new choice winning over it; unknown values; out-of-range times.
+- `KeyArrangementTest` (core, JVM): the default bar, moves within a pill and at its ends, hiding
+  everything but the keyboard key, the stored form read back, migration from the old switches,
+  unknown and missing keys.
+- `KeyBarLayoutTest` (app, JVM): the widths at 360, 393, 411, 426 and 891 dp, a sweep of every
+  width from 300 to 1400 dp for 8 to 11 keys, small pills of one and two keys, no wide-pill keys.
 - `ClosedPaneTest` / size test (core): a size set while a resize is out is still sent.
 - `TermChromeTest` (app, JVM): which bars show for tall and short windows, keyboard up or down, in
   and out of full screen.
 - Instrumented: `TerminalViewTest` for the real view (wait mode, the person's long-press time, a
   long press set to act, a link still offered), `FullScreenTest` (menu, pill key, double tap,
   Back), `KeyBarLayoutInstrumentedTest` (the full-screen key whole at 411 and 891 dp, both pills
-  hinting at 426 dp). Whether a tap really closes the screen keyboard in full screen is covered by the pure rule
+  hinting at 426 dp), `ArrangeKeysTest` (a key moved in the list moves in the bar; a key hidden
+  leaves it; Reset brings it back). Whether a tap really closes the screen keyboard in full screen is covered by the pure rule
   only: the CI emulator reports a desk keyboard and shows no screen keyboard.

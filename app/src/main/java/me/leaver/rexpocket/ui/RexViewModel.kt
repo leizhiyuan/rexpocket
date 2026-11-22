@@ -21,6 +21,7 @@ import me.leaver.rexpocket.alerts.Alert
 import me.leaver.rexpocket.alerts.AlertTarget
 import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.KeyArrangement
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
@@ -217,8 +218,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
 
     /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
     val keyBar = MutableStateFlow(store.keyBarAlways())
-    val keyBarShift = MutableStateFlow(store.keyBarShift())
-    val keyBarAlt = MutableStateFlow(store.keyBarAlt())
+    /** The key bar's keys in the person's order, and which show. */
+    val keyArrangement = MutableStateFlow(store.keyArrangement())
     val keyBarCtrlC = MutableStateFlow(store.keyBarCtrlC())
     /** What the terminal's tap, double tap and long press do, and their times. */
     val gestures = MutableStateFlow(store.gestures())
@@ -305,14 +306,9 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         store.setKeyBarAlways(always)
     }
 
-    fun setKeyBarShift(on: Boolean) {
-        store.setKeyBarShift(on)
-        keyBarShift.value = on
-    }
-
-    fun setKeyBarAlt(on: Boolean) {
-        store.setKeyBarAlt(on)
-        keyBarAlt.value = on
+    fun setKeyArrangement(next: KeyArrangement) {
+        store.setKeyArrangement(next)
+        keyArrangement.value = next
     }
 
     fun setKeyBarCtrlC(choice: CtrlCKey) {

@@ -30,8 +30,9 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   programs are exactly as on the desk.
 - **Made for the phone.** Typing goes straight into the pane. A floating dock holds the keyboard,
   Return and a key row: `esc`, `C-c`, arrows that repeat while held, Tab, Return, `ctrl`, paste, a paperclip and `/`.
-  Settings → Terminal can show optional `Shift` and `Alt` keys; both are hidden by default. There
-  too, the `C-c` key can be made to need a hold while the program is idle, or taken off the bar
+  Settings → Terminal → Arrange keys puts the keys of both pills in any order and shows or hides
+  each one; optional `Shift` and `Alt` keys are hidden by default, and only the keyboard key always
+  stays. The `C-c` key can be made to need a hold while the program is idle, or hidden there
   (`ctrl` then `c` still sends it). `Fn` pins a panel of Home, End, PgUp, PgDn, Ins, Del, F1-F12
   and the symbols a phone keyboard buries; the row's modifiers apply to them. Hold
   `ctrl` for `C-c` `C-d` `C-z` `C-r` `C-l` `C-a` `C-e` `C-w` `C-j`. A split shows one pane at a
@@ -119,8 +120,8 @@ own SSH daemon. How the transport works is described in
      (open keyboard, open or close it, nothing), double tap (full screen, keyboard, nothing), long
      press (select text, full screen, keyboard; a link is always offered), whether a tap waits to
      see if a second follows (off by default, so a tap acts at once), and the double-tap and
-     long-press times (the phone's own by default). The key bar's Shift, Alt and `C-c` choices are
-     there too. See [docs/design/terminal-controls.md](docs/design/terminal-controls.md).
+     long-press times (the phone's own by default). Arrange keys (order, show, hide, reset) and the
+     `C-c` key's hold are there too. See [docs/design/terminal-controls.md](docs/design/terminal-controls.md).
    - On a phone held sideways the pane switcher sits in the top bar, and while the keyboard is up
      the top bar steps aside so the key bar keeps its height; a ⋮ in the corner keeps the menu.
    - Scroll the wide pill to reach more keys. Tap a modifier for the next key, twice quickly to

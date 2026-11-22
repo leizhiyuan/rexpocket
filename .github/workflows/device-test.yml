@@ -90,6 +90,7 @@ jobs:
               me.leaver.rexpocket.ui.TerminalViewTest \
               me.leaver.rexpocket.ui.FullScreenTest \
               me.leaver.rexpocket.ui.KeyBarLayoutInstrumentedTest \
+              me.leaver.rexpocket.ui.ArrangeKeysTest \
               me.leaver.rexpocket.ui.ClosedPaneTest; do
             adb logcat -c || true
             if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \

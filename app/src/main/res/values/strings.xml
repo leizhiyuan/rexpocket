@@ -286,10 +286,20 @@
     <string name="update_later">Later</string>
     <string name="update_allow_install">Allow RexPocket to install apps, then tap Install again.</string>
 
-    <string name="keybar_shift">Show Shift key</string>
-    <string name="keybar_alt">Show Alt key</string>
-    <string name="keybar_visible">Shown</string>
-    <string name="keybar_hidden">Hidden</string>
+    <string name="arrange_title">Arrange keys</string>
+    <string name="arrange_hint">Order the keys of the key bar, show or hide them</string>
+    <string name="arrange_group_keys">Key pill</string>
+    <string name="arrange_group_rest">Right pill</string>
+    <string name="arrange_slash">Slash (/)</string>
+    <string name="arrange_drag">Drag to move %1$s</string>
+    <string name="arrange_move_up">Move %1$s up</string>
+    <string name="arrange_move_down">Move %1$s down</string>
+    <string name="arrange_show">Show %1$s</string>
+    <string name="arrange_hide">Hide %1$s</string>
+    <string name="arrange_shown">Shown</string>
+    <string name="arrange_hidden">Hidden</string>
+    <string name="arrange_always">Always shown: it brings the keyboard back</string>
+    <string name="arrange_reset">Reset to default</string>
     <string name="keybar_ctrl_c">C-c key</string>
     <string name="keybar_ctrl_c_tap">Tap to send</string>
     <string name="keybar_ctrl_c_hold">Hold unless busy</string>

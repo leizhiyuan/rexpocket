@@ -76,7 +76,9 @@ import kotlin.math.roundToInt
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.BlockInfo
 import me.leaver.rexpocket.core.ClosedPane
+import me.leaver.rexpocket.core.BarKey
 import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.KeyArrangement
 import me.leaver.rexpocket.core.DeskKey
 import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.KeyModifiers
@@ -165,8 +167,8 @@ internal fun TermScreen(
     onRetryUpload: () -> Unit,
     /** True when the key bar is kept even with a keyboard on the desk. */
     keyBarWithKeyboard: Boolean = false,
-    keyBarShift: Boolean = false,
-    keyBarAlt: Boolean = false,
+    /** The key bar's keys in the person's order, and which show. */
+    keyArrangement: KeyArrangement = KeyArrangement(),
     keyBarCtrlC: CtrlCKey = CtrlCKey.Tap,
     /** What a tap, a double tap and a long press on the pane do; full screen is in the menu and the pill either way. */
     gestures: GestureSettings = GestureSettings(),
@@ -179,7 +181,10 @@ internal fun TermScreen(
         if (uri != null) onAttach(uri)
     }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
-    var mods by remember(keyBarShift, keyBarAlt) { mutableStateOf(KeyModifiers()) }
+    // A modifier taken off the bar while held would stay held with no key to let it go.
+    val shift = keyArrangement.isShown(BarKey.Shift)
+    val alt = keyArrangement.isShown(BarKey.Alt)
+    var mods by remember(shift, alt) { mutableStateOf(KeyModifiers()) }
     var link by remember { mutableStateOf<String?>(null) }
     var rename by remember { mutableStateOf<Rename?>(null) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
@@ -432,8 +437,7 @@ internal fun TermScreen(
                             imeUp = imeShown(),
                             onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
                             onKey = { key, own -> press(key, own) },
-                            showShift = keyBarShift,
-                            showAlt = keyBarAlt,
+                            arrangement = keyArrangement,
                             ctrlC = keyBarCtrlC,
                             onDeskKey = { pressDesk(it) },
                             onNewLine = { press(KeyPress("enter", 0), "shift") },

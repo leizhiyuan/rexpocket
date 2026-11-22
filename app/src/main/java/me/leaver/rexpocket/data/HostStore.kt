@@ -2,6 +2,7 @@ package me.leaver.rexpocket.data
 
 import android.content.Context
 import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.KeyArrangement
 import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.TailnetBackend
@@ -175,16 +176,30 @@ class HostStore(context: Context) {
         prefs.edit().putBoolean(KEY_KEY_BAR, on).apply()
     }
 
-    fun keyBarShift(): Boolean = prefs.getBoolean(KEY_KEY_BAR_SHIFT, false)
-
-    fun setKeyBarShift(on: Boolean) {
-        prefs.edit().putBoolean(KEY_KEY_BAR_SHIFT, on).apply()
+    /**
+     * The key bar's order and which keys show. The first read after an upgrade builds it from the
+     * switches that came before it - Shift, Alt, and C-c's "hidden" - and stores it, so the bar
+     * stays as it was and those switches no longer matter. They are left for an older build to read.
+     */
+    fun keyArrangement(): KeyArrangement {
+        val order = prefs.getString(KEY_KEY_BAR_ORDER, null)
+        val hidden = prefs.getString(KEY_KEY_BAR_HIDDEN, null)
+        val arrangement = KeyArrangement.fromStored(
+            order = order,
+            hidden = hidden,
+            legacyShift = prefs.getBoolean(KEY_KEY_BAR_SHIFT, false),
+            legacyAlt = prefs.getBoolean(KEY_KEY_BAR_ALT, false),
+            legacyCtrlCHidden = prefs.getString(KEY_KEY_BAR_CTRL_C, null) == CtrlCKey.Hidden.pref,
+        )
+        if (order == null || hidden == null) setKeyArrangement(arrangement)
+        return arrangement
     }
 
-    fun keyBarAlt(): Boolean = prefs.getBoolean(KEY_KEY_BAR_ALT, false)
-
-    fun setKeyBarAlt(on: Boolean) {
-        prefs.edit().putBoolean(KEY_KEY_BAR_ALT, on).apply()
+    fun setKeyArrangement(arrangement: KeyArrangement) {
+        prefs.edit()
+            .putString(KEY_KEY_BAR_ORDER, arrangement.storedOrder())
+            .putString(KEY_KEY_BAR_HIDDEN, arrangement.storedHidden())
+            .apply()
     }
 
     /**
@@ -213,8 +228,12 @@ class HostStore(context: Context) {
             .apply()
     }
 
-    /** How the C-c key behaves; a tap sends it unless the person chose otherwise. */
+    /**
+     * How the C-c key behaves; a tap sends it unless the person chose otherwise. Whether it shows
+     * at all is the key arrangement's now: a "hidden" stored before that reads as a tap.
+     */
     fun keyBarCtrlC(): CtrlCKey = CtrlCKey.fromPref(prefs.getString(KEY_KEY_BAR_CTRL_C, null))
+        .let { if (it == CtrlCKey.Hidden) CtrlCKey.Tap else it }
 
     fun setKeyBarCtrlC(choice: CtrlCKey) {
         prefs.edit().putString(KEY_KEY_BAR_CTRL_C, choice.pref).apply()
@@ -263,6 +282,8 @@ class HostStore(context: Context) {
         private const val KEY_KEY_BAR_SHIFT = "keybar_shift"
         private const val KEY_KEY_BAR_ALT = "keybar_alt"
         private const val KEY_KEY_BAR_CTRL_C = "keybar_ctrl_c"
+        private const val KEY_KEY_BAR_ORDER = "keybar_order"
+        private const val KEY_KEY_BAR_HIDDEN = "keybar_hidden"
         private const val KEY_DOUBLE_TAP_FULL_SCREEN = "double_tap_full_screen"
         private const val KEY_GESTURE_TAP = "gesture_tap"
         private const val KEY_GESTURE_DOUBLE_TAP = "gesture_double_tap"
