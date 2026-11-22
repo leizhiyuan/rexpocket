@@ -305,8 +305,8 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
     private var watch: Job? = null
     private var connectJob: Job? = null
     private var tailnetJob: Job? = null
-    private val _tailnetError = MutableStateFlow<String?>(null)
-    val tailnetError: StateFlow<String?> = _tailnetError
+    private val _tailnetError = MutableStateFlow<TailnetFailure?>(null)
+    val tailnetError: StateFlow<TailnetFailure?> = _tailnetError
 
     /** The session being opened or created from the list, shown as busy until it is on screen. */
     private val _opening = MutableStateFlow<Opening?>(null)
@@ -434,7 +434,7 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
         tailnetJob = viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 runCatching { nodeFor(settings.backend).start(configFor(settings, setupKey)) }
-                    .onFailure { _tailnetError.value = it.message ?: "The tailnet could not start" }
+                    .onFailure { _tailnetError.value = TailnetFailure(it.message) }
             }
         }
     }
@@ -958,7 +958,7 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
                     "tailnet",
                     when {
                         !node.enabled -> "off"
-                        tailnetError.value != null -> "failed · ${tailnetError.value}"
+                        tailnetError.value != null -> "failed · ${tailnetError.value?.detail}"
                         else -> "${node.backend.storageKey} · ${tailnetStatus.value.backendState.ifBlank { "starting" }} · node ${node.hostname.ifBlank { "default" }}"
                     },
                 ),
@@ -1032,7 +1032,8 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _upload.value = UploadStatus(name, UploadPhase.Failed, error = e.message ?: "Could not read this file")
+                if (e !is UploadStageException) Diagnostics.event(CONN_TAG, "upload: could not read the file: ${e.javaClass.simpleName}: ${e.message}")
+                _upload.value = UploadStatus(name, UploadPhase.Failed, error = (e as? UploadStageException)?.error ?: UploadError.Unreadable)
                 return@launch
             }
             uploadFile = staged.file
@@ -1084,7 +1085,7 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
         _upload.value = UploadStatus(name, UploadPhase.Preparing)
         try {
             s.upload(file, name, sessionId, blockId).collect { progress ->
-                _upload.value = UploadStatus(name, progress.phase, progress.sent, progress.total, progress.error, retryable = true)
+                _upload.value = UploadStatus(name, progress.phase, progress.sent, progress.total, progress.error?.let(UploadError::Said), retryable = true)
                 if (progress.phase == UploadPhase.Done) {
                     delay(UPLOAD_DONE_MS)
                     if (_upload.value?.phase == UploadPhase.Done) clearUpload()
@@ -1093,7 +1094,12 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            _upload.value = UploadStatus(name, UploadPhase.Failed, error = e.message ?: "Upload failed", retryable = uploadFile != null)
+            _upload.value = UploadStatus(
+                name,
+                UploadPhase.Failed,
+                error = e.message?.let(UploadError::Said) ?: UploadError.Failed,
+                retryable = uploadFile != null,
+            )
         }
     }
 
@@ -1174,6 +1180,9 @@ internal const val NODE_READY_MS = 30_000L
 private const val PEER_READY_MS = 10_000L
 
 /** What a failure says in the report: its kind, then whatever the exception carried. */
+/** Why the tailnet node did not start: what the node said, when it said anything ([tailnetFailureText]). */
+data class TailnetFailure(val detail: String?)
+
 private fun Problem.describe(): String = trouble.toString() + (detail?.let { ": $it" } ?: "")
 
 /** Connection diagnostics: `adb logcat -s RexPocketConn`. */

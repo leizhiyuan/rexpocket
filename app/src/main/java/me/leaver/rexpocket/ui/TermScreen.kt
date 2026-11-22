@@ -1198,7 +1198,7 @@ private fun UploadPill(
             )
             if (status.phase == UploadPhase.Failed) {
                 Text(
-                    status.error.orEmpty(),
+                    status.error?.let { uploadErrorText(it) }.orEmpty(),
                     color = Colors.muted,
                     fontSize = TextStyles.label,
                     maxLines = 2,

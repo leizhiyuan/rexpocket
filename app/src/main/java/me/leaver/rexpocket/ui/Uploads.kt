@@ -18,7 +18,7 @@ data class UploadStatus(
     val phase: UploadPhase,
     val sent: Long = 0,
     val total: Long = 0,
-    val error: String? = null,
+    val error: UploadError? = null,
     /** True when the staged copy is still there, so a failed attempt can be sent again. */
     val retryable: Boolean = false,
 ) {
@@ -32,6 +32,29 @@ data class UploadStatus(
 
 internal data class StagedFile(val file: File, val name: String)
 
+/** Why a file did not go, as the pill words it ([uploadErrorText]). */
+sealed interface UploadError {
+    /** The picker's file went away before it could be read. */
+    data object Gone : UploadError
+
+    /** Over Rex's 100 MiB. */
+    data object TooLarge : UploadError
+
+    data object Empty : UploadError
+
+    /** The file could not be read for another reason. */
+    data object Unreadable : UploadError
+
+    /** Sending failed, and nothing more specific is known. */
+    data object Failed : UploadError
+
+    /** What Rex or the upload said: already a sentence. */
+    data class Said(val message: String) : UploadError
+}
+
+/** Staging stopped for [error]. */
+internal class UploadStageException(val error: UploadError) : Exception(error.toString())
+
 /**
  * Copies a picked [uri] into the cache. Rex needs a file whose byte count will not change under it,
  * and a content URI is not a file: the picker may hand over a stream that ends only once read.
@@ -43,7 +66,7 @@ internal suspend fun stageUpload(context: Context, uri: Uri): StagedFile = withC
     val file = File(directory, UUID.randomUUID().toString())
     try {
         val source = context.contentResolver.openInputStream(uri)
-            ?: error("This file is no longer available")
+            ?: throw UploadStageException(UploadError.Gone)
         source.use { input ->
             file.outputStream().use { sink ->
                 val buffer = ByteArray(64 * 1024)
@@ -53,12 +76,12 @@ internal suspend fun stageUpload(context: Context, uri: Uri): StagedFile = withC
                     val count = input.read(buffer)
                     if (count < 0) break
                     total += count
-                    require(total <= FileUpload.MAX_BYTES) { "Choose a file smaller than 100 MiB" }
+                    if (total > FileUpload.MAX_BYTES) throw UploadStageException(UploadError.TooLarge)
                     sink.write(buffer, 0, count)
                 }
             }
         }
-        require(file.length() > 0) { "This file is empty" }
+        if (file.length() <= 0) throw UploadStageException(UploadError.Empty)
         StagedFile(file, uploadName(context, uri))
     } catch (e: Throwable) {
         file.delete()

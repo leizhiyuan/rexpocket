@@ -62,6 +62,7 @@
     <string name="netbird_hint">The app runs its own Netbird node, so this phone can reach peers such as host.netbird.cloud or 100.x addresses without the Netbird app and without taking over the phone\'s VPN slot. Self-hosted peers are reached by their address.</string>
     <string name="tailnet_path_unreachable">%1$s: no path (%2$s)</string>
     <string name="tailscale_state_failed">Failed to start</string>
+    <string name="tailnet_start_failed">The tailnet could not start</string>
     <string name="tailscale_state_stopped">Stopped</string>
     <string name="tailscale_login_hint">Approve this node in the browser, then come back: the connection is retrying.</string>
     <string name="tailscale_login_copied">Login link copied</string>
@@ -123,6 +124,11 @@
     <string name="upload_canceled">Upload canceled</string>
     <string name="upload_uncertain">Upload unconfirmed. Rex may already have put the file in the pane; check it before sending again.</string>
     <string name="upload_need_update">Update the Rex server to enable uploads (API revision 11 or newer).</string>
+    <string name="upload_error_gone">This file is no longer available</string>
+    <string name="upload_error_too_large">Choose a file smaller than 100 MiB</string>
+    <string name="upload_error_empty">This file is empty</string>
+    <string name="upload_error_unreadable">Could not read this file</string>
+    <string name="upload_error_failed">Upload failed</string>
     <string name="action_retry">Retry</string>
     <string name="key_up">↑</string>
     <string name="key_down">↓</string>

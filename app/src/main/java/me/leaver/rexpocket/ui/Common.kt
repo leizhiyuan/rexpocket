@@ -205,6 +205,21 @@ internal fun problemText(problem: Problem, endpoint: String): String = when (pro
     Trouble.Other -> problem.detail ?: stringResource(R.string.error_operation_failed)
 }
 
+/** Why a file did not go, in the app's words; what Rex said as it said it. */
+@Composable
+internal fun uploadErrorText(error: UploadError): String = when (error) {
+    UploadError.Gone -> stringResource(R.string.upload_error_gone)
+    UploadError.TooLarge -> stringResource(R.string.upload_error_too_large)
+    UploadError.Empty -> stringResource(R.string.upload_error_empty)
+    UploadError.Unreadable -> stringResource(R.string.upload_error_unreadable)
+    UploadError.Failed -> stringResource(R.string.upload_error_failed)
+    is UploadError.Said -> error.message
+}
+
+@Composable
+internal fun tailnetFailureText(failure: TailnetFailure): String =
+    failure.detail ?: stringResource(R.string.tailnet_start_failed)
+
 @Composable
 internal fun phaseText(state: PocketState): String = when (state.phase) {
     Phase.Idle -> stringResource(R.string.status_idle)

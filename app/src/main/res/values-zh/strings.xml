@@ -62,6 +62,7 @@
     <string name="netbird_hint">应用自己跑一个 Netbird 节点，所以手机不用装 Netbird、也不占手机的 VPN，就能连 host.netbird.cloud 这类名字和 100.x 地址。自建的 Netbird 节点用地址连接。</string>
     <string name="tailnet_path_unreachable">%1$s：无路径（%2$s）</string>
     <string name="tailscale_state_failed">启动失败</string>
+    <string name="tailnet_start_failed">tailnet 无法启动</string>
     <string name="tailscale_state_stopped">已停止</string>
     <string name="tailscale_login_hint">在浏览器里批准这个节点，然后回到应用：连接在自动重试。</string>
     <string name="tailscale_login_copied">已复制登录链接</string>
@@ -122,6 +123,11 @@
     <string name="upload_canceled">已取消发送</string>
     <string name="upload_uncertain">发送结果未确认。Rex 可能已经把文件放进窗格，请先查看再重新发送。</string>
     <string name="upload_need_update">请更新 Rex 服务端以启用文件发送（API revision 11 或更新）。</string>
+    <string name="upload_error_gone">这个文件已不可用</string>
+    <string name="upload_error_too_large">请选择小于 100 MiB 的文件</string>
+    <string name="upload_error_empty">这个文件是空的</string>
+    <string name="upload_error_unreadable">无法读取这个文件</string>
+    <string name="upload_error_failed">发送失败</string>
     <string name="action_retry">重试</string>
     <string name="key_up">↑</string>
     <string name="key_down">↓</string>

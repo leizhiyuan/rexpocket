@@ -143,7 +143,7 @@ internal fun HomeScreen(
     detail: Boolean = false,
     tailnet: TailnetSettings,
     tailnetStatus: TailnetStatus,
-    tailnetError: String?,
+    tailnetError: TailnetFailure?,
     tailnetPath: TailnetPath?,
     opening: Opening?,
     cachedSessions: (String) -> List<ListedSession>,
@@ -844,7 +844,7 @@ private fun SearchBar(
 private fun SettingsSheet(
     tailnet: TailnetSettings,
     tailnetStatus: TailnetStatus,
-    tailnetError: String?,
+    tailnetError: TailnetFailure?,
     onDismiss: () -> Unit,
     onTailnet: () -> Unit,
     alerts: Boolean,
@@ -1002,7 +1002,7 @@ internal fun TailnetDialog(
     initial: TailnetSettings,
     backends: List<TailnetBackend>,
     status: TailnetStatus,
-    error: String?,
+    error: TailnetFailure?,
     onDismiss: () -> Unit,
     onJoin: (TailnetBackend, String, String, String) -> Unit,
     onLeave: () -> Unit,
@@ -1061,7 +1061,7 @@ internal fun TailnetDialog(
                         fontSize = TextStyles.label,
                     )
                 }
-                error?.let { Text(it, color = Colors.danger, fontSize = TextStyles.label) }
+                error?.let { Text(tailnetFailureText(it), color = Colors.danger, fontSize = TextStyles.label) }
                 if (joinedHere && status.authUrl.isNotBlank()) {
                     Text(
                         status.authUrl,

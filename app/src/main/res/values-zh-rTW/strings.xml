@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Traditional Chinese (Taiwan). Only the strings written for it so far; every other string falls back
+  to values-zh (Simplified), one resource at a time.
+-->
+<resources>
+    <string name="toast_program_copied">程式已將文字複製到剪貼簿</string>
+    <string name="tailnet_start_failed">tailnet 無法啟動</string>
+    <string name="upload_error_gone">這個檔案已無法使用</string>
+    <string name="upload_error_too_large">請選擇小於 100 MiB 的檔案</string>
+    <string name="upload_error_empty">這個檔案是空的</string>
+    <string name="upload_error_unreadable">無法讀取這個檔案</string>
+    <string name="upload_error_failed">傳送失敗</string>
+</resources>
