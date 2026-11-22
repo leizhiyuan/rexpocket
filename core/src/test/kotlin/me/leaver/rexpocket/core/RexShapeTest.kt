@@ -106,7 +106,7 @@ class RexShapeTest {
                 // Where Rex's order is a race (a response against the event the same call caused, on
                 // a real server), the lines are compared as a set.
                 out += phone.take().let { if (unordered) it.sorted() else it }
-                if (deskToo) out += desk.take().map { "desk: $it" }
+                if (deskToo) out += desk.take().map { "desk: $it" }.let { if (unordered) it.sorted() else it }
             }
             step("phone hello") { phone.hello() }
             step("phone bootstrap, nothing on the server") { phone.call("session.bootstrap", JSONObject().put("event_scope", "all")) }
@@ -226,7 +226,7 @@ class RexShapeTest {
                 phone.close(keepStreams = true)
                 last.awaitEnd()
             }
-            step("desk destroys the sessions", deskToo = true) {
+            step("desk destroys the sessions", deskToo = true, unordered = true) {
                 desk.call("session.destroy", JSONObject().put("session_id", mine))
                 desk.call("session.destroy", JSONObject().put("session_id", s))
                 sid = null

@@ -107,8 +107,8 @@ desk: event block_owner_changed {block_id:<block>,previous:<client>,reason:"disc
 desk: event session_view_changed {revision:num}
 ## desk destroys the sessions
 desk: event block_closed {block_id:<block>}
+desk: event session_destroyed {session_id:<session>}
+desk: event session_destroyed {session_id:<session>}
 desk: event session_view_changed {revision:num}
-desk: event session_destroyed {session_id:<session>}
 desk: response session.destroy {}
-desk: event session_destroyed {session_id:<session>}
 desk: response session.destroy {}
