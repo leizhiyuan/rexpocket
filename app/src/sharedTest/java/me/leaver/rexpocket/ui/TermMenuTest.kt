@@ -9,6 +9,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.BarKey
@@ -54,8 +56,18 @@ class TermMenuTest {
 
     private fun texts(lines: List<SheetLine>) = lines.map { it.text }
 
+    /**
+     * The keyboard row's label for the keyboard as the window has it now: on the JVM it is down
+     * unless a test sends its insets; the emulator may have its own up.
+     */
+    private fun keyboardNow(): Int {
+        val content = compose.activity.findViewById<ViewGroup>(android.R.id.content)
+        val up = ViewCompat.getRootWindowInsets(content)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        return if (up) R.string.menu_hide_keyboard else R.string.menu_show_keyboard
+    }
+
     /** The rows of a live pane held by the phone, alone in its tab. */
-    private fun onePane(holder: Int = R.string.action_release, keyboard: Int = R.string.menu_show_keyboard) = listOf(
+    private fun onePane(holder: Int = R.string.action_release, keyboard: Int = keyboardNow()) = listOf(
         string(R.string.key_paste),
         string(R.string.upload_attach),
         string(keyboard),
@@ -78,7 +90,8 @@ class TermMenuTest {
     @Test
     fun aPaneHeldByThePhoneAloneInItsTab() {
         // One pane: closing it would close the tab, which Close tab already says.
-        assertEquals(onePane(), texts(open(liveState())))
+        val lines = texts(open(liveState()))
+        assertEquals(onePane(), lines)
     }
 
     @Test
@@ -112,7 +125,8 @@ class TermMenuTest {
         for (key in BarKey.entries) arrangement = arrangement.show(key, false)
         model.setKeyArrangement(arrangement)
         assertFalse(model.keyArrangement.value.isShown(BarKey.Paste))
-        assertEquals(onePane(), texts(open(liveState(), model)))
+        val lines = texts(open(liveState(), model))
+        assertEquals(onePane(), lines)
     }
 
     @Test

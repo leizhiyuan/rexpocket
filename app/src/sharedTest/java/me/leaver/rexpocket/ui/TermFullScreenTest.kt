@@ -87,8 +87,25 @@ class TermFullScreenTest {
 
         // Right after entering, before any keyboard or later insets: no band at either end.
         val pane = compose.bounds(PANE_TAG)
-        assertNear("pane top", root.top, pane.top)
-        assertNear("pane bottom", root.bottom, pane.bottom)
+        val seen = describe()
+        assertNear("pane top ($seen)", root.top, pane.top)
+        assertNear("pane bottom ($seen)", root.bottom, pane.bottom)
+    }
+
+    /** What the screen and the window say, for a failure on a device to explain itself. */
+    private fun describe(): String {
+        val insets = ViewCompat.getRootWindowInsets(content)
+        val types = mapOf(
+            "status" to WindowInsetsCompat.Type.statusBars(),
+            "nav" to WindowInsetsCompat.Type.navigationBars(),
+            "ime" to WindowInsetsCompat.Type.ime(),
+            "cutout" to WindowInsetsCompat.Type.displayCutout(),
+        )
+        val bars = types.entries.joinToString { (name, type) ->
+            "$name=${insets?.getInsets(type)} visible=${insets?.isVisible(type)}"
+        }
+        val docks = compose.onAllNodes(androidx.compose.ui.test.hasTestTag(DOCK_TAG)).fetchSemanticsNodes().map { it.boundsInRoot }
+        return "pane=${compose.bounds(PANE_TAG)} dock=$docks $bars"
     }
 
     @Test
