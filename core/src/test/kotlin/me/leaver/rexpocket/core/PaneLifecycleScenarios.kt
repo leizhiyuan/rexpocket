@@ -56,7 +56,8 @@ abstract class PaneLifecycleScenarios {
 
         // Rex tells child_exited before the pane's block_closed and the tab's window_closed.
         rex.exit(desk, sid, block2, 3)
-        val closed = until("the closed note") { it.closed != null }.closed
+        // The note can go up as the pane's stream ends, and learn why a moment later.
+        val closed = until("the closed note, with why") { it.closed?.exit != null }.closed
         assertEquals(ClosedPane(sid, block2, tabClosed = true, exit = PaneExit(3, "exit status 3")), closed)
         quietFor(500)
     }
@@ -69,7 +70,7 @@ abstract class PaneLifecycleScenarios {
         showsAndHolds(sid, split)
 
         rex.exit(desk, sid, split, 0)
-        val closed = until("the closed note") { it.closed != null }.closed
+        val closed = until("the closed note, with why") { it.closed?.exit != null }.closed
         assertEquals(ClosedPane(sid, split, tabClosed = false, exit = PaneExit(0, null)), closed)
     }
 

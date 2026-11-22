@@ -1061,7 +1061,13 @@ class PocketSession(
             "child_exited" -> {
                 val now = clock()
                 exits.values.removeIf { now - it.second > EXIT_CLOSES_MS }
-                exits[block] = PaneExit(body.optInt("exit_code", -1), body.optNullableString("error")) to now
+                val exit = PaneExit(body.optInt("exit_code", -1), body.optNullableString("error"))
+                exits[block] = exit to now
+                // The pane's stream can end before this event arrives, and the note go up first.
+                updateState { st ->
+                    val closed = st.closed
+                    if (closed != null && closed.blockId == block && closed.exit == null) st.copy(closed = closed.copy(exit = exit)) else st
+                }
             }
         }
     }

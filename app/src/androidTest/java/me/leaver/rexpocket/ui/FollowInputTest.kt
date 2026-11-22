@@ -9,6 +9,8 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.flow.flowOf
@@ -57,7 +59,7 @@ class FollowInputTest {
                     onFont = {},
                     onBack = {},
                     onOpenSession = {},
-                    watchPane = { flowOf(TerminalFeed.Snapshot(SNAPSHOT), TerminalFeed.Output(history)) },
+                    watchPane = { flowOf(TerminalFeed.Snapshot(snapshot()), TerminalFeed.Output(history)) },
                     onRetry = {},
                     onDismissNotice = {},
                     onAct = { acts++ },
@@ -70,10 +72,18 @@ class FollowInputTest {
                 )
             }
         }
-        compose.waitUntil(10_000) { pane()?.frame()?.atBottom == true }
+        compose.waitUntil(10_000) { pane() != null }
+        compose.waitUntil(10_000) { requireNotNull(pane()).frame()?.atBottom == true }
     }
 
-    private fun pane(): TerminalSession? = compose.runOnIdle { find(compose.activity.window.decorView)?.session }
+    /** A snapshot a real Rex sent, as TerminalSessionTest restores it. */
+    private fun snapshot(): ByteArray = requireNotNull(javaClass.getResourceAsStream("/rex-snapshot.bin")).use { it.readBytes() }
+
+    private fun pane(): TerminalSession? {
+        var found: TerminalSession? = null
+        compose.runOnUiThread { found = find(compose.activity.window.decorView)?.session }
+        return found
+    }
 
     private fun find(view: View): TerminalView? = when (view) {
         is TerminalView -> view
@@ -83,7 +93,7 @@ class FollowInputTest {
 
     private fun scrollBack(): TerminalSession {
         val session = requireNotNull(pane())
-        compose.runOnIdle { session.scroll(-20) }
+        compose.runOnUiThread { session.scroll(-20) }
         assertFalse("the pane was scrolled back", requireNotNull(session.frame()).atBottom)
         return session
     }
@@ -99,9 +109,12 @@ class FollowInputTest {
 
     @Test
     fun pasteBringsThePaneToTheNewestOutput() {
-        compose.runOnIdle { clipboardSet(compose.activity, "echo hi") }
+        compose.runOnUiThread { clipboardSet(compose.activity, "echo hi") }
         val session = scrollBack()
-        compose.onNode(hasContentDescription(string(R.string.key_paste)) and hasClickAction() and inBar).performClick()
+        // The ⋮ menu's Paste: the same paste as the bar's, which may be scrolled out of the pill.
+        compose.onNodeWithContentDescription(string(R.string.action_more)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(string(R.string.key_paste)).performClick()
         compose.waitForIdle()
         assertEquals("the paste went to Rex", 1, acts)
         assertTrue("the pane follows the paste to the bottom", requireNotNull(session.frame()).atBottom)
@@ -116,8 +129,5 @@ class FollowInputTest {
             zoomedBlockId = null,
             blocks = listOf(BlockInfo("block:main", "main", null, null, null)),
         )
-
-        /** The smallest snapshot there is, as ScriptedRex sends: the magic, a version, the end record. */
-        val SNAPSHOT = "GHOSTSNP".toByteArray() + byteArrayOf(1, 0) + byteArrayOf(6, 0, 0, 0, 0, 0, 0, 0, 0, 0)
     }
 }
