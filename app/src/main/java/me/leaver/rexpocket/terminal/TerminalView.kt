@@ -178,6 +178,12 @@ internal class TerminalView(context: Context) : View(context) {
     /** True after a long press until the finger lifts: the rest of that touch is not a drag. */
     private var longPressed = false
 
+    /**
+     * The main thread's handler, not the view's own post: a view not yet in a window holds what is
+     * posted to it until it is, and a gesture's time must pass whether or not it is.
+     */
+    private val tapClock = android.os.Handler(android.os.Looper.getMainLooper())
+
     private val tapTimer = Runnable {
         dispatch(taps.timer(SystemClock.uptimeMillis()))
         scheduleTaps()
@@ -198,9 +204,9 @@ internal class TerminalView(context: Context) : View(context) {
     }
 
     private fun scheduleTaps() {
-        removeCallbacks(tapTimer)
+        tapClock.removeCallbacks(tapTimer)
         val at = taps.deadline ?: return
-        postDelayed(tapTimer, (at - SystemClock.uptimeMillis() + 1).coerceAtLeast(0))
+        tapClock.postDelayed(tapTimer, (at - SystemClock.uptimeMillis() + 1).coerceAtLeast(0))
     }
 
     private fun dispatch(gestures: List<Gesture>) {
@@ -821,7 +827,7 @@ internal class TerminalView(context: Context) : View(context) {
     }
 
     override fun onDetachedFromWindow() {
-        removeCallbacks(tapTimer)
+        tapClock.removeCallbacks(tapTimer)
         taps.cancel()
         clearSelection()
         dropBitmaps()
