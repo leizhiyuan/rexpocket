@@ -219,6 +219,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     val keyBarShift = MutableStateFlow(store.keyBarShift())
     val keyBarAlt = MutableStateFlow(store.keyBarAlt())
     val keyBarCtrlC = MutableStateFlow(store.keyBarCtrlC())
+    /** True when a double tap on the terminal toggles full screen, which is the default. */
+    val doubleTapFullScreen = MutableStateFlow(store.doubleTapFullScreen())
     private val attention = AttentionLedger()
     var host: SavedHost? = null
         private set
@@ -315,6 +317,11 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     fun setKeyBarCtrlC(choice: CtrlCKey) {
         store.setKeyBarCtrlC(choice)
         keyBarCtrlC.value = choice
+    }
+
+    fun setDoubleTapFullScreen(on: Boolean) {
+        store.setDoubleTapFullScreen(on)
+        doubleTapFullScreen.value = on
     }
 
     fun setAlerts(on: Boolean) {

@@ -168,6 +168,8 @@ internal fun HomeScreen(
     onKeyBarAlt: (Boolean) -> Unit,
     keyBarCtrlC: CtrlCKey,
     onKeyBarCtrlC: (CtrlCKey) -> Unit,
+    doubleTapFullScreen: Boolean,
+    onDoubleTapFullScreen: (Boolean) -> Unit,
     /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
     keyBar: Boolean,
     onKeyBar: (Boolean) -> Unit,
@@ -420,6 +422,8 @@ internal fun HomeScreen(
             onKeyBarAlt = onKeyBarAlt,
             keyBarCtrlC = keyBarCtrlC,
             onKeyBarCtrlC = onKeyBarCtrlC,
+            doubleTapFullScreen = doubleTapFullScreen,
+            onDoubleTapFullScreen = onDoubleTapFullScreen,
             keyBar = keyBar,
             onKeyBar = onKeyBar,
             onFontSettings = onFontSettings,
@@ -818,6 +822,8 @@ private fun SettingsSheet(
     onKeyBarAlt: (Boolean) -> Unit,
     keyBarCtrlC: CtrlCKey,
     onKeyBarCtrlC: (CtrlCKey) -> Unit,
+    doubleTapFullScreen: Boolean,
+    onDoubleTapFullScreen: (Boolean) -> Unit,
     /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
     keyBar: Boolean,
     onKeyBar: (Boolean) -> Unit,
@@ -889,6 +895,13 @@ private fun SettingsSheet(
                     },
                 ),
                 keepOpen = true, onClick = { onKeyBarCtrlC(keyBarCtrlC.next()) },
+            )
+            // Off for whoever taps the pane quickly or wants a program's double click: the button
+            // on the terminal's bar still goes to full screen, and its corner button back.
+            SheetItem(
+                label = stringResource(R.string.double_tap_full_screen), icon = R.drawable.ic_fullscreen,
+                detail = stringResource(if (doubleTapFullScreen) R.string.double_tap_full_screen_on else R.string.double_tap_full_screen_off),
+                keepOpen = true, onClick = { onDoubleTapFullScreen(!doubleTapFullScreen) },
             )
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
         }

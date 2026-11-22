@@ -139,6 +139,12 @@ dependencies {
     androidTestImplementation("androidx.test:core:1.7.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    // The terminal screen's own controls, driven on a device: see FullScreenTest.
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    // The empty activity the Compose test rule hosts its content in is declared in
+    // src/debug/AndroidManifest.xml, not by ui-test-manifest: that one is exported, and the debug
+    // APK is the one people install.
     implementation(project(":core"))
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.ui:ui")

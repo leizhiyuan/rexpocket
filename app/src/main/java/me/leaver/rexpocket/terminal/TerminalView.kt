@@ -91,6 +91,23 @@ internal class TerminalView(context: Context) : View(context) {
     /** A tap that was not the start of anything else. */
     var onTap: (() -> Unit)? = null
 
+    /**
+     * A second tap soon after a first, in the same place. The first tap is still a tap, at once - a
+     * single tap never waits to see whether a second follows - and the second one is this instead
+     * of another tap. Null, the default, leaves every tap a tap, as before there was one.
+     */
+    var onDoubleTap: (() -> Unit)? = null
+        set(value) {
+            val listening = field != null
+            field = value
+            // Set again on every recomposition: only a change between listening and not touches the
+            // detector, so a double tap under way is not lost to a new callback.
+            if (listening != (value != null)) {
+                doubleTapArmed = false
+                gestures.setOnDoubleTapListener(if (value != null) doubleTaps else null)
+            }
+        }
+
     /** A horizontal swipe; true when it went towards the next pane. */
     var onSwipe: ((forward: Boolean) -> Unit)? = null
 
@@ -137,6 +154,37 @@ internal class TerminalView(context: Context) : View(context) {
 
     private enum class Axis { None, Vertical, Horizontal }
 
+    /** True from a double tap's second press until it lifts, unless it became something else. */
+    private var doubleTapArmed = false
+    private val touchSlop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+
+    /**
+     * The double tap acts when its second finger lifts, not when it lands: a second press that is
+     * held becomes a long press (a selection, a link), and one that moves or turns into a pinch is
+     * not a tap at all.
+     */
+    private val doubleTaps = object : GestureDetector.OnDoubleTapListener {
+        override fun onSingleTapConfirmed(e: MotionEvent): Boolean = false
+
+        override fun onDoubleTap(e: MotionEvent): Boolean {
+            doubleTapArmed = true
+            return true
+        }
+
+        override fun onDoubleTapEvent(e: MotionEvent): Boolean {
+            when (e.actionMasked) {
+                MotionEvent.ACTION_MOVE ->
+                    if (abs(e.x - downX) > touchSlop || abs(e.y - downY) > touchSlop) doubleTapArmed = false
+                MotionEvent.ACTION_UP -> if (doubleTapArmed) {
+                    doubleTapArmed = false
+                    onDoubleTap?.invoke()
+                }
+                MotionEvent.ACTION_CANCEL -> doubleTapArmed = false
+            }
+            return true
+        }
+    }
+
     private val gestures = GestureDetector(
         context,
         object : GestureDetector.SimpleOnGestureListener() {
@@ -178,9 +226,16 @@ internal class TerminalView(context: Context) : View(context) {
                 return true
             }
 
-            override fun onLongPress(e: MotionEvent) = longPress(e)
+            override fun onLongPress(e: MotionEvent) {
+                doubleTapArmed = false
+                longPress(e)
+            }
         },
-    )
+    ).apply {
+        // SimpleOnGestureListener is a double-tap listener too, which would swallow every second
+        // tap: double taps are listened for only while someone asked for them.
+        setOnDoubleTapListener(null)
+    }
 
     private val pinch = ScaleGestureDetector(
         context,
@@ -590,6 +645,7 @@ internal class TerminalView(context: Context) : View(context) {
         touchX = event.x
         touchY = event.y
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            doubleTapArmed = false
             downX = event.x
             downY = event.y
             val (column, row) = cellAt(event.x, event.y)
@@ -601,6 +657,7 @@ internal class TerminalView(context: Context) : View(context) {
         pinch.onTouchEvent(event)
         if (pinch.isInProgress) {
             axis = Axis.None
+            doubleTapArmed = false
             return true
         }
         val consumed = gestures.onTouchEvent(event)

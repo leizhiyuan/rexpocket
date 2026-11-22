@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +41,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -159,6 +161,8 @@ internal fun TermScreen(
     keyBarShift: Boolean = false,
     keyBarAlt: Boolean = false,
     keyBarCtrlC: CtrlCKey = CtrlCKey.Tap,
+    /** True when a double tap on the pane goes in and out of full screen; the button always does. */
+    doubleTapFullScreen: Boolean = true,
     /** True when this pane shares the window with the list, which is then the way back. */
     embedded: Boolean = false,
 ) {
@@ -241,8 +245,15 @@ internal fun TermScreen(
         }
     }
 
-    // An open sheet handles Back itself and closes.
+    // Full screen is this screen's own: it survives a rotation, and is gone once the terminal is left.
+    var fullScreen by rememberSaveable { mutableStateOf(false) }
+    val chrome = TermChrome(fullScreen)
+    SystemBars(shown = chrome.systemBars)
+
+    // An open sheet handles Back itself and closes. In full screen Back first brings the bars back:
+    // the later handler is the one asked first.
     BackHandler(onBack = onBack)
+    BackHandler(enabled = chrome.fullScreen) { TermChrome(fullScreen).back()?.let { fullScreen = it.fullScreen } }
 
     // The keyboard belongs to the pane that is on screen: leaving the terminal drops it, so the
     // session list does not come back with a keyboard over it.
@@ -261,25 +272,30 @@ internal fun TermScreen(
     // it was - while the dock and the rest of the bottom chrome rise over it. A program is therefore
     // never resized by the screen keyboard opening, so it never redraws or reflows for it.
     val hardwareKeys = rememberHardwareKeyboard()
-    val dock = keyBarShown(hardwareKeys, keyBarWithKeyboard)
+    val dock = chrome.keyBar(keyBarShown(hardwareKeys, keyBarWithKeyboard))
     var bottomPx by remember { mutableIntStateOf(0) }
     var panePx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val slide = imeShift(imeHeight(), panePx)
 
-    Box(Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().navigationBarsPadding()) {
+    // With the phone's bars hidden their insets are nothing, so the pane reaches the edges; a camera
+    // cutout still keeps the text out from under it.
+    Box(Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().navigationBarsPadding().displayCutoutPadding()) {
         Column(Modifier.fillMaxSize().padding(bottom = with(density) { bottomPx.toDp() })) {
-            SessionTopBar(
-                state = state,
-                view = view,
-                tab = tab,
-                status = status,
-                onBack = onBack,
-                showBack = !embedded,
-                onNavigate = { if (view != null) sheet = Sheet.Navigator },
-                onHolder = { if (state.owning) onAct { releasePane() } else onAct { takeOver() } },
-                onMore = { sheet = Sheet.Actions },
-            )
+            if (chrome.topBar) {
+                SessionTopBar(
+                    state = state,
+                    view = view,
+                    tab = tab,
+                    status = status,
+                    onBack = onBack,
+                    showBack = !embedded,
+                    onNavigate = { if (view != null) sheet = Sheet.Navigator },
+                    onHolder = { if (state.owning) onAct { releasePane() } else onAct { takeOver() } },
+                    onFullScreen = { fullScreen = TermChrome(fullScreen).toggled().fullScreen },
+                    onMore = { sheet = Sheet.Actions },
+                )
+            }
             TermBanner(state, onRetry = onRetry, onDismiss = onDismissNotice)
             // The pane sits on its own paper: white in the day, the page at night, edge to edge, the
             // way a terminal fills the screen.
@@ -308,6 +324,11 @@ internal fun TermScreen(
                                 if (next != index) onAct { focusBlock(panes[next].id) }
                             }
                         },
+                        onDoubleTap = if (doubleTapFullScreen) {
+                            { fullScreen = TermChrome(fullScreen).toggled().fullScreen }
+                        } else {
+                            null
+                        },
                         onError = { onAct { note(it.toProblem()) } },
                         modifier = Modifier.fillMaxSize()
                             // Moved, not resized: see imeShift. An offset keeps the pane's measured size
@@ -315,6 +336,19 @@ internal fun TermScreen(
                             .offset { IntOffset(0, -slide.roundToInt()) }
                             .padding(horizontal = 3.dp, vertical = 2.dp)
                             .onSizeChanged { panePx = it.height },
+                    )
+                }
+                // The way back out of full screen, always on screen while it is on: small, in the
+                // corner a video player uses, and over the pane rather than taking a row from it.
+                if (chrome.fullScreen) {
+                    RoundButton(
+                        R.drawable.ic_fullscreen_exit,
+                        stringResource(R.string.action_exit_full_screen),
+                        { fullScreen = TermChrome(fullScreen).toggled().fullScreen },
+                        modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                        plate = Colors.key.copy(alpha = 0.85f),
+                        size = 36.dp,
+                        iconSize = 20.dp,
                     )
                 }
             }
@@ -591,6 +625,7 @@ private fun SessionTopBar(
     showBack: Boolean,
     onNavigate: () -> Unit,
     onHolder: () -> Unit,
+    onFullScreen: () -> Unit,
     onMore: () -> Unit,
 ) {
     val title = when {
@@ -651,6 +686,8 @@ private fun SessionTopBar(
             HolderChip(state.owning, onHolder)
             Spacer(Modifier.width(4.dp))
         }
+        // Full screen: this bar, the key bar and the phone's bars go, and the pane takes their room.
+        RoundButton(R.drawable.ic_fullscreen, stringResource(R.string.action_full_screen), onFullScreen, size = 40.dp)
         RoundButton(R.drawable.ic_more, stringResource(R.string.action_more), onMore, plate = Colors.key, size = 40.dp)
     }
 }

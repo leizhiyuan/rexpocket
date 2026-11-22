@@ -87,7 +87,8 @@ jobs:
               me.leaver.rexpocket.net.TailnetNodeInstrumentedTest \
               me.leaver.rexpocket.data.FontPreferenceTest \
               me.leaver.rexpocket.ui.TerminalImeTest \
-              me.leaver.rexpocket.ui.TerminalViewTest; do
+              me.leaver.rexpocket.ui.TerminalViewTest \
+              me.leaver.rexpocket.ui.FullScreenTest; do
             adb logcat -c || true
             if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \
                 -Pandroid.testInstrumentationRunnerArguments.class="$class"; then

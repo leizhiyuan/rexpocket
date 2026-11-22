@@ -72,6 +72,11 @@ internal fun TerminalPane(
     hardwareKeyboard: Boolean = false,
     /** A horizontal swipe across the pane: forward means towards the next pane. */
     onSwipe: ((forward: Boolean) -> Unit)? = null,
+    /**
+     * A double tap on the pane; null leaves a second tap an ordinary tap. The keyboard the first tap
+     * raised goes away again before this is called, so a double tap changes nothing else.
+     */
+    onDoubleTap: (() -> Unit)? = null,
     onError: (Exception) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -150,9 +155,25 @@ internal fun TerminalPane(
     }
     // A tap on the pane is a tap on its text: it raises the keyboard, which the pane never asks for
     // itself - it is no text editor, and its input connection would answer with no text type at all.
+    //
+    // A tap does that at once, even when a double tap is listened for: waiting to see whether a
+    // second tap follows would make every tap feel slow. So the first tap of a double tap has raised
+    // the keyboard by the time the second lands, and the double tap puts it back the way it was.
+    val taps = remember { TapMemory() }
+    val currentDoubleTap = rememberUpdatedState(onDoubleTap)
+    val listening = onDoubleTap != null
     SideEffect {
         keyboard.pane = pane
-        pane.onTap = { keyboard.showIme() }
+        pane.onTap = {
+            taps.keyboardUpBeforeTap = keyboard.imeUp()
+            keyboard.showIme()
+        }
+        pane.onDoubleTap = if (!listening) null else {
+            {
+                if (!keyboardStaysAfterDoubleTap(upBeforeFirstTap = taps.keyboardUpBeforeTap)) keyboard.hideIme()
+                currentDoubleTap.value?.invoke()
+            }
+        }
     }
     // Published before the terminal view exists, so the key row can raise the keyboard at once.
     LaunchedEffect(keyboard) { currentKeyboard.value(keyboard) }
@@ -189,6 +210,12 @@ internal fun TerminalPane(
             session = null
         }
     }
+}
+
+/** What the pane remembers from one tap to the next; plain fields, since nothing draws from them. */
+private class TapMemory {
+    /** Whether the keyboard was up before the last tap raised it. */
+    var keyboardUpBeforeTap = false
 }
 
 /** Sends what the emulator produces, and reports its grid, through the screen's callbacks. */

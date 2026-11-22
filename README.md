@@ -109,6 +109,10 @@ own SSH daemon. How the transport works is described in
 4. **In the terminal:**
    - Tap the pane to type. Drag to scroll back, pinch to change the font size, long-press to
      select, or long-press a link to open it.
+   - For more room, tap the full-screen button in the top bar or double-tap the pane: the top bar,
+     the key bar and the phone's status and navigation bars go away (swipe from the edge to see the
+     phone's bars for a moment). The corner button, another double tap or Back brings them back.
+     An open keyboard stays open and keeps typing. Settings › Terminal can turn the double tap off.
    - Scroll the wide pill to reach more keys. Tap a modifier for the next key, twice quickly to
      lock it, and once again to release it. Hold Return for Shift+Enter. Hold `ctrl` and slide to
      a chord. Locked Shift applies to all repeated arrows; one-shot Shift applies only to the first.

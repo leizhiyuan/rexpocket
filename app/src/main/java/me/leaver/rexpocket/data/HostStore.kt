@@ -186,6 +186,16 @@ class HostStore(context: Context) {
         prefs.edit().putBoolean(KEY_KEY_BAR_ALT, on).apply()
     }
 
+    /**
+     * Whether a double tap on the terminal goes in and out of full screen. On unless turned off: it
+     * is what was asked for, and the bars' own button does the same either way.
+     */
+    fun doubleTapFullScreen(): Boolean = prefs.getBoolean(KEY_DOUBLE_TAP_FULL_SCREEN, true)
+
+    fun setDoubleTapFullScreen(on: Boolean) {
+        prefs.edit().putBoolean(KEY_DOUBLE_TAP_FULL_SCREEN, on).apply()
+    }
+
     /** How the C-c key behaves; a tap sends it unless the person chose otherwise. */
     fun keyBarCtrlC(): CtrlCKey = CtrlCKey.fromPref(prefs.getString(KEY_KEY_BAR_CTRL_C, null))
 
@@ -236,6 +246,7 @@ class HostStore(context: Context) {
         private const val KEY_KEY_BAR_SHIFT = "keybar_shift"
         private const val KEY_KEY_BAR_ALT = "keybar_alt"
         private const val KEY_KEY_BAR_CTRL_C = "keybar_ctrl_c"
+        private const val KEY_DOUBLE_TAP_FULL_SCREEN = "double_tap_full_screen"
         private const val KEY_TAILSCALE_ENABLED = "tailscale_enabled"
         private const val KEY_TAILSCALE_HOSTNAME = "tailscale_hostname"
         private const val KEY_TAILNET_BACKEND = "tailnet_backend"

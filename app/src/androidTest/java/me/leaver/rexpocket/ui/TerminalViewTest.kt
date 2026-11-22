@@ -154,6 +154,54 @@ class TerminalViewTest {
     }
 
     @Test
+    fun aDoubleTapIsOneTapAtOnceAndThenTheDoubleTap() {
+        var tapped = 0
+        var doubled = 0
+        onMain {
+            view.onTap = { tapped++ }
+            view.onDoubleTap = { doubled++ }
+        }
+        tap(40f, 40f)
+        // The first tap does not wait to see whether a second follows.
+        assertEquals(1, tapped)
+        Thread.sleep(DOUBLE_TAP_GAP_MS)
+        tap(42f, 41f)
+        assertEquals("the second tap is the double tap, not another tap", 1, tapped)
+        assertEquals(1, doubled)
+
+        // Taps far enough apart in time are two taps again.
+        Thread.sleep(android.view.ViewConfiguration.getDoubleTapTimeout() + 200L)
+        tap(40f, 40f)
+        assertEquals(2, tapped)
+        assertEquals(1, doubled)
+    }
+
+    @Test
+    fun withNoDoubleTapListenedForEveryTapIsATap() {
+        var tapped = 0
+        onMain { view.onTap = { tapped++ } }
+        tap(40f, 40f)
+        Thread.sleep(DOUBLE_TAP_GAP_MS)
+        tap(40f, 40f)
+        assertEquals(2, tapped)
+    }
+
+    @Test
+    fun aSecondPressThatIsHeldSelectsInsteadOfBeingADoubleTap() {
+        feed("alpha beta gamma")
+        var doubled = 0
+        onMain { view.onDoubleTap = { doubled++ } }
+        tap(3f, 10f)
+        Thread.sleep(DOUBLE_TAP_GAP_MS)
+        longPress(x = 3f, y = 10f)
+        val down = SystemClock.uptimeMillis()
+        touch(MotionEvent.ACTION_UP, down, 3f, 10f)
+
+        assertEquals(0, doubled)
+        assertEquals("alpha", session.selectionText())
+    }
+
+    @Test
     fun draggingOverAProgramThatReadsTheMouseSendsItsWheel() {
         feed("\u001b[?1049h\u001b[?1000h\u001b[?1006h")
         drag(fromY = 600f, toY = 100f)
@@ -287,5 +335,7 @@ class TerminalViewTest {
         // 12sp at the density of a test device is some 30-50 px wide; a probe this size sits inside one.
         const val CELL_PROBE_W = 6
         const val CELL_PROBE_H = 12
+        // Between the platform's shortest and longest gap for a double tap (40 and 300 ms).
+        const val DOUBLE_TAP_GAP_MS = 120L
     }
 }

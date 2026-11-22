@@ -45,6 +45,18 @@ internal class TerminalImeView(context: Context) : View(context) {
         raise()
     }
 
+    /** Puts the keyboard away again, and with it any request [showIme] still has pending. */
+    fun hideIme() {
+        requestedUntil = 0L
+        context.getSystemService(InputMethodManager::class.java)?.hideSoftInputFromWindow(windowToken, 0)
+        clearFocus()
+    }
+
+    /** Whether the screen keyboard is up over this window right now. */
+    fun imeUp(): Boolean =
+        androidx.core.view.ViewCompat.getRootWindowInsets(this)
+            ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+
     private fun raise() {
         if (SystemClock.uptimeMillis() > requestedUntil) return
         if (!isAttachedToWindow || !isFocused || !hasWindowFocus()) return

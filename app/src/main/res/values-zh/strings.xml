@@ -192,6 +192,11 @@
     <string name="action_show_active">只看有活动的</string>
     <string name="no_activity">现在没有正在运行的任务</string>
     <string name="action_more">更多操作</string>
+    <string name="action_full_screen">全屏</string>
+    <string name="action_exit_full_screen">退出全屏</string>
+    <string name="double_tap_full_screen">双击切换全屏</string>
+    <string name="double_tap_full_screen_on">开启</string>
+    <string name="double_tap_full_screen_off">关闭，只用按钮</string>
     <string name="action_take_over">接管</string>
     <string name="action_release">交还</string>
     <string name="menu_navigate">标签与窗格</string>

@@ -194,6 +194,11 @@
     <string name="action_show_active">Show active only</string>
     <string name="no_activity">Nothing is running right now</string>
     <string name="action_more">More actions</string>
+    <string name="action_full_screen">Full screen</string>
+    <string name="action_exit_full_screen">Exit full screen</string>
+    <string name="double_tap_full_screen">Double-tap for full screen</string>
+    <string name="double_tap_full_screen_on">On</string>
+    <string name="double_tap_full_screen_off">Off, button only</string>
     <string name="action_take_over">Take over</string>
     <string name="action_release">Release</string>
     <string name="menu_navigate">Tabs and panes</string>
