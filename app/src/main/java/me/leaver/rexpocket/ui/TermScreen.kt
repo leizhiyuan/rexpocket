@@ -207,12 +207,22 @@ internal fun TermScreen(
     val status = focused?.let { state.blockStatus[it.id] }
     val panes = tab?.blocks.orEmpty()
 
+    /**
+     * A key or a paste that goes to the program through Rex rather than through the pane's own
+     * terminal: the pane follows it to the newest output, as typing does, so whoever had scrolled
+     * back sees what it did.
+     */
+    fun followNewest() {
+        termSession?.scrollToBottom()
+    }
+
     /** Puts what the clipboard holds into the program, where a key on the bar or the menu asks for it. */
     fun pasteClipboard() {
         val text = clipboard(context)
         if (text.isNullOrEmpty()) {
             toast(context, context.getString(R.string.toast_clipboard_empty))
         } else {
+            followNewest()
             onAct { paste(text) }
         }
     }
@@ -220,6 +230,7 @@ internal fun TermScreen(
     /** Sends a key with the modifiers the key row holds; the ones on for one key are then used up. */
     fun press(key: KeyPress, own: String = "") {
         val e = mods.event(key, own)
+        followNewest()
         onAct { sendKey(e.code, mods = e.mods, text = e.text, codepoint = e.codepoint, consumedMods = e.consumedMods) }
         mods = mods.consume()
     }
