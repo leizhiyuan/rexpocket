@@ -2,6 +2,8 @@ package me.leaver.rexpocket.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -156,7 +158,7 @@ class TailnetStatusTest {
         assumeFalse("a text field in a dialog never idles on Robolectric", onRobolectric)
         compose.onNodeWithText("build-box", useUnmergedTree = true).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(string(R.string.action_add_host)).assertIsDisplayed()
+        compose.onNode(hasText(string(R.string.action_add_host)) and hasAnyAncestor(isDialog())).assertIsDisplayed()
         compose.onNode(hasSetTextAction() and hasText("build-box.tail1234.ts.net:7297")).assertIsDisplayed()
         compose.onNode(hasSetTextAction() and hasText("build-box")).assertIsDisplayed()
     }

@@ -90,7 +90,8 @@ internal object TailnetSamples {
     val peers = listOf(nas, buildBox, mac, iphone, desktop)
 
     val starting = TailnetStatus()
-    val needsLogin = TailnetStatus(backendState = "NeedsLogin", authUrl = "https://login.tailscale.com/a/1a2b3c4d5e")
+    // A link no app opens: the app opens a login link by itself, and a browser would take the screen.
+    val needsLogin = TailnetStatus(backendState = "NeedsLogin", authUrl = "rexpocket-test://login.tailscale.com/a/1a2b3c4d5e")
     val connecting = TailnetStatus(backendState = "Starting")
     fun connected(peers: List<TailnetPeer> = this.peers, health: List<String> = emptyList()) =
         TailnetStatus(backendState = "Running", networkName = "example.com", self = self, peers = peers, health = health)
@@ -147,7 +148,8 @@ internal class FakeSocks(
     private val stall: Boolean = false,
     private val route: (host: String, port: Int) -> InetSocketAddress?,
 ) : AutoCloseable {
-    private val server = ServerSocket(0, 50, java.net.InetAddress.getLoopbackAddress())
+    // 127.0.0.1, where the app dials the node's proxy: Android's loopback address is ::1.
+    private val server = ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"))
     private val sockets = CopyOnWriteArrayList<Socket>()
 
     /** Each host:port a client asked for, as it asked. */
