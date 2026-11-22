@@ -227,7 +227,7 @@ internal fun TermScreen(
      */
     fun pressDesk(key: DeskKey) {
         val terminal = termSession ?: return
-        terminal.encodeKey(key.keyCode, false, mods.metaState(), null)?.let(terminal::send)
+        deskKeyBytes(terminal, key, mods)?.let(terminal::send)
         mods = mods.consume()
     }
 
@@ -1043,11 +1043,13 @@ internal val BarKey.actsOnPhone: Boolean
     get() = when (this) {
         BarKey.Paste, BarKey.Attach, BarKey.Keyboard, BarKey.FullScreen -> true
         BarKey.Escape, BarKey.CtrlC, BarKey.Tab, BarKey.Enter, BarKey.Ctrl, BarKey.Shift, BarKey.Alt,
-        BarKey.More, BarKey.Slash, BarKey.Arrows -> false
+        BarKey.Slash, BarKey.Arrows -> false
+        // Group keys open a panel; the rest of the catalogue types.
+        is BarKey.Group, is BarKey.Desk, is BarKey.Arrow, is BarKey.Chord, is BarKey.Typed -> false
     }
 
 /** The menu's first group: [actsOnPhone] keys, the wide pill's before the small pill's. */
-internal val PHONE_ACTIONS: List<BarKey> = BarKey.entries.filter { it.actsOnPhone }
+internal val PHONE_ACTIONS: List<BarKey> = BarKey.catalogue.filter { it.actsOnPhone }
 
 /**
  * The room the phone's status and navigation bars take while they are shown: their sizes whether

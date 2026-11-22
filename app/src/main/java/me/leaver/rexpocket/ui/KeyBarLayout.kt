@@ -1,6 +1,7 @@
 package me.leaver.rexpocket.ui
 
 import kotlin.math.floor
+import me.leaver.rexpocket.core.BarKey
 
 // How the key bar's width is shared between its two pills. Pure, in dp, so it is tested on the JVM.
 
@@ -75,3 +76,31 @@ internal const val PEEK_MAX = 38f
  * it): 52 - (20 - peek) below the band, 52 - (68 - peek) above it, so 22 to 50 dp.
  */
 internal const val PEEK_SET = 20f
+
+/** A row of a group's panel: its keys, and how many slots it is cut into, so keys keep one width. */
+internal data class PanelRow(val keys: List<BarKey>, val slots: Int)
+
+/**
+ * A group's keys in rows, in their order: six to a row, or seven while every key of the row is one
+ * narrow character. Fn's keys by default come out as the panel always was: Home to Del, F1 to F6,
+ * F7 to F12, and its seven symbols.
+ */
+internal fun panelRows(keys: List<BarKey>): List<PanelRow> {
+    fun slots(row: List<BarKey>) = if (row.all { it.narrow }) PANEL_NARROW else PANEL_WIDE
+    val rows = mutableListOf<List<BarKey>>()
+    var row = emptyList<BarKey>()
+    for (key in keys) {
+        val next = row + key
+        if (next.size <= slots(next)) {
+            row = next
+        } else {
+            rows += row
+            row = listOf(key)
+        }
+    }
+    if (row.isNotEmpty()) rows += row
+    return rows.map { PanelRow(it, slots(it)) }
+}
+
+private const val PANEL_WIDE = 6
+private const val PANEL_NARROW = 7

@@ -80,6 +80,18 @@ import androidx.compose.ui.platform.testTag
 import me.leaver.rexpocket.core.BarKey
 import me.leaver.rexpocket.core.CtrlCKey
 import me.leaver.rexpocket.core.KeyArrangement
+import me.leaver.rexpocket.core.KeyGroup
+import androidx.compose.runtime.saveable.rememberSaveable
+import me.leaver.rexpocket.core.typedPress
+import me.leaver.rexpocket.core.metaState
+import me.leaver.rexpocket.terminal.TerminalSession
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import me.leaver.rexpocket.core.Pill
 import me.leaver.rexpocket.core.DeskKey
 import me.leaver.rexpocket.core.KeyModifiers
@@ -131,12 +143,14 @@ internal fun KeyBar(
     /** Full screen, from its key in the small pill; null leaves the key out. */
     onFullScreen: (() -> Unit)? = null,
 ) {
-    val haptics = LocalHapticFeedback.current
-    val context = LocalContext.current
-    val holdHint = stringResource(R.string.key_ctrl_c_hold_hint)
     val scroll = rememberScrollState()
     val pill = RoundedCornerShape(50)
     val keys = arrangement.shown(Pill.Keys)
+    // One group's panel at a time; it goes when its key leaves the bar.
+    // Kept across a rotation, as the screen's other state is.
+    var pinned by rememberSaveable { mutableStateOf<String?>(null) }
+    val openGroup = pinned?.takeIf { id -> keys.any { it is BarKey.Group && it.id == id } }
+    val actions = KeyActions(mods, busy, ctrlC, onMod, onKey, onNewLine, onPaste, onAttach, attachReady, onDeskKey)
     val restKeys = arrangement.shown(Pill.Rest).filter { it != BarKey.FullScreen || onFullScreen != null }
     BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         // How many keys each pill has decides how they share the width, so both show their hint
@@ -156,65 +170,15 @@ internal fun KeyBar(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val key = Modifier.size(KEY_SIZE)
-                    for (barKey in keys) when (barKey) {
-                        BarKey.Escape -> Key(stringResource(R.string.key_escape), key) { onKey(KeyPress("escape", 0), "") }
-                        // Always named for the chord it sends; red says the program would take it as a stop.
-                        BarKey.CtrlC -> {
-                            val interrupt = { onKey(KeyPress("key_c", 'c'.code, text = "c"), "ctrl") }
-                            Key(
-                                stringResource(R.string.key_ctrl_c),
-                                key,
-                                color = if (busy) Colors.danger else Colors.ink,
-                                onLongClick = if (ctrlC == CtrlCKey.Hold) {
-                                    {
-                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        interrupt()
-                                    }
-                                } else {
-                                    null
-                                },
-                            ) {
-                                // Held unless the program is busy: then a tap is still the quick stop.
-                                if (ctrlC.tapSends(busy)) interrupt() else toast(context, holdHint)
+                    for (barKey in keys) {
+                        if (barKey is BarKey.Group) {
+                            val group = arrangement.group(barKey.id) ?: continue
+                            GroupKey(group, key, open = openGroup == group.id, actions = actions) {
+                                pinned = if (openGroup == group.id) null else group.id
                             }
+                        } else {
+                            BarKeyFace(barKey, key, Colors.clear, actions)
                         }
-                        BarKey.Tab -> Key(stringResource(R.string.key_tab), key, icon = R.drawable.ic_tab_key) { onKey(KeyPress("tab", 0), "") }
-                        BarKey.Enter -> Key(
-                            stringResource(R.string.action_enter),
-                            key,
-                            icon = R.drawable.ic_return,
-                            onLongClick = {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onNewLine()
-                            },
-                        ) { onKey(KeyPress("enter", 0), "") }
-                        BarKey.Ctrl -> CtrlKey(mods[Mod.Ctrl], key, onTap = { onMod(Mod.Ctrl) }) { letter ->
-                            onKey(KeyPress("key_$letter", letter.code, text = letter.toString()), "ctrl")
-                        }
-                        BarKey.Shift, BarKey.Alt -> {
-                            val mod = if (barKey == BarKey.Shift) Mod.Shift else Mod.Alt
-                            val isShift = mod == Mod.Shift
-                            val latch = mods[mod]
-                            val description = modState(latch)
-                            Key(
-                                label = stringResource(if (isShift) R.string.key_shift else R.string.key_alt),
-                                modifier = key.semantics { stateDescription = description },
-                                color = modInk(latch),
-                                plate = modPlate(latch),
-                                icon = if (isShift) R.drawable.ic_shift else null,
-                            ) { onMod(mod) }
-                        }
-                        BarKey.More -> MoreKeys(key, onDesk = onDeskKey, onSymbol = { symbol -> symbolPress(symbol)?.let { onKey(it, "") } })
-                        BarKey.Paste -> Key(stringResource(R.string.key_paste), key, icon = R.drawable.ic_paste) { onPaste() }
-                        BarKey.Attach -> Key(
-                            stringResource(R.string.upload_attach),
-                            key,
-                            icon = R.drawable.ic_attach_file,
-                            color = if (attachReady) Colors.ink else Colors.muted,
-                        ) { if (attachReady) onAttach() }
-                        // A slash opens pi's command menu; the stick then walks it.
-                        BarKey.Slash -> Key("/", key) { onKey(KeyPress("slash", '/'.code, text = "/"), "") }
-                        BarKey.Arrows, BarKey.Keyboard, BarKey.FullScreen -> Unit
                     }
                 }
                 // The pill goes on under this fade, so the key part under it reads as more to swipe to.
@@ -295,7 +259,7 @@ internal fun KeyBar(
 private fun ArrowStick(modifier: Modifier, onArrow: (String) -> Unit) {
     var held by remember { mutableStateOf(false) }
     var steering by remember { mutableStateOf(false) }
-    var pinned by remember { mutableStateOf(false) }
+    var pinned by rememberSaveable { mutableStateOf(false) }
     var direction by remember { mutableStateOf<String?>(null) }
     var knob by remember { mutableStateOf(Offset.Zero) }
     val arrow by rememberUpdatedState(onArrow)
@@ -411,17 +375,151 @@ private fun ArrowStick(modifier: Modifier, onArrow: (String) -> Unit) {
     }
 }
 
+/** What the keys of the bar and of its panels act on: the row's modifiers and the screen's actions. */
+private class KeyActions(
+    val mods: KeyModifiers,
+    val busy: Boolean,
+    val ctrlC: CtrlCKey,
+    val onMod: (Mod) -> Unit,
+    val onKey: (key: KeyPress, own: String) -> Unit,
+    val onNewLine: () -> Unit,
+    val onPaste: () -> Unit,
+    val onAttach: () -> Unit,
+    val attachReady: Boolean,
+    val onDeskKey: (DeskKey) -> Unit,
+)
+
 /**
- * Fn: a tap pins the panel of the keys a phone keyboard lacks above the bar, and a second tap puts
- * it away. It is not focusable, so the phone keyboard stays up under it, and the bar's modifiers
- * can still be tapped while it is open: Shift then End selects, Ctrl then F5 is C-F5.
+ * One key of the key pill or of a group's panel, on its [plate]: it does the same wherever it sits,
+ * with the modifiers the row holds. Group keys and the right pill's keys are drawn by the bar itself.
  */
 @Composable
-private fun MoreKeys(modifier: Modifier, onDesk: (DeskKey) -> Unit, onSymbol: (Char) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    val label = stringResource(R.string.key_more)
+private fun BarKeyFace(barKey: BarKey, modifier: Modifier, plate: Color, a: KeyActions) {
+    val haptics = LocalHapticFeedback.current
+    val context = LocalContext.current
+    when (barKey) {
+        BarKey.Escape -> Key(stringResource(R.string.key_escape), modifier, plate = plate) { a.onKey(KeyPress("escape", 0), "") }
+        // Always named for the chord it sends; red says the program would take it as a stop.
+        BarKey.CtrlC -> {
+            val holdHint = stringResource(R.string.key_ctrl_c_hold_hint)
+            val interrupt = { a.onKey(KeyPress("key_c", 'c'.code, text = "c"), "ctrl") }
+            Key(
+                stringResource(R.string.key_ctrl_c),
+                modifier,
+                color = if (a.busy) Colors.danger else Colors.ink,
+                plate = plate,
+                onLongClick = if (a.ctrlC == CtrlCKey.Hold) {
+                    {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        interrupt()
+                    }
+                } else {
+                    null
+                },
+            ) {
+                // Held unless the program is busy: then a tap is still the quick stop.
+                if (a.ctrlC.tapSends(a.busy)) interrupt() else toast(context, holdHint)
+            }
+        }
+        BarKey.Tab -> Key(stringResource(R.string.key_tab), modifier, plate = plate, icon = R.drawable.ic_tab_key) { a.onKey(KeyPress("tab", 0), "") }
+        BarKey.Enter -> Key(
+            stringResource(R.string.action_enter),
+            modifier,
+            plate = plate,
+            icon = R.drawable.ic_return,
+            onLongClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                a.onNewLine()
+            },
+        ) { a.onKey(KeyPress("enter", 0), "") }
+        BarKey.Ctrl -> CtrlKey(a.mods[Mod.Ctrl], modifier, plate, onTap = { a.onMod(Mod.Ctrl) }) { letter ->
+            a.onKey(KeyPress("key_$letter", letter.code, text = letter.toString()), "ctrl")
+        }
+        BarKey.Shift, BarKey.Alt -> {
+            val mod = if (barKey == BarKey.Shift) Mod.Shift else Mod.Alt
+            val isShift = mod == Mod.Shift
+            val latch = a.mods[mod]
+            val description = modState(latch)
+            Key(
+                label = stringResource(if (isShift) R.string.key_shift else R.string.key_alt),
+                modifier = modifier.semantics { stateDescription = description },
+                color = modInk(latch),
+                plate = if (latch == Latch.Off) plate else modPlate(latch),
+                icon = if (isShift) R.drawable.ic_shift else null,
+            ) { a.onMod(mod) }
+        }
+        BarKey.Paste -> Key(stringResource(R.string.key_paste), modifier, plate = plate, icon = R.drawable.ic_paste) { a.onPaste() }
+        BarKey.Attach -> Key(
+            stringResource(R.string.upload_attach),
+            modifier,
+            plate = plate,
+            icon = R.drawable.ic_attach_file,
+            color = if (a.attachReady) Colors.ink else Colors.muted,
+        ) { if (a.attachReady) a.onAttach() }
+        // A slash opens pi's command menu; the stick then walks it.
+        BarKey.Slash -> Key("/", modifier, plate = plate) { a.onKey(KeyPress("slash", '/'.code, text = "/"), "") }
+        is BarKey.Desk -> Key(deskLabel(barKey.key), modifier, plate = plate) { a.onDeskKey(barKey.key) }
+        is BarKey.Arrow -> {
+            val (icon, name) = arrowFace(barKey.code)
+            RepeatKey(modifier, icon, stringResource(name), plate) { a.onKey(KeyPress(barKey.code, 0), "") }
+        }
+        is BarKey.Chord -> Key(chordLabel(barKey.letter), modifier, plate = plate) {
+            a.onKey(KeyPress("key_${barKey.letter}", barKey.letter.code, text = barKey.letter.toString()), "ctrl")
+        }
+        is BarKey.Typed -> {
+            val c = barKey.char
+            Key(
+                typedFace(c),
+                modifier,
+                plate = plate,
+                description = if (c == ' ') stringResource(R.string.key_space) else null,
+            ) { typedPress(c)?.let { a.onKey(it, "") } }
+        }
+        is BarKey.Group, BarKey.Arrows, BarKey.Keyboard, BarKey.FullScreen -> Unit
+    }
+}
+
+/** What a desk key's face says: the short names a desk keyboard prints, F1 to F12 as they are. */
+@Composable
+internal fun deskLabel(key: DeskKey): String = when (key) {
+    DeskKey.Home -> stringResource(R.string.key_home)
+    DeskKey.End -> stringResource(R.string.key_end)
+    DeskKey.PageUp -> stringResource(R.string.key_page_up)
+    DeskKey.PageDown -> stringResource(R.string.key_page_down)
+    DeskKey.Insert -> stringResource(R.string.key_insert)
+    DeskKey.Delete -> stringResource(R.string.key_delete)
+    else -> key.name
+}
+
+/** A typed key's face: its character, space as the open box a keyboard legend uses. */
+internal fun typedFace(c: Char): String = if (c == ' ') "␣" else c.toString()
+
+/** An arrow key's mark and spoken name. */
+internal fun arrowFace(code: String): Pair<Int, Int> = when (code) {
+    "arrow_up" -> R.drawable.ic_arrow_up to R.string.key_up
+    "arrow_down" -> R.drawable.ic_arrow_down to R.string.key_down
+    "arrow_left" -> R.drawable.ic_arrow_left to R.string.key_left
+    else -> R.drawable.ic_arrow_right to R.string.key_right
+}
+
+/** The tag of [group]'s key on the bar, and of its panel. Fn keeps the tags it had. */
+internal fun groupKeyTag(id: String): String = if (id == BarKey.FN_GROUP) MORE_KEYS_TAG else "group-key-$id"
+internal fun groupPanelTag(id: String): String = if (id == BarKey.FN_GROUP) MORE_PANEL_TAG else "group-panel-$id"
+
+/**
+ * A group's key - Fn, or one the person made: a tap pins the group's panel above the bar, and a
+ * second tap puts it away. The panel is not focusable, so the phone keyboard stays up under it, and
+ * the bar's modifiers can still be tapped while it is open: Shift then End selects, Ctrl then F5 is
+ * C-F5. The key shows the group's name, made smaller to fit.
+ */
+@Composable
+private fun GroupKey(group: KeyGroup, modifier: Modifier, open: Boolean, actions: KeyActions, onToggle: () -> Unit) {
+    val label = stringResource(R.string.key_group, group.name)
     val state = stringResource(if (open) R.string.arrows_pinned else R.string.mod_off)
-    val edge = with(LocalDensity.current) { POPUP_EDGE.roundToPx() }
+    val density = LocalDensity.current
+    val edge = with(density) { POPUP_EDGE.roundToPx() }
+    // The room above the key, in the window: the panel scrolls rather than run off the top.
+    var top by remember { mutableIntStateOf(0) }
     val above = remember(edge) {
         object : PopupPositionProvider {
             override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
@@ -433,70 +531,78 @@ private fun MoreKeys(modifier: Modifier, onDesk: (DeskKey) -> Unit, onSymbol: (C
         }
     }
     Box(
-        modifier.height(KEY_HEIGHT).clip(RoundedCornerShape(Radius.chip))
+        modifier.height(KEY_HEIGHT)
+            .onGloballyPositioned { top = it.boundsInWindow().top.toInt() }
+            .clip(RoundedCornerShape(Radius.chip))
             .background(if (open) Colors.keyOn else Colors.clear)
-            .clickable(role = Role.Button) { open = !open }
+            .clickable(role = Role.Button, onClick = onToggle)
             .semantics { contentDescription = label; stateDescription = state }
-            .testTag(MORE_KEYS_TAG)
+            .testTag(groupKeyTag(group.id))
             .padding(horizontal = KEY_PAD),
         contentAlignment = Alignment.Center,
     ) {
-        KeyText(stringResource(R.string.key_more_short), if (open) Colors.accent else Colors.ink)
+        FittedKeyText(group.name, if (open) Colors.accent else Colors.ink)
         if (open) {
+            // At least two rows, so a panel over a bar with little above it still has keys to scroll.
+            val room = with(density) { (top - 2 * edge).toDp() }.coerceAtLeast(MORE_PANEL_MIN)
             Popup(popupPositionProvider = above, properties = PopupProperties(focusable = false)) {
-                MorePanel(onDesk, onSymbol)
+                GroupPanel(group, if (top > 0) room else Dp.Infinity, actions)
             }
         }
     }
 }
 
-/** The panel's rows: the moving and editing keys, the function keys in two sixes, then symbols. */
+/** A group's keys in rows of six, or seven of one character each (see [panelRows]); it scrolls when tall. */
 @Composable
-private fun MorePanel(onDesk: (DeskKey) -> Unit, onSymbol: (Char) -> Unit) {
-    val names = mapOf(
-        DeskKey.Home to stringResource(R.string.key_home),
-        DeskKey.End to stringResource(R.string.key_end),
-        DeskKey.PageUp to stringResource(R.string.key_page_up),
-        DeskKey.PageDown to stringResource(R.string.key_page_down),
-        DeskKey.Insert to stringResource(R.string.key_insert),
-        DeskKey.Delete to stringResource(R.string.key_delete),
-    )
-    val function = DeskKey.entries.filter { it !in names }
+private fun GroupPanel(group: KeyGroup, maxHeight: Dp, a: KeyActions) {
     Column(
-        Modifier.width(MORE_PANEL_WIDTH).floating(RoundedCornerShape(Radius.card)).padding(PAD_INSET)
-            .testTag(MORE_PANEL_TAG),
+        Modifier.width(MORE_PANEL_WIDTH).heightIn(max = maxHeight).floating(RoundedCornerShape(Radius.card))
+            .verticalScroll(rememberScrollState())
+            .padding(PAD_INSET)
+            .testTag(groupPanelTag(group.id)),
         verticalArrangement = Arrangement.spacedBy(CHORD_GAP),
     ) {
-        for (row in listOf(names.keys.toList(), function.take(6), function.drop(6))) {
-            PanelRow(row.map { k -> (names[k] ?: k.name) to { onDesk(k) } })
-        }
-        PanelRow(MORE_SYMBOLS.map { c -> c.toString() to { onSymbol(c) } })
-    }
-}
-
-@Composable
-private fun PanelRow(keys: List<Pair<String, () -> Unit>>) {
-    Row(Modifier.fillMaxWidth().height(MORE_KEY_HEIGHT), horizontalArrangement = Arrangement.spacedBy(CHORD_GAP)) {
-        for ((name, press) in keys) {
-            Box(
-                Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(Radius.chip))
-                    .background(Colors.key)
-                    .clickable(role = Role.Button, onClick = press),
-                contentAlignment = Alignment.Center,
-            ) {
-                KeyText(name, Colors.ink)
+        for (row in panelRows(group.keys)) {
+            Row(Modifier.fillMaxWidth().height(MORE_KEY_HEIGHT), horizontalArrangement = Arrangement.spacedBy(CHORD_GAP)) {
+                for (k in row.keys) BarKeyFace(k, Modifier.weight(1f).fillMaxHeight(), Colors.key, a)
+                repeat(row.slots - row.keys.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
 }
 
-/** The symbols a phone keyboard buries that a shell line is full of. */
+/** A key's name in one line, as large as the bar's labels where it fits and smaller where not. */
+@Composable
+private fun FittedKeyText(label: String, color: Color) {
+    val measurer = rememberTextMeasurer()
+    val room = with(LocalDensity.current) { (KEY_SIZE - KEY_PAD * 2 - 4.dp).toPx() }
+    val full = TextStyles.label.value
+    val size = remember(label, room) {
+        generateSequence(full) { it - 0.5f }.takeWhile { it >= 8f }.firstOrNull { s ->
+            measurer.measure(label, TextStyle(fontSize = s.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium), softWrap = false)
+                .size.width <= room
+        } ?: 8f
+    }
+    Text(
+        label,
+        color = color,
+        fontSize = size.sp,
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+    )
+}
+
+/** The symbols a phone keyboard buries that a shell line is full of: Fn's last row by default. */
 internal const val MORE_SYMBOLS = "|~`\\/-_"
 
 internal const val MORE_KEYS_TAG = "more_keys"
 internal const val MORE_PANEL_TAG = "more_keys_panel"
 private val MORE_PANEL_WIDTH = 336.dp
 private val MORE_KEY_HEIGHT = 44.dp
+private val MORE_PANEL_MIN = MORE_KEY_HEIGHT * 2 + 4.dp + 16.dp
 
 /** The pinned arrow pad: up over left, down and right, as the arrows sit on a desk keyboard. */
 @Composable
@@ -521,26 +627,35 @@ private fun ArrowPad(onArrow: (String) -> Unit) {
  */
 @Composable
 private fun PadKey(code: String, icon: Int, name: Int, onArrow: (String) -> Unit) {
-    var pressed by remember { mutableStateOf(false) }
     val arrow by rememberUpdatedState(onArrow)
+    RepeatKey(Modifier.size(PAD_KEY), icon, stringResource(name), Colors.key, iconSize = 24.dp) { arrow(code) }
+}
+
+/**
+ * A key that acts as the finger lands, and again and again once it has stayed down past the repeat
+ * delay, until it lifts: the arrow pad's keys and the single arrow keys.
+ */
+@Composable
+private fun RepeatKey(modifier: Modifier, icon: Int, label: String, plate: Color, iconSize: Dp = 22.dp, onPress: () -> Unit) {
+    var pressed by remember { mutableStateOf(false) }
+    val press by rememberUpdatedState(onPress)
     val haptics = LocalHapticFeedback.current
-    val label = stringResource(name)
     Box(
-        Modifier.size(PAD_KEY).clip(RoundedCornerShape(Radius.chip))
-            .background(if (pressed) Colors.keyOn else Colors.key)
-            .semantics { contentDescription = label; role = Role.Button; onClick { arrow(code); true } }
-            .pointerInput(code) {
+        modifier.clip(RoundedCornerShape(Radius.chip))
+            .background(if (pressed) Colors.keyOn else plate)
+            .semantics { contentDescription = label; role = Role.Button; onClick { press(); true } }
+            .pointerInput(Unit) {
                 coroutineScope {
                     awaitEachGesture {
                         val down = awaitFirstDown()
                         down.consume()
                         pressed = true
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        arrow(code)
+                        press()
                         val repeating = launch {
                             delay(STICK_REPEAT_DELAY_MS)
                             while (isActive) {
-                                arrow(code)
+                                press()
                                 delay(STICK_REPEAT_MS)
                             }
                         }
@@ -559,7 +674,7 @@ private fun PadKey(code: String, icon: Int, name: Int, onArrow: (String) -> Unit
             },
         contentAlignment = Alignment.Center,
     ) {
-        Glyph(icon, if (pressed) Colors.accent else Colors.ink, size = 24.dp)
+        Glyph(icon, if (pressed) Colors.accent else Colors.ink, size = iconSize)
     }
 }
 
@@ -690,7 +805,7 @@ private fun modPlate(latch: Latch): Color = when (latch) {
  * control chords; sliding onto one and lifting sends it, lifting anywhere else sends nothing.
  */
 @Composable
-private fun CtrlKey(latch: Latch, modifier: Modifier, onTap: () -> Unit, onChord: (Char) -> Unit) {
+private fun CtrlKey(latch: Latch, modifier: Modifier, plate: Color, onTap: () -> Unit, onChord: (Char) -> Unit) {
     var open by remember { mutableStateOf(false) }
     var pressed by remember { mutableStateOf(false) }
     var highlighted by remember { mutableIntStateOf(-1) }
@@ -749,7 +864,7 @@ private fun CtrlKey(latch: Latch, modifier: Modifier, onTap: () -> Unit, onChord
         modifier.height(KEY_HEIGHT)
             .onGloballyPositioned { anchor = it.boundsInWindow() }
             .clip(RoundedCornerShape(Radius.chip))
-            .background(if (pressed || open) Colors.keyOn else modPlate(latch))
+            .background(if (pressed || open) Colors.keyOn else if (latch == Latch.Off) plate else modPlate(latch))
             .semantics {
                 contentDescription = label
                 stateDescription = state
@@ -869,13 +984,16 @@ internal fun Key(
     plate: Color = Colors.clear,
     icon: Int? = null,
     onLongClick: (() -> Unit)? = null,
+    /** What TalkBack says for a key whose face is a mark rather than its name. */
+    description: String? = null,
     onClick: () -> Unit,
 ) {
+    val spoken = description ?: label.takeIf { icon != null }
     Box(
         modifier.height(KEY_HEIGHT).clip(RoundedCornerShape(Radius.chip))
             .background(plate)
             .combinedClickable(role = Role.Button, onLongClick = onLongClick, onClick = onClick)
-            .then(if (icon != null) Modifier.semantics { contentDescription = label } else Modifier)
+            .then(if (spoken != null) Modifier.semantics { contentDescription = spoken } else Modifier)
             .padding(horizontal = KEY_PAD),
         contentAlignment = Alignment.Center,
     ) {
@@ -894,3 +1012,11 @@ private fun KeyText(label: String, color: Color) {
         maxLines = 1,
     )
 }
+
+/**
+ * The bytes a desk key - Home, PgDn, F10 - makes in the pane's [terminal] with the row's [mods]:
+ * libghostty encodes it in the modes the program set, as for a keyboard on the desk. TermScreen
+ * sends them; the device tests check them.
+ */
+internal fun deskKeyBytes(terminal: TerminalSession, key: DeskKey, mods: KeyModifiers): ByteArray? =
+    terminal.encodeKey(key.keyCode, false, mods.metaState(), null)

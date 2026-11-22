@@ -167,3 +167,15 @@ fun isWebLink(url: String): Boolean {
     val scheme = uri.scheme?.lowercase() ?: return false
     return (scheme == "http" || scheme == "https") && !uri.host.isNullOrBlank()
 }
+
+/**
+ * The key a typed key of the bar ([BarKey.Typed]) sends for [char]: a letter, digit or space as the
+ * phone keyboard's would, a symbol as [symbolPress] makes it, so a held modifier reaches it as a chord.
+ */
+fun typedPress(char: Char): KeyPress? {
+    keyPressFor(char.toString())?.let { return it }
+    symbolPress(char)?.let { return it }
+    // The shifted digits, ! to ): their digit with shift.
+    val base = SHIFTED.entries.firstOrNull { (from, to) -> to == char && from in '0'..'9' }?.key ?: return null
+    return KeyPress("digit_$base", base.code, shifted = true, text = base.toString())
+}

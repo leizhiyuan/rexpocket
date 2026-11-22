@@ -5,7 +5,10 @@ import me.leaver.rexpocket.core.DeskKey
 import me.leaver.rexpocket.core.META_ALT_ON
 import me.leaver.rexpocket.core.META_CTRL_ON
 import me.leaver.rexpocket.core.META_SHIFT_ON
+import me.leaver.rexpocket.core.BarKey
+import me.leaver.rexpocket.core.KeyModifiers
 import me.leaver.rexpocket.core.symbolPress
+import me.leaver.rexpocket.core.typedPress
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
@@ -40,5 +43,19 @@ class KeyBarTest {
     @Test
     fun everyPanelSymbolHasAKey() {
         for (symbol in MORE_SYMBOLS) assertNotNull("$symbol", symbolPress(symbol))
+    }
+
+    @Test
+    fun everyTypedKeyOfTheCatalogueSendsAKey() {
+        for (key in BarKey.catalogue.filterIsInstance<BarKey.Typed>()) {
+            val press = typedPress(key.char)
+            assertNotNull("${key.char}", press)
+            assertEquals("${key.char}", key.char.toString(), KeyModifiers().event(press!!).text)
+        }
+        assertEquals("space", typedPress(' ')!!.code)
+        assertEquals("key_q", typedPress('q')!!.code)
+        // A symbol made with shift is that key with shift, so Ctrl and Alt still reach it.
+        assertEquals("backslash", typedPress('|')!!.code)
+        assertEquals("shift", KeyModifiers().event(typedPress('|')!!).mods)
     }
 }

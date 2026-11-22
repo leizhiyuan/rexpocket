@@ -129,11 +129,11 @@ class TermMenuTest {
 
     @Test
     fun arrangeKeysAndADeskKeyboardLeaveTheMenuAsItIs() {
-        // Every phone key hidden from the bar but the keyboard key, which cannot be, and the bar
+        // Every phone key taken off the bar but the keyboard key, which cannot be, and the bar
         // taken away by a desk keyboard where there is one.
         val model = termModel(keyBar = false)
         var arrangement = model.keyArrangement.value
-        for (key in BarKey.entries) arrangement = arrangement.show(key, false)
+        for (key in BarKey.catalogue) arrangement = arrangement.remove(key)
         model.setKeyArrangement(arrangement)
         assertFalse(model.keyArrangement.value.isShown(BarKey.Paste))
         val lines = texts(open(liveState(), model))

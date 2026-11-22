@@ -3,6 +3,9 @@ package me.leaver.rexpocket.ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import me.leaver.rexpocket.core.BarKey
+import me.leaver.rexpocket.core.DeskKey
+import me.leaver.rexpocket.core.KeyArrangement
 import org.junit.Test
 
 /**
@@ -60,7 +63,8 @@ class KeyBarLayoutTest {
 
     @Test
     fun atEveryWidthBothPillsShowTheirHintAndFillTheBar() {
-        for (keys in listOf(8, 9, 10, 11)) {
+        // Up to 40: the bar's own keys, and many added from Fn and the catalogue.
+        for (keys in (8..40)) {
             var screen = 300f
             while (screen <= 1400f) {
                 val w = bar(screen, keys)
@@ -101,5 +105,28 @@ class KeyBarLayoutTest {
         val w = bar(360f, keys = 0)
         assertTrue(w.restWhole)
         assertEquals(152f, w.rest)
+    }
+
+    @Test
+    fun fnsPanelByDefaultHasTheRowsItAlwaysHad() {
+        val rows = panelRows(KeyArrangement().group(BarKey.FN_GROUP)!!.keys)
+        assertEquals(listOf(6, 6, 6, 7), rows.map { it.keys.size })
+        assertEquals(listOf(6, 6, 6, 7), rows.map { it.slots })
+        assertEquals(BarKey.Desk(DeskKey.F1), rows[1].keys.first())
+        assertEquals(BarKey.Desk(DeskKey.F7), rows[2].keys.first())
+        assertEquals(MORE_SYMBOLS.toList(), rows[3].keys.map { if (it == BarKey.Slash) '/' else (it as BarKey.Typed).char })
+    }
+
+    @Test
+    fun panelRowsFlowInTheOrderGiven() {
+        val f = DeskKey.entries.map { BarKey.Desk(it) }
+        // A wide key among symbols makes their row one of six; a short last row keeps the keys' width.
+        val rows = panelRows(listOf(BarKey.Typed('q'), BarKey.Typed(':')) + f.take(5) + BarKey.Arrow("arrow_up"))
+        assertEquals(listOf(6, 2), rows.map { it.keys.size })
+        assertEquals(listOf(6, 6), rows.map { it.slots })
+        val narrow = panelRows("abcdefghij".map { BarKey.Typed(it) })
+        assertEquals(listOf(7, 3), narrow.map { it.keys.size })
+        assertEquals(listOf(7, 7), narrow.map { it.slots })
+        assertEquals(emptyList<PanelRow>(), panelRows(emptyList()))
     }
 }

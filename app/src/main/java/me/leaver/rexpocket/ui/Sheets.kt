@@ -45,6 +45,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.isWebLink
@@ -107,11 +110,12 @@ internal class SheetScope(val close: (() -> Unit) -> Unit)
 
 /**
  * A bottom sheet in the app's colours: rows grouped on cards over the dark background, the same
- * look as the host and session lists.
+ * look as the host and session lists. A page reached from another sheet has [onBack]: an arrow
+ * before its title that goes back up, as swiping the sheet down does.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, content: @Composable SheetScope.() -> Unit) {
+internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, onBack: (() -> Unit)? = null, content: @Composable SheetScope.() -> Unit) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val rows = SheetScope { action ->
@@ -135,7 +139,28 @@ internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, content: 
             Modifier.fillMaxWidth().testTag(ACTION_SHEET_TAG).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
                 .padding(bottom = 12.dp),
         ) {
-            if (title != null) {
+            if (onBack != null) {
+                val back = stringResource(R.string.action_back)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(48.dp).clip(CircleShape)
+                            .clickable(role = Role.Button, onClick = onBack)
+                            .semantics { contentDescription = back },
+                        contentAlignment = Alignment.Center,
+                    ) { Glyph(R.drawable.ic_back, Colors.ink) }
+                    if (title != null) {
+                        Text(
+                            title,
+                            color = Colors.ink,
+                            fontSize = TextStyles.title,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(end = 16.dp),
+                        )
+                    }
+                }
+            } else if (title != null) {
                 Text(
                     title,
                     color = Colors.ink,

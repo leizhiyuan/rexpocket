@@ -2,6 +2,7 @@ package me.leaver.rexpocket.data
 
 import android.content.Context
 import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.BarKey
 import me.leaver.rexpocket.core.KeyArrangement
 import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.ListedSession
@@ -194,30 +195,48 @@ class HostStore(context: Context) {
     }
 
     /**
-     * The key bar's order and which keys show. The first read after an upgrade builds it from the
-     * switches that came before it - Shift, Alt, and C-c's "hidden" - and stores it, so the bar
-     * stays as it was and those switches no longer matter. They are left for an older build to read.
+     * The key bar's keys and its key groups (see docs/design/terminal-controls.md, 4.1). The first
+     * read after an upgrade builds them from what came before - the Shift, Alt and C-c switches, or
+     * the last version's order and hidden keys with today's Fn - and stores them, so the bar stays as
+     * it was. The old keys are kept in their old form for an older build to read.
      */
     fun keyArrangement(): KeyArrangement {
         val order = prefs.getString(KEY_KEY_BAR_ORDER, null)
         val hidden = prefs.getString(KEY_KEY_BAR_HIDDEN, null)
+        val groups = prefs.getString(KEY_KEY_BAR_GROUPS, null)
         val arrangement = KeyArrangement.fromStored(
             order = order,
             hidden = hidden,
+            groups = groups,
+            groupKeys = { id -> prefs.getString(groupKeysPref(id), null) },
+            groupName = { id -> prefs.getString(groupNamePref(id), null) },
             legacyShift = prefs.getBoolean(KEY_KEY_BAR_SHIFT, false),
             legacyAlt = prefs.getBoolean(KEY_KEY_BAR_ALT, false),
             legacyCtrlCHidden = prefs.getString(KEY_KEY_BAR_CTRL_C, null) == CtrlCKey.Hidden.pref,
         )
-        if (order == null || hidden == null) setKeyArrangement(arrangement)
+        if (order == null || hidden == null || groups == null) setKeyArrangement(arrangement)
         return arrangement
     }
 
     fun setKeyArrangement(arrangement: KeyArrangement) {
-        prefs.edit()
+        val before = prefs.getString(KEY_KEY_BAR_GROUPS, null)?.split(',').orEmpty()
+        val edit = prefs.edit()
             .putString(KEY_KEY_BAR_ORDER, arrangement.storedOrder())
             .putString(KEY_KEY_BAR_HIDDEN, arrangement.storedHidden())
-            .apply()
+            .putString(KEY_KEY_BAR_GROUPS, arrangement.storedGroups())
+        for (group in arrangement.groups) {
+            edit.putString(groupKeysPref(group.id), arrangement.storedGroupKeys(group.id))
+            edit.putString(groupNamePref(group.id), group.name)
+        }
+        // A group deleted leaves nothing behind, so one made again with its id starts afresh.
+        for (id in before.map { it.trim() }.filter { id -> BarKey.validGroupId(id) && arrangement.group(id) == null }) {
+            edit.remove(groupKeysPref(id)).remove(groupNamePref(id))
+        }
+        edit.apply()
     }
+
+    private fun groupKeysPref(id: String) = "keybar_group_$id"
+    private fun groupNamePref(id: String) = "keybar_group_${id}_name"
 
     /**
      * What a tap, a double tap and a long press on the terminal do, and their times. The double tap
@@ -327,6 +346,7 @@ class HostStore(context: Context) {
         private const val KEY_KEY_BAR_CTRL_C = "keybar_ctrl_c"
         private const val KEY_KEY_BAR_ORDER = "keybar_order"
         private const val KEY_KEY_BAR_HIDDEN = "keybar_hidden"
+        private const val KEY_KEY_BAR_GROUPS = "keybar_groups"
         private const val KEY_DOUBLE_TAP_FULL_SCREEN = "double_tap_full_screen"
         private const val KEY_GESTURE_TAP = "gesture_tap"
         private const val KEY_GESTURE_DOUBLE_TAP = "gesture_double_tap"

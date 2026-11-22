@@ -14,7 +14,7 @@ one change of behaviour by default is that a tap in full screen also closes the 
 | Top bar: back, the tab title (opens tabs and panes), who holds the pane, ⋮ | shown | hidden |
 | Pane switcher pill (only with 2+ panes in the tab) | over the key bar | hidden |
 | Pane | between the bars | the whole window |
-| Key pill: Esc, C-c, Tab, Return, Ctrl, (Shift), (Alt), Fn, Paste, Attach, `/` | bottom | hidden |
+| Key pill: Esc, C-c, Tab, Return, Ctrl, Fn, Paste, Attach, `/` by default; any key of the catalogue and the keys of key groups (4.1) | bottom | hidden |
 | Small pill: arrow stick, keyboard key, full-screen key (scrolled into view) | bottom right | hidden |
 | Exit-full-screen corner button | — | top right |
 
@@ -137,30 +137,174 @@ its way, so the rows do not jump. Close pane shows only with two or more panes: 
 with its last pane, which is Close tab. The keyboard row says what a tap does, by whether the
 keyboard is up; Release or Take over by who holds the pane. A desk keyboard changes nothing.
 
-### 4.1 Arrange keys
+### 4.1 Key bar and key group customization
 
-Settings › Terminal controls › Arrange keys lists each pill's keys in their order: the wide pill's
-Esc, C-c, Tab, Return, Ctrl, Shift, Alt, Fn, Paste, Attach, `/`, and the small pill's arrow stick,
-keyboard key and full-screen key. Each row has a handle to drag it to its place, up and down buttons
-for one step (and for TalkBack, where a drag is awkward), and an eye to show or hide the key.
-Changes apply at once; "Reset to default" brings back the bar as it first came (Shift and Alt
-hidden, everything else shown, the default order).
+People asked for two things: to put a key that lives behind `Fn` (F10 for htop, Home, PgDn) right
+on the bar, and to choose what the `Fn` panel holds. The second grows into **key groups**: `Fn` is
+one panel of keys opened by its key on the bar, and a person can have others - one for htop, one for
+vim - made from a preset or from nothing. Everything here is in Settings › Terminal controls ›
+Arrange keys.
 
-- The keyboard key cannot be hidden: once the phone keyboard is down it is the one way back. With
-  everything else hidden the bar is the keyboard key alone.
-- Keys stay in their pill. The small pill is the thumb's fixed place, and its width rule assumes its
-  own few keys; a wide-pill key moved there would make it a second scrolling row and starve the
-  wide pill, and the stick moved into a scrolling row would fight the scroll for its drags.
-- Shift, Alt and C-c's "hidden" were separate settings; they are now rows here. The first read
-  after an upgrade builds the arrangement from them and stores it, so nobody's bar changes. A
-  stored C-c "hidden" then reads as "tap".
-- A key the model does not know (from a later build) is dropped; a key the stored order lacks (new
-  since) goes back after the key that precedes it by default; a stored hidden set keeps new keys
-  shown.
+#### The keys
 
-The pure model is `KeyArrangement` (core): `move`, `moveTo`, `show`, `fromStored`, the stored form.
+One catalogue (`BarKey`, core) of every key the bar can draw, each with a stored name:
 
-Later: key size, a second row, keys of one's own.
+| Kind | Keys | Stored as |
+| --- | --- | --- |
+| The bar's own | Esc, C-c, Tab, Return, Ctrl, Shift, Alt, Paste, Attach, `/` | `escape`, `ctrl_c`, ... as before |
+| Group keys | one per group: `Fn`, and each group made | `fn`, `group_<id>` |
+| The right pill's | arrow stick, keyboard key, full-screen key | `arrows`, `keyboard`, `full_screen` |
+| Desk keys | Home, End, PgUp, PgDn, Ins, Del, F1-F12 | `home`, `page_up`, `f10`, ... |
+| Arrow keys | ↑ ↓ ← →, each its own key | `arrow_up`, ... |
+| Control keys | C-a to C-z but C-c (the bar's own, with its setting) | `ctrl_d`, ... |
+| Characters | space, a-z, 0-9, and every ASCII symbol but `/` (the bar's own) | `char_<hex code>` |
+
+New are the single arrows (Termux's default row has them; a held one repeats, as the arrow pad's
+do), the control keys (one tap for the chords behind a held `ctrl`, which an agent or vim asks for
+again and again), and the characters: htop wants `q` and space, vim `:`, tmux its follow-up letters,
+and a phone keyboard keeps most symbols a page away. Every key sends what it does today wherever it
+sits: a desk key goes to the pane's terminal by its Android key code, the rest go to Rex as keys,
+and the modifiers held on the bar apply to all of them (Shift then End selects, Ctrl then F5 is
+C-F5, Alt then `b`).
+
+#### Where a key may live
+
+- **The key pill**: any key but the right pill's three. Group keys live only here: a group inside a
+  group would be a menu of menus.
+- **A group's panel**: any key but group keys and the right pill's.
+- **The right pill**: its own three keys only. It is the thumb's fixed place, its width rule
+  assumes its few keys, and the stick in a scrolling row would fight the scroll for its drags.
+
+A key is at most once in each place, but may be in several: on the pill and in `Fn` both, as `/`
+is by default. So putting F10 on the bar adds it there and leaves `Fn`'s rows of F-keys whole;
+moving a key is adding it in one place and removing it from the other, two steps a person sees.
+
+Defaults are today's bar: the pill Esc, C-c, Tab, Return, Ctrl, Fn, Paste, Attach, `/`; `Fn` with
+Home, End, PgUp, PgDn, Ins, Del, F1-F12 and the seven symbols; the right pill stick, keyboard key,
+full-screen key. Shift and Alt are off the bar until added, as they were hidden.
+
+The keyboard key cannot be removed: once the phone keyboard is down it is the one way back. Every
+other key can, and none is ever lost: a place's "Add keys" page always offers every key that may go
+there, so a key taken off is one tap from coming back. (C-c also has `ctrl` then `c`, and every
+chord has a held `ctrl`.)
+
+#### Key groups
+
+A group is a named panel of keys and a key on the bar that pins it, as `Fn` pins its panel now.
+
+- **Making one**: "New group" offers the presets - **Fn** (once deleted), **htop** (F1-F10, the
+  four arrows, PgUp, PgDn, space, `/`, `q`), **vim** (Esc, `:`, `/`, `?`, `*`, `~`, C-d, C-u, C-o,
+  C-r, C-w, C-v, arrows) and **tmux** (C-b, then `c n p d % " [ z` and arrows: the prefix and its
+  follow-ups, two taps on a panel that stays open; tmux in a Rex pane is still tmux) - and "Empty
+  group", which asks for a name. Presets are off by default, and a template copied when chosen, so
+  a later change to a preset never changes a group someone has tuned. A preset already made opens
+  that group instead of being greyed out.
+- **Its key on the bar** shows the group's name (up to 8 characters, set smaller to fit the 48 dp
+  key; `Fn`, `htop`, `vim` at the usual size), in the bar's monospace, lit while its panel is open.
+  A new group's key goes right after the last group key on the pill, so groups sit together. It is
+  a key like any other: moved in the pill's list, removed, added back from the pill's "Add keys".
+  A group whose key is off the pill keeps its keys; its row says "Not on the key bar".
+- **Its panel** lays its keys in rows of six, or seven when every key of the row is one character,
+  in the person's order: today's `Fn` comes out as before (the moving keys, F1-F6, F7-F12, the
+  seven symbols). It scrolls when it is taller than the room above the bar (a phone on its side with
+  the keyboard up), never less than two rows. One panel at a time: opening another puts the first
+  away, and the open one stays open across a rotation (as the arrow pad does). A held key does on a
+  panel what it does on the bar: Return held is a new line, C-c per its setting, `ctrl` held opens
+  the chords.
+- **An empty group** draws no key: a key that opens nothing is a dead key, and the width rule counts
+  only keys drawn. Its rows say why ("Empty: not on the key bar"), and adding a key brings it back.
+- **At most 8 groups.** Each is a key on the bar and a row in settings; more would not be keys a
+  thumb finds. At the limit "New group" says so and why instead of acting.
+- **Rename** and **Delete** are on the group's page. Delete asks first, since the keys go with it;
+  a preset deleted can be made again.
+- Groups are listed in their keys' order on the bar, then those off the bar; reordering groups is
+  reordering their keys in the pill, so there is one order, not two.
+
+#### The pages
+
+Arrange keys (portrait and landscape alike; it scrolls):
+
+1. **Key pill**: its keys in order. A row: a drag handle, the name, up and down (one step; for
+   TalkBack, where a drag is awkward), and remove (⊖). A group key's row says how many keys it
+   opens. Last, "Add keys ›".
+2. **Key groups**: a row per group - its name, "25 keys · on the key bar" - opening the group's
+   page; then "New group ›".
+3. **Right pill**: its keys as in 1, the keyboard key with a lock in place of ⊖; "Add keys ›" once
+   one is removed.
+4. **Reset to default**: the pills and `Fn` as they first came, other groups gone. It asks first
+   when there are groups to lose.
+
+A **group's page**: its keys as in 1 (a key also on the pill says so under its name), "Add keys ›",
+then "On the key bar" (on or off), "Rename", "Delete group". A name is typed on a page of the sheet,
+with Save as its last row, not in a dialog over it: a dialog takes the keyboard from the sheet's
+window. Every page past Arrange keys has a back arrow before its title, as swiping it down does.
+
+**Add keys** is the catalogue as chips in flowing rows under headings (The bar's keys, Groups,
+Desk keys, Arrows, Control keys, Symbols, Letters and digits), only those that may go in the place.
+A chip is a toggle: checked when the key is there, a tap adds it at the end or takes it off, and the
+page stays open, so filling a group is a run of taps rather than a trip per key. Chips wrap to the
+width: a phone shows six or so to a row, a landscape screen twice as many.
+
+A drag moves a row within its list and stops at the list's ends.
+
+**Controls that cannot act say why.** The platform's pattern is a control shown disabled with the
+reason in supporting text, and a tooltip on a tap of the control itself. The keyboard key's row says
+"Always on the bar: it brings the keyboard back"; its lock is a button whose tap or long press shows
+that in a tooltip, and TalkBack reads "Keyboard cannot be removed" with the reason. "New group" at
+the limit carries its reason the same way. Up on the first row and down on the last are disabled
+(TalkBack says so): their reason is where the row is. Elsewhere a control that would do nothing is
+not drawn (no "Add keys" on a full right pill) rather than greyed.
+
+#### Interactions
+
+- **Modifiers** apply to a key wherever it is, and a modifier key may be on a panel too (Shift next
+  to End). A modifier that cannot be reached - off the pill and in no group whose key is on it - is
+  let go, so it never stays held with no key to release it.
+- **C-c's setting** (tap · hold unless busy) is the C-c key's, wherever it sits.
+- **Width**: `keyBarWidths` holds for any number of keys (tested up to 40): the pill scrolls and
+  hints, the right pill stays whole or gives way as before. Every key is 48 dp, so the rule's only
+  input is still how many there are.
+
+#### Stored, and every earlier form
+
+| Key | Values | Missing means |
+| --- | --- | --- |
+| `keybar_order` | the key pill's keys, then the right pill's | built from the old switches, below |
+| `keybar_hidden` | the default bar keys (the 14 of the last version) not on their pill | as `keybar_order` |
+| `keybar_groups` | the group ids, in the order they were made | `fn` alone, with today's keys |
+| `keybar_group_<id>` | the group's keys | the preset's keys, or none |
+| `keybar_group_<id>_name` | its name | the preset's name |
+
+- **Before Arrange keys** (the Shift, Alt and C-c "hidden" switches): read as before, and stored.
+- **Arrange keys of the last version** (order and hidden of the 14 keys): the pill is the stored
+  order without the hidden keys, the right pill likewise, and `Fn` today's: the same bar. That
+  version's hidden key is now a removed one, back from "Add keys".
+- **An older build reading this**: it knows `keybar_order` and `keybar_hidden`, drops the keys it
+  does not know (F10, group keys), and finds each of its own keys either in the order or hidden, so
+  it shows this bar less the new keys. Groups it ignores.
+- **A later build's keys** in any list are dropped; a default bar key the order lacks and hidden
+  does not name (one added since) goes back where it is by default; a group key whose group is gone
+  is dropped; a key not allowed where it is stored is dropped.
+
+#### Elsewhere
+
+- **Termux** reads `extra-keys` from a properties file: rows of key names (ESC, CTRL, F1-F12, UP,
+  PGDN...) or literal characters, each with an optional second key on a swipe up. Any key is
+  possible, but only by editing a file. Taken: the catalogue by name, literal characters as keys,
+  single arrows. Not taken: the file, and swipe-up second keys (deferred).
+- **JuiceSSH** has a row of extra keys over its keyboard and a popup of more, with little to change
+  about them as far as I know; a fixed set is what this bar had.
+- **Blink** keeps its keys over the keyboard in fixed groups - modifiers, arrows, a scrolling strip
+  of the rest - and puts its settings into remapping a desk keyboard. Taken: groups, and a fixed
+  thumb place, which the right pill already is.
+
+The model is `KeyArrangement` (core, pure): `add`, `remove`, `move`, `moveTo` for the pills;
+`addGroup`, `renameGroup`, `deleteGroup`, `addToGroup`, `removeFromGroup`, `moveInGroup` for
+groups; `shown`, `isShown`, `fromStored` and the stored form. `KeyPreset` holds the presets.
+
+Deferred: a key with its own text or sequence (a macro, such as tmux's `C-b c` in one tap); a second
+key on a swipe up, as Termux has; dragging a key from one list into another; resetting one group to
+its preset; key size and a second row.
 
 ## 5. Short windows and landscape
 
@@ -217,7 +361,8 @@ sheet with two groups:
   under its label ("A tap waits in case a second follows" / "A tap acts at once"), its detail
   just On or Off. Every sheet row wraps - a label to three lines, a detail to two, at most 152 dp
   wide - so nothing is cut off on a narrow phone or with large text.
-- **Key bar**: With a desk keyboard, Arrange keys ›, C-c (tap · hold unless busy).
+- **Key bar**: With a desk keyboard, Arrange keys › (the key pill, key groups, right pill; 4.1), C-c
+  (tap · hold unless busy).
 
 Stored in the app's shared preferences beside the existing keys:
 
@@ -229,7 +374,8 @@ Stored in the app's shared preferences beside the existing keys:
 | `gesture_wait_double_tap` | boolean | false |
 | `gesture_double_tap_ms`, `gesture_long_press_ms` | int; 0 = the phone's | 0 |
 | `keybar_order` | both pills' keys, comma-separated (`escape,ctrl_c,...,arrows,keyboard,full_screen`) | built once from the old keys, below |
-| `keybar_hidden` | the hidden keys, comma-separated | built once: `shift` unless `keybar_shift`, `alt` unless `keybar_alt`, `ctrl_c` if `keybar_ctrl_c` was `hidden` |
+| `keybar_hidden` | the default keys not on their pill, comma-separated | built once: `shift` unless `keybar_shift`, `alt` unless `keybar_alt`, `ctrl_c` if `keybar_ctrl_c` was `hidden` |
+| `keybar_groups`, `keybar_group_<id>`, `keybar_group_<id>_name` | the key groups, their keys and names (4.1) | Fn alone, with its keys of before |
 
 Migration: `gesture_double_tap` missing and the old `double_tap_full_screen` false gives
 `nothing`; otherwise `full_screen`. The old key is left in place, so going back to an older build
@@ -242,19 +388,30 @@ keeps its own setting. Values out of range are clamped; unknown strings fall bac
   the keyboard rules for taps and double taps.
 - Migration (core, JVM, `GestureSettings.fromStored`, which the store calls): old key true, false
   and missing; a new choice winning over it; unknown values; out-of-range times.
-- `KeyArrangementTest` (core, JVM): the default bar, moves within a pill and at its ends, hiding
-  everything but the keyboard key, the stored form read back, migration from the old switches,
-  unknown and missing keys.
+- `KeyArrangementTest` (core, JVM): the default bar and Fn; every key's stored name read back; a
+  desk key added to the pill, placed, moved at the ends and removed; where keys may and may not go;
+  the keyboard key staying; Fn's keys arranged and reachability; empty groups; presets, empty
+  groups, rename, delete and the limit of 8; every arrangement read back; migration from the old
+  switches and from the last version's order and hidden keys; what an older build reads; unknown,
+  missing and misplaced keys and groups.
 - `KeyBarLayoutTest` (app, JVM): the widths at 360, 393, 411, 426 and 891 dp, a sweep of every
-  width from 300 to 1400 dp for 8 to 11 keys, small pills of one and two keys, no wide-pill keys.
+  width from 300 to 1400 dp for 8 to 40 keys, a group's panel rows (Fn's as before), small pills of one and two keys, no wide-pill keys.
 - `ClosedPaneTest` / size test (core): a size set while a resize is out is still sent.
 - `TermChromeTest` (app, JVM): which bars show for tall and short windows, keyboard up or down, in
   and out of full screen.
 - Instrumented: `TerminalViewTest` for the real view (wait mode, the person's long-press time, a
   long press set to act, a link still offered), `FullScreenTest` (menu, pill key, double tap,
   Back), `KeyBarLayoutInstrumentedTest` (the full-screen key whole at 411 and 891 dp, both pills
-  hinting at 426 dp), `ArrangeKeysTest` (a key moved in the list moves in the bar; a key hidden
-  leaves it; Reset brings it back), `TermMenuTest` (the ⋮ menu's rows, order and sections for one
+  hinting at 426 dp), `ArrangeKeysTest` (on the JVM too: rows moved by up, down and drag, in the key
+  pill and in Fn's list, move on screen, in the bar or panel, and in the store; a key removed and
+  added back from Add keys; F10 added through the page, placed first, in the bar, sent as F10 and
+  with the row's Ctrl as C-F10; Home moved from Fn to the bar; a preset group's key and panel; an
+  empty group without a key until it has one; rename, off the bar, delete; the keyboard key's line,
+  lock and tooltip; New group at the limit; Reset, asking first when groups would go),
+  `KeyBarBytesTest` (F10 put on the bar through the page sends `ESC [21~`, and `ESC [21;5~` after
+  Ctrl, through a real libghostty terminal, as Fn's own F10 does), `KeyBarStateTest` (the open group
+  panel stays open across a rotation, on the JVM too),
+  `TermMenuTest` (the ⋮ menu's rows, order and sections for one
   and two panes, held and handed back, not live, a closed pane, an upload on its way, every phone
   key hidden with a desk keyboard; on the JVM the keyboard row with the keyboard up),
   `TermFullScreenTest` (the pane fills the window right after entering, the key bar is above the

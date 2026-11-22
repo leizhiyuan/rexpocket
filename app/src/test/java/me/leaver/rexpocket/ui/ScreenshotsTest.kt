@@ -3,7 +3,10 @@ package me.leaver.rexpocket.ui
 import android.graphics.Typeface
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -11,7 +14,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import kotlinx.coroutines.flow.emptyFlow
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.BarKey
+import me.leaver.rexpocket.core.DeskKey
 import me.leaver.rexpocket.core.GestureSettings
+import me.leaver.rexpocket.core.KeyArrangement
+import me.leaver.rexpocket.core.KeyPreset
 import me.leaver.rexpocket.core.PocketState
 import org.junit.Rule
 import org.junit.Test
@@ -40,7 +47,22 @@ class ScreenshotsTest {
         captureScreenRoboImage("build/outputs/roborazzi/$name.png")
     }
 
-    private fun terminal(name: String) {
+    /** A row of the sheet tapped, as a person opens a page from it. */
+    private fun open(text: String) {
+        compose.onAllNodes(hasText(text) and hasClickAction())[0].performScrollTo().performClick()
+        compose.waitForIdle()
+    }
+
+    /** Arrange keys, then the page [path] leads to, captured. */
+    private fun arrangePage(name: String, vararg path: Int) {
+        val model = RexViewModel(freshApp())
+        compose.setContent { ControlsOnModel(model, ControlsPage.ArrangeKeys, onPage = {}, bar = false) }
+        compose.waitForIdle()
+        for (step in path) open(if (step == 0) "Fn" else compose.activity.getString(step))
+        captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    private fun terminal(name: String, arrangement: KeyArrangement = KeyArrangement(), panel: String? = null) {
         compose.setContent {
             RexTheme {
                 TermScreen(
@@ -61,10 +83,15 @@ class ScreenshotsTest {
                     onRetryUpload = {},
                     gestures = GestureSettings(),
                     keyBarWithKeyboard = true,
+                    keyArrangement = arrangement,
                 )
             }
         }
         compose.waitForIdle()
+        if (panel != null) {
+            compose.onNodeWithTag(groupKeyTag(panel)).performScrollTo().performClick()
+            compose.waitForIdle()
+        }
         captureScreenRoboImage("build/outputs/roborazzi/$name.png")
     }
 
@@ -112,6 +139,18 @@ class ScreenshotsTest {
     @Test fun controlsLandscape() { landscape(); controls(ControlsPage.Controls, "controls-landscape") }
     @Test fun arrangeKeysPortrait() = controls(ControlsPage.ArrangeKeys, "arrange-keys-portrait")
     @Test fun arrangeKeysLandscape() { landscape(); controls(ControlsPage.ArrangeKeys, "arrange-keys-landscape") }
+    @Test fun addKeysPortrait() = arrangePage("add-keys-portrait", R.string.arrange_add_keys)
+    @Test fun addKeysLandscape() { landscape(); arrangePage("add-keys-landscape", R.string.arrange_add_keys) }
+    @Test fun fnGroupPortrait() = arrangePage("fn-group-portrait", 0)
+    @Test fun fnGroupLandscape() { landscape(); arrangePage("fn-group-landscape", 0) }
+    @Test fun newGroupPortrait() = arrangePage("new-group-portrait", R.string.arrange_new_group)
+    @Test fun newGroupLandscape() { landscape(); arrangePage("new-group-landscape", R.string.arrange_new_group) }
+
+    /** The bar with F10 added and the htop group made, its panel open. */
+    private val htopBar = KeyArrangement().add(BarKey.Desk(DeskKey.F10)).moveTo(BarKey.Desk(DeskKey.F10), 2).addPreset(KeyPreset.Htop)
+    @Test fun terminalFnPanelPortrait() = terminal("terminal-fn-panel-portrait", panel = BarKey.FN_GROUP)
+    @Test fun terminalHtopPortrait() = terminal("terminal-htop-portrait", htopBar, panel = "htop")
+    @Test fun terminalHtopLandscape() { landscape(); terminal("terminal-htop-landscape", htopBar, panel = "htop") }
 }
 
 /** A Pixel 6 or so, the phone the emulator in device-test is. */

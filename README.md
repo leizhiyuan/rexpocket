@@ -30,11 +30,13 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   programs are exactly as on the desk.
 - **Made for the phone.** Typing goes straight into the pane. A floating dock holds the keyboard,
   Return and a key row: `esc`, `C-c`, arrows that repeat while held, Tab, Return, `ctrl`, paste, a paperclip and `/`.
-  Settings → Terminal → Arrange keys puts the keys of both pills in any order and shows or hides
-  each one; optional `Shift` and `Alt` keys are hidden by default, and only the keyboard key always
-  stays. The `C-c` key can be made to need a hold while the program is idle, or hidden there
-  (`ctrl` then `c` still sends it). `Fn` pins a panel of Home, End, PgUp, PgDn, Ins, Del, F1-F12
-  and the symbols a phone keyboard buries; the row's modifiers apply to them. Hold
+  `Fn` pins a panel of Home, End, PgUp, PgDn, Ins, Del, F1-F12 and the symbols a phone keyboard
+  buries; the row's modifiers apply to them. Settings → Terminal → Arrange keys puts the keys of
+  both pills in any order, adds and removes them - any key of `Fn`, such as F10, can go right on the
+  bar, as can single arrows, `C-d`-style chords, letters and symbols - and chooses what `Fn` holds.
+  **Key groups** are panels like `Fn` with a key of their own: make one empty or from a preset
+  (htop, vim, tmux). Only the keyboard key always stays. The `C-c` key can be made to need a hold
+  while the program is idle (`ctrl` then `c` always sends it). Hold
   `ctrl` for `C-c` `C-d` `C-z` `C-r` `C-l` `C-a` `C-e` `C-w` `C-j`. A split shows one pane at a
   time, with a bar to move between them. **The keyboard never resizes the terminal** - the pane
   slides up under it by what it covers, but never past the cursor's row - so the line being typed
@@ -120,8 +122,8 @@ own SSH daemon. How the transport works is described in
      (open keyboard, open or close it, nothing), double tap (full screen, keyboard, nothing), long
      press (select text, full screen, keyboard; a link is always offered), whether a tap waits to
      see if a second follows (off by default, so a tap acts at once), and the double-tap and
-     long-press times (the phone's own by default). Arrange keys (order, show, hide, reset) and the
-     `C-c` key's hold are there too. See [docs/design/terminal-controls.md](docs/design/terminal-controls.md).
+     long-press times (the phone's own by default). Arrange keys (order, add, remove, key groups,
+     reset) and the `C-c` key's hold are there too. See [docs/design/terminal-controls.md](docs/design/terminal-controls.md).
    - On a phone held sideways the pane switcher sits in the top bar, and while the keyboard is up
      the top bar steps aside so the key bar keeps its height; a ⋮ in the corner keeps the menu.
    - Scroll the wide pill to reach more keys. Tap a modifier for the next key, twice quickly to
