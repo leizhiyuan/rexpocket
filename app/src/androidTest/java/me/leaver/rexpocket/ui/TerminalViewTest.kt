@@ -343,6 +343,41 @@ class TerminalViewTest {
         assertEquals("\u001bOH", encode(DeskKey.Home, KeyModifiers()))
     }
 
+    @Test
+    fun theCursorsRowIsReportedSoTheKeyboardNeverHidesIt() {
+        val tops = java.util.Collections.synchronizedList(mutableListOf<Int?>())
+        onMain { view.onCursorRow = { tops += it } }
+        render()
+        assertEquals("a new terminal's cursor is on the top row: $tops", 0, tops.last())
+
+        feed("one\r\ntwo\r\nthree")
+        render()
+        val two = requireNotNull(tops.last())
+        assertTrue("the cursor moved down two rows: $tops", two > 0)
+        feed("\r\n")
+        render()
+        assertEquals("one row further, one row's height further: $tops", two * 1.5, requireNotNull(tops.last()).toDouble(), 1.0)
+
+        // A program that hides the cursor only while it redraws does not move the pane.
+        val before = tops.size
+        feed("\u001b[?25l")
+        render()
+        feed("\u001b[?25h")
+        render()
+        assertEquals("a cursor hidden for a moment is not reported: $tops", before, tops.size)
+
+        // One that keeps it hidden is, once it has stayed hidden: the pane then keeps the bottom of
+        // the grid in view instead.
+        feed("\u001b[?25l")
+        render()
+        val deadline = SystemClock.uptimeMillis() + 2_000
+        while (tops.last() != null && SystemClock.uptimeMillis() < deadline) {
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            Thread.sleep(20)
+        }
+        assertEquals(null, tops.last())
+    }
+
     private fun encode(key: DeskKey, mods: KeyModifiers): String =
         String(requireNotNull(session.encodeKey(key.keyCode, false, mods.metaState(), null)) { key.name }, Charsets.UTF_8)
 

@@ -281,14 +281,18 @@ internal fun TermScreen(
     //
     // The keyboard takes no room from the terminal. The pane keeps the grid it has and slides up by
     // what the keyboard covers - the bottom of the terminal, the rows being typed into, stays where
-    // it was - while the dock and the rest of the bottom chrome rise over it. A program is therefore
+    // it was, unless the cursor is too near the top for that - while the dock and the rest of the
+    // bottom chrome rise over it. A program is therefore
     // never resized by the screen keyboard opening, so it never redraws or reflows for it.
     val hardwareKeys = rememberHardwareKeyboard()
     val dock = chrome.keyBar(keyBarShown(hardwareKeys, keyBarWithKeyboard)) && closed == null
     var bottomPx by remember { mutableIntStateOf(0) }
     var panePx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
-    val slide = imeShift(imeHeight(), panePx)
+    // Where the pane's cursor is, so the slide never takes its row out of view; a new pane starts
+    // with none until it has drawn.
+    var cursorTopPx by remember(focused?.id) { mutableStateOf<Int?>(null) }
+    val slide = imeShift(imeCover(), panePx, cursorTopPx)
 
     // With the phone's bars hidden their insets are nothing, so the pane reaches the edges. A camera
     // cutout keeps the text out from under it at the sides, where it would hide the start of every
@@ -354,6 +358,7 @@ internal fun TermScreen(
                         onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
                         onSession = { termSession = it },
                         onKeyboard = { keyboard = it },
+                        onCursorTop = { cursorTopPx = it },
                         hardwareKeyboard = hardwareKeys,
                         // A horizontal swipe on the pane moves to the pane beside it, as the dots
                         // under it say there is one.

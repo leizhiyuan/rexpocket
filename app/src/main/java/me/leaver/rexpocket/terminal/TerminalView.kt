@@ -125,6 +125,26 @@ internal class TerminalView(context: Context) : View(context) {
     /** A horizontal swipe; true when it went towards the next pane. */
     var onSwipe: ((forward: Boolean) -> Unit)? = null
 
+    /**
+     * Where the cursor's row is, as the pane draws it: its top in this view's pixels, or null once no
+     * cursor has shown for a moment. Called when it changes. The screen reads it to keep that row in
+     * view while the keyboard covers the bottom of the pane.
+     *
+     * A program that hides the cursor only while it redraws would otherwise flick the answer to
+     * null and back, so a cursor that goes away is reported only once it has stayed away for
+     * [CURSOR_GONE_MS]. While the pane is scrolled back into the history nothing is reported: the
+     * cursor is out of view because the person is reading, and the pane stays where it is.
+     */
+    var onCursorRow: ((topPx: Int?) -> Unit)? = null
+
+    private var cursorTop: Int? = null
+    private var cursorReported = false
+    private var cursorGonePending = false
+    private val cursorGone = Runnable {
+        cursorGonePending = false
+        reportCursor(null)
+    }
+
     private val regular = Paint(Paint.ANTI_ALIAS_FLAG).apply { isSubpixelText = true }
     private val bold = Paint(regular)
     private val italic = Paint(regular)
@@ -365,7 +385,10 @@ internal class TerminalView(context: Context) : View(context) {
         drawImages(canvas, frame, images, TerminalImage.LAYER_BELOW_TEXT)
         for (row in 0 until rows) drawText(canvas, frame, row, columns)
         drawImages(canvas, frame, images, TerminalImage.LAYER_ABOVE_TEXT)
-        if (selection == null) drawCursor(canvas, frame)
+        if (selection == null) {
+            drawCursor(canvas, frame)
+            noteCursor(frame)
+        }
         drawHandles(canvas)
         drawScrollbar(canvas, frame)
     }
@@ -579,6 +602,28 @@ internal class TerminalView(context: Context) : View(context) {
             }
         }
         if (composing.isNotEmpty()) drawComposing(canvas, left, top)
+    }
+
+    private fun noteCursor(frame: TerminalFrame) {
+        if (!frame.atBottom) return
+        val shown = frame.cursorX >= 0 && frame.cursorY >= 0 && frame.cursorY < frame.rows
+        if (shown) {
+            if (cursorGonePending) {
+                tapClock.removeCallbacks(cursorGone)
+                cursorGonePending = false
+            }
+            reportCursor((frame.cursorY * cellHeight).roundToInt())
+        } else if (cursorTop != null && !cursorGonePending) {
+            cursorGonePending = true
+            tapClock.postDelayed(cursorGone, CURSOR_GONE_MS)
+        }
+    }
+
+    private fun reportCursor(top: Int?) {
+        if (cursorReported && top == cursorTop) return
+        cursorTop = top
+        cursorReported = true
+        onCursorRow?.invoke(top)
     }
 
     /** What the keyboard is still composing, over the cursor and underlined: it is not input yet. */
@@ -828,6 +873,8 @@ internal class TerminalView(context: Context) : View(context) {
 
     override fun onDetachedFromWindow() {
         tapClock.removeCallbacks(tapTimer)
+        tapClock.removeCallbacks(cursorGone)
+        cursorGonePending = false
         taps.cancel()
         clearSelection()
         dropBitmaps()
@@ -897,6 +944,8 @@ internal class TerminalView(context: Context) : View(context) {
         const val WHEEL_LINES = 3
         const val FAINT_ALPHA = 150
         const val SCROLLBAR_MS = 900L
+        /** How long the cursor must stay hidden before the pane counts it as gone. */
+        const val CURSOR_GONE_MS = 250L
         const val COMBINING_ACCENT = Int.MIN_VALUE
         const val DELETE = 0x7f
     }

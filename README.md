@@ -36,7 +36,8 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   and the symbols a phone keyboard buries; the row's modifiers apply to them. Hold
   `ctrl` for `C-c` `C-d` `C-z` `C-r` `C-l` `C-a` `C-e` `C-w` `C-j`. A split shows one pane at a
   time, with a bar to move between them. **The keyboard never resizes the terminal** - the pane
-  slides up under it by what it covers, so the line being typed into stays in view and a program in
+  slides up under it by what it covers, but never past the cursor's row - so the line being typed
+  into stays in view, even a new shell's prompt on the top row - and a program in
   it is never redrawn for the keyboard coming or going - and **a keyboard on the desk takes the dock
   away**, since it has every key on it. Paste and attach stay in the menu.
 - **Links.** Long-press a link a program printed, or one it set as a hyperlink, to open, copy or
