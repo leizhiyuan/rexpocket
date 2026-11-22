@@ -13,6 +13,7 @@ package netbird
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -118,11 +119,77 @@ func checkNode(t *testing.T, node *Node, peerName string, ping bool) (string, st
 			t.Fatalf("Ping %s: no path: %s", ip, out)
 		}
 		t.Logf("path to %s: %s", ip, out)
+		checkLink(t, node, peerName)
 	}
 
 	banner := sshBanner(t, node.ProxyPort(), peerName)
 	t.Logf("banner from %s:22: %q", peerName, banner)
+	checkDialError(t, node, peerName, ip)
 	return ip, self
+}
+
+// checkLink reads the state once the peer is connected: the node's own addresses, and a link to the
+// peer the home screen can show - direct or through a relay.
+func checkLink(t *testing.T, node *Node, peerName string) {
+	t.Helper()
+	raw, err := node.State()
+	if err != nil {
+		t.Fatalf("State: %v", err)
+	}
+	var st state
+	if err := json.Unmarshal([]byte(raw), &st); err != nil {
+		t.Fatalf("State %q: %v", raw, err)
+	}
+	if st.SelfInfo == nil || len(st.SelfInfo.IPs) == 0 || strings.Contains(st.SelfInfo.IPs[0], "/") {
+		t.Fatalf("state has no usable self: %s", raw)
+	}
+	if st.Tailnet == "" {
+		t.Fatalf("state names no network: %s", raw)
+	}
+	want := strings.ToLower(strings.TrimSuffix(peerName, "."))
+	for _, p := range st.Peers {
+		if strings.ToLower(p.DNSName) != want {
+			continue
+		}
+		if p.Link != "direct" && p.Link != "relay" {
+			t.Fatalf("peer %s is connected after a ping, but its link is %q: %s", peerName, p.Link, raw)
+		}
+		t.Logf("link to %s: %s %s", peerName, p.Link, p.LinkDetail)
+		return
+	}
+	t.Fatalf("state does not list %s: %s", peerName, raw)
+}
+
+// checkDialError dials a port nothing listens on and expects the node to say why it failed, which
+// a SOCKS5 reply cannot: the app shows that reason when Rex is not reached.
+func checkDialError(t *testing.T, node *Node, peerName, ip string) {
+	t.Helper()
+	dialer, err := proxy.SOCKS5("tcp", fmt.Sprintf("127.0.0.1:%d", node.ProxyPort()), nil, &net.Dialer{Timeout: 10 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if conn, err := dialer.(proxy.ContextDialer).DialContext(ctx, "tcp", net.JoinHostPort(peerName, "7297")); err == nil {
+		conn.Close()
+		t.Fatalf("%s:7297 answered; the test wants a port nothing listens on", peerName)
+	}
+	// The node's own dial may end a moment after the proxy's reply.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		reason := node.DialError(ip)
+		if reason == "" {
+			reason = node.DialError(peerName)
+		}
+		if reason != "" {
+			t.Logf("why %s:7297 failed: %s", peerName, reason)
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a failed dial to %s:7297 left no reason", peerName)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
 // waitForPeer polls State until the node is Running and lists peerName, then returns the peer's IP

@@ -52,12 +52,16 @@ import me.leaver.rexpocket.data.TailnetSettings
 import me.leaver.rexpocket.core.ReportedFact
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.net.NetworkWatcher
-import me.leaver.rexpocket.net.NetbirdBox
+import me.leaver.rexpocket.net.TailnetNodes
+import me.leaver.rexpocket.core.ConnectProgress
+import me.leaver.rexpocket.core.ConnectStep
+import me.leaver.rexpocket.core.TailnetStage
+import me.leaver.rexpocket.core.explainTailnetProblem
+import me.leaver.rexpocket.core.tailnetStage
 import me.leaver.rexpocket.net.NetbirdConfig
 import me.leaver.rexpocket.net.TailnetConfig
 import me.leaver.rexpocket.net.TailnetNode
 import me.leaver.rexpocket.net.TailnetStatus
-import me.leaver.rexpocket.net.TailscaleBox
 import me.leaver.rexpocket.net.TailscaleConfig
 import me.leaver.rexpocket.update.InstallResult
 import me.leaver.rexpocket.update.UpdateState
@@ -106,13 +110,19 @@ sealed interface Route {
  * here only whether the terminal was on screen, which is what makes a reopen at launch a
  * continuation rather than a surprise.
  */
-class RexViewModel(app: Application, private val saved: SavedStateHandle = SavedStateHandle()) : AndroidViewModel(app) {
+class RexViewModel @JvmOverloads constructor(
+    app: Application,
+    private val saved: SavedStateHandle = SavedStateHandle(),
+    /** The tailnet nodes; a test gives its own, since the real ones need the Go library. */
+    nodes: TailnetNodes = TailnetNodes.of(app),
+) : AndroidViewModel(app) {
     private val store = HostStore(app)
 
     /** True when this process was started again after Android killed it while the terminal was on screen. */
     private val terminalWasOpen = saved.get<Boolean>(KEY_TERMINAL_OPEN) == true
-    private val tailscaleBox = TailscaleBox(app)
-    private val netbirdBox = NetbirdBox(app)
+    private val tailscaleBox = nodes.tailscale
+    private val netbirdBox = nodes.netbird
+    private val netbirdAvailable = nodes.netbirdAvailable
     private val updater = Updater(app)
 
     /** The newer build the app found, from the check through to the downloaded APK. */
@@ -126,7 +136,7 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
 
     /** The backends this build can run: Netbird only when it was built in. */
     val tailnetBackends: List<TailnetBackend> by lazy {
-        TailnetBackend.entries.filter { it == TailnetBackend.Tailscale || NetbirdBox.available() }
+        TailnetBackend.entries.filter { it == TailnetBackend.Tailscale || netbirdAvailable() }
     }
 
     /** The status of the backend that is selected, so the home screen follows the choice. */
@@ -137,6 +147,59 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
     ) { tailscale, netbird, settings ->
         if (settings.backend == TailnetBackend.Netbird) netbird else tailscale
     }.stateIn(viewModelScope, SharingStarted.Eagerly, TailnetStatus())
+
+    /**
+     * Where the joined node is on its way to the network, as the home screen tells it: starting,
+     * signing in, connecting, connected as a device - or why it is not. See [tailnetStage].
+     */
+    val tailnetStage: StateFlow<TailnetStage> by lazy {
+        combine(tailnet, tailnetStatus, tailnetError) { settings, status, error ->
+            tailnetStage(
+                joined = settings.enabled,
+                backendState = status.backendState,
+                authUrl = status.authUrl,
+                device = status.self?.name.orEmpty(),
+                network = status.networkName,
+                // Blank when the node said nothing: the screen then words it (tailnet_start_failed).
+                error = error?.let { it.detail.orEmpty() },
+            )
+        }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Eagerly, TailnetStage.Off)
+    }
+
+    /**
+     * How far the connection to the open host has come, step by step, while it is on its way;
+     * null once it is live, and for a host that is not being connected.
+     */
+    private val _connectProgress = MutableStateFlow<ConnectProgress?>(null)
+    val connectProgress: StateFlow<ConnectProgress?> = _connectProgress
+
+    /** Moves the connection to [host] on to [step]; a connection that is not on its way stays as it is. */
+    private fun progress(host: String, step: ConnectStep) {
+        while (true) {
+            val current = _connectProgress.value ?: return
+            if (current.host != host) return
+            val next = current.next(step, System.currentTimeMillis())
+            if (next === current) return
+            if (_connectProgress.compareAndSet(current, next)) {
+                Diagnostics.event(CONN_TAG, "connect step $step after ${current.step} ${next.took.last().second}ms")
+                return
+            }
+        }
+    }
+
+    /**
+     * The connection's state with its problem told from what the tailnet node knows, for a host on
+     * the tailnet: an offline device, a name the tailnet does not have, a port nothing listens on, a
+     * node that needs a sign-in. See [explainTailnetProblem].
+     */
+    private fun explained(st: PocketState, target: SavedHost): PocketState {
+        val problem = st.problem ?: return st
+        if (!target.viaTailscale || st.phase == Phase.Live) return st
+        val status = tailnetStatus.value
+        val dial = runCatching { nodeFor(tailnet.value.backend).dialError(target.host) }.getOrNull()
+        val better = explainTailnetProblem(problem, target.host, target.port, status.backendState, status.peers, status.peersKnown, dial)
+        return if (better == problem) st else st.copy(problem = better)
+    }
 
     /** The node of [backend]: only one of them runs at a time. */
     private fun nodeFor(backend: TailnetBackend): TailnetNode =
@@ -439,6 +502,14 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
         }
     }
 
+    /** Starts the joined node again after its start failed: the home screen's Try again. */
+    fun restartTailnet() {
+        val current = tailnet.value
+        if (!current.enabled) return
+        Diagnostics.event(CONN_TAG, "restarting the tailnet")
+        startTailnet(current)
+    }
+
     /** Leaves the tailnet: the node stops and its login stays in the app for the next join. */
     fun leaveTailnet() {
         Diagnostics.event(CONN_TAG, "leaving the tailnet")
@@ -492,6 +563,7 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
         connectedToResume = resume
         val settings = store.tailnet()
         val endpoint = target.endpoint()
+        _connectProgress.value = null
         if (target.viaTailscale && !settings.enabled) {
             // The host is saved either way; without a joined node there is no route to it.
             Diagnostics.event(CONN_TAG, "${target.label}: the tailnet is not joined")
@@ -512,6 +584,12 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
             sessions = cached,
         )
         if (Alerts.enabled.value) Alerts.watch(getApplication(), target.label)
+        _connectProgress.value = ConnectProgress(
+            host = target.host,
+            viaTailnet = viaTailscale,
+            step = if (viaTailscale) ConnectStep.StartTailnet else ConnectStep.Reach,
+            startedAt = System.currentTimeMillis(),
+        )
         connectJob = viewModelScope.launch {
             // A host on the phone's own network is dialed directly, and the tailnet node stays as it
             // is: the home screen says the phone is in a tailnet, so that must not depend on which
@@ -542,9 +620,16 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
                 // Running comes before the first netmap, and a MagicDNS name dialed before the
                 // netmap lists that peer fails in the node's DNS: that was the SOCKS error the first
                 // open showed for a moment. Waiting for the peer costs nothing once it is known.
-                if (settled?.backendState == "Running" && !node.awaitPeer(target.host, PEER_READY_MS)) {
-                    Diagnostics.event(CONN_TAG, "${target.host} is not in the netmap yet; dialing anyway")
+                if (settled?.backendState == "Running") {
+                    progress(target.host, ConnectStep.FindPeer)
+                    // A node that has its device list and no such name is not going to learn it in
+                    // the next ten seconds: dial soon, and let the failure say the name is unknown.
+                    val wait = if (node.status.value.peersKnown) PEER_LISTED_MS else PEER_READY_MS
+                    if (!node.awaitPeer(target.host, wait)) {
+                        Diagnostics.event(CONN_TAG, "${target.host} is not in the netmap yet; dialing anyway")
+                    }
                 }
+                progress(target.host, ConnectStep.Reach)
                 port
             } else {
                 0
@@ -590,7 +675,7 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
             s.setActive(foreground)
             s.setWatching(Alerts.enabled.value)
             sessionJob = s.start(viewModelScope, previousSession)
-            watch = viewModelScope.launch { follow(s, target.id, if (resume) previousSession else null) }
+            watch = viewModelScope.launch { follow(s, target, if (resume) previousSession else null) }
         }
     }
 
@@ -598,8 +683,24 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
      * Everything that follows the connection's state, one flow per job: the screen shows every
      * state, and the store only hears about what changed. Ends with the connection.
      */
-    private suspend fun follow(s: PocketSession, hostId: String, resumeTo: String?) = coroutineScope {
-        launch { s.state.collect { _pocket.value = it } }
+    private suspend fun follow(s: PocketSession, target: SavedHost, resumeTo: String?) = coroutineScope {
+        val hostId = target.id
+        // The node's view of the host can change while the connection waits to retry - it signs in,
+        // the device comes online - so the problem is told again on either.
+        launch {
+            combine(s.state, tailnetStatus) { st, _ -> st }.collect { st ->
+                _pocket.value = explained(st, target)
+                // Rex answered the connection: the host was reached, and what is left is its sessions.
+                // (OkHttp's own socket events cannot tell: a WebSocket call drops its event listener.)
+                if (st.clientId != null && st.phase != Phase.Live) progress(target.host, ConnectStep.OpenRex)
+                if (st.phase == Phase.Live) {
+                    _connectProgress.value?.let { p ->
+                        Diagnostics.event(CONN_TAG, "connected in ${System.currentTimeMillis() - p.startedAt}ms: " + p.took.joinToString { "${it.first} ${it.second}ms" })
+                    }
+                    _connectProgress.value = null
+                }
+            }
+        }
         // The session a resume goes back to is the one that was on the terminal: connecting selects
         // one on its own (the remembered one, or Rex's first), and that one was never on screen.
         launch {
@@ -963,6 +1064,13 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
                     },
                 ),
             )
+            tailnetStatus.value.takeIf { node.enabled }?.let { st ->
+                val online = st.peers.count { it.online == true }
+                add(ReportedFact("tailnet stage", tailnetStage.value.javaClass.simpleName))
+                add(ReportedFact("tailnet devices", "${st.peers.size}" + if (st.peers.any { it.online != null }) " · $online online" else ""))
+                if (st.health.isNotEmpty()) add(ReportedFact("tailnet health", st.health.joinToString(" | ")))
+            }
+            connectProgress.value?.let { p -> add(ReportedFact("connect step", "${p.step} · ${p.took.joinToString { "${it.first} ${it.second}ms" }}")) }
             tailnetPath.value?.let { add(ReportedFact("tailnet path", it.toString())) }
             add(ReportedFact("alerts", if (alerts.value) "on" else "off"))
             add(ReportedFact("foreground", if (foreground) "yes" else "no"))
@@ -1131,6 +1239,7 @@ class RexViewModel(app: Application, private val saved: SavedStateHandle = Saved
         connectJob = null
         pathJob?.cancel()
         _tailnetPath.value = null
+        _connectProgress.value = null
         // A tap waiting for the old connection must not open anything on the next one.
         sessionReady.cancel()
         sessionReady = CompletableDeferred()
@@ -1178,6 +1287,9 @@ internal const val NODE_READY_MS = 30_000L
 
 /** How long a running node may take to list the host as a peer before it is dialed anyway. */
 private const val PEER_READY_MS = 10_000L
+
+/** How long a connection waits for a host its node's device list does not have: a device added a moment ago. */
+private const val PEER_LISTED_MS = 2_000L
 
 /** What a failure says in the report: its kind, then whatever the exception carried. */
 /** Why the tailnet node did not start: what the node said, when it said anything ([tailnetFailureText]). */

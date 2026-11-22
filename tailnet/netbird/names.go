@@ -68,13 +68,17 @@ func (r peerResolver) Resolve(ctx context.Context, name string) (context.Context
 	return r.next.Resolve(ctx, name)
 }
 
-// dial dials through the node, with a name resolved from its peers first.
+// dial dials through the node, with a name resolved from its peers first, and remembers how it
+// went under the address it was asked for: the proxy's resolver has usually made that the peer's IP.
 func (n *Node) dial(ctx context.Context, network, address string) (net.Conn, error) {
+	asked := address
 	host, port, err := net.SplitHostPort(address)
 	if err == nil && net.ParseIP(host) == nil {
 		if ip, ok := addressOf(host, n.peersOf()); ok {
 			address = net.JoinHostPort(ip, port)
 		}
 	}
-	return n.client.DialContext(ctx, network, address)
+	conn, err := n.client.DialContext(ctx, network, address)
+	n.dials.Record(asked, err)
+	return conn, err
 }

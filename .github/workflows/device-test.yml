@@ -103,6 +103,7 @@ jobs:
               me.leaver.rexpocket.ui.HomeStateTest \
               me.leaver.rexpocket.ui.ActivityViewTest \
               me.leaver.rexpocket.ui.EmptySessionTest \
+              me.leaver.rexpocket.ui.TailnetStatusTest \
               me.leaver.rexpocket.ui.CommandPaletteTest \
               me.leaver.rexpocket.ui.TextFieldsTest; do
             adb logcat -c || true
@@ -166,6 +167,7 @@ jobs:
             --tests 'me.leaver.rexpocket.ui.TermFullScreenTest' \
             --tests 'me.leaver.rexpocket.ui.EmptySessionTest' \
             --tests 'me.leaver.rexpocket.ui.TextFieldsTest' \
+            --tests 'me.leaver.rexpocket.ui.TailnetStatusTest' \
             --tests 'me.leaver.rexpocket.ui.ScreenshotsTest'
 
       - uses: actions/upload-artifact@v4

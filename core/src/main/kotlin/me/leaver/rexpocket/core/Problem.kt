@@ -23,6 +23,21 @@ enum class Trouble {
     /** The app's own Tailscale node could not start. */
     Tailnet,
 
+    /**
+     * The phone's tailnet node needs a sign-in before it reaches anything; [Problem.detail] is
+     * [APPROVAL] when it is signed in and waits for the tailnet's admin instead.
+     */
+    TailnetNeedsLogin,
+
+    /** The tailnet has no device by the host's name. */
+    TailnetPeerUnknown,
+
+    /** The host's device is offline on the tailnet; [Problem.detail] is when it was last seen, in epoch ms. */
+    TailnetPeerOffline,
+
+    /** The host answered over the tailnet, but nothing listens on Rex's port; [Problem.detail] is the port. */
+    RexNotListening,
+
     /** The machine's SSH key has not been confirmed yet; [Problem.detail] is its fingerprint. */
     SshHostKeyUnknown,
 

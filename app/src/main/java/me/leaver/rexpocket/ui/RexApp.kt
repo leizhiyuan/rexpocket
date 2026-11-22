@@ -60,6 +60,8 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val tailnetError by model.tailnetError.collectAsState()
     val opening by model.opening.collectAsState()
     val tailnetPath by model.tailnetPath.collectAsState()
+    val tailnetStage by model.tailnetStage.collectAsState()
+    val connectProgress by model.connectProgress.collectAsState()
     val alerts by model.alerts.collectAsState()
     val keyArrangement by model.keyArrangement.collectAsState()
     val keyBarCtrlC by model.keyBarCtrlC.collectAsState()
@@ -141,6 +143,10 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     tailnetStatus = tailnetStatus,
                     tailnetError = tailnetError,
                     tailnetPath = tailnetPath,
+                    tailnetStage = tailnetStage,
+                    connectProgress = connectProgress,
+                    onSignIn = { url -> openLink(context, url) },
+                    onTailnetRetry = model::restartTailnet,
                     opening = opening,
                     cachedSessions = model::cachedSessions,
                     folds = folds,

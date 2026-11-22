@@ -60,6 +60,7 @@ import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.Problem
 import me.leaver.rexpocket.core.Trouble
+import me.leaver.rexpocket.core.APPROVAL
 import android.content.Intent
 import android.net.Uri
 import me.leaver.rexpocket.R
@@ -188,9 +189,21 @@ internal fun rememberSettledProblem(phase: Phase, problem: Problem?): Problem? {
     return settled
 }
 
-/** What went wrong, in the app's words; Rex's own message only where it says something specific. */
+/**
+ * What went wrong, in the app's words; Rex's own message only where it says something specific.
+ * [network] is the tailnet's backend, Tailscale or Netbird, for the problems that are about it.
+ */
 @Composable
-internal fun problemText(problem: Problem, endpoint: String): String = when (problem.trouble) {
+internal fun problemText(problem: Problem, endpoint: String, network: String = "tailnet"): String = when (problem.trouble) {
+    Trouble.TailnetNeedsLogin ->
+        if (problem.detail == APPROVAL) stringResource(R.string.problem_tailnet_needs_approval, network)
+        else stringResource(R.string.problem_tailnet_needs_login, network, endpointHost(endpoint))
+    Trouble.TailnetPeerUnknown -> stringResource(R.string.problem_tailnet_peer_unknown, network, endpointHost(endpoint))
+    Trouble.TailnetPeerOffline -> problem.detail?.toLongOrNull()?.let { seen ->
+        stringResource(R.string.problem_tailnet_peer_offline_seen, network, endpointHost(endpoint), relativeTime(seen))
+    } ?: stringResource(R.string.problem_tailnet_peer_offline, network, endpointHost(endpoint))
+    Trouble.RexNotListening ->
+        stringResource(R.string.problem_rex_not_listening, endpointHost(endpoint), problem.detail ?: endpoint.substringAfterLast(':'))
     Trouble.Unreachable -> stringResource(R.string.problem_unreachable, endpoint)
     Trouble.TimedOut -> stringResource(R.string.problem_timed_out, endpoint)
     Trouble.Dropped -> stringResource(R.string.problem_dropped)
@@ -219,6 +232,21 @@ internal fun uploadErrorText(error: UploadError): String = when (error) {
 @Composable
 internal fun tailnetFailureText(failure: TailnetFailure): String =
     failure.detail ?: stringResource(R.string.tailnet_start_failed)
+
+/** The host of a `host:port` or `user@host:port` label, an IPv6 literal's brackets kept. */
+internal fun endpointHost(label: String): String {
+    val endpoint = label.substringAfterLast('@')
+    val colon = endpoint.lastIndexOf(':')
+    if (colon <= 0 || endpoint.substring(colon + 1).any { !it.isDigit() }) return endpoint
+    val host = endpoint.substring(0, colon)
+    return if (':' in host && !host.startsWith('[')) endpoint else host
+}
+
+/** [epochMs] as "2 hours ago", in the phone's language. */
+internal fun relativeTime(epochMs: Long, now: Long = System.currentTimeMillis()): String =
+    android.text.format.DateUtils.getRelativeTimeSpanString(
+        epochMs, now, android.text.format.DateUtils.MINUTE_IN_MILLIS, android.text.format.DateUtils.FORMAT_ABBREV_RELATIVE,
+    ).toString()
 
 @Composable
 internal fun phaseText(state: PocketState): String = when (state.phase) {

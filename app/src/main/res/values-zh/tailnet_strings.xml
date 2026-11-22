@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tailnet_stage_starting">正在启动 %1$s…</string>
+    <string name="tailnet_stage_signing_in">登录 %1$s</string>
+    <string name="tailnet_stage_needs_approval">等待审批</string>
+    <string name="tailnet_stage_connecting">正在连接 %1$s…</string>
+    <string name="tailnet_stage_connected">已连接，设备名 %1$s</string>
+    <string name="tailnet_stage_connected_on">已连接 %2$s，设备名 %1$s</string>
+    <string name="tailnet_stage_stopped">%1$s 已停止</string>
+    <string name="tailnet_stage_failed">%1$s 启动失败</string>
+    <string name="tailnet_stage_off">未加入</string>
+    <string name="tailnet_step">第 %1$d 步，共 %2$d 步</string>
+    <string name="tailnet_sign_in_body">在浏览器里批准这台手机一次，登录状态会留在应用里。</string>
+    <string name="tailnet_sign_in_waiting">正在等待登录链接…</string>
+    <string name="tailnet_approval_body">已登录。需要 tailnet 管理员在管理后台批准这台手机。</string>
+    <string name="tailnet_stopped_body">节点在运行但已关闭。重新加入即可打开。</string>
+    <plurals name="tailnet_hosts_need_join">
+        <item quantity="other">%d 台主机在 tailnet 上，加入后才能连接。</item>
+    </plurals>
+    <string name="tailnet_devices_online">%2$d 台中 %1$d 台在线</string>
+    <plurals name="tailnet_devices">
+        <item quantity="other">%d 台设备</item>
+    </plurals>
+    <string name="tailnet_open_details">tailnet 详情</string>
+
+    <string name="action_sign_in">登录</string>
+    <string name="action_copy_link">复制链接</string>
+    <string name="action_join">加入</string>
+    <string name="action_devices">设备</string>
+    <string name="action_tailnet_settings">tailnet 设置</string>
+    <string name="action_try_again">重试</string>
+
+    <string name="tailnet_section_this_phone">这台手机</string>
+    <string name="tailnet_section_devices">设备</string>
+    <string name="tailnet_section_devices_count">设备 · %1$s</string>
+    <string name="tailnet_field_status">状态</string>
+    <string name="tailnet_field_network">tailnet</string>
+    <string name="tailnet_field_device">设备名</string>
+    <string name="tailnet_field_user">登录账号</string>
+    <string name="tailnet_field_addresses">地址</string>
+    <string name="tailnet_field_relay">主中继</string>
+    <string name="tailnet_field_key_expiry">密钥到期</string>
+    <string name="tailnet_field_route">到 %1$s 的路径</string>
+    <string name="tailnet_route_measure">点按测量</string>
+    <string name="tailnet_field_health">节点报告</string>
+    <string name="tailnet_copied">已复制</string>
+    <string name="tailnet_no_devices">这个 tailnet 上还没有其他设备。</string>
+    <string name="tailnet_devices_waiting">手机连上之后才会有设备列表。</string>
+
+    <string name="tailnet_peer_online">在线</string>
+    <string name="tailnet_peer_offline">离线</string>
+    <string name="tailnet_peer_last_seen">离线 · 最后在线 %1$s</string>
+    <string name="tailnet_peer_rex_host">Rex 主机</string>
+    <string name="tailnet_peer_connect">点按连接</string>
+    <string name="tailnet_peer_add">点按添加为主机</string>
+    <string name="tailnet_link_direct">直连</string>
+    <string name="tailnet_link_peer_relay">peer relay</string>
+    <string name="tailnet_link_derp">DERP %1$s</string>
+    <string name="tailnet_link_relay">中继</string>
+    <string name="tailnet_link_connecting">连接中</string>
+
+    <string name="connect_step_start_tailnet">正在启动 %1$s…</string>
+    <string name="connect_step_sign_in">正在等待 %1$s 登录…</string>
+    <string name="connect_step_find_peer">正在 %2$s 上查找 %1$s…</string>
+    <string name="connect_step_reach_tailnet">正在通过 %2$s 连接 %1$s…</string>
+    <string name="connect_step_reach">正在连接 %1$s…</string>
+    <string name="connect_step_rex">Rex 已响应 · 正在读取会话…</string>
+    <string name="connect_elapsed">%1$.1f 秒</string>
+
+    <string name="problem_tailnet_needs_login">登录 %1$s 后才能连接 %2$s。</string>
+    <string name="problem_tailnet_needs_approval">%1$s 正在等待管理员批准这台手机。</string>
+    <string name="problem_tailnet_peer_unknown">%1$s 上没有名为 %2$s 的设备。请在设备列表里核对名字。</string>
+    <string name="problem_tailnet_peer_offline">%2$s 在 %1$s 上离线。</string>
+    <string name="problem_tailnet_peer_offline_seen">%2$s 在 %1$s 上离线，最后在线 %3$s。</string>
+    <string name="problem_rex_not_listening">%1$s 有响应，但端口 %2$s 上没有服务在监听。Rex 是否用 --extra-listen 启动了？</string>
+</resources>

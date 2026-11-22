@@ -50,6 +50,7 @@ class NetbirdBox(context: Context) : TailnetBox(context) {
         override val proxyPort: Int get() = node.proxyPort()
         override fun state(): String = node.state()
         override fun ping(ip: String, timeoutMillis: Int): String = node.ping(ip, timeoutMillis)
+        override fun dialError(host: String): String = node.dialError(host)
 
         // Netbird's engine follows the network on its own, so there is nothing to hand it.
         override fun networkChanged() = Unit

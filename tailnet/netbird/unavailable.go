@@ -27,5 +27,8 @@ func (n *Node) State() (string, error) { return "", errUnavailable }
 // Ping fails: there is no node.
 func (n *Node) Ping(ip string, timeoutMillis int32) (string, error) { return "", errUnavailable }
 
+// DialError is empty: there is no node, so nothing was dialed.
+func (n *Node) DialError(host string) string { return "" }
+
 // Close does nothing: there is no node.
 func (n *Node) Close() {}

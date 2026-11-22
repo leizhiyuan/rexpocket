@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/netbirdio/netbird/client/embed"
 	socks5 "github.com/things-go/go-socks5"
+	"me.leaver.rexpocket/tailnet/internal/dials"
 )
 
 // Available reports whether this build has the Netbird node.
@@ -41,6 +43,7 @@ type Node struct {
 	proxy    net.Listener
 	cancel   context.CancelFunc
 	closed   atomic.Bool
+	dials    dials.Memory
 }
 
 // savedConfig is the part of the node's config file the app reads back: the WireGuard private key
@@ -159,9 +162,9 @@ func (n *Node) ProxyPort() int32 {
 }
 
 // State is the node's state as JSON, in the shape the tailnet package reports:
-// {"backendState", "authUrl", "tailnet", "self", "peers": [{"dnsName", "hostName", "ips": [...]}]}.
+// {"backendState", "authUrl", "tailnet", "self", "selfInfo", "health", "peers": [...]}.
 // The node is "Running" once its management and signal connections are up, and "Starting" until
-// then; the embedded client does not report an auth URL.
+// then; the embedded client does not report an auth URL. See [stateOf] for the rest.
 func (n *Node) State() (string, error) {
 	if n.closed.Load() {
 		return "", errors.New("netbird: node is closed")
@@ -170,30 +173,145 @@ func (n *Node) State() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out := state{BackendState: "Starting"}
-	if st.ManagementState.Connected && st.SignalState.Connected {
-		out.BackendState = "Running"
+	in := status{
+		managementURL:       st.ManagementState.URL,
+		managementConnected: st.ManagementState.Connected,
+		signalConnected:     st.SignalState.Connected,
+		selfFQDN:            st.LocalPeerState.FQDN,
+		selfIPs:             []string{st.LocalPeerState.IP, st.LocalPeerState.IPv6},
 	}
-	if st.LocalPeerState.FQDN != "" {
-		out.Self = strings.TrimSuffix(st.LocalPeerState.FQDN, ".")
+	if st.ManagementState.Error != nil {
+		in.managementError = st.ManagementState.Error.Error()
+	}
+	if st.SignalState.Error != nil {
+		in.signalError = st.SignalState.Error.Error()
 	}
 	for _, p := range st.Peers {
-		name := strings.TrimSuffix(p.FQDN, ".")
+		in.peers = append(in.peers, peerStatus{
+			fqdn:          p.FQDN,
+			ip:            p.IP,
+			ipv6:          p.IPv6,
+			conn:          p.ConnStatus.String(),
+			relayed:       p.Relayed,
+			endpoint:      p.RemoteIceCandidateEndpoint,
+			relayServer:   p.RelayServerAddress,
+			latency:       p.Latency,
+			lastHandshake: p.LastWireguardHandshake,
+		})
+	}
+	b, err := json.Marshal(stateOf(in))
+	return string(b), err
+}
+
+// status is the part of the embedded client's status [stateOf] reads. The client's own type lives
+// in an internal package of Netbird's, which this module cannot name.
+type status struct {
+	managementURL       string
+	managementConnected bool
+	managementError     string
+	signalConnected     bool
+	signalError         string
+	selfFQDN            string
+	selfIPs             []string
+	peers               []peerStatus
+}
+
+type peerStatus struct {
+	fqdn, ip, ipv6        string
+	conn                  string // "Idle", "Connecting" or "Connected"
+	relayed               bool
+	endpoint, relayServer string
+	latency               time.Duration
+	lastHandshake         time.Time
+}
+
+// stateOf is what [Node.State] reports for in. Netbird has no network name, so the management
+// server's host stands in for it; a broken management or signal connection is a health line, as
+// Tailscale reports its own trouble. A peer's link is the connection the node has to it: none yet
+// ("idle", since Netbird connects lazily), "connecting", or up, "direct" or through a "relay". The
+// control plane's view of whether a peer is online is not in the embedded client's status, so
+// "online" is left out.
+func stateOf(in status) state {
+	out := state{BackendState: "Starting", Tailnet: hostOf(in.managementURL)}
+	if in.managementConnected && in.signalConnected {
+		out.BackendState = "Running"
+	}
+	if in.managementError != "" {
+		out.Health = append(out.Health, "management: "+in.managementError)
+	}
+	if in.signalError != "" {
+		out.Health = append(out.Health, "signal: "+in.signalError)
+	}
+	if in.selfFQDN != "" {
+		out.Self = strings.TrimSuffix(in.selfFQDN, ".")
+	}
+	if out.Self != "" || len(nonEmpty(in.selfIPs)) > 0 {
+		var ips []string
+		for _, ip := range nonEmpty(in.selfIPs) {
+			ips = append(ips, strings.SplitN(ip, "/", 2)[0])
+		}
+		out.SelfInfo = &selfInfo{
+			DNSName:  out.Self,
+			HostName: strings.SplitN(out.Self, ".", 2)[0],
+			IPs:      ips,
+		}
+	}
+	for _, p := range in.peers {
+		name := strings.TrimSuffix(p.fqdn, ".")
 		if name == "" {
 			continue
 		}
-		var ips []string
-		if p.IP != "" {
-			ips = []string{p.IP}
-		}
-		out.Peers = append(out.Peers, peer{
+		item := peer{
 			DNSName:  name,
 			HostName: strings.SplitN(name, ".", 2)[0],
-			IPs:      ips,
-		})
+			IPs:      nonEmpty([]string{p.ip, p.ipv6}),
+		}
+		switch {
+		case p.conn == "Connecting":
+			item.Link = "connecting"
+		case p.conn != "Connected":
+			item.Link = "idle"
+		case p.relayed:
+			item.Link, item.LinkDetail = "relay", p.relayServer
+		default:
+			item.Link, item.LinkDetail = "direct", p.endpoint
+		}
+		if p.conn == "Connected" && p.latency > 0 {
+			item.LatencyMs = float64(p.latency) / float64(time.Millisecond)
+		}
+		if !p.lastHandshake.IsZero() {
+			item.LastHandshake = p.lastHandshake.UTC().Format(time.RFC3339)
+		}
+		out.Peers = append(out.Peers, item)
 	}
-	b, err := json.Marshal(out)
-	return string(b), err
+	return out
+}
+
+func nonEmpty(list []string) []string {
+	var out []string
+	for _, s := range list {
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// hostOf is the host of a management URL such as https://api.netbird.io:443, or the URL itself.
+func hostOf(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	if u, err := url.Parse(raw); err == nil && u.Hostname() != "" {
+		return u.Hostname()
+	}
+	return raw
+}
+
+// DialError is why the last dial to host through the proxy failed, or "" when it worked or was
+// long enough ago not to matter.
+func (n *Node) DialError(host string) string {
+	return n.dials.For(host)
 }
 
 // Ping reports the path to the peer at ip as JSON, in the shape the tailnet package reports:
@@ -318,18 +436,32 @@ func (n *Node) watch(ctx context.Context) {
 	}
 }
 
+// state, selfInfo and peer are the tailnet package's state JSON; the fields Netbird has no
+// answer for are left out.
 type state struct {
-	BackendState string `json:"backendState"`
-	AuthURL      string `json:"authUrl"`
-	Tailnet      string `json:"tailnet"`
-	Self         string `json:"self"`
-	Peers        []peer `json:"peers"`
+	BackendState string    `json:"backendState"`
+	AuthURL      string    `json:"authUrl"`
+	Tailnet      string    `json:"tailnet"`
+	Self         string    `json:"self"`
+	SelfInfo     *selfInfo `json:"selfInfo,omitempty"`
+	Health       []string  `json:"health,omitempty"`
+	Peers        []peer    `json:"peers"`
 }
 
-type peer struct {
+type selfInfo struct {
 	DNSName  string   `json:"dnsName"`
 	HostName string   `json:"hostName"`
 	IPs      []string `json:"ips"`
+}
+
+type peer struct {
+	DNSName       string   `json:"dnsName"`
+	HostName      string   `json:"hostName"`
+	IPs           []string `json:"ips"`
+	Link          string   `json:"link,omitempty"`
+	LinkDetail    string   `json:"linkDetail,omitempty"`
+	LatencyMs     float64  `json:"latencyMs,omitempty"`
+	LastHandshake string   `json:"lastHandshake,omitempty"`
 }
 
 // logWriter sends the embedded client's log lines to the platform.

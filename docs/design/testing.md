@@ -44,7 +44,8 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 (as it comes, and with every choice changed, so its icons show the change) and Arrange keys,
 Settings and Diagnostics (on ScriptedRex), the terminal's ⋮ menu, the command palette, the home screen's Activity view (on
 ScriptedRex, its programs reporting statuses) and full screen right after entering it, in portrait and
-landscape on a Pixel 6-sized screen (the JVM tests' default too, in `robolectric.properties`), and Arrange keys before and
+landscape on a Pixel 6-sized screen, the tailnet's states on the home screen and its details sheet
+(`tailnet-*`, on a stand-in node: see tailnet-backends.md), (the JVM tests' default too, in `robolectric.properties`), and Arrange keys before and
 after a move. They land in `app/build/outputs/roborazzi/`; `device-test` uploads them as the
 **screenshots** artifact of each run, with the JVM test report. They are for review: look at them
 when a change touches a screen. Nothing is compared against stored images yet, as fonts render

@@ -25,6 +25,9 @@ import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.KeyArrangement
 import me.leaver.rexpocket.core.KeyPreset
 import me.leaver.rexpocket.core.PocketState
+import me.leaver.rexpocket.core.TailnetBackend
+import me.leaver.rexpocket.data.SavedHost
+import me.leaver.rexpocket.net.TailnetStatus
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -199,6 +202,100 @@ class ScreenshotsTest {
     @Test fun settingsLandscape() { landscape(); settings("settings-landscape") }
     @Test fun diagnosticsPortrait() = settings("diagnostics-portrait", R.string.diagnostics)
     @Test fun groupNamePortrait() = arrangePage("group-name-portrait", R.string.arrange_new_group, R.string.arrange_empty_group)
+
+    /**
+     * The home screen with the tailnet in [status] - the whole app on its view model, the node a
+     * stand-in reporting what a real one does (see TailnetHarness) - with [open] connecting through
+     * [socks], the details sheet open when [details], and the clock moved on until [waitFor] shows.
+     */
+    private fun tailnet(
+        name: String,
+        status: TailnetStatus,
+        open: SavedHost? = null,
+        socks: FakeSocks? = null,
+        dialError: String? = null,
+        startError: String? = null,
+        details: Boolean = false,
+        waitFor: String? = null,
+        backend: TailnetBackend = TailnetBackend.Tailscale,
+        joined: Boolean = true,
+        hosts: List<SavedHost> = listOf(TailnetSamples.macHost, TailnetSamples.nasHost),
+    ) {
+        val node = FakeTailnetNode()
+        node.state.value = status
+        node.startError = startError
+        socks?.let { node.socksPort = it.port }
+        if (dialError != null && open != null) node.dialErrors[open.host] = dialError
+        val model = tailnetModel(compose, node, hosts, open, backend, joined)
+        try {
+            compose.setContent { RexPocketApp(model) }
+            compose.waitForIdle()
+            if (details) {
+                compose.onNodeWithTag(TAILNET_CARD_TAG).performClick()
+                compose.waitForIdle()
+            }
+            if (waitFor != null) {
+                compose.awaitThat(15_000) {
+                    compose.mainClock.advanceTimeBy(500)
+                    compose.onAllNodes(hasText(waitFor, substring = true)).fetchSemanticsNodes().isNotEmpty()
+                }
+            }
+            captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+        } finally {
+            compose.runOnUiThread { model.disconnect() }
+            socks?.close()
+        }
+    }
+
+    private fun refusing() = FakeSocks { _, _ -> null }
+
+    @Test fun tailnetStartingPortrait() = tailnet("tailnet-starting-portrait", TailnetSamples.starting)
+    @Test fun tailnetNeedsLoginPortrait() = tailnet("tailnet-needs-login-portrait", TailnetSamples.needsLogin)
+    @Test fun tailnetNeedsLoginLandscape() { landscape(); tailnet("tailnet-needs-login-landscape", TailnetSamples.needsLogin) }
+    @Test fun tailnetConnectingPortrait() = tailnet("tailnet-connecting-portrait", TailnetSamples.connecting)
+    @Test fun tailnetConnectedPortrait() = tailnet("tailnet-connected-portrait", TailnetSamples.connected())
+    @Test fun tailnetConnectedLandscape() { landscape(); tailnet("tailnet-connected-landscape", TailnetSamples.connected()) }
+    @Test fun tailnetDetailsPortrait() = tailnet("tailnet-details-portrait", TailnetSamples.connected(), details = true)
+    @Test fun tailnetDetailsLandscape() { landscape(); tailnet("tailnet-details-landscape", TailnetSamples.connected(), details = true) }
+    @Test fun tailnetErrorPortrait() = tailnet("tailnet-error-portrait", TailnetSamples.starting, startError = "tsnet: open state: permission denied")
+    @Test fun tailnetNotJoinedPortrait() = tailnet("tailnet-not-joined-portrait", TailnetSamples.starting, joined = false)
+    @Test fun tailnetNetbirdDetailsPortrait() = tailnet(
+        "tailnet-netbird-details-portrait",
+        TailnetSamples.netbird(),
+        details = true,
+        backend = TailnetBackend.Netbird,
+        hosts = listOf(TailnetSamples.macHost.copy(host = "mac.netbird.cloud")),
+    )
+
+    @Test
+    fun tailnetPeerOfflinePortrait() = tailnet(
+        "tailnet-peer-offline-portrait",
+        TailnetSamples.connected(),
+        open = TailnetSamples.nasHost,
+        socks = refusing(),
+        dialError = "dial tcp 100.64.0.3:7297: i/o timeout",
+        waitFor = "is offline on Tailscale",
+    )
+
+    @Test
+    fun tailnetRexNotListeningPortrait() = tailnet(
+        "tailnet-rex-not-listening-portrait",
+        TailnetSamples.connected(),
+        open = TailnetSamples.macHost,
+        socks = refusing(),
+        dialError = "connect tcp 100.64.0.2:7297: connection was refused",
+        waitFor = "nothing listens on port 7297",
+    )
+
+    @Test
+    fun tailnetReachingHostPortrait() = tailnet(
+        "tailnet-connect-reaching-portrait",
+        TailnetSamples.connected(),
+        open = TailnetSamples.macHost,
+        // A proxy that takes the connection and never answers: a peer that does not.
+        socks = FakeSocks(stall = true) { _, _ -> null },
+        waitFor = "Reaching mac over Tailscale",
+    )
 
     @Test fun palettePortrait() = palette("command-palette-portrait")
     @Test fun paletteLandscape() { landscape(); palette("command-palette-landscape") }

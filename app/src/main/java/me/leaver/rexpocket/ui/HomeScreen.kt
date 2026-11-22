@@ -91,6 +91,9 @@ import me.leaver.rexpocket.core.ProgramRecord
 import me.leaver.rexpocket.core.SessionView
 import me.leaver.rexpocket.core.TailnetBackend
 import me.leaver.rexpocket.core.TailnetPath
+import me.leaver.rexpocket.core.TailnetStage
+import me.leaver.rexpocket.core.ConnectProgress
+import me.leaver.rexpocket.core.Trouble
 import me.leaver.rexpocket.core.UpdateChannel
 import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.data.HostStore
@@ -145,6 +148,14 @@ internal fun HomeScreen(
     tailnetStatus: TailnetStatus,
     tailnetError: TailnetFailure?,
     tailnetPath: TailnetPath?,
+    /** Where the joined node is on its way to the network; see [TailnetStage]. */
+    tailnetStage: TailnetStage = TailnetStage.Off,
+    /** The steps of the connection to the open host while it is on its way. */
+    connectProgress: ConnectProgress? = null,
+    /** Opens the node's sign-in page. */
+    onSignIn: (String) -> Unit = {},
+    /** Starts the joined node again after it failed to start. */
+    onTailnetRetry: () -> Unit = {},
     opening: Opening?,
     cachedSessions: (String) -> List<ListedSession>,
     /** Which hosts and sessions are folded: the view model's, so they outlive this screen. */
@@ -211,6 +222,10 @@ internal fun HomeScreen(
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     val editing = editingId?.let { id -> hosts.firstOrNull { it.id == id } }
     var creating by rememberSaveable { mutableStateOf(false) }
+    // A device picked in the tailnet sheet: a new host starts from its name and Rex's port.
+    var prefillLabel by rememberSaveable { mutableStateOf<String?>(null) }
+    var prefillAddress by rememberSaveable { mutableStateOf<String?>(null) }
+    var tailnetDetails by rememberSaveable { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
     var controlsPage by rememberSaveable { mutableStateOf<ControlsPage?>(null) }
     var diagnostics by rememberSaveable { mutableStateOf(false) }
@@ -281,6 +296,23 @@ internal fun HomeScreen(
                         bottom = if (searchOpen) 16.dp else navBottom + 104.dp,
                     ),
                 ) {
+                    // The tailnet's line leads the list it carries, quiet once the phone is on it.
+                    val tailnetHosts = hosts.count { it.viaTailscale }
+                    if (!activeOnly && !searchOpen && (tailnet.enabled || tailnetHosts > 0)) {
+                        item(key = "tailnet") {
+                            TailnetStatusCard(
+                                backend = tailnet.backend,
+                                stage = tailnetStage,
+                                status = tailnetStatus,
+                                hostsNeedingTailnet = tailnetHosts,
+                                onDetails = { tailnetDetails = true },
+                                onSignIn = onSignIn,
+                                onSettings = onTailnet,
+                                onRetry = onTailnetRetry,
+                                modifier = Modifier.padding(bottom = 12.dp),
+                            )
+                        }
+                    }
                     if (activeOnly) {
                         if (activity.isEmpty() || liveHost == null) {
                             item(key = "activity-empty") { ActivityEmpty(live = liveHost != null, searching = query.isNotBlank()) }
@@ -310,7 +342,21 @@ internal fun HomeScreen(
                                 },
                                 onMenu = { menuHostId = host.id },
                             )
-                            if (live) HostStatus(state, tailnetPath, tailnetName(tailnet.backend), onRetry, onProbePath)
+                            if (live) {
+                                HostStatus(
+                                    state = state,
+                                    path = tailnetPath,
+                                    network = tailnetName(tailnet.backend),
+                                    progress = connectProgress?.takeIf { it.host == host.host },
+                                    stage = tailnetStage,
+                                    authUrl = tailnetStatus.authUrl,
+                                    onRetry = onRetry,
+                                    onProbe = onProbePath,
+                                    onSignIn = onSignIn,
+                                    onDevices = { tailnetDetails = true },
+                                    onTailnet = onTailnet,
+                                )
+                            }
                         }
                         if (hostExpanded) {
                             sessions.forEach { row ->
@@ -386,20 +432,52 @@ internal fun HomeScreen(
     }
 
     if (creating || editing != null) {
+        val done = {
+            creating = false
+            editingId = null
+            prefillLabel = null
+            prefillAddress = null
+        }
         HostDialog(
             initial = editing,
             tailnetEnabled = tailnet.enabled,
-            onDismiss = { creating = false; editingId = null },
-            onDelete = editing?.let { host -> { onDelete(host.id); creating = false; editingId = null } },
+            prefillLabel = prefillLabel,
+            prefillAddress = prefillAddress,
+            onDismiss = done,
+            onDelete = editing?.let { host -> { onDelete(host.id); done() } },
             onSave = {
                 onSave(it)
-                creating = false
-                editingId = null
+                done()
             },
             onJoinTailnet = {
-                creating = false
-                editingId = null
+                done()
                 onTailnet()
+            },
+        )
+    }
+
+    if (tailnetDetails) {
+        TailnetSheet(
+            backend = tailnet.backend,
+            stage = tailnetStage,
+            status = tailnetStatus,
+            hosts = hosts,
+            openHost = connected,
+            path = tailnetPath,
+            onDismiss = { tailnetDetails = false },
+            onSignIn = onSignIn,
+            onSettings = onTailnet,
+            onRetry = onTailnetRetry,
+            onProbe = onProbePath,
+            onPeer = { peer, saved ->
+                if (saved != null) {
+                    onConnect(saved)
+                } else {
+                    // Rex's own plaintext port: what `rex server start --extra-listen :7297` opens.
+                    prefillLabel = peer.name
+                    prefillAddress = "${peer.dnsName.trimEnd('.').ifBlank { peer.ips.firstOrNull().orEmpty() }}:${HostAddressParser.PLAIN_PORT}"
+                    creating = true
+                }
             },
         )
     }
@@ -430,6 +508,7 @@ internal fun HomeScreen(
             tailnet = tailnet,
             tailnetStatus = tailnetStatus,
             tailnetError = tailnetError,
+            tailnetStage = tailnetStage,
             onDismiss = { settings = false },
             onTailnet = {
                 settings = false
@@ -541,31 +620,62 @@ private fun HostHeader(
     }
 }
 
-/** The line under a connected host: why it is not live, and how the tailnet carries it. */
+/**
+ * The line under a connected host: the step its connection is on while it connects, why it is not
+ * live - with the fix next to Retry when there is one: sign in, the device list, join - and how the
+ * tailnet carries it once it is.
+ */
 @Composable
-private fun HostStatus(state: PocketState, path: TailnetPath?, network: String, onRetry: () -> Unit, onProbe: () -> Unit) {
+private fun HostStatus(
+    state: PocketState,
+    path: TailnetPath?,
+    network: String,
+    progress: ConnectProgress?,
+    stage: TailnetStage,
+    authUrl: String,
+    onRetry: () -> Unit,
+    onProbe: () -> Unit,
+    onSignIn: (String) -> Unit,
+    onDevices: () -> Unit,
+    onTailnet: () -> Unit,
+) {
     val problem = rememberSettledProblem(state.phase, state.problem.takeIf { state.phase != Phase.Live })
+    if (problem == null && progress != null && state.phase != Phase.Live) {
+        ConnectProgressLine(progress, stage, network, Modifier.padding(start = KEY_TEXT, end = 12.dp))
+    }
     if (problem != null) {
+        val fix: Pair<String, () -> Unit>? = when (problem.trouble) {
+            Trouble.TailnetNeedsLogin ->
+                if (authUrl.isNotBlank()) stringResource(R.string.action_sign_in) to { onSignIn(authUrl) }
+                else stringResource(R.string.action_devices) to onDevices
+            Trouble.TailnetPeerUnknown, Trouble.TailnetPeerOffline -> stringResource(R.string.action_devices) to onDevices
+            Trouble.TailnetNotJoined -> stringResource(R.string.action_join) to onTailnet
+            Trouble.Tailnet -> stringResource(R.string.action_tailnet_settings) to onTailnet
+            else -> null
+        }
         Row(
             Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(Radius.chip)).clickable(onClick = onRetry)
                 .padding(start = KEY_TEXT, end = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(problemText(problem, state.endpointLabel), color = Colors.danger, fontSize = TextStyles.label, modifier = Modifier.weight(1f))
-            Spacer(Modifier.width(12.dp))
+            Text(problemText(problem, state.endpointLabel, network), color = Colors.danger, fontSize = TextStyles.label, modifier = Modifier.weight(1f))
+            if (fix != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    fix.first,
+                    color = Colors.accent,
+                    fontSize = TextStyles.label,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clip(RoundedCornerShape(Radius.chip)).clickable(role = Role.Button, onClick = fix.second)
+                        .padding(horizontal = 6.dp, vertical = 10.dp),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.action_retry_now), color = Colors.accent, fontSize = TextStyles.label, fontWeight = FontWeight.Medium)
         }
     }
     if (path != null) {
-        val ms = path.latencyMs?.let { " · ${it.toInt()} ms" }.orEmpty()
-        val (text, color) = when (path) {
-            is TailnetPath.Direct -> stringResource(R.string.tailnet_path_direct, network) + ms to Colors.ok
-            is TailnetPath.PeerRelay -> stringResource(R.string.tailnet_path_peer_relay, network) + ms to Colors.amber
-            is TailnetPath.Derp ->
-                stringResource(R.string.tailnet_path_derp, network, path.regionCode.ifBlank { path.regionId.toString() }) + ms to Colors.amber
-            is TailnetPath.Relay -> stringResource(R.string.tailnet_path_relay, network) + ms to Colors.amber
-            is TailnetPath.Unreachable -> stringResource(R.string.tailnet_path_unreachable, network, path.reason) to Colors.danger
-        }
+        val (text, color) = pathText(path, network)
         Text(
             text,
             color = color,
@@ -845,6 +955,7 @@ private fun SettingsSheet(
     tailnet: TailnetSettings,
     tailnetStatus: TailnetStatus,
     tailnetError: TailnetFailure?,
+    tailnetStage: TailnetStage,
     onDismiss: () -> Unit,
     onTailnet: () -> Unit,
     alerts: Boolean,
@@ -862,7 +973,6 @@ private fun SettingsSheet(
     onChannel: (UpdateChannel) -> Unit,
 ) {
     val context = LocalContext.current
-    val joined = tailnet.enabled && tailnetStatus.backendState == "Running"
     // Said on the tap, because the row's own detail is the only other sign the channel moved.
     val switchedToStable = stringResource(R.string.update_channel_switched_stable)
     val switchedToPreview = stringResource(R.string.update_channel_switched_preview)
@@ -875,12 +985,8 @@ private fun SettingsSheet(
             SheetItem(
                 label = stringResource(R.string.tailnet_title),
                 icon = R.drawable.ic_tailnet,
-                detail = when {
-                    tailnetError != null -> stringResource(R.string.tailscale_state_failed)
-                    joined -> stringResource(R.string.tailscale_state_running)
-                    tailnet.enabled -> tailnetState(tailnetStatus)
-                    else -> stringResource(R.string.tailscale_not_joined)
-                },
+                detail = if (tailnetStage is TailnetStage.Off) stringResource(R.string.tailscale_not_joined)
+                else tailnetName(tailnet.backend) + " · " + tailnetStageText(tailnetStage, tailnet.backend),
                 onClick = onTailnet,
             )
             // Alerts are the connection kept up in the background, so they sit with the way in.
@@ -1119,6 +1225,9 @@ internal fun TailnetDialog(
 internal fun HostDialog(
     initial: SavedHost?,
     tailnetEnabled: Boolean,
+    /** A new host's name and address to start from, such as a device picked in the tailnet sheet. */
+    prefillLabel: String? = null,
+    prefillAddress: String? = null,
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)?,
     onSave: (SavedHost) -> Unit,
@@ -1126,7 +1235,7 @@ internal fun HostDialog(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var label by rememberSaveable { mutableStateOf(initial?.label ?: "") }
+    var label by rememberSaveable { mutableStateOf(initial?.label ?: prefillLabel.orEmpty()) }
     var confirmDelete by remember { mutableStateOf(false) }
     var address by rememberSaveable {
         mutableStateOf(
@@ -1137,7 +1246,7 @@ internal fun HostDialog(
                     val scheme = if (host.plaintext) "ws" else "wss"
                     "$scheme://${host.host}:${host.port}"
                 }
-            } ?: "",
+            } ?: prefillAddress.orEmpty(),
         )
     }
     var sshUser by rememberSaveable { mutableStateOf(initial?.sshUser.orEmpty()) }

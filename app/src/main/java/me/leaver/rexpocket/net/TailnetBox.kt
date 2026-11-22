@@ -36,6 +36,9 @@ interface RunningNode {
     val proxyPort: Int
     fun state(): String
     fun ping(ip: String, timeoutMillis: Int): String
+
+    /** The node's reason for its last failed dial to [host], or "" when there is none. */
+    fun dialError(host: String): String
     fun networkChanged()
     fun close()
 }
@@ -116,7 +119,8 @@ abstract class TailnetBox(protected val context: Context) : TailnetNode {
         node = started
         running = config
         port = started.proxyPort
-        _status.value = TailnetStatus(backendState = "Starting")
+        // No state of its own yet: the node says whether it needs a sign-in or connects straight away.
+        _status.value = TailnetStatus()
         watchNetwork()
         readState()
         return port
@@ -134,6 +138,15 @@ abstract class TailnetBox(protected val context: Context) : TailnetNode {
             if (last is TailnetPath.Direct) return last
         }
         return last
+    }
+
+    override fun dialError(host: String): String? {
+        val current = node ?: return null
+        // The Netbird proxy resolves a peer's name before it dials, so its failure is under the address.
+        val names = listOfNotNull(host, peerFor(host, peers)).distinct()
+        return names.firstNotNullOfOrNull { name ->
+            runCatching { current.dialError(name) }.getOrNull()?.takeIf { it.isNotBlank() }
+        }
     }
 
     override fun resetNetwork() {
@@ -181,12 +194,22 @@ abstract class TailnetBox(protected val context: Context) : TailnetNode {
                 backendState = snapshot.backendState,
                 authUrl = snapshot.authUrl,
                 networkName = snapshot.networkName,
+                self = snapshot.self,
+                peers = snapshot.peers,
+                health = snapshot.health,
             )
-            if (next.copy(authUrl = "") != _status.value.copy(authUrl = "")) {
-                Diagnostics.event(LOG_TAG, "$name: node state ${next.backendState} peers=${snapshot.peerCount}".trim())
-            }
+            // Logged when what a report needs changed, not on every path or handshake the peers make.
+            if (summary(next) != summary(_status.value)) Diagnostics.event(LOG_TAG, "$name: node ${summary(next)}")
             _status.value = next
         }
+    }
+
+    /** The state, the device count and what is wrong, for the diagnostics: names and addresses are left out. */
+    private fun summary(s: TailnetStatus): String {
+        val online = s.peers.count { it.online == true }
+        return "state ${s.backendState.ifBlank { "-" }} self=${s.self != null} peers=${s.peers.size}" +
+            (if (s.peers.any { it.online != null }) " online=$online" else "") +
+            (if (s.health.isNotEmpty()) " health=${s.health.size}" else "")
     }
 
     // The node's own monitor may only poll; the app hears about a new network at once and passes it on.

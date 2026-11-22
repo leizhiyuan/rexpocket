@@ -114,6 +114,7 @@ class TailscaleBox(context: Context) : TailnetBox(context) {
         override val proxyPort: Int get() = node.proxyPort()
         override fun state(): String = node.state()
         override fun ping(ip: String, timeoutMillis: Int): String = node.ping(ip, timeoutMillis)
+        override fun dialError(host: String): String = node.dialError(host)
         override fun networkChanged() = node.networkChanged()
         override fun close() = node.close()
     }
