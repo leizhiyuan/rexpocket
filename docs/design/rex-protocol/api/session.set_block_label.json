@@ -1,0 +1,54 @@
+{
+  "name": "session.set_block_label",
+  "description": "Set a block's label.",
+  "invoke": {
+    "method": "session.set_block_label"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The block to relabel. Required."
+      },
+      "label": {
+        "type": "string",
+        "description": "The new label, up to 128 characters. An empty or missing label restores a default made from the block's ID."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the call changed nothing that session.view shows, unless the method's notes say otherwise.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"block_id\": \"block:<uuid>\",\n  \"label\": \"shell\"\n}",
+  "response_example": "{\"revision\": 42}",
+  "validation_notes": [
+    "`block_id` is required. Leaving it out fails with `bad_request`.",
+    "The server trims whitespace from both ends of `label`. An empty `label` restores a default made from the block's ID, such as `Block 89abcdef`, rather than the flavor name a new block starts with.",
+    "A label longer than 128 characters, or one that contains a control character, fails with `bad_request`.",
+    "Relabeling a block that is in a window sends `session_view_changed`. A detached block isn't part of the view, so relabeling it sends no event and leaves `revision` unchanged.",
+    "If `block_id` names a block that isn't in the session, the call fails with `not_found`."
+  ]
+}

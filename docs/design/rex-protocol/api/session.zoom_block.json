@@ -1,0 +1,76 @@
+{
+  "name": "session.zoom_block",
+  "description": "Zoom a block to fill its window, or undo the zoom.",
+  "invoke": {
+    "method": "session.zoom_block"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The block to zoom. It takes focus, and its window becomes active. Leave it out to use the focused block of window_id, or of the active window."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      },
+      "window_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "A window whose focused block to zoom. The active window doesn't change. Send it only when block_id is left out."
+      },
+      "zoom": {
+        "type": [
+          "null",
+          "boolean"
+        ],
+        "description": "Set true to zoom or false to restore the layout. Leave it out to switch between the two."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The block this call zoomed or restored. If the request didn't name one, this is the focused block the server used."
+      },
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the call changed nothing that session.view shows.",
+        "minimum": 0
+      },
+      "zoomed": {
+        "type": "boolean",
+        "description": "Whether the block is zoomed after this call."
+      }
+    },
+    "required": [
+      "block_id",
+      "zoomed",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"block_id\": \"block:<uuid>\",\n  \"zoom\": true\n}",
+  "response_example": "{\n  \"block_id\": \"block:<uuid>\",\n  \"zoomed\": true,\n  \"revision\": 42\n}",
+  "validation_notes": [
+    "With `block_id`, the server first focuses the block and makes its window active, as `session.focus_block` does. With `window_id`, focus and the active window don't change.",
+    "Zoom changes only what is shown. The layout stays the same, and the zoom ends when focus moves to another block in the window.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If `block_id` names a block that isn't in any window, or `window_id` names a window that isn't in the session, it fails with `not_found`. Sending both fails with `bad_request`.",
+    "If both `block_id` and `window_id` are left out and the session has no windows, the call fails with `conflict`."
+  ]
+}

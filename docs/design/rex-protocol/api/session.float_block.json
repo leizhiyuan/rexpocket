@@ -1,0 +1,103 @@
+{
+  "name": "session.float_block",
+  "description": "Move a block out of its window's layout into a new floating layer.",
+  "invoke": {
+    "method": "session.float_block"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The block to float. It must be in its window's layout, not already in a floating layer."
+      },
+      "bounds": {
+        "description": "Where the new floating layer sits, as [x, y, w, h] fractions of the window's width and height. It must fit inside the window.",
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "A rectangle as [x, y, w, h]. x and y place its top-left corner and w and h give its size, each as a fraction of the window's width or height.",
+            "minItems": 4,
+            "maxItems": 4
+          },
+          {
+            "type": "object",
+            "properties": {
+              "h": {
+                "type": "number",
+                "description": "The height, as a fraction of the window's height."
+              },
+              "w": {
+                "type": "number",
+                "description": "The width, as a fraction of the window's width."
+              },
+              "x": {
+                "type": "number",
+                "description": "The left edge, as a fraction of the window's width."
+              },
+              "y": {
+                "type": "number",
+                "description": "The top edge, as a fraction of the window's height."
+              }
+            },
+            "description": "The same rectangle as an object, the form that earlier clients send.",
+            "required": [
+              "x",
+              "y",
+              "w",
+              "h"
+            ]
+          }
+        ]
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      }
+    },
+    "required": [
+      "session_id",
+      "block_id",
+      "bounds"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "layer_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The new floating layer's ID."
+      },
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "layer_id",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"block_id\": \"block:<uuid>\",\n  \"bounds\": [0.1, 0.1, 0.6, 0.5]\n}",
+  "response_example": "{\n  \"layer_id\": \"layer:<uuid>\",\n  \"revision\": 42\n}",
+  "validation_notes": [
+    "`bounds` is measured from the window's top-left corner. Its width and height must be greater than 0.",
+    "The new layer is in the block's own window, in front of every other floating layer there.",
+    "Focus and the active window don't change. If the window was zoomed, the zoom ends.",
+    "Floating the last block of a window's layout leaves the layout empty. The window stays open, and its layer of kind `tiled` in `session.view` keeps the same `layer_id`.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If `block_id` names a block that isn't in any window, including a detached block, it fails with `not_found`, and bad `bounds` fail with `bad_request`.",
+    "If the block is already in a floating layer, the call fails with `bad_request`."
+  ]
+}

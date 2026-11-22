@@ -1,0 +1,52 @@
+{
+  "name": "session.detach_block",
+  "description": "Take a block out of its window without closing it. The block keeps running.",
+  "invoke": {
+    "method": "session.detach_block"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The block to detach. It keeps running but leaves its window."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      }
+    },
+    "required": [
+      "session_id",
+      "block_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the call changed nothing that session.view shows, unless the method's notes say otherwise.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"block_id\": \"block:<uuid>\"\n}",
+  "response_example": "{\"revision\": 42}",
+  "validation_notes": [
+    "`session.list_blocks` lists the block with `placement` set to `detached`, and `session.move_block` places it in a window again.",
+    "Detaching a block that is already detached succeeds and changes nothing.",
+    "If the block was the last one in its window, the window closes too. If it was the only block in a floating layer, the layer closes.",
+    "If the block had focus, another block in its window gets focus.",
+    "To close the block instead, call `block.close`.",
+    "If `block_id` names a block that isn't in the session, the call fails with `not_found`."
+  ]
+}

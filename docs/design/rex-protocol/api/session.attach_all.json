@@ -1,0 +1,64 @@
+{
+  "name": "session.attach_all",
+  "description": "Start receiving events from the whole server and get the list of sessions.",
+  "invoke": {
+    "method": "session.attach_all"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "event_scope": {
+        "type": "string",
+        "description": "Which events to receive. 'session' sends every session's events except block_event, plus session_created, session_destroyed, session_moved, and tailscale_status_changed. 'all' also sends block_event and the client events, such as client_joined."
+      }
+    },
+    "required": [
+      "event_scope"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "sessions": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string",
+              "description": "The session's label."
+            },
+            "session_id": {
+              "type": "string",
+              "description": "The session's ID."
+            }
+          },
+          "required": [
+            "session_id",
+            "label"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Every session on the server when this connection started receiving events."
+      }
+    },
+    "required": [
+      "sessions"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"event_scope\": \"session\"\n}",
+  "response_example": "{\n  \"sessions\": [\n    {\n      \"session_id\": \"session:<uuid>\",\n      \"label\": \"work\"\n    }\n  ]\n}",
+  "validation_notes": [
+    "Use `session` unless you need `block_event` or the client events. With `all`, the client events are `client_joined`, `client_left`, `client_changed`, `client_performed`, and `client_script_events_dropped`. Any value other than `session` or `all` fails with `bad_request`.",
+    "The connection still receives every event from a session it attached to with `session.attach`, whatever the scope.",
+    "The connection doesn't join any session. It can call methods on every session, but it isn't listed in `session.list_clients` and can't call `data.connect` or own blocks. To join a session too, call `session.attach`, or use `session.bootstrap` to do both in one call.",
+    "Calling it again replaces the scope with the new `event_scope`.",
+    "The session list is a snapshot taken after events start. Apply each event whose `seq` is higher than the response message's `seq` on top of it.",
+    "Events arrive in order, and their `seq` has no gaps. If the connection falls more than 8 MiB of events behind, the server closes it rather than skip events. Open a new connection to get a fresh snapshot."
+  ]
+}

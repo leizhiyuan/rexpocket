@@ -1,0 +1,85 @@
+{
+  "name": "session.new_window",
+  "description": "Create a window and the blocks in its layout. It becomes the active window by default.",
+  "invoke": {
+    "method": "session.new_window"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "focus": {
+        "type": [
+          "null",
+          "boolean"
+        ],
+        "description": "Whether to make the new window the active window. Defaults to true. A session with no active window always makes the new one active."
+      },
+      "layout": {
+        "type": [
+          "null",
+          "object"
+        ],
+        "description": "The blocks to create in the window and how to arrange them. Required. Each node holds either block, with a flavor and optional options and label, or split, with direction, before, after, and an optional ratio."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      },
+      "window_label": {
+        "type": "string",
+        "description": "The window's label, up to 128 characters. Leave it out for a label made from the window's ID, such as Window 89abcdef."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "block_ids": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": "The new blocks' IDs, in layout order: each split's before side comes ahead of its after side."
+      },
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after the window was created.",
+        "minimum": 0
+      },
+      "window_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The new window's ID."
+      }
+    },
+    "required": [
+      "window_id",
+      "block_ids",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"window_label\": \"server\",\n  \"layout\": {\n    \"split\": {\n      \"direction\": \"horizontal\",\n      \"before\": {\n        \"block\": {\n          \"flavor\": \"com.superlogical.terminal.shell\",\n          \"label\": \"shell\"\n        }\n      },\n      \"after\": {\n        \"block\": {\n          \"flavor\": \"com.superlogical.terminal.shell\",\n          \"label\": \"logs\"\n        }\n      }\n    }\n  }\n}",
+  "response_example": "{\n  \"window_id\": \"window:<uuid>\",\n  \"block_ids\": [\n    \"block:01234567-89ab-cdef-0123-456789abcde1\",\n    \"block:01234567-89ab-cdef-0123-456789abcde2\"\n  ],\n  \"revision\": 42\n}",
+  "validation_notes": [
+    "A `block` node in `layout` starts one new block from a `flavor`, such as `com.superlogical.terminal.shell`. A `split` node divides its space in two and holds another node in each of `before` and `after`.",
+    "In a `split` node, `direction` is `horizontal` to put `before` on the left of `after`, or `vertical` to put it on top. `ratio` is the fraction of the space that `before` gets, greater than 0 and less than 1. It defaults to 0.5.",
+    "`layout` always starts new blocks. To place a detached block that already exists, use `session.move_block`.",
+    "In the new window, the first block in `block_ids` has focus.",
+    "Either the whole layout is created or none of it is. If a block fails to start, the server closes the blocks it already started, and the call fails.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If `layout` is missing or malformed, or a `flavor` is malformed, it fails with `bad_request`, and if no creator provides a `flavor`, it fails with `not_found`.",
+    "If the call would go past a limit on windows per session, blocks per window, or blocks on the server, it fails with `conflict`."
+  ]
+}

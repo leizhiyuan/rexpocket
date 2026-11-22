@@ -1,0 +1,46 @@
+$ rex server start --help
+Start a persistent server.
+
+Start is idempotent. Start options apply only when a new server is launched. An existing server retains its active configuration until explicitly restarted.
+
+The log size limit applies only to the file created for a detached server. Rex clears that file before a write would exceed --log-max-size.
+
+Usage:
+  rex server start [flags]
+
+Options:
+      --extra-listen ENDPOINT             also listen on unix, http, tailnet, tailnet-serve, or login-server ENDPOINT (repeatable, but not tailnet-serve or login-server on Windows)
+      --socket-mode MODE                  set Unix socket permissions to MODE, owner and group bits only (default 0600, not available on Windows)
+      --allow-anonymous                   admit anonymous callers on plain TCP listeners (every connection gets full access)
+      --tailnet-allow-identified          admit every identified caller through the host's tailscaled (default: node owner)
+      --tailscaled-socket PATH            use the tailscaled LocalAPI socket at PATH (default: platform socket)
+      --websocket-origin-pattern PATTERN  allow browser WebSockets from cross-origin PATTERN (repeatable)
+      --block-dir DIR                     discover executable block plugins in DIR (repeatable)
+      --block-plugin-reload               reload block plugins after source changes
+      --state-dir DIR                     store persistent server state below DIR
+      --restore                           restore the saved sessions (false starts without them and saves nothing) (default true)
+      --config PATH                       read the config file at PATH (default: REX_CONFIG, else rex/init.lua in the config directory)
+      --max-sessions N                    refuse new sessions once the server holds N (0 for no limit) (default 64)
+      --max-blocks N                      refuse new blocks once the server holds N across all sessions (0 for no limit) (default 1024)
+      --max-windows N                     refuse new windows once a session holds N (0 for no limit) (default 64)
+      --max-panes N                       refuse new panes once a window holds N (0 for no limit) (default 64)
+      --tailscale-allow-tailnet-members   allow any tailnet member permitted by ACLs to reach Rex
+      --tailscale                         also serve the API over the tailnet as an embedded tsnet node
+      --tailscale-hostname NAME           tailnet device NAME for --tailscale (default rex)
+      --tailscale-control-url URL         register the tailnet node with the control server at URL, such as Headscale
+      --tailscale-auth-key-file FILE      enroll --tailscale with the one-time auth key read from FILE
+      --tailscale-advertise-tag TAG       advertise ACL TAG (tag:name) when --tailscale enrolls the node (repeatable)
+      --log-format FORMAT                 write server logs as FORMAT: text or json (default text)
+      --log-level LEVEL                   log at LEVEL and above: debug, info, warn, or error (default info, or debug if -v is given without this flag)
+      --log-max-size SIZE                 limit the active detached log to SIZE by clearing old contents (0 disables) (default 50MiB)
+      --env NAME                          pass environment variable NAME or NAME=VALUE to a new server (repeatable)
+      --json                              output server information as JSON
+  -h, --help                              help for start
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

@@ -1,0 +1,93 @@
+{
+  "name": "session.resize_layer",
+  "description": "Move or resize a floating layer.",
+  "invoke": {
+    "method": "session.resize_layer"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "bounds": {
+        "description": "The layer's new position and size, as [x, y, w, h] fractions of the window's width and height. It must fit inside the window.",
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "A rectangle as [x, y, w, h]. x and y place its top-left corner and w and h give its size, each as a fraction of the window's width or height.",
+            "minItems": 4,
+            "maxItems": 4
+          },
+          {
+            "type": "object",
+            "properties": {
+              "h": {
+                "type": "number",
+                "description": "The height, as a fraction of the window's height."
+              },
+              "w": {
+                "type": "number",
+                "description": "The width, as a fraction of the window's width."
+              },
+              "x": {
+                "type": "number",
+                "description": "The left edge, as a fraction of the window's width."
+              },
+              "y": {
+                "type": "number",
+                "description": "The top edge, as a fraction of the window's height."
+              }
+            },
+            "description": "The same rectangle as an object, the form that earlier clients send.",
+            "required": [
+              "x",
+              "y",
+              "w",
+              "h"
+            ]
+          }
+        ]
+      },
+      "layer_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The floating layer to move or resize."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      }
+    },
+    "required": [
+      "session_id",
+      "layer_id",
+      "bounds"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the call changed nothing that session.view shows, unless the method's notes say otherwise.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"layer_id\": \"layer:<uuid>\",\n  \"bounds\": [0.2, 0.15, 0.5, 0.6]\n}",
+  "response_example": "{\"revision\": 42}",
+  "validation_notes": [
+    "`layer_id` must name a floating layer. Naming the window's layout, the layer of kind `tiled` in `session.view`, fails the call with `bad_request`.",
+    "`bounds` is measured from the window's top-left corner. Its width and height must be greater than 0.",
+    "Focus and the order of floating layers don't change. Setting the bounds the layer already has changes nothing.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If `layer_id` names no layer in the session, it fails with `not_found`, and bad `bounds` fail with `bad_request`."
+  ]
+}

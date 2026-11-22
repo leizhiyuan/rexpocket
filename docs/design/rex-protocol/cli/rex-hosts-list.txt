@@ -1,0 +1,21 @@
+$ rex hosts list --help
+List the hosts your home keeps, including changes held for it, and the hosts of this machine's own server.
+
+FROM says which server a host came from, and is left out when your home is this machine. SOURCE is the init.lua line that declares a host, "stored" for a host added with rex hosts, or "held" for a host not yet sent to your home.
+
+If your home is away, the list shows the hosts it had when it was last reached, and says how long ago that was. Warnings go to standard error.
+
+Usage:
+  rex hosts list [flags]
+
+Options:
+      --json  output the hosts as JSON
+  -h, --help  help for list
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

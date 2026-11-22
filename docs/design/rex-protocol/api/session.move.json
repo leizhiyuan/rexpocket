@@ -1,0 +1,40 @@
+{
+  "name": "session.move",
+  "description": "Move a session to another place in the order that session.list returns.",
+  "invoke": {
+    "method": "session.move"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "before_session_id": {
+        "type": [
+          "null",
+          "string"
+        ],
+        "description": "The session to place it just before. Leave it out to move the session to the end."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to move."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:01234567-89ab-cdef-0123-456789abcde1\",\n  \"before_session_id\": \"session:01234567-89ab-cdef-0123-456789abcde2\"\n}",
+  "response_example": "{}",
+  "validation_notes": [
+    "The order is the same for every client. Each move that changes it sends `session_moved` with the same `session_id` and `before_session_id`.",
+    "Moving a session to where it already is succeeds and changes nothing.",
+    "The connection must be attached to the session it moves, with `session.attach`, `session.bootstrap`, or `session.attach_all`, or the call fails with `conflict`.",
+    "If `before_session_id` names the session being moved, the call fails with `bad_request`.",
+    "If either ID names no session, the call fails with `session_not_found`, and the message says which one."
+  ]
+}

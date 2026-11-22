@@ -1,0 +1,62 @@
+{
+  "name": "session.set_layer_state",
+  "description": "Minimize a floating layer or return it to normal, optionally raising and focusing it.",
+  "invoke": {
+    "method": "session.set_layer_state"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "focus": {
+        "type": "boolean",
+        "description": "Whether to also raise the layer, focus the block last focused in it, and make its window active, all in one change. Needs state to be 'normal' and the layer to have a block. Defaults to false."
+      },
+      "layer_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The layer to change."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      },
+      "state": {
+        "type": "string",
+        "description": "The state to set: 'normal' or 'minimized'."
+      }
+    },
+    "required": [
+      "session_id",
+      "layer_id",
+      "state"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the call changed nothing that session.view shows, unless the method's notes say otherwise.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"layer_id\": \"layer:<uuid>\",\n  \"state\": \"minimized\"\n}",
+  "response_example": "{\"revision\": 42}",
+  "validation_notes": [
+    "Only a floating layer can be minimized. Minimizing the window's layout, the layer of kind `tiled` in `session.view`, fails with `bad_request`. Setting it to `normal` succeeds and changes nothing.",
+    "With `focus` set to `true`, the layer is also raised, the block last focused in it takes focus, or its first block, and its window becomes active, all in one revision. This also works on a layer that is already normal and on the tiled layer. `focus` with `minimized`, or on a layer with no blocks, fails with `bad_request` and changes nothing.",
+    "`state` must be `normal` or `minimized`. Any other value fails with `bad_request`.",
+    "A minimized layer stays in `session.view` with `state` set to `minimized`, its blocks keep running, and it keeps its bounds and its place in the stack. `state` is left out for a normal layer.",
+    "Minimizing the layer that has focus moves focus to the layer used before it, or to the nearest visible pane, and clears zoom. Returning a layer to normal leaves focus where it is. Setting the state the layer already has changes nothing.",
+    "A window must keep a visible pane, so minimizing the layer that holds its last visible panes fails with `bad_request`.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If `layer_id` names no layer in the session, it fails with `not_found`."
+  ]
+}

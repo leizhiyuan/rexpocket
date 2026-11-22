@@ -1,0 +1,148 @@
+{
+  "name": "server.tailscale.enable",
+  "description": "Turn on built-in Tailscale so devices on your tailnet can reach the server.",
+  "invoke": {
+    "method": "server.tailscale.enable"
+  },
+  "local": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "advertise_tags": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "description": "Tailscale tags, such as tag:rex, for the device to sign in with. Used only when this call starts the device. Needs allow_tailnet_members set to true."
+      },
+      "allow_tailnet_members": {
+        "type": "boolean",
+        "description": "True lets in anyone your tailnet's access rules allow. False lets in only the Tailscale user who signed the device in. Applies on every call, even when the device is already on."
+      },
+      "auth_key": {
+        "type": "string",
+        "description": "A Tailscale auth key that signs the device in without a browser. Used only when this call starts the device. Never logged or saved."
+      },
+      "control_url": {
+        "type": "string",
+        "description": "The control server to sign in with if this call starts the device, such as https://headscale.example.com. If left out, the server uses its configured control server, or Tailscale's own."
+      },
+      "hostname": {
+        "type": "string",
+        "description": "The device name to use if this call starts the device, such as studio. If left out, the server uses its configured name, or rex."
+      }
+    },
+    "required": [
+      "allow_tailnet_members"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "tailscale": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "object",
+            "properties": {
+              "login_name": {
+                "type": "string",
+                "description": "The Tailscale login name, usually an email address. For display only, because it can change."
+              }
+            },
+            "description": "The Tailscale account that signed the device in. Left out until Tailscale reports it.",
+            "required": [
+              "login_name"
+            ],
+            "additionalProperties": false
+          },
+          "allow_tailnet_members": {
+            "type": "boolean",
+            "description": "True if anyone your tailnet's access rules allow may connect. False lets in only the Tailscale user who signed the device in."
+          },
+          "auth_url": {
+            "type": "string",
+            "description": "The link to open to sign the device in to Tailscale. Present while state is needs_login, once Tailscale has made the link."
+          },
+          "control_url": {
+            "type": "string",
+            "description": "The control server the device uses, such as a Headscale server. Left out for Tailscale's own, while built-in Tailscale is off, and by older servers."
+          },
+          "dns_name": {
+            "type": "string",
+            "description": "The device's MagicDNS name, such as rex.tail1234.ts.net. Left out until known."
+          },
+          "error": {
+            "type": "string",
+            "description": "Why built-in Tailscale turned off after its HTTPS listener failed. The next enable clears it."
+          },
+          "https": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "description": "'pending' until the HTTPS listener is ready, then 'available'. The server is reachable over the tailnet only when available. Treat a value you don't know as 'pending'."
+              },
+              "url": {
+                "type": "string",
+                "description": "The server's address on the tailnet, such as https://rex.tail1234.ts.net. Present once HTTPS is available and the device's name is known."
+              }
+            },
+            "description": "The state of the device's HTTPS listener. Left out while built-in Tailscale is off, and by older servers.",
+            "required": [
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          "state": {
+            "type": "string",
+            "description": "'disabled' (off), 'starting', 'needs_login' (see auth_url), 'needs_machine_approval' (a tailnet admin must approve the device), or 'running' (on the tailnet). Treat a value you don't know as 'starting'."
+          },
+          "tags": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The Tailscale tags the device has, such as tag:rex. A tagged device has no owner. Left out when it has none."
+          },
+          "tailnet_name": {
+            "type": "string",
+            "description": "The tailnet's display name, or its domain if it has none. Left out until known."
+          }
+        },
+        "description": "The status of built-in Tailscale after the call.",
+        "required": [
+          "state",
+          "allow_tailnet_members"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "tailscale"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"hostname\": \"studio\",\n  \"allow_tailnet_members\": false\n}",
+  "response_example": "{\n  \"tailscale\": {\n    \"state\": \"starting\",\n    \"allow_tailnet_members\": false,\n    \"https\": {\n      \"state\": \"pending\"\n    }\n  }\n}",
+  "validation_notes": [
+    "Built-in Tailscale is a copy of Tailscale inside Rex. It makes the server join your tailnet as a device of its own, so the machine doesn't need Tailscale installed.",
+    "If built-in Tailscale is already on, the call only applies `allow_tailnet_members`, without restarting the device or dropping connections. It ignores `hostname`, `auth_key`, and `advertise_tags`.",
+    "The first time the device starts, it must sign in to Tailscale. With a valid `auth_key`, it signs in without a browser. Otherwise `state` becomes `needs_login`, and the sign-in link appears in `auth_url` and in the server's log.",
+    "The device keeps its sign-in, so later calls need no `auth_key`. The server never logs, saves, or returns the key.",
+    "`advertise_tags` signs the device in as a tagged device, which has no owner, so it needs `allow_tailnet_members` set to true. The auth key or OAuth client that signs the device in must be allowed to grant the tags.",
+    "The call returns once the device has started, before it has finished connecting. The server is reachable over the tailnet only once `https.state` is `available`. Follow the progress with `tailscale_status_changed` events, on a connection that called `session.attach_all` or `session.bootstrap`.",
+    "If the HTTPS listener fails later, built-in Tailscale turns off: `state` becomes `disabled` and `error` says why.",
+    "When the call starts the device, it fails with `bad_request` for a tag that isn't a valid Tailscale tag, and for tags with `allow_tailnet_members` set to false.",
+    "While the server is shutting down, the call fails with `conflict`.",
+    "If the server can't run built-in Tailscale, the call fails with `not_supported`.",
+    "The server accepts this method only over its local Unix socket, or its named pipe on Windows. Over any other connection, such as TCP or Tailscale, the call fails with status 403."
+  ]
+}

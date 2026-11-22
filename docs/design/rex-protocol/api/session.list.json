@@ -1,0 +1,49 @@
+{
+  "name": "session.list",
+  "description": "List the sessions on the server.",
+  "invoke": {
+    "method": "session.list"
+  },
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "sessions": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string",
+              "description": "The session's label."
+            },
+            "session_id": {
+              "type": "string",
+              "description": "The session's ID."
+            }
+          },
+          "required": [
+            "session_id",
+            "label"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Every session on the server. New sessions go at the end, and session.move changes the order."
+      }
+    },
+    "required": [
+      "sessions"
+    ],
+    "additionalProperties": false
+  },
+  "response_example": "{\n  \"sessions\": [\n    {\n      \"session_id\": \"session:<uuid>\",\n      \"label\": \"work\"\n    }\n  ]\n}",
+  "validation_notes": [
+    "Sessions are listed in the order they were created, until `session.move` changes that order. `session.attach_all` and `session.bootstrap` list them in the same order."
+  ]
+}

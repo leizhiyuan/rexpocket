@@ -1,0 +1,130 @@
+{
+  "name": "hosts.list",
+  "description": "List the server's hosts: the other Rex servers you connect to by label.",
+  "invoke": {
+    "method": "hosts.list"
+  },
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "diagnostics": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "The full name of the action the problem is about, as written, even if misspelled. Left out if it isn't about one action."
+            },
+            "key": {
+              "type": "string",
+              "description": "The key the problem is about, spelled like a binding's keys, with a sequence joined by spaces, such as ctrl+a b. Left out if it isn't about one key."
+            },
+            "message": {
+              "type": "string",
+              "description": "The problem in one sentence, ready to show. Its wording may change, so don't parse it."
+            },
+            "mode": {
+              "type": "string",
+              "description": "The mode the problem is about. Left out if it isn't about a mode."
+            },
+            "severity": {
+              "type": "string",
+              "description": "How serious the problem is: warning, for something the user probably didn't mean, or error, for a part that was skipped. Show a value you don't know as a warning."
+            },
+            "source": {
+              "type": "string",
+              "description": "Where the problem is, as file:line, such as init.lua:22. Left out when it isn't known."
+            }
+          },
+          "required": [
+            "severity",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Warnings about the hosts declared in the configuration file. Left out when there are none. The hash doesn't cover them."
+      },
+      "hash": {
+        "type": "string",
+        "description": "Identifies this version of the list. hosts.put, hosts.remove, and the hosts_changed event report the same hash for the same list."
+      },
+      "hosts": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "added_from": {
+              "type": "string",
+              "description": "The device or client that added the host. For display only."
+            },
+            "endpoints": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "The addresses that reach the host, in the order to try them, such as studio.tail1234.ts.net or unix:///tmp/rex.sock. Each takes a form the -S option of rex accepts. A socket path works only on a device where the path exists, such as the local end of an ssh -L forward."
+            },
+            "host_id": {
+              "type": "string",
+              "description": "The host_id that the host's server.status reported when the host was added, if known. Compare it with a server's host_id to tell whether this host is that server."
+            },
+            "icon": {
+              "type": "string",
+              "description": "The name of an icon for clients to show next to the label. Rex doesn't interpret it."
+            },
+            "id": {
+              "type": "string",
+              "description": "The host's ID, such as host:<uuid>, chosen by the device that adds the host. If hosts.put leaves it out, the server creates one."
+            },
+            "label": {
+              "type": "string",
+              "description": "The name you connect to the host by, such as studio. Unique in the list, ignoring case, and at most 64 characters."
+            },
+            "source": {
+              "type": "string",
+              "description": "Where the configuration file declares the host, such as init.lua:12. Left out for a host added with hosts.put. The server sets it."
+            },
+            "updated_at": {
+              "type": "string",
+              "description": "When the host last changed, as an RFC 3339 timestamp. The server sets it and ignores any value a client sends."
+            }
+          },
+          "required": [
+            "label",
+            "endpoints"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Every host in the list, sorted by label, ignoring case, then by id. An empty list when there are no hosts."
+      }
+    },
+    "required": [
+      "hosts",
+      "hash"
+    ],
+    "additionalProperties": false
+  },
+  "response_example": "{\n  \"hosts\": [\n    {\n      \"id\": \"host:0199abcd-1234-7abc-8def-0123456789ab\",\n      \"label\": \"studio\",\n      \"endpoints\": [\"studio.tail1234.ts.net\", \"192.168.1.20:7297\"],\n      \"host_id\": \"0e9d6c1f-4a3b-4a52-9c85-2f6d3f6f2f10\",\n      \"added_from\": \"laptop\",\n      \"updated_at\": \"2026-10-03T12:00:00Z\"\n    },\n    {\n      \"id\": \"host:6f1c1d4e-2b7a-5c39-8e0f-3a9b7c5d1e2f\",\n      \"label\": \"attic\",\n      \"endpoints\": [\"attic.example-tailnet.ts.net\"],\n      \"source\": \"init.lua:4\"\n    }\n  ],\n  \"hash\": \"9f2c4e1a0b3d5f7e9a1c3e5f7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3f5b\",\n  \"diagnostics\": [\n    {\n      \"severity\": \"warning\",\n      \"source\": \"init.lua:9\",\n      \"message\": \"the label \\\"studio\\\" is already used by the host at studio.tail1234.ts.net, which was stored through the API\"\n    }\n  ]\n}",
+  "validation_notes": [
+    "Every Rex server keeps a host list. Each of your devices reads its hosts from the one server it uses as its home, so they all see the same list.",
+    "The list holds the hosts declared with `rex.host` in the server's configuration file, and the hosts that clients added with `hosts.put`. A declared host has a `source`, such as `init.lua:4`. A host added with `hosts.put` has none.",
+    "Each host comes back exactly as it was stored, including fields this server doesn't know. A client that sends a host back with `hosts.put` must keep those fields.",
+    "A declared host with a mistake in it, or whose label another host already uses, is left out of `hosts`. A warning in `diagnostics` names the line that declared it.",
+    "A server started without a state directory can't store hosts, so it lists only the declared ones.",
+    "If a hand edit broke the file that stores the hosts, the call fails with `conflict` and a message that names the file."
+  ]
+}

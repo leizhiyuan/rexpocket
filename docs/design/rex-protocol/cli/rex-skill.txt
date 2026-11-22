@@ -1,0 +1,26 @@
+$ rex skill --help
+Set up agents such as Claude Code and Codex to use Rex.
+
+Rex installs two things into each agent. A skill teaches the agent how to use the rex command. A hook, in agents that support hooks, tells the agent at the start of each session which Rex session and terminal it is running in. Both get their text from the rex command each time the agent uses them, so upgrading Rex also updates what agents are told.
+
+Run "rex skill setup" once per account, and "rex skill status" to see what is installed.
+
+Usage:
+  rex skill [command] [flags]
+
+Commands:
+  status  Report whether Rex's skill and hooks are installed
+  setup   Install Rex's skill and hooks into agents
+  remove  Remove Rex's skill and hooks from agents
+  show    Print the guide that Rex's skill gives agents
+
+Options:
+  -h, --help  help for skill
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

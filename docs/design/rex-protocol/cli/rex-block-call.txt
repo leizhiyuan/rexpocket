@@ -1,0 +1,36 @@
+$ rex block call --help
+Call one method exposed by a block.
+
+METHOD is the block method name. ARGS must be a JSON object. Pass the object
+directly, use @path to read it from a file, or use - to read it from stdin. When
+ARGS is omitted, the request sends no arguments.
+
+When --block is omitted, Rex uses REX_BLOCK if it names a live block. Otherwise,
+it uses the focused block of the default window.
+
+Method results are JSON. Output written to a terminal uses two-space indentation.
+Redirected output stays on one line for use in scripts. Use rex block inspect to
+list methods and rex block inspect --json to view their schemas.
+
+Examples:
+  rex block call process
+  rex block call -b c2a9f3 write '{"data":"ls\n"}'
+  rex block call -b logs format @request.json
+  echo '{"format":"text","trim":true}' | rex block call format -
+
+Usage:
+  rex block call METHOD [ARGS] [flags]
+
+Options:
+  -b, --block BLOCK     select block BLOCK
+  -s, --session string  scope to session SESSION
+  -w, --window string   scope to window WINDOW
+  -h, --help            help for call
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

@@ -1,0 +1,48 @@
+{
+  "name": "session.focus_window",
+  "description": "Make a window the active window. Focus goes to the block it last had focused.",
+  "invoke": {
+    "method": "session.focus_window"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      },
+      "window_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The window to make active. Focus goes to the block that was focused in it."
+      }
+    },
+    "required": [
+      "session_id",
+      "window_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the call changed nothing that session.view shows, unless the method's notes say otherwise.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"window_id\": \"window:<uuid>\"\n}",
+  "response_example": "{\"revision\": 42}",
+  "validation_notes": [
+    "If the window is already active, the call changes nothing.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If `window_id` names a window that isn't in the session, it fails with `not_found`."
+  ]
+}

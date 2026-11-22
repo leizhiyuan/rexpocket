@@ -1,0 +1,172 @@
+{
+  "name": "session.describe_block",
+  "description": "Get a block's details and the methods, events, and actions it provides.",
+  "invoke": {
+    "method": "session.describe_block"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The block to describe. It may be a detached block."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      }
+    },
+    "required": [
+      "session_id",
+      "block_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "api": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "object",
+            "description": "The block events, by name. Each value is a JSON Schema for the event's fields.",
+            "additionalProperties": true
+          },
+          "methods": {
+            "type": "object",
+            "description": "The block methods, by short name.",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "actions": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "args": {
+                        "description": "The fixed arguments the method is called with when the action runs. Left out when there are none."
+                      },
+                      "category": {
+                        "type": "string",
+                        "description": "A group of related actions, such as Pane."
+                      },
+                      "description": {
+                        "type": "string",
+                        "description": "A sentence about what the action does, to show under its title in a menu or command palette."
+                      },
+                      "keywords": {
+                        "type": "string",
+                        "description": "More words to search for the action by, separated by spaces."
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "The action's short name, such as reset. Its full name, used in key bindings, is the creator's name, a dot, and this name."
+                      },
+                      "repeats": {
+                        "type": "boolean",
+                        "description": "True if holding the key down should run the action again, as holding an arrow key does."
+                      },
+                      "title": {
+                        "type": "string",
+                        "description": "The name to show a person, such as Reset Terminal."
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "title"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "The actions that call this method, in the order the creator declares them."
+                },
+                "description": {
+                  "type": "string",
+                  "description": "What the method does."
+                },
+                "input_schema": {
+                  "description": "A JSON Schema for the method's arguments."
+                },
+                "output_schema": {
+                  "description": "A JSON Schema for the method's result."
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "description": "The methods and events the block provides.",
+        "additionalProperties": false
+      },
+      "block": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The block's ID."
+          },
+          "creator_name": {
+            "type": "string",
+            "description": "The creator that made the block, such as com.superlogical.terminal."
+          },
+          "flavor": {
+            "type": "string",
+            "description": "The flavor the block was made from, such as com.superlogical.terminal.shell."
+          },
+          "host_id": {
+            "type": "string",
+            "description": "Identifies the machine and account the block runs as. If it equals your local server's host_id, the block sees the same files you do. Otherwise treat the block as remote."
+          },
+          "label": {
+            "type": "string",
+            "description": "The block's label."
+          },
+          "owner": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The client that owns the block. Left out when the block has no owner."
+          },
+          "placement": {
+            "type": "string",
+            "description": "Whether the block is in a window: 'placed' or 'detached'. Treat a value you don't know as 'detached'."
+          },
+          "window_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The window the block is in. Left out when the block is detached."
+          }
+        },
+        "description": "The block, described as in session.list_blocks.",
+        "required": [
+          "block_id",
+          "label",
+          "placement"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "block"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"block_id\": \"block:<uuid>\"\n}",
+  "response_example": "{\n  \"block\": {\n    \"block_id\": \"block:<uuid>\",\n    \"label\": \"shell\",\n    \"creator_name\": \"com.superlogical.terminal\",\n    \"flavor\": \"com.superlogical.terminal.shell\",\n    \"host_id\": \"0e9d6c1f-4a3b-4a52-9c85-2f6d3f6f2f10\",\n    \"placement\": \"placed\",\n    \"window_id\": \"window:<uuid>\",\n    \"owner\": \"client:<uuid>\"\n  },\n  \"api\": {\n    \"methods\": {\n      \"title\": {\n        \"description\": \"Get the terminal's title and the process that set it.\",\n        \"input_schema\": {\"type\": \"object\"},\n        \"output_schema\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"title\": {\"type\": \"string\"}\n          }\n        }\n      }\n    },\n    \"events\": {\n      \"bell\": {\"type\": \"object\"}\n    }\n  }\n}",
+  "validation_notes": [
+    "`api` lists the methods and events the block provides, in the same form as `block_creator.list`. Call a method as `<creator>.<method>` with `session_id`, `block_id`, and its arguments under `args`.",
+    "If `block_id` names a block that isn't in the session, or one that is closing, the call fails with `not_found`."
+  ]
+}

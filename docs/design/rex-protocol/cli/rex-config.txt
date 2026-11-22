@@ -1,0 +1,22 @@
+$ rex config --help
+Rex reads one configuration file per account, init.lua. It binds keys with rex.bind and takes them away with rex.unbind.
+
+The file is REX_CONFIG when that variable is set. Otherwise it is rex/init.lua in the account's configuration directory, which is $XDG_CONFIG_HOME/rex or ~/.config/rex on macOS and Linux, and %AppData%\rex on Windows.
+
+Usage:
+  rex config [command] [flags]
+
+Commands:
+  check   Load the config file and report what it found
+  reload  Make the server read the config file again
+
+Options:
+  -h, --help  help for config
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

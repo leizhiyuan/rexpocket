@@ -1,0 +1,22 @@
+$ rex skill remove --help
+Remove Rex's skill and hooks from every agent Rex knows, or from the agents named with --agent. Agents that are no longer installed are included, so nothing Rex installed is left behind.
+
+Only files and hooks that Rex installed are removed, including older copies of the skill in other directories the agent reads. Other skills, hooks and settings are left as they were.
+
+Usage:
+  rex skill remove [flags]
+
+Options:
+      --agent AGENT  use only AGENT, which is claude, codex, opencode or pi (repeatable)
+      --project      remove from the current repository instead of your account
+      --dry-run      report what would change without changing anything
+      --json         print the result as JSON
+  -h, --help         help for remove
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

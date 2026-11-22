@@ -1,0 +1,24 @@
+$ rex forward close --help
+Close forwards by closing their tunnel blocks. Give the forwards' IDs, as rex
+forward ls shows them, or close every orphaned forward in the session with
+--orphaned, or every forward in it with --all.
+
+A rex forward new that is carrying a closed forward stops it, and exits once
+it has no forwards left.
+
+Usage:
+  rex forward close [FORWARD...] [flags]
+
+Options:
+  -s, --session string  scope to session SESSION
+      --orphaned        close every orphaned forward in the session
+      --all             close every forward in the session
+  -h, --help            help for close
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

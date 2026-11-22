@@ -1,0 +1,95 @@
+{
+  "name": "session.list_blocks",
+  "description": "List every block in the session, including detached blocks.",
+  "invoke": {
+    "method": "session.list_blocks"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "blocks": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "block_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The block's ID."
+            },
+            "creator_name": {
+              "type": "string",
+              "description": "The creator that made the block, such as com.superlogical.terminal."
+            },
+            "flavor": {
+              "type": "string",
+              "description": "The flavor the block was made from, such as com.superlogical.terminal.shell."
+            },
+            "host_id": {
+              "type": "string",
+              "description": "Identifies the machine and account the block runs as. If it equals your local server's host_id, the block sees the same files you do. Otherwise treat the block as remote."
+            },
+            "label": {
+              "type": "string",
+              "description": "The block's label."
+            },
+            "owner": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The client that owns the block. Left out when the block has no owner."
+            },
+            "placement": {
+              "type": "string",
+              "description": "Whether the block is in a window: 'placed' or 'detached'. Treat a value you don't know as 'detached'."
+            },
+            "window_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The window the block is in. Left out when the block is detached."
+            }
+          },
+          "required": [
+            "block_id",
+            "label",
+            "placement"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Every block in the session, including detached blocks."
+      }
+    },
+    "required": [
+      "blocks"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\"\n}",
+  "response_example": "{\n  \"blocks\": [\n    {\n      \"block_id\": \"block:01234567-89ab-cdef-0123-456789abcde1\",\n      \"label\": \"shell\",\n      \"creator_name\": \"com.superlogical.terminal\",\n      \"flavor\": \"com.superlogical.terminal.shell\",\n      \"host_id\": \"0e9d6c1f-4a3b-4a52-9c85-2f6d3f6f2f10\",\n      \"placement\": \"placed\",\n      \"window_id\": \"window:<uuid>\",\n      \"owner\": \"client:<uuid>\"\n    },\n    {\n      \"block_id\": \"block:01234567-89ab-cdef-0123-456789abcde2\",\n      \"label\": \"logs\",\n      \"creator_name\": \"com.superlogical.terminal\",\n      \"flavor\": \"com.superlogical.terminal.shell\",\n      \"host_id\": \"0e9d6c1f-4a3b-4a52-9c85-2f6d3f6f2f10\",\n      \"placement\": \"detached\"\n    }\n  ]\n}",
+  "validation_notes": [
+    "Treat a `placement` you don't recognize like `detached`. The block exists and you can call its methods, but don't assume where it is shown.",
+    "Blocks are sorted by `block_id`.",
+    "To see where each block sits in its window and which one has focus, call `session.view`."
+  ]
+}

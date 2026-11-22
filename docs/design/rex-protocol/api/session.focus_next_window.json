@@ -1,0 +1,46 @@
+{
+  "name": "session.focus_next_window",
+  "description": "Make the next window the active window.",
+  "invoke": {
+    "method": "session.focus_next_window"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      },
+      "wrap": {
+        "type": "boolean",
+        "description": "Whether to go from the last window back to the first. Defaults to false."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the call changed nothing that session.view shows, unless the method's notes say otherwise.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"wrap\": true\n}",
+  "response_example": "{\"revision\": 42}",
+  "validation_notes": [
+    "The window order is the order of `windows` in `session.view`.",
+    "Each window keeps its own focused block, which then receives typing.",
+    "If there's no next window, nothing changes and the call still succeeds.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If the session has no windows, it fails with `conflict`."
+  ]
+}

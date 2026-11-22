@@ -1,0 +1,115 @@
+{
+  "name": "server.whoami",
+  "description": "Get how the server identified you, and the account the server runs as.",
+  "invoke": {
+    "method": "server.whoami"
+  },
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "account": {
+        "type": "string",
+        "description": "The operating system account the server runs as. It can differ from your own name. Left out when unknown."
+      },
+      "principal": {
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "string",
+            "description": "A readable name for the client, such as uid 501 or alice@example.com. It can be out of date or shared, so compare uid, sid, or user_id instead."
+          },
+          "gid": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "The client's Unix group ID. Only for kind peer."
+          },
+          "kind": {
+            "type": "string",
+            "description": "How the server identified the client: 'peer' (Unix socket credentials), 'windows_peer' (named pipe credentials), 'tailscale' (a Tailscale login), or 'anonymous' (not identified). Show a kind you don't know by its name."
+          },
+          "login_name": {
+            "type": "string",
+            "description": "The client's Tailscale login name, usually an email address. For display only."
+          },
+          "node": {
+            "type": "string",
+            "description": "The name of the client's Tailscale device. Only for kind tailscale."
+          },
+          "path": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The route the client took to this server, for troubleshooting. Entries include 'tailscale' (built-in Tailscale), 'tailnet' and 'tailnet-serve' (the machine's own Tailscale), and 'login-server' (passed on by a login server)."
+          },
+          "pid": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "The client's process ID when it connected, for kind peer or windows_peer, if known. Process IDs are reused, so use it only for debugging."
+          },
+          "remote_addr": {
+            "type": "string",
+            "description": "The client's network address. Left out when there is none, such as on a Unix socket."
+          },
+          "sid": {
+            "type": "string",
+            "description": "The client's Windows security identifier, which survives account renames. Only for kind windows_peer."
+          },
+          "tags": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The Tailscale tags of the client's device. Any tag means the client is a machine, such as a CI runner, not a person."
+          },
+          "transport": {
+            "type": "string",
+            "description": "How the client first reached Rex: 'unix', 'named_pipe', 'tcp', or 'tailscale'. A login server passes it on unchanged."
+          },
+          "uid": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "The client's Unix user ID. Only for kind peer."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "The Tailscale user ID that owns the client's device. Only for kind tailscale. Check tags before treating it as a person."
+          }
+        },
+        "description": "How the server identified you when your connection opened.",
+        "required": [
+          "kind",
+          "transport",
+          "display"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "principal"
+    ],
+    "additionalProperties": false
+  },
+  "response_example": "{\n  \"principal\": {\n    \"kind\": \"peer\",\n    \"transport\": \"unix\",\n    \"display\": \"uid 501\",\n    \"uid\": 501,\n    \"gid\": 20,\n    \"pid\": 4242\n  },\n  \"account\": \"alice\"\n}",
+  "validation_notes": [
+    "Which fields `principal` has depends on its `kind`. A `peer` has `uid` and `gid`, and usually `pid`. A `windows_peer` has `sid`, and usually `pid`. A `tailscale` client has `user_id`, `login_name`, and `node`, plus `tags` if its device is tagged. An `anonymous` client has none of these.",
+    "The server identifies a client when its connection opens. `principal` stays the same for as long as the connection lasts.",
+    "`principal` describes a decision the server already made when it let the client in. Use it to show who is connected, not to decide what a client may do."
+  ]
+}

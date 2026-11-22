@@ -1,0 +1,61 @@
+$ rex --help
+The multiplexer for all work.
+
+Usage:
+  rex [command] [flags]
+
+Common commands:
+  new           Create a session
+  ls, list      List sessions
+  run           Run a command in a new block
+  split         Split the focused block
+  do            Perform an action or run a Lua script
+  send          Send input to a terminal
+  send-key      Send key presses to a terminal
+  capture       Print a terminal's screen and scrollback
+  kill          Kill sessions
+  forward, fwd  Forward TCP ports
+
+Layout:
+  focus   Focus a block or window
+  zoom    Zoom a block to fill its window
+  move    Move a block next to another
+  swap    Swap two blocks
+  resize  Resize a block
+
+Resources:
+  session  Manage sessions
+  window   Manage windows
+  block    Manage blocks
+  client   Manage clients
+
+Automation:
+  events   Stream server events
+  wait     Wait for a block, window, or session to end
+  api      Inspect and call the server API
+  actions  List the actions a client or the server offers
+
+Server:
+  server        Manage the Rex server
+  config        Work with Rex's config file
+  keymap        Show what each key does
+  login-server  Run the multi-account login server
+  home          Show or choose your home server
+  hosts         List and change the hosts you connect to
+  whoami        Show your identity, server, and Rex location
+
+Other:
+  completion  Generate shell completion
+  terminfo    Set up and report Rex's terminal type
+  skill       Set up agents to use Rex
+  help        Help about any command
+  version     Print version information
+
+Options:
+      --autostart         start a missing local server (default true)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -h, --help              help for rex
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

@@ -1,0 +1,23 @@
+$ rex terminfo status --help
+Report the TERM a new terminal would be given, what was examined to decide it, and, when this account is not set up, which command fixes it.
+
+A server claims xterm-rex wherever that is safe and keeps xterm-256color everywhere else. Naming an entry in REX_TERM overrides that and gives every terminal that name, which makes REX_TERM=xterm-256color the off switch. The value "auto" asks for the rule the server already follows.
+
+The report covers the terminfo entry, the ssh client, both guard files, the hosts that have been recorded, and which configuration is responsible for what ssh would actually send.
+
+Nothing of yours is changed and no host is contacted. The one file written is a throwaway copy of Rex's guard, used to ask ssh what that guard would do on its own.
+
+Usage:
+  rex terminfo status [flags]
+
+Options:
+      --json  output the report as JSON
+  -h, --help  help for status
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

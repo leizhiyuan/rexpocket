@@ -1,0 +1,21 @@
+$ rex home set --help
+Make the server at ENDPOINT your home. ENDPOINT takes the same forms as --server.
+
+The server is asked for its status first. If it cannot be reached, your home is not changed, so a mistyped address or a server that is down never becomes your home. The home is named by --label, or by the endpoint's host or socket name if no label is given.
+
+Your choice is written to home.json in Rex's state directory, along with the host ID the server reports. rex home uses the host ID to warn you if the address later leads to a different machine. This command fails while REX_HOME is set, because that variable takes precedence over the file.
+
+Usage:
+  rex home set ENDPOINT [flags]
+
+Options:
+      --label NAME  call the home NAME in output
+  -h, --help        help for set
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

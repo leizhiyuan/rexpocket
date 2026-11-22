@@ -1,0 +1,27 @@
+$ rex server stop --help
+Stop the server.
+
+Stopping the server ends every program running in its sessions.
+
+With --if-idle, the server stops only if it has no sessions and no other client is connected. Otherwise it keeps running, and the command says what is using it and exits with status 1. A client that connects at the same moment is refused, so it never starts work that the stop would end.
+
+With --discard, the command also deletes the server's saved sessions once it has stopped, so the next start begins with none. If no server is running, it only deletes them. If the stop is refused, nothing is deleted. Pass --state-dir if the server was started with one.
+
+--if-idle needs a server recent enough to support it. With an older server, the command leaves the server running and exits with status 4. Without --if-idle, rex server stop works with a server of any version.
+
+Usage:
+  rex server stop [flags]
+
+Options:
+      --discard        delete the saved sessions once the server has stopped
+  -h, --help           help for stop
+      --if-idle        stop only if the server has no sessions and no other connected clients
+      --state-dir DIR  find the saved sessions for --discard below DIR
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

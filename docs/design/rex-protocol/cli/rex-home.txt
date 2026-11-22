@@ -1,0 +1,25 @@
+$ rex home --help
+Show or choose your home, the server this device follows for hosts and shortcuts.
+
+Your home is this machine unless you choose another. Any Rex server can be a home. A server is not told that it is someone's home, and admits you the same way either way.
+
+Without a command, connect to your home and show what it reports about you. Your choice is kept in home.json in Rex's state directory. Setting REX_HOME chooses a home for one environment and takes precedence over the file. The --server option and REX_SERVER choose the server other commands talk to. They do not change your home.
+
+Usage:
+  rex home [command] [flags]
+
+Commands:
+  set    Follow ENDPOINT for hosts and shortcuts
+  unset  Follow this machine again
+
+Options:
+      --json  output the home and your identity as JSON
+  -h, --help  help for home
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

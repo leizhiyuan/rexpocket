@@ -1,0 +1,26 @@
+$ rex client inspect --help
+Show one client and the actions it offers.
+
+CLIENT is a client ID, label, or ID suffix. With no CLIENT, -C or REX_CLIENT
+names the client, and otherwise the app client is used when exactly one is
+connected.
+
+Examples:
+  rex client inspect studio
+  rex client inspect 3f9a
+  rex client inspect --json
+
+Usage:
+  rex client inspect [CLIENT] [flags]
+
+Options:
+      --json  output the client and its actions as JSON
+  -h, --help  help for inspect
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

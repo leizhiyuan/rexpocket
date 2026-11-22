@@ -1,0 +1,102 @@
+{
+  "name": "session.create",
+  "description": "Create a session, optionally with its first windows already in it.",
+  "invoke": {
+    "method": "session.create"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "initial_windows": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "layout": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "description": "The blocks to create in the window and how to arrange them. Required. Each node holds either block, with a flavor and optional options and label, or split, with direction, before, after, and an optional ratio."
+            },
+            "window_label": {
+              "type": "string",
+              "description": "The window's label, up to 128 characters. Leave it out for a label made from the window's ID, such as Window 89abcdef."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Windows to create with the session, in order. The last one becomes the active window. If any of them fails, the server creates no session."
+      },
+      "label": {
+        "type": "string",
+        "description": "The session's label, up to 128 characters. Leave it out to let the server choose one, such as quiet-meadow."
+      }
+    },
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "initial_windows": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "block_ids": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "The new blocks' IDs, in layout order: each split's before side comes ahead of its after side."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "The session's revision after the window was created.",
+              "minimum": 0
+            },
+            "window_id": {
+              "type": "string",
+              "description": "The new window's ID."
+            }
+          },
+          "required": [
+            "window_id",
+            "block_ids",
+            "revision"
+          ],
+          "additionalProperties": false
+        },
+        "description": "The windows created with the session, in the order requested."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The new session's ID."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"label\": \"work\",\n  \"initial_windows\": [\n    {\n      \"window_label\": \"editor\",\n      \"layout\": {\n        \"block\": {\n          \"flavor\": \"com.superlogical.terminal.shell\"\n        }\n      }\n    }\n  ]\n}",
+  "response_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"initial_windows\": [\n    {\n      \"window_id\": \"window:<uuid>\",\n      \"block_ids\": [\"block:<uuid>\"],\n      \"revision\": 1\n    }\n  ]\n}",
+  "validation_notes": [
+    "Every argument is optional. With none, the server creates a session with no windows.",
+    "If `label` is left out or empty, the server picks one that no other session has, such as `quiet-meadow`.",
+    "The server sends `session_created` only once every window in `initial_windows` is ready, so no client sees a half-built session. If any window fails, the server closes the session and its blocks, and the call fails.",
+    "The blocks in the initial windows start with no owner, because the calling client can't be attached to a session that doesn't exist yet. To own them, call `session.attach` and then `session.own_block`.",
+    "The call doesn't attach the connection to the new session. Call `session.attach` to receive its events.",
+    "If a layout is malformed, the call fails with `bad_request` before any block is created. A flavor that no creator provides fails with `not_found`.",
+    "If the server already has as many sessions as it allows, the call fails with `conflict`."
+  ]
+}

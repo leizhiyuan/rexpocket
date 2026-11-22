@@ -1,0 +1,39 @@
+$ rex events --help
+Stream server events as they occur.
+
+Without --session, events follows session creation, removal, state changes, and
+server connectivity for the whole server. Use --session to follow one session,
+including custom events emitted by its blocks. Use --all to follow every server
+event, including clients joining, leaving, and changing.
+
+The default format writes one human-readable line per event. With --json, each
+line contains the same event JSON object sent by the server, compacted onto one
+line. Output is flushed after every event so pipelines can process events as
+they arrive.
+
+The command runs until interrupted or the server disconnects. --timeout limits
+connecting and starting event delivery. It does not limit how long events
+are streamed.
+
+Examples:
+  rex events
+  rex events -s build
+  rex events --all
+  rex events --json | jq -c 'select(.type == "session_created")'
+
+Usage:
+  rex events [flags]
+
+Options:
+  -s, --session string  scope to session SESSION
+      --all             follow every server event, including clients joining, leaving, and changing
+      --json            output events as newline-delimited JSON
+  -h, --help            help for events
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

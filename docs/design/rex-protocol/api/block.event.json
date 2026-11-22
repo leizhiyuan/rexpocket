@@ -1,0 +1,56 @@
+{
+  "name": "block.event",
+  "description": "Send an input event, such as a key press or a paste, to a block.",
+  "invoke": {
+    "method": "block.event"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": "string",
+        "description": "The block to send the event to."
+      },
+      "event": {
+        "type": "object",
+        "properties": {
+          "payload": {
+            "description": "The event's fields. Leaving it out is the same as an empty object."
+          },
+          "type": {
+            "type": "string",
+            "description": "The kind of event, such as key, paste, mouse, wheel, or focus."
+          }
+        },
+        "description": "The event to send: its type, such as paste, and its payload.",
+        "required": [
+          "type"
+        ]
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session that holds the block."
+      }
+    },
+    "required": [
+      "session_id",
+      "block_id",
+      "event"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"block_id\": \"block:<uuid>\",\n  \"event\": {\n    \"type\": \"paste\",\n    \"payload\": {\n      \"text\": \"echo hello\\n\"\n    }\n  }\n}",
+  "response_example": "{}",
+  "validation_notes": [
+    "A client may send only `key`, `paste`, `mouse`, `wheel`, and `focus` events. Every other event type is sent only by the server. A `paste` event's `payload` is `{\"text\": \"...\"}`, and a `focus` event's `payload` is `{\"action\": \"in\"}` or `{\"action\": \"out\"}`.",
+    "The event goes straight to the block, so Lua key bindings never see it. To give key bindings the first chance at a key, use `client.key` instead.",
+    "On one connection, `block.event` calls run one at a time, in order with `client.key`, so the block receives events in the order you send them.",
+    "The call returns once the block has received the event, which may be before the block has finished acting on it.",
+    "The call fails with `bad_request` if `event` is missing or its `payload` has the wrong shape for its type. It also fails with `bad_request` if `event.type` is empty, names an event only the server sends, or names an event this server doesn't know.",
+    "If the session doesn't exist, the call fails with `session_not_found`, and if `block_id` names a block that isn't in the session, it fails with `not_found`."
+  ]
+}

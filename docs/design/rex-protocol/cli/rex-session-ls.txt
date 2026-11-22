@@ -1,0 +1,19 @@
+$ rex session ls --help
+List sessions
+
+Usage:
+  rex session ls [flags]
+
+Options:
+      --json   output sessions as JSON
+  -q, --quiet  print IDs only, one per line
+      --short  show short IDs (--short=false shows full IDs) (default true)
+  -h, --help   help for ls
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

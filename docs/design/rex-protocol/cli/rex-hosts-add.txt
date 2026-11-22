@@ -1,0 +1,23 @@
+$ rex hosts add --help
+Add a host called LABEL, reached at each ENDPOINT in turn. An endpoint takes the same forms as --server.
+
+A socket path, such as unix:///tmp/rex.sock, works only on a device where the path exists, such as the local end of an ssh -L forward. Other devices skip it and try the next endpoint.
+
+The host goes to your home, so every device that follows your home sees it. No other host of yours may have the same label, ignoring case.
+
+If your home is away, the host is held on this machine and listed at once. It is sent the next time rex hosts reaches your home.
+
+Usage:
+  rex hosts add LABEL ENDPOINT... [flags]
+
+Options:
+      --icon NAME  show the icon NAME next to the host
+  -h, --help       help for add
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

@@ -1,0 +1,452 @@
+{
+  "bindings": [],
+  "diagnostics": [],
+  "actions": [
+    {
+      "name": "com.superlogical.onboarding.set_step",
+      "kind": "block",
+      "description": "Move the walkthrough to another step. Emits step_changed when the step changes.",
+      "args": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string",
+            "description": "The step to move to. Empty means the first step."
+          }
+        },
+        "required": [
+          "step"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.onboarding.state",
+      "kind": "block",
+      "description": "Return the step the walkthrough is on.",
+      "args": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.blob_read",
+      "kind": "block",
+      "description": "Read a result that was too large for one reply or event, such as the output of format with max_bytes set, or a selection_copied event without text. The server keeps each result for about five minutes.",
+      "args": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The result to read, from the reply or event that named it, such as the id in a format reply or a selection_copied event. Zero or left out reads the newest result, whatever produced it. If the server no longer has the result, the call fails with not_found.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Where to start reading, in bytes from the start of the result. To read the next part, add the length in bytes of the data you received. Must not be negative."
+          },
+          "max_bytes": {
+            "type": "integer",
+            "description": "The most bytes of data to return, measured once it is encoded as a JSON string. Zero or left out means 49152 (48 KiB), and values above 983040 (960 KiB) are lowered to that. Must not be negative."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.clear",
+      "kind": "block",
+      "title": "Clear Terminal",
+      "description": "Clear the screen and scrollback, keeping the current line.",
+      "category": "Pane",
+      "keywords": "terminal clear screen scrollback erase cmd+k ctrl+l"
+    },
+    {
+      "name": "com.superlogical.terminal.clipboard_read",
+      "kind": "block",
+      "description": "Read text that a program in the terminal copied to the clipboard. The server keeps each copy for about a minute, so a client can read text too large to send in an event.",
+      "args": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The copy to read, from a clipboard_written event or an earlier reply. Zero or left out reads the newest copy. If the server no longer has the copy, the call fails with not_found.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Where to start reading, in bytes from the start of the text. To read the next part, add the length in bytes of the data you received. Must not be negative."
+          },
+          "max_bytes": {
+            "type": "integer",
+            "description": "The most bytes of data to return, measured once it is encoded as a JSON string. Zero or left out means 49152 (48 KiB), and values above 983040 (960 KiB) are lowered to that. Must not be negative."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.download_begin",
+      "kind": "block",
+      "description": "Open a file on the terminal's machine for download, and get a ticket for the rex.data.bytes.v1 data stream that carries its bytes from the terminal. A relative path is relative to the working directory of the terminal's foreground process. Only regular files can be downloaded.",
+      "args": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "description": "The data reference for the file's stream: download: followed by a new UUID in lower-case canonical form, which the client chooses."
+          },
+          "path": {
+            "type": "string",
+            "description": "The file to download. A relative path is relative to the working directory of the terminal's foreground process, and a leading ~ is the home directory."
+          },
+          "if_none_match": {
+            "type": "string",
+            "description": "The version of the copy the client already has, from an earlier result for the same path. If the file still has it, the result has not_modified and no ticket."
+          }
+        },
+        "required": [
+          "ref",
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.format",
+      "kind": "block",
+      "description": "Get the screen and scrollback as plain text, HTML, or escape sequences.",
+      "args": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "description": "The format to return: 'text' for plain text, 'html' for HTML with inline styles, or 'vt' for escape sequences that redraw the screen with its colors and styles. Defaults to 'text'."
+          },
+          "trim": {
+            "type": "boolean",
+            "description": "Remove spaces from the end of each line."
+          },
+          "unwrap": {
+            "type": "boolean",
+            "description": "Join lines that the terminal wrapped because they were too long, so each line of output is one line the program wrote."
+          },
+          "extra_charsets": {
+            "type": "boolean",
+            "description": "Include the selected character sets. Only used with the vt format."
+          },
+          "extra_cursor": {
+            "type": "boolean",
+            "description": "Include the cursor position. Only used with the vt format."
+          },
+          "extra_hyperlink": {
+            "type": "boolean",
+            "description": "Include the hyperlink in effect at the cursor. Only used with the vt format."
+          },
+          "extra_keyboard": {
+            "type": "boolean",
+            "description": "Include keyboard modes such as modifyOtherKeys. Only used with the vt format."
+          },
+          "extra_kitty_keyboard": {
+            "type": "boolean",
+            "description": "Include the state of the Kitty keyboard protocol. Only used with the vt format."
+          },
+          "extra_modes": {
+            "type": "boolean",
+            "description": "Include terminal modes that differ from their defaults. Only used with the vt format."
+          },
+          "extra_palette": {
+            "type": "boolean",
+            "description": "Include the color palette. Only used with the vt format."
+          },
+          "extra_protection": {
+            "type": "boolean",
+            "description": "Include the character protection mode. Only used with the vt format."
+          },
+          "extra_pwd": {
+            "type": "boolean",
+            "description": "Include the reported working directory. Only used with the vt format."
+          },
+          "extra_scrolling_region": {
+            "type": "boolean",
+            "description": "Include the scrolling region. Only used with the vt format."
+          },
+          "extra_style": {
+            "type": "boolean",
+            "description": "Include the text style in effect at the cursor. Only used with the vt format."
+          },
+          "extra_tabstops": {
+            "type": "boolean",
+            "description": "Include the tab stops. Only used with the vt format."
+          },
+          "max_bytes": {
+            "type": "integer",
+            "description": "The most bytes of content to return, measured once it is encoded as a JSON string. If more output remains, the reply has an id, and you read the rest with blob_read. Values above 983040 (960 KiB) are lowered to that. Zero or left out returns the whole output in one reply, and the call fails with too_large if the output doesn't fit. Must not be negative."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.input_mode",
+      "kind": "block",
+      "description": "Get how the terminal handles typed input, such as whether it is echoed. On Windows the call fails with not_found.",
+      "args": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.list_dir",
+      "kind": "block",
+      "description": "List the subdirectories of a directory, and optionally its files. A relative path or ~ is resolved the way a program in the terminal would resolve it.",
+      "args": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The directory to list: an absolute path, ~ or a path under ~/ for the home directory, or a path relative to the working directory of the terminal's foreground process. Empty lists that working directory."
+          },
+          "prefix": {
+            "type": "string",
+            "description": "Keep only entries whose names start with this text, ignoring case. Use it to narrow a listing that came back truncated."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most entries to return. Zero, negative, or left out means 2000."
+          },
+          "files": {
+            "type": "boolean",
+            "description": "Include entries that aren't directories, such as files, and mark each with file set to true."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.modes",
+      "kind": "block",
+      "description": "List the terminal modes that programs can turn on, such as the alternate screen, bracketed paste, and mouse reporting, with each mode's name, number, and whether it is on. It doesn't wake an idle terminal.",
+      "args": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.ports",
+      "kind": "block",
+      "description": "List the TCP ports that programs in the terminal are listening on, such as a development server's, with each port's address and the process that holds it. status is 'partial' when some processes couldn't be looked at, so a port missing from a partial reply may still be open. A truncated reply has an id, and blob_read with that id returns the whole list. It doesn't wake an idle terminal. To follow changes, call it once and then follow the ports_changed event.",
+      "args": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.process",
+      "kind": "block",
+      "description": "Get the processes running in the terminal and how its program exited.",
+      "args": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.program_status",
+      "kind": "block",
+      "description": "List the status that programs in the terminal have reported. Programs report a status, such as working or blocked, with OSC 7501 escape sequences.",
+      "args": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.pwd",
+      "kind": "block",
+      "description": "Get the working directory that a program in the terminal last reported. To find where each process actually is, call process instead.",
+      "args": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.reset",
+      "kind": "block",
+      "title": "Reset Terminal",
+      "description": "Return the terminal to its starting state and clear the screen and scrollback.",
+      "category": "Pane",
+      "keywords": "terminal reset clear scrollback emulator can ris"
+    },
+    {
+      "name": "com.superlogical.terminal.resize",
+      "kind": "block",
+      "description": "Request a terminal size in columns and rows. It applies at once if the caller owns the block or no client does, and otherwise when the caller becomes the owner.",
+      "args": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "integer",
+            "description": "The width in columns, that is, characters per line, from 1 to 65535.",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "rows": {
+            "type": "integer",
+            "description": "The height in rows, from 1 to 65535.",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "cell_width_px": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "The width of one character cell in pixels, from 1 to 65535. Send it together with cell_height_px, or leave both out to keep the current cell size.",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "cell_height_px": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "The height of one character cell in pixels, from 1 to 65535. Send it together with cell_width_px, or leave both out to keep the current cell size.",
+            "minimum": 0,
+            "maximum": 4294967295
+          }
+        },
+        "required": [
+          "columns",
+          "rows"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.set_theme",
+      "kind": "block",
+      "description": "Replace the terminal's default colors. As with resize, they apply at once if the caller owns the block or no client does, and otherwise when the caller becomes the owner.",
+      "args": {
+        "type": "object",
+        "properties": {
+          "foreground": {
+            "type": "string",
+            "description": "The default text color, as hex RRGGBB or #RRGGBB, such as #d6deeb. Empty or left out uses the built-in color."
+          },
+          "background": {
+            "type": "string",
+            "description": "The default background color, as hex RRGGBB or #RRGGBB, such as #011627. Empty or left out uses the built-in color."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "The cursor color, as hex RRGGBB or #RRGGBB, such as #80a4c2. Empty or left out uses the built-in color."
+          },
+          "palette": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Changes to the 256-color palette, each written as index=RRGGBB or index=#RRGGBB with an index from 0 to 255, such as 1=#ef5350. Colors not listed keep their built-in values."
+          },
+          "scheme": {
+            "type": "string",
+            "description": "Whether the theme is 'light' or 'dark', which programs in the terminal can ask for. If empty, the terminal decides from how bright background is, and treats no background as dark."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.size",
+      "kind": "block",
+      "description": "Get the terminal's size, its owner, and the size each client last requested.",
+      "args": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.title",
+      "kind": "block",
+      "description": "Get the terminal's title and the process that set it.",
+      "args": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.upload_begin",
+      "kind": "block",
+      "description": "Reserve a file to upload to the terminal's machine, such as one the user dropped on the terminal, and get a ticket for the rex.data.bytes.v1 data stream that carries its bytes. Once every file of the batch has arrived, the terminal types their paths as if the user had pasted them.",
+      "args": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "description": "The data reference for the file's stream: upload: followed by a new UUID in lower-case canonical form, which the client chooses."
+          },
+          "name": {
+            "type": "string",
+            "description": "The file's name. Only its last path component is used, without control characters."
+          },
+          "size": {
+            "type": "integer",
+            "description": "The file's exact size in bytes."
+          },
+          "batch": {
+            "type": "string",
+            "description": "An ID the client chooses for a group of files whose paths are typed together. Left out, the file is uploaded on its own."
+          },
+          "index": {
+            "type": "integer",
+            "description": "The file's position in its batch, from 0. Paths are typed in this order."
+          },
+          "count": {
+            "type": "integer",
+            "description": "How many files the batch has. Required with batch."
+          }
+        },
+        "required": [
+          "ref",
+          "name",
+          "size"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.terminal.write",
+      "kind": "block",
+      "description": "Type text into the terminal as if the user had typed it. The call returns once the text is queued, without waiting for the program to read it.",
+      "args": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "The text to type. It can hold escape sequences for keys that aren't text, such as \\u001b[A for the up arrow."
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "com.superlogical.tunnel.info",
+      "kind": "block",
+      "description": "Return what the tunnel forwards and how many connections it is relaying.",
+      "args": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  ],
+  "config": {
+    "path": "~/.config/rex/init.lua",
+    "exists": false,
+    "note": "instance_id, generation and hash left out"
+  }
+}

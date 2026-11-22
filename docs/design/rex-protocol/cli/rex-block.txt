@@ -1,0 +1,33 @@
+$ rex block --help
+Manage blocks
+
+Usage:
+  rex block [command] [flags]
+
+Commands:
+  new       Create a block
+  ls, list  List blocks
+  inspect   Inspect a block
+  focus     Focus a block
+  types     List block types
+  send      Send input to a terminal
+  send-key  Send key presses to a terminal
+  capture   Print a terminal's screen and scrollback
+  zoom      Zoom a block to fill its window
+  move      Move a block next to another
+  swap      Swap two blocks
+  stream    Stream block data
+  call      Call a block method
+  rename    Rename a block
+  close     Close blocks
+
+Options:
+  -h, --help  help for block
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

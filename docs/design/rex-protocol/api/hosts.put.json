@@ -1,0 +1,141 @@
+{
+  "name": "hosts.put",
+  "description": "Add a host to the server's host list, or replace the host with the same ID.",
+  "invoke": {
+    "method": "hosts.put"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "host": {
+        "type": "object",
+        "properties": {
+          "added_from": {
+            "type": "string",
+            "description": "The device or client that added the host. For display only."
+          },
+          "endpoints": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The addresses that reach the host, in the order to try them, such as studio.tail1234.ts.net or unix:///tmp/rex.sock. Each takes a form the -S option of rex accepts. A socket path works only on a device where the path exists, such as the local end of an ssh -L forward."
+          },
+          "host_id": {
+            "type": "string",
+            "description": "The host_id that the host's server.status reported when the host was added, if known. Compare it with a server's host_id to tell whether this host is that server."
+          },
+          "icon": {
+            "type": "string",
+            "description": "The name of an icon for clients to show next to the label. Rex doesn't interpret it."
+          },
+          "id": {
+            "type": "string",
+            "description": "The host's ID, such as host:<uuid>, chosen by the device that adds the host. If hosts.put leaves it out, the server creates one."
+          },
+          "label": {
+            "type": "string",
+            "description": "The name you connect to the host by, such as studio. Unique in the list, ignoring case, and at most 64 characters."
+          },
+          "source": {
+            "type": "string",
+            "description": "Where the configuration file declares the host, such as init.lua:12. Left out for a host added with hosts.put. The server sets it."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "When the host last changed, as an RFC 3339 timestamp. The server sets it and ignores any value a client sends."
+          }
+        },
+        "description": "The host to add, or to store in place of the host with the same id.",
+        "required": [
+          "label",
+          "endpoints"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "host"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "hash": {
+        "type": "string",
+        "description": "Identifies the list after the call, the same way hosts.list does."
+      },
+      "host": {
+        "type": "object",
+        "properties": {
+          "added_from": {
+            "type": "string",
+            "description": "The device or client that added the host. For display only."
+          },
+          "endpoints": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The addresses that reach the host, in the order to try them, such as studio.tail1234.ts.net or unix:///tmp/rex.sock. Each takes a form the -S option of rex accepts. A socket path works only on a device where the path exists, such as the local end of an ssh -L forward."
+          },
+          "host_id": {
+            "type": "string",
+            "description": "The host_id that the host's server.status reported when the host was added, if known. Compare it with a server's host_id to tell whether this host is that server."
+          },
+          "icon": {
+            "type": "string",
+            "description": "The name of an icon for clients to show next to the label. Rex doesn't interpret it."
+          },
+          "id": {
+            "type": "string",
+            "description": "The host's ID, such as host:<uuid>, chosen by the device that adds the host. If hosts.put leaves it out, the server creates one."
+          },
+          "label": {
+            "type": "string",
+            "description": "The name you connect to the host by, such as studio. Unique in the list, ignoring case, and at most 64 characters."
+          },
+          "source": {
+            "type": "string",
+            "description": "Where the configuration file declares the host, such as init.lua:12. Left out for a host added with hosts.put. The server sets it."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "When the host last changed, as an RFC 3339 timestamp. The server sets it and ignores any value a client sends."
+          }
+        },
+        "description": "The host as the server stored it, with its id and updated_at.",
+        "required": [
+          "label",
+          "endpoints"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "host",
+      "hash"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"host\": {\n    \"id\": \"host:0199abcd-1234-7abc-8def-0123456789ab\",\n    \"label\": \"studio\",\n    \"endpoints\": [\"studio.tail1234.ts.net\"],\n    \"added_from\": \"laptop\"\n  }\n}",
+  "response_example": "{\n  \"host\": {\n    \"id\": \"host:0199abcd-1234-7abc-8def-0123456789ab\",\n    \"label\": \"studio\",\n    \"endpoints\": [\"studio.tail1234.ts.net\"],\n    \"added_from\": \"laptop\",\n    \"updated_at\": \"2026-10-03T12:00:00Z\"\n  },\n  \"hash\": \"9f2c4e1a0b3d5f7e9a1c3e5f7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3f5b\"\n}",
+  "validation_notes": [
+    "The device that adds a host chooses its `id`, so sending the same request again is safe and adds nothing. If `host` has no `id`, the server creates one.",
+    "If `host` matches the stored host in every field except `updated_at`, nothing changes and the result holds the stored host.",
+    "`label` can't be empty, can't start or end with white space, and has at most 64 characters. No other host in the list may have the same label, ignoring case. If one does, the call fails with `conflict` and a message that names that host and, for a declared host, the line that declared it.",
+    "`endpoints` needs at least one endpoint, each in a form that the `-S` option of `rex` accepts. Unix sockets and named pipes aren't allowed, because their paths work only on their own machine.",
+    "To change a declared host, put a host with its `id`. The server never writes the configuration file. It stores the host you send, which takes the place of the declared one. A put also brings back a host that `hosts.remove` removed.",
+    "The server sets `updated_at` and drops `source`. It stores every other field as sent, including fields it doesn't know.",
+    "When the put changes the list, every connected client receives a `hosts_changed` event.",
+    "If `host` fails a check, the call fails with `bad_request` and a message that names the field. A server started without a state directory can't store hosts, and fails with `not_supported`. A hand edit that broke the file that stores the hosts makes the call fail with `conflict`.",
+    "The file that stores the hosts can hold at most 1 MiB, which is room for thousands of hosts. A put that would make it larger fails with `too_large`."
+  ]
+}

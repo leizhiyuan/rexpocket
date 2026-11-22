@@ -1,0 +1,33 @@
+{
+  "name": "server.stop",
+  "description": "Shut the server down, or with if_idle, only if nothing is using it.",
+  "invoke": {
+    "method": "server.stop"
+  },
+  "local": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "if_idle": {
+        "type": "boolean",
+        "description": "Stop only if the server has no sessions and no other client is connected. A server that is in use refuses with conflict and keeps running."
+      }
+    },
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "request_example": "{\"if_idle\": true}",
+  "response_example": "{}",
+  "validation_notes": [
+    "Only a client on the server's own machine, connected over its Unix socket or named pipe, can call this method.",
+    "Without `if_idle`, the server stops no matter what it is doing, and every program running in its sessions ends.",
+    "With `if_idle`, the server stops only if it has no sessions, including any still being created or closed, and no client is connected except the caller. Otherwise it keeps running and the call fails with `conflict`. The error message says what is using the server.",
+    "The server checks and stops in one step. A client that connects just after the check is refused.",
+    "The server replies before it shuts down. Close the connection after reading the reply. The server waits up to a second for the connection to close before it stops.",
+    "A server running inside another program, with no process of its own, fails the call with `not_supported`.",
+    "The server accepts this method only over its local Unix socket, or its named pipe on Windows. Over any other connection, such as TCP or Tailscale, the call fails with status 403."
+  ]
+}

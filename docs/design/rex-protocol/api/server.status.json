@@ -1,0 +1,212 @@
+{
+  "name": "server.status",
+  "description": "Get the server's identity, session count, configuration, and Tailscale status.",
+  "invoke": {
+    "method": "server.status"
+  },
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "api_min_revision": {
+        "type": "integer",
+        "description": "The oldest revision of the API the server supports. Left out when it is 0.",
+        "minimum": 0,
+        "maximum": 4294967295
+      },
+      "api_revision": {
+        "type": "integer",
+        "description": "The newest revision of the API the server supports. Left out when it is 0.",
+        "minimum": 0,
+        "maximum": 4294967295
+      },
+      "config": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer",
+            "description": "How many times the server has loaded its configuration file since it started, counting from 1. It goes up on every load, even one that fails.",
+            "minimum": 0
+          },
+          "hash": {
+            "type": "string",
+            "description": "The SHA-256 of the configuration file and the modules it requires while it loads, in lowercase hexadecimal. Empty if there's no file or it couldn't be read."
+          }
+        },
+        "description": "The configuration file the server loaded most recently. Always present, even when there is no file.",
+        "required": [
+          "generation",
+          "hash"
+        ],
+        "additionalProperties": false
+      },
+      "exit_empty": {
+        "type": "boolean",
+        "description": "True if the server stops on its own soon after its last session and last connection close."
+      },
+      "host_id": {
+        "type": "string",
+        "description": "Identifies the machine and account the server runs as. Servers that see the same files report the same value. Left out when the server has no state directory."
+      },
+      "instance_id": {
+        "type": "string",
+        "description": "A random ID for this run of the server. A new value means a new server process, even if pid is the same."
+      },
+      "listeners": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "addresses": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "The addresses the listener is bound to, such as a socket path or 127.0.0.1:54321. They show the port that an endpoint like 127.0.0.1:0 got. Left out when the server can't tell."
+            },
+            "admission": {
+              "type": "string",
+              "description": "Which callers the listener lets in: 'peer_credentials', 'anonymous', 'tailscale_owner', 'tailscale_identified', or 'login_server'. Left out when the server can't tell. Show a value you don't know as it is."
+            },
+            "endpoint": {
+              "type": "string",
+              "description": "The endpoint the listener was configured with, such as unix:///run/rex.sock, 127.0.0.1:7297, or tailnet://:7297."
+            },
+            "primary": {
+              "type": "boolean",
+              "description": "True for the server's primary endpoint, where commands such as rex server status and rex server stop look for the server. Left out for the other listeners."
+            },
+            "transport": {
+              "type": "string",
+              "description": "How the listener identifies its callers: 'unix', 'named_pipe', 'tcp', or 'tailscale'. Show a value you don't know as it is."
+            }
+          },
+          "required": [
+            "endpoint",
+            "transport"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Each endpoint the server accepts connections on, primary first. Servers older than API revision 12 leave it out. Doesn't include built-in Tailscale, which the tailscale member describes."
+      },
+      "pid": {
+        "type": "integer",
+        "description": "The server's process ID."
+      },
+      "session_count": {
+        "type": "integer",
+        "description": "How many sessions the server has."
+      },
+      "started_at": {
+        "type": "string",
+        "description": "When the server started, as an RFC 3339 timestamp."
+      },
+      "tailscale": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "object",
+            "properties": {
+              "login_name": {
+                "type": "string",
+                "description": "The Tailscale login name, usually an email address. For display only, because it can change."
+              }
+            },
+            "description": "The Tailscale account that signed the device in. Left out until Tailscale reports it.",
+            "required": [
+              "login_name"
+            ],
+            "additionalProperties": false
+          },
+          "allow_tailnet_members": {
+            "type": "boolean",
+            "description": "True if anyone your tailnet's access rules allow may connect. False lets in only the Tailscale user who signed the device in."
+          },
+          "auth_url": {
+            "type": "string",
+            "description": "The link to open to sign the device in to Tailscale. Present while state is needs_login, once Tailscale has made the link."
+          },
+          "control_url": {
+            "type": "string",
+            "description": "The control server the device uses, such as a Headscale server. Left out for Tailscale's own, while built-in Tailscale is off, and by older servers."
+          },
+          "dns_name": {
+            "type": "string",
+            "description": "The device's MagicDNS name, such as rex.tail1234.ts.net. Left out until known."
+          },
+          "error": {
+            "type": "string",
+            "description": "Why built-in Tailscale turned off after its HTTPS listener failed. The next enable clears it."
+          },
+          "https": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "description": "'pending' until the HTTPS listener is ready, then 'available'. The server is reachable over the tailnet only when available. Treat a value you don't know as 'pending'."
+              },
+              "url": {
+                "type": "string",
+                "description": "The server's address on the tailnet, such as https://rex.tail1234.ts.net. Present once HTTPS is available and the device's name is known."
+              }
+            },
+            "description": "The state of the device's HTTPS listener. Left out while built-in Tailscale is off, and by older servers.",
+            "required": [
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          "state": {
+            "type": "string",
+            "description": "'disabled' (off), 'starting', 'needs_login' (see auth_url), 'needs_machine_approval' (a tailnet admin must approve the device), or 'running' (on the tailnet). Treat a value you don't know as 'starting'."
+          },
+          "tags": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The Tailscale tags the device has, such as tag:rex. A tagged device has no owner. Left out when it has none."
+          },
+          "tailnet_name": {
+            "type": "string",
+            "description": "The tailnet's display name, or its domain if it has none. Left out until known."
+          }
+        },
+        "description": "The status of built-in Tailscale. Present only when the server can run it.",
+        "required": [
+          "state",
+          "allow_tailnet_members"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "pid",
+      "instance_id",
+      "started_at",
+      "exit_empty",
+      "session_count",
+      "config"
+    ],
+    "additionalProperties": false
+  },
+  "response_example": "{\n  \"pid\": 1234,\n  \"instance_id\": \"7d7e9aca-9a92-41b1-b849-418e76d8f84b\",\n  \"host_id\": \"0e9d6c1f-4a3b-4a52-9c85-2f6d3f6f2f10\",\n  \"started_at\": \"2026-08-13T12:00:00Z\",\n  \"exit_empty\": false,\n  \"session_count\": 2,\n  \"tailscale\": {\n    \"state\": \"running\",\n    \"dns_name\": \"rex.tail1234.ts.net\",\n    \"account\": {\n      \"login_name\": \"alice@example.com\"\n    },\n    \"tailnet_name\": \"Superlogical\",\n    \"allow_tailnet_members\": false,\n    \"https\": {\n      \"state\": \"available\",\n      \"url\": \"https://rex.tail1234.ts.net\"\n    }\n  },\n  \"config\": {\n    \"generation\": 3,\n    \"hash\": \"a3f1c0de5b7e2a94c6d8f0e1b2a3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5\"\n  }\n}",
+  "validation_notes": [
+    "Two servers report the same `host_id` only when they see the same files, as two servers run by one user on one machine usually do. If the values differ, or either one is missing, assume the servers don't share files. The value means nothing else.",
+    "`config` describes the last load of the configuration file. Its `generation` and `hash` match the `config` of a `client.keymap` result taken at the same moment.",
+    "A client that saved a keymap can compare `config.hash` and `instance_id` with the values it saved. If either differs, call `client.keymap` again.",
+    "Later changes to `tailscale` arrive as `tailscale_status_changed` events, which only connections that called `session.attach_all` or `session.bootstrap` receive."
+  ]
+}
