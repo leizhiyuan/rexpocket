@@ -172,7 +172,8 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
   empty or null id, as the app already keys the root record) and the values of `reason` were not
   seen from a real Rex.
 - Whether a real Rex answers `program_status` for a pane of a session the connection has not
-  attached. ScriptedRex refuses it (as it refuses every pane call there), so on it a status set before
-  the phone connected shows only for the attached session until the program reports again. If real
-  Rex behaves the same, Activity on the phone misses such tabs; reading them with
-  `session.attach_all` or `block.method` should be checked on a real Rex.
+  attached. Rex's API reference says it does: after `session.bootstrap` "the connection can then
+  call methods on any session"; only `data.connect`, `session.own_block` and `session.disown_block`
+  need `session.attach`. ScriptedRex now follows that (it used to refuse every pane call outside the
+  one session last attached), and `ActivityTest` checks that a record set before the phone connected
+  shows for a session the phone never opened. Not yet seen on a real Rex.

@@ -135,6 +135,32 @@ class ActivityTest {
     }
 
     @Test
+    fun aStatusReportedBeforeThePhoneLookedShowsForASessionItHasNotOpened() = runBlocking {
+        // Rex lets a connection that bootstrapped call methods on any session (API reference,
+        // session.bootstrap), so the first read finds a record in a session the phone never opened.
+        val rex = ScriptedRex()
+        val desk = Desk(rex.endpoint)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val phone = PocketSession(rex.endpoint, clock = { clock.get() })
+        try {
+            desk.connect()
+            val (shown, _) = desk.newSession(tabs = 1)
+            val (_, otherTabs) = desk.newSession(tabs = 1)
+            rex.report(otherTabs[0].second, "blocked", kind = "question", msg = "Which branch?")
+            phone.start(scope, preferredSessionId = shown)
+            withTimeout(15_000) { phone.awaitReady() }
+            phone.setActive(true)
+            val st = phone.until("the other session's question") { shape(it).isNotEmpty() }
+            assertEquals(listOf(ActivityGroup.Waiting to listOf(otherTabs[0].first)), shape(st))
+        } finally {
+            phone.stop()
+            scope.cancel()
+            desk.close()
+            rex.close()
+        }
+    }
+
+    @Test
     fun ageIsWrittenAsRexWritesIt() {
         assertNull(activityAge(0, 59_000))
         assertEquals("9m", activityAge(0, 9 * 60_000L))

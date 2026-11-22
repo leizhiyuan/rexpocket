@@ -27,9 +27,11 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * - Every connection is a client of its own, with a new id, even one that resumes with its
  *   reconnect token. A client's panes are let go when its connection ends.
- * - A pane call - own, disown, size, resize, write, a ticket - is refused unless the pane is in the
- *   session this connection attached, with "block … is not in the session". So is any call on a
- *   pane that closed: there is no pane to act on. [paneRefusal] is that message.
+ * - A connection stays in every session it attached, and after `session.bootstrap` it may call
+ *   methods on any session; a ticket and owning need the session attached (Rex's API reference).
+ * - A pane call - own, disown, size, resize, write, a ticket - on a pane that is not in the
+ *   session it names, or closed, is refused with "block … is not in the session": `not_found`, or
+ *   `bad_request` for own and disown. [paneRefusal] is that message.
  * - Every change is told to every client as an event, the asking one included, after its answer.
  * - A closed pane's streams are closed with 4000; a HELLO or RESUME for it is refused with 0x03.
  * - Closing a tab's last pane closes the tab; closing a session's last tab destroys the session.
@@ -48,7 +50,11 @@ class ScriptedRex : AutoCloseable {
     }
 
     private class Client(val id: String, val socket: WebSocket) {
-        @Volatile var attached: String? = null
+        /** The sessions this connection joined with `session.attach` or `session.bootstrap`; it stays in each. */
+        val attached: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+        /** True after `session.bootstrap` or `session.attach_all`: the connection may call methods on any session. */
+        @Volatile var all: Boolean = false
     }
 
     private class Stream(val block: String, val token: ByteString, val nonce: Long) {
@@ -231,12 +237,28 @@ class ScriptedRex : AutoCloseable {
     private fun session(payload: JSONObject): Session =
         sessions[payload.optString("session_id")] ?: throw Refused("session_not_found", 404, "no such session")
 
-    /** The pane a pane call names, which must be in the session this client attached. */
-    private fun pane(client: Client, payload: JSONObject, block: String = payload.optString("block_id")): Pair<Session, String> {
-        val s = sessions[client.attached]
-        if (s == null || s.id != payload.optString("session_id") || s.tabOf(block) == null) {
-            throw Refused("invalid_request", 400, paneRefusal(block))
+    /**
+     * The pane a pane call names, which must be in the session the call names. As in Rex's API
+     * reference: a connection that bootstrapped may call methods on any session, but a ticket
+     * (`data.connect`) and owning (`session.own_block`, `session.disown_block`) need the session
+     * joined with `session.attach` or `session.bootstrap` ([joined]). A pane that is not in the
+     * session is `not_found` ([code]; `bad_request` for own and disown).
+     */
+    private fun pane(
+        client: Client,
+        payload: JSONObject,
+        block: String = payload.optString("block_id"),
+        joined: Boolean = false,
+        code: String = "not_found",
+    ): Pair<Session, String> {
+        val s = session(payload)
+        val reached = if (joined) s.id in client.attached else client.all || s.id in client.attached
+        if (!reached) {
+            // Owning on a connection that only bootstrapped its events is bad_request; the rest conflict.
+            val refusal = if (code == "bad_request") "bad_request" else "conflict"
+            throw Refused(refusal, if (refusal == "bad_request") 400 else 409, "not attached to session ${s.id}")
         }
+        if (s.tabOf(block) == null) throw Refused(code, if (code == "not_found") 404 else 400, paneRefusal(block))
         return s to block
     }
 
@@ -286,7 +308,8 @@ class ScriptedRex : AutoCloseable {
         when (method) {
             "session.bootstrap" -> {
                 val s = sessions[payload.optString("preferred_session_id")] ?: sessions.values.firstOrNull()
-                client.attached = s?.id
+                client.all = true
+                s?.let { client.attached += it.id }
                 JSONObject()
                     .put("attach_all", JSONObject().put("sessions", list()))
                     .put(
@@ -296,7 +319,7 @@ class ScriptedRex : AutoCloseable {
             }
             "session.attach" -> {
                 val s = session(payload)
-                client.attached = s.id
+                client.attached += s.id
                 JSONObject().put("view", view(s))
             }
             "session.view" -> view(session(payload))
@@ -343,16 +366,14 @@ class ScriptedRex : AutoCloseable {
             }
             "session.own_block", "session.disown_block" -> {
                 val blocks = payload.optJSONArray("block_ids") ?: JSONArray()
-                val s = sessions[client.attached]
-                for (i in 0 until blocks.length()) pane(client, payload, blocks.getString(i))
+                val s = session(payload)
+                for (i in 0 until blocks.length()) pane(client, payload, blocks.getString(i), joined = true, code = "bad_request")
                 for (i in 0 until blocks.length()) {
                     val block = blocks.getString(i)
                     if (method == "session.own_block") owners[block] = client.id else if (owners[block] == client.id) owners -= block
                 }
-                if (s != null) {
-                    sessionEvent(s.id, "block_owner_changed")
-                    changed(s)
-                }
+                sessionEvent(s.id, "block_owner_changed")
+                changed(s)
                 JSONObject()
             }
             "com.superlogical.terminal.size" -> {
@@ -376,7 +397,7 @@ class ScriptedRex : AutoCloseable {
                 JSONObject()
             }
             "data.connect" -> {
-                val (_, block) = pane(client, payload)
+                val (_, block) = pane(client, payload, joined = true)
                 val bytes = ByteArray(16).also { java.util.Random().nextBytes(it) }
                 val ticket = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
                 tickets[bytes.toByteString().hex()] = payload.optString("session_id") to block
