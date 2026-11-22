@@ -100,6 +100,8 @@
     <string name="menu_rename_session">重命名会话</string>
     <string name="menu_rename_pane">重命名窗格</string>
     <string name="menu_close_pane">关闭窗格</string>
+    <string name="menu_show_keyboard">显示键盘</string>
+    <string name="menu_hide_keyboard">隐藏键盘</string>
     <string name="menu_kill_session">结束会话</string>
 
     <string name="pane_reading">正在读取画面…</string>

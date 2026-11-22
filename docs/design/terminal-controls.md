@@ -114,9 +114,28 @@ full-screen key or the stick hidden) never gives way: it stays whole, and the wi
 its 20 dp hint instead. A wide pill with every key hidden is not drawn; the small pill keeps its
 place at the right.
 
-The ⋮ menu keeps "Full screen": the pill key is a quick way for people who use the bar; the menu
-is where people look for what a screen can do, and it stays reachable when the bar is hidden by a
-desk keyboard.
+**The ⋮ menu repeats every key-bar action that acts on the phone rather than sending a key**:
+Paste, Send a file, the keyboard (Show keyboard / Hide keyboard) and Full screen, plus the top
+bar's Release / Take over. They are always there, whatever the bar shows: a desk keyboard takes the
+bar away, Arrange keys can hide those keys, full screen and a short window's keyboard hide the bar
+or the top bar, and the menu is where people look for what the screen can do. Keys that send bytes
+(Esc, C-c, Tab, Return, Ctrl, Shift, Alt, Fn, `/`, the arrows) are never repeated: the menu is no
+second key bar. `BarKey.actsOnPhone` (TermScreen.kt) decides which keys these are, and has no
+default, so a key added to the bar has to be put on one side.
+
+The menu, top to bottom; each section's destructive row last, in red:
+
+1. No caption, in the bar's order: Paste; Send a file; Show / Hide keyboard; Full screen.
+2. Pane: Release / Take over (while the session is live and a tab is open, as the top bar's chip);
+   New pane on the right; New pane below; Rename pane; Close pane.
+3. Tab: New tab; Rename tab; Close tab.
+4. Session: Sessions; Rename session; End session.
+
+What changes it: Paste, Send a file, the keyboard, Rename pane and Close pane need a pane on screen,
+so the closed-pane note leaves them out. Send a file is greyed out, not removed, while a file is on
+its way, so the rows do not jump. Close pane shows only with two or more panes: Rex closes a tab
+with its last pane, which is Close tab. The keyboard row says what a tap does, by whether the
+keyboard is up; Release or Take over by who holds the pane. A desk keyboard changes nothing.
 
 ### 4.1 Arrange keys
 
@@ -172,6 +191,15 @@ In full screen the display cutout is padded on the sides only: a punch hole at t
 held upright cost a whole band of rows, while one at the side of a phone on its side would hide the
 start of every line.
 
+Entering full screen then still left a band at the bottom (and a little at the top) until the
+keyboard was opened and closed. The screen was padded by the bars' insets as Compose last heard
+them, and Compose drops the insets Android sends while a bar animation is being prepared, taking
+them at its end only when the animation had a duration: with animations off, or a bar that hides
+without one, the old insets stayed until the next change, which the keyboard made. The room for the
+bars now follows full screen itself: none in full screen, and otherwise the bars' sizes whether
+shown or not (`statusBarsIgnoringVisibility`, `navigationBarsIgnoringVisibility`), which do not
+change as the bars hide and show. Entering and leaving lay the screen out at once.
+
 ## 7. Haptics
 
 The long press on the pane and the held keys of the bar buzz as they do today. A switch for it is
@@ -226,5 +254,9 @@ keeps its own setting. Values out of range are clamped; unknown strings fall bac
   long press set to act, a link still offered), `FullScreenTest` (menu, pill key, double tap,
   Back), `KeyBarLayoutInstrumentedTest` (the full-screen key whole at 411 and 891 dp, both pills
   hinting at 426 dp), `ArrangeKeysTest` (a key moved in the list moves in the bar; a key hidden
-  leaves it; Reset brings it back). Whether a tap really closes the screen keyboard in full screen is covered by the pure rule
+  leaves it; Reset brings it back), `TermMenuTest` (the ⋮ menu's rows, order and sections for one
+  and two panes, held and handed back, not live, a closed pane, an upload on its way, every phone
+  key hidden with a desk keyboard; on the JVM the keyboard row with the keyboard up),
+  `TermFullScreenTest` (the pane fills the window right after entering, the key bar is above the
+  navigation bar right after leaving, Back leaves full screen and then the terminal). Whether a tap really closes the screen keyboard in full screen is covered by the pure rule
   only: the CI emulator reports a desk keyboard and shows no screen keyboard.

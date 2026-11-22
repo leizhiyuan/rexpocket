@@ -40,7 +40,7 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   slides up under it by what it covers, but never past the cursor's row - so the line being typed
   into stays in view, even a new shell's prompt on the top row - and a program in
   it is never redrawn for the keyboard coming or going - and **a keyboard on the desk takes the dock
-  away**, since it has every key on it. Paste and attach stay in the menu.
+  away**, since it has every key on it. Paste, Send a file, the keyboard and Full screen stay in the menu.
 - **Links.** Long-press a link a program printed, or one it set as a hyperlink, to open, copy or
   share it.
 - **Files and images.** Pick any file on the phone and send it to the pane you are looking at.
@@ -129,7 +129,9 @@ own SSH daemon. How the transport works is described in
      a chord. Locked Shift applies to all repeated arrows; one-shot Shift applies only to the first.
    - Tap the title for the session's tabs and panes, and the list of sessions.
    - Swipe left or right, or use the bar under the pane, to move between the panes of a split.
-   - The menu holds Release / Take over, splitting, renaming and closing.
+   - The ⋮ menu repeats the key bar's phone actions - Paste, Send a file, Show or Hide keyboard,
+     Full screen - whatever the bar shows, then Pane (Release / Take over, new panes, rename, close),
+     Tab (new, rename, close) and Session (sessions, rename, end).
 5. **On the home screen,** the eye keeps only the tabs with a program working or waiting, and
    search filters hosts, sessions and tabs.
 6. **Background alerts:** Settings › Background alerts, and allow notifications. A quiet

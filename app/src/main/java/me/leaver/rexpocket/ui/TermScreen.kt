@@ -25,10 +25,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -56,6 +57,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -261,6 +263,15 @@ internal fun TermScreen(
         }
     }
 
+    /** The holder chip's one tap, which the menu repeats: hand the pane back, or take it over. */
+    fun toggleHolder() {
+        if (state.holder == Holder.Phone) onAct { releasePane() } else onAct { takeOver() }
+    }
+
+    /** Who holds the pane shows while there is one on screen to hold: the chip, and the menu's row. */
+    val showHolder = holderShown(state, tab)
+    val imeUp = imeShown()
+
     // Full screen is this screen's own: it survives a rotation, and is gone once the terminal is left.
     var fullScreen by rememberSaveable { mutableStateOf(false) }
     val toggleFullScreen = { fullScreen = TermChrome(fullScreen).toggled().fullScreen }
@@ -300,11 +311,19 @@ internal fun TermScreen(
     var cursorTopPx by remember(focused?.id) { mutableStateOf<Int?>(null) }
     val slide = imeShift(imeCover(), panePx, cursorTopPx)
 
-    // With the phone's bars hidden their insets are nothing, so the pane reaches the edges. A camera
-    // cutout keeps the text out from under it at the sides, where it would hide the start of every
-    // line; at the top of a phone held upright it would cost a whole band of rows for a punch hole.
+    // In full screen the phone's bars are hidden, so the pane reaches the edges; a swipe brings them
+    // over it for a moment without taking room. A camera cutout keeps the text out from under it at
+    // the sides, where it would hide the start of every line; at the top of a phone held upright it
+    // would cost a whole band of rows for a punch hole.
+    //
+    // The room for the bars follows full screen itself, not the bars' insets as last heard: Compose
+    // drops the insets sent while a bar animation is being prepared and takes them at its end only
+    // when it had a duration, so with animations off, or a bar that goes without one, the old insets
+    // stayed - a band at the bottom - until the keyboard sent new ones. The bars' sizes while hidden
+    // are known all along, so leaving full screen makes room for them at once too.
     val cutout = if (chrome.fullScreen) WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal) else WindowInsets.displayCutout
-    Box(Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().navigationBarsPadding().windowInsetsPadding(cutout)) {
+    val bars = if (chrome.fullScreen) Modifier else Modifier.windowInsetsPadding(systemBarsRoom())
+    Box(Modifier.fillMaxSize().background(Colors.terminal).then(bars).windowInsetsPadding(cutout)) {
         Column(Modifier.fillMaxSize().padding(bottom = with(density) { bottomPx.toDp() })) {
             if (chrome.topBar) {
                 SessionTopBar(
@@ -315,7 +334,7 @@ internal fun TermScreen(
                     onBack = onBack,
                     showBack = !embedded,
                     onNavigate = { if (view != null) sheet = Sheet.Navigator },
-                    onHolder = { if (state.holder == Holder.Phone) onAct { releasePane() } else onAct { takeOver() } },
+                    onHolder = ::toggleHolder,
                     onMore = { sheet = Sheet.Actions },
                     panes = if (chrome.panesInTopBar && panes.size > 1) {
                         {
@@ -340,7 +359,7 @@ internal fun TermScreen(
             TermBanner(state, onRetry = onRetry, onDismiss = onDismissNotice)
             // The pane sits on its own paper: white in the day, the page at night, edge to edge, the
             // way a terminal fills the screen.
-            Box(Modifier.weight(1f).fillMaxWidth().background(Colors.terminal).clipToBounds()) {
+            Box(Modifier.weight(1f).fillMaxWidth().background(Colors.terminal).clipToBounds().testTag(PANE_TAG)) {
                 val shown = focused?.id
                 if (closed != null && view != null) {
                     ClosedPaneNote(
@@ -405,7 +424,7 @@ internal fun TermScreen(
         // The bottom of the screen, on its own: the pane's size is measured above without it, so the
         // keyboard can lift this stack without the terminal ever changing shape.
         Box(Modifier.align(Alignment.BottomCenter).imePadding()) {
-            Column(Modifier.onSizeChanged { bottomPx = it.height }) {
+            Column(Modifier.onSizeChanged { bottomPx = it.height }.testTag(DOCK_TAG)) {
                 if (panes.size > 1 && chrome.panesBelow) {
                     Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp), contentAlignment = Alignment.Center) {
                         PaneBar(
@@ -476,29 +495,54 @@ internal fun TermScreen(
             onCreate = { onAct { createShell(null) } },
         )
         Sheet.Actions -> ActionSheet(onDismiss = { sheet = null }) {
-            // Full screen: the top bar, the key bar and the phone's bars go, and the pane takes their
-            // room. It lives here rather than on the top bar, which has no room to spare on a phone.
+            // The key bar's keys that act on the phone rather than send a key, in the bar's order,
+            // whatever the bar shows: a keyboard on the desk takes the bar away, Arrange keys can
+            // hide them, and full screen hides it all. See terminal-controls.md, 4.
             Group {
-                SheetItem(stringResource(R.string.action_full_screen), icon = R.drawable.ic_fullscreen) { toggleFullScreen() }
+                for (key in PHONE_ACTIONS) {
+                    when (key) {
+                        // Paste, Send a file and the keyboard act on the pane on screen.
+                        BarKey.Paste -> if (focused != null) {
+                            SheetItem(stringResource(R.string.key_paste), icon = R.drawable.ic_paste) { pasteClipboard() }
+                        }
+                        // One file at a time, as the bar's key: greyed out while one is on its way,
+                        // so the rows below do not move up and down with the upload.
+                        BarKey.Attach -> if (focused != null) {
+                            SheetItem(
+                                stringResource(R.string.upload_attach),
+                                icon = R.drawable.ic_attach_file,
+                                enabled = upload?.running != true,
+                            ) { filePicker.launch("*/*") }
+                        }
+                        BarKey.Keyboard -> if (focused != null) {
+                            SheetItem(
+                                stringResource(if (imeUp) R.string.menu_hide_keyboard else R.string.menu_show_keyboard),
+                                icon = if (imeUp) R.drawable.ic_keyboard_hide else R.drawable.ic_keyboard,
+                            ) { toggleKeyboard() }
+                        }
+                        BarKey.FullScreen -> SheetItem(stringResource(R.string.action_full_screen), icon = R.drawable.ic_fullscreen) { toggleFullScreen() }
+                        else -> Unit
+                    }
+                }
             }
             Group(stringResource(R.string.level_pane)) {
+                // The top bar's holder chip, which full screen and a short window's keyboard hide.
+                if (showHolder) {
+                    SheetItem(
+                        stringResource(if (state.holder == Holder.Phone) R.string.action_release else R.string.action_take_over),
+                        icon = R.drawable.ic_swap,
+                    ) { toggleHolder() }
+                }
                 SheetItem(stringResource(R.string.menu_split_right), icon = R.drawable.ic_split_right) { onAct { split(vertical = false) } }
                 SheetItem(stringResource(R.string.menu_split_below), icon = R.drawable.ic_split_below) { onAct { split(vertical = true) } }
                 if (focused != null) {
                     SheetItem(stringResource(R.string.menu_rename_pane), icon = R.drawable.ic_edit) { rename = Rename(Level.Pane, focused.id, focused.label) }
-                    SheetItem(stringResource(R.string.menu_close_pane), Colors.danger, icon = R.drawable.ic_close) {
-                        confirm = Confirm(Level.Pane, focused.id, focused.label)
+                    // A tab's last pane closing closes the tab on Rex: that is Close tab, below.
+                    if (panes.size > 1) {
+                        SheetItem(stringResource(R.string.menu_close_pane), Colors.danger, icon = R.drawable.ic_close) {
+                            confirm = Confirm(Level.Pane, focused.id, focused.label)
+                        }
                     }
-                }
-            }
-            // Paste is here as well as on the key bar, because a keyboard on the desk takes the bar
-            // away and a chord only reaches the program, never the phone's clipboard.
-            if (focused != null) {
-                Group {
-                    if (upload?.running != true) {
-                        SheetItem(stringResource(R.string.upload_attach), icon = R.drawable.ic_attach_file) { filePicker.launch("*/*") }
-                    }
-                    SheetItem(stringResource(R.string.key_paste), icon = R.drawable.ic_paste) { pasteClipboard() }
                 }
             }
             Group(stringResource(R.string.level_tab)) {
@@ -757,7 +801,7 @@ private fun SessionTopBar(
             Spacer(Modifier.width(8.dp))
         }
         // Who holds the pane, while there is one on screen to hold.
-        if (state.phase == Phase.Live && tab != null) {
+        if (holderShown(state, tab)) {
             HolderChip(state.holder == Holder.Phone, onHolder)
             Spacer(Modifier.width(4.dp))
         }
@@ -987,6 +1031,34 @@ private fun uploadText(status: UploadStatus): String = when (status.phase) {
  * one floating pill - keyboard, Enter, the special keys, the attach key - and the circle that makes
  * a tab. All of it is 56 dp, the same height as the home's floating controls, on the page margin.
  */
+/** Who holds the pane is shown while the session is live and a tab is open: the chip and the menu's row. */
+private fun holderShown(state: PocketState, tab: WindowInfo?): Boolean = state.phase == Phase.Live && tab != null
+
+/**
+ * The key bar's keys that act on the phone rather than send bytes to the program, in the bar's own
+ * order: the ⋮ menu repeats each of them, whatever the bar shows. A key added to the bar has to be
+ * placed here or among the keys that only type.
+ */
+internal val BarKey.actsOnPhone: Boolean
+    get() = when (this) {
+        BarKey.Paste, BarKey.Attach, BarKey.Keyboard, BarKey.FullScreen -> true
+        BarKey.Escape, BarKey.CtrlC, BarKey.Tab, BarKey.Enter, BarKey.Ctrl, BarKey.Shift, BarKey.Alt,
+        BarKey.More, BarKey.Slash, BarKey.Arrows -> false
+    }
+
+/** The menu's first group: [actsOnPhone] keys, the wide pill's before the small pill's. */
+internal val PHONE_ACTIONS: List<BarKey> = BarKey.entries.filter { it.actsOnPhone }
+
+/**
+ * The room the phone's status and navigation bars take while they are shown: their sizes whether
+ * or not they are on screen this moment, which Android keeps up to date as they come and go. See
+ * the bars in TermScreen.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun systemBarsRoom(): WindowInsets =
+    WindowInsets.statusBarsIgnoringVisibility.union(WindowInsets.navigationBarsIgnoringVisibility)
+
 /** Whether the phone keyboard is up, which decides which way the keyboard key points. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1082,6 +1154,10 @@ internal fun shortPath(path: String): String {
 internal const val NOTICE_MS = 4_000L
 
 internal val GENERATED_WINDOW_LABEL = Regex("Window [0-9a-f]{6,}")
+
+/** The pane's place on the terminal screen, and the stack under it, for the screen tests to measure. */
+internal const val PANE_TAG = "terminal-pane"
+internal const val DOCK_TAG = "terminal-dock"
 
 /** The top bar's height, which a short window keeps as room while the bar steps aside. */
 private val TOP_BAR_HEIGHT = 64.dp

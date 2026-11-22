@@ -4,6 +4,7 @@ import android.graphics.Typeface
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -66,6 +67,33 @@ class ScreenshotsTest {
         compose.waitForIdle()
         captureScreenRoboImage("build/outputs/roborazzi/$name.png")
     }
+
+    /** The terminal of a live session, as the app shows it on its view model, with the ⋮ menu open. */
+    private fun menu(name: String) {
+        val model = termModel()
+        compose.setContent { TermOnModel(model, liveState(tabOf(testPane("left"), testPane("right")))) }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_more)).performClick()
+        compose.waitForIdle()
+        captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    /** Full screen right after the menu's item, before anything else could lay the screen out again. */
+    private fun fullScreen(name: String) {
+        val model = termModel()
+        compose.setContent { TermOnModel(model, liveState()) }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_more)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(compose.activity.getString(R.string.action_full_screen)).performClick()
+        compose.waitForIdle()
+        captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    @Test fun menuPortrait() = menu("terminal-menu-portrait")
+    @Test fun menuLandscape() { landscape(); menu("terminal-menu-landscape") }
+    @Test fun fullScreenPortrait() = fullScreen("terminal-full-screen-portrait")
+    @Test fun fullScreenLandscape() { landscape(); fullScreen("terminal-full-screen-landscape") }
 
     /** Arrange keys right after Paste's up button: Paste must be drawn above Fn. */
     @Test

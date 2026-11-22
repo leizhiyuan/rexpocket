@@ -92,6 +92,8 @@ jobs:
               me.leaver.rexpocket.ui.KeyBarLayoutInstrumentedTest \
               me.leaver.rexpocket.ui.ArrangeKeysTest \
               me.leaver.rexpocket.ui.TerminalControlsTest \
+              me.leaver.rexpocket.ui.TermMenuTest \
+              me.leaver.rexpocket.ui.TermFullScreenTest \
               me.leaver.rexpocket.ui.ClosedPaneTest \
               me.leaver.rexpocket.ui.PaneHolderTest; do
             adb logcat -c || true
@@ -151,6 +153,8 @@ jobs:
           ./gradlew --no-daemon $GRADLE_ARGS -x :app:buildGhosttyHost :app:testDebugUnitTest \
             --tests 'me.leaver.rexpocket.ui.ArrangeKeysTest' \
             --tests 'me.leaver.rexpocket.ui.TerminalControlsTest' \
+            --tests 'me.leaver.rexpocket.ui.TermMenuTest' \
+            --tests 'me.leaver.rexpocket.ui.TermFullScreenTest' \
             --tests 'me.leaver.rexpocket.ui.ScreenshotsTest'
 
       - uses: actions/upload-artifact@v4

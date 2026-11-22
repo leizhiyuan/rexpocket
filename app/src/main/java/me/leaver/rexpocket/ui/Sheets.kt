@@ -29,12 +29,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -93,6 +95,9 @@ internal fun LinkSheet(url: String, onDismiss: () -> Unit, onOpen: () -> Unit, o
     }
 }
 
+/** The content of an open sheet, for the screen tests to read its rows in order. */
+internal const val ACTION_SHEET_TAG = "action-sheet"
+
 /**
  * Lets a sheet row close its sheet. The row's action runs once the sheet has gone: a dialog it opens
  * would otherwise ask for the keyboard while the sheet's window still holds it, and lose it when that
@@ -127,7 +132,7 @@ internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, content: 
         },
     ) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
+            Modifier.fillMaxWidth().testTag(ACTION_SHEET_TAG).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
                 .padding(bottom = 12.dp),
         ) {
             if (title != null) {
@@ -215,6 +220,9 @@ private fun GroupRows(scope: SheetScope, inset: Dp, content: @Composable SheetSc
 /** The most a row's detail takes, so a long one wraps rather than crowding out the label. */
 private val DETAIL_MAX = 152.dp
 
+/** How much of a row that cannot act right now shows: the platform's disabled content. */
+private const val DISABLED_ALPHA = 0.38f
+
 /** Where a row's text starts when it has an icon: the margin, the 24 dp slot and its gap. */
 private val ICON_INSET = 56.dp
 
@@ -228,6 +236,9 @@ private val ICON_INSET = 56.dp
  *
  * A row that only changes what its own detail shows - a switch, a pick between two - stays open
  * ([keepOpen]): closing the sheet would take away the one place the change is visible.
+ *
+ * A row that cannot act right now - Send a file while a file is on its way - stays in its place,
+ * greyed out and not [enabled], so the rows around it do not jump as the state changes.
  */
 @Composable
 internal fun SheetScope.SheetItem(
@@ -238,11 +249,13 @@ internal fun SheetScope.SheetItem(
     icon: Int? = null,
     keepOpen: Boolean = false,
     supporting: String? = null,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp)
-            .clickable { if (keepOpen) onClick() else close(onClick) }
+            .clickable(enabled = enabled) { if (keepOpen) onClick() else close(onClick) }
+            .alpha(if (enabled) 1f else DISABLED_ALPHA)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

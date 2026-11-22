@@ -28,7 +28,8 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 
 ## Where the tests run
 
-- `app/src/sharedTest` holds the screen tests (`ArrangeKeysTest`, `TerminalControlsTest`). They are
+- `app/src/sharedTest` holds the screen tests (`ArrangeKeysTest`, `TerminalControlsTest`, `TermMenuTest`,
+  `TermFullScreenTest`). They are
   compiled into both the JVM unit tests and the instrumented tests:
   - on the JVM with Robolectric, in seconds on any computer:
     `./gradlew -x :app:buildGhostty -x :app:buildGhosttyHost :app:testDebugUnitTest --tests 'me.leaver.rexpocket.ui.*'`
@@ -40,7 +41,8 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 ## Screenshots
 
 `ScreenshotsTest` (JVM, Roborazzi) captures the terminal screen with the key bar, Terminal controls
-and Arrange keys, in portrait and landscape on a Pixel 6-sized screen, and Arrange keys before and
+and Arrange keys, the terminal's ⋮ menu and full screen right after entering it, in portrait and
+landscape on a Pixel 6-sized screen (the JVM tests' default too, in `robolectric.properties`), and Arrange keys before and
 after a move. They land in `app/build/outputs/roborazzi/`; `device-test` uploads them as the
 **screenshots** artifact of each run, with the JVM test report. They are for review: look at them
 when a change touches a screen. Nothing is compared against stored images yet, as fonts render

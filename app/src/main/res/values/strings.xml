@@ -101,6 +101,8 @@
     <string name="menu_rename_session">Rename session</string>
     <string name="menu_rename_pane">Rename pane</string>
     <string name="menu_close_pane">Close pane</string>
+    <string name="menu_show_keyboard">Show keyboard</string>
+    <string name="menu_hide_keyboard">Hide keyboard</string>
     <string name="menu_kill_session">End session</string>
 
     <string name="pane_reading">Reading the screen…</string>
