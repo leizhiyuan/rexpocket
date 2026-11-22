@@ -86,6 +86,8 @@ internal fun TerminalPane(
     /** Goes in or out of full screen, for a gesture set to do that. */
     onFullScreen: () -> Unit = {},
     onError: (Exception) -> Unit = {},
+    /** A key from a keyboard, offered before the terminal gets it; true when the screen took it. */
+    onShortcut: (android.view.KeyEvent) -> Boolean = { false },
 ) {
     val context = LocalContext.current
     // Replaced when Rex sends a new snapshot: a reconnect, or a pane whose stream started over.
@@ -100,6 +102,7 @@ internal fun TerminalPane(
     val currentKeyboard = rememberUpdatedState(onKeyboard)
     val currentFont = rememberUpdatedState(onFont)
     val currentCursor = rememberUpdatedState(onCursorTop)
+    val currentShortcut = rememberUpdatedState(onShortcut)
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
 
     LaunchedEffect(blockId, attempt) {
@@ -156,6 +159,7 @@ internal fun TerminalPane(
             view.onSwipe = { forward -> currentSwipe.value?.invoke(forward) }
             // The screen keeps the cursor's row in view while the keyboard is up.
             view.onCursorRow = { currentCursor.value(it) }
+            view.onShortcut = { currentShortcut.value(it) }
         }
     }
     // With a keyboard on the desk the pane holds the focus itself, so its keys reach the program

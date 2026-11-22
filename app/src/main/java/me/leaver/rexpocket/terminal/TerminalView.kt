@@ -902,7 +902,17 @@ internal class TerminalView(context: Context) : View(context) {
         invalidate()
     }
 
+    /**
+     * Offered every key from a keyboard before the terminal sees it; true when the screen took it
+     * as its own shortcut, such as the command palette's, so the program never gets it.
+     */
+    var onShortcut: ((KeyEvent) -> Boolean)? = null
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (onShortcut?.invoke(event) == true) {
+            handled.add(keyCode)
+            return true
+        }
         val active = session ?: return false
         if (event.isShiftPressed && (keyCode == KeyEvent.KEYCODE_PAGE_UP || keyCode == KeyEvent.KEYCODE_PAGE_DOWN)) {
             val rows = currentFrame()?.rows ?: return false

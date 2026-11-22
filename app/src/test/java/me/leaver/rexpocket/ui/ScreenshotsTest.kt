@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import kotlinx.coroutines.flow.emptyFlow
@@ -116,6 +117,53 @@ class ScreenshotsTest {
         compose.waitForIdle()
         captureScreenRoboImage("build/outputs/roborazzi/$name.png")
     }
+
+    /** The command palette over a live terminal, opened from the ⋮ menu, with [query] typed. */
+    private fun palette(name: String, query: String = "") {
+        val model = termModel()
+        compose.setContent { TermOnModel(model, liveState(tabOf(testPane("left"), testPane("right")))) }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_more)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(compose.activity.getString(R.string.palette_title)).performClick()
+        compose.waitForIdle()
+        if (query.isNotEmpty()) compose.onNodeWithTag(PALETTE_FIELD_TAG).performTextInput(query)
+        compose.waitForIdle()
+        captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    /**
+     * The home screen's activity view, the whole app on ScriptedRex: a failed tab with its message,
+     * one waiting, one done and one running.
+     */
+    private fun activity(name: String) {
+        RexOnDesk(sessions = 2).use { desk ->
+            val app = freshApp()
+            desk.saveFor(app, lastSession = desk.ids[0])
+            val model = launchedModel(compose, app)
+            compose.setContent { RexPocketApp(model) }
+            compose.awaitLive(model, desk.ids[0])
+            compose.awaitThat { model.pocket.value.views.containsKey(desk.ids[1]) }
+            val views = model.pocket.value.views
+            val first = views.getValue(desk.ids[0]).windows
+            val second = views.getValue(desk.ids[1]).windows
+            desk.rex.report(first[0].blocks[0].id, "error", msg = "failed: prompt_failed: 401 Unauthorized", app = "pi")
+            desk.rex.report(first[1].blocks[0].id, "blocked", kind = "permission", msg = "Apply 3 to add, 1 to change, 0 to destroy?", app = "terraform")
+            desk.rex.report(second[0].blocks[0].id, "done", msg = "Upgraded 12 packages", app = "brew")
+            desk.rex.report(second[1].blocks[0].id, "working", app = "claude")
+            compose.awaitThat { model.pocket.value.blockStatus.size == 4 }
+            compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_show_active)).performClick()
+            compose.waitForIdle()
+            captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+            compose.runOnUiThread { model.disconnect() }
+        }
+    }
+
+    @Test fun palettePortrait() = palette("command-palette-portrait")
+    @Test fun paletteLandscape() { landscape(); palette("command-palette-landscape") }
+    @Test fun paletteSearchPortrait() = palette("command-palette-search-portrait", "tab")
+    @Test fun activityPortrait() = activity("activity-portrait")
+    @Test fun activityLandscape() { landscape(); activity("activity-landscape") }
 
     @Test fun menuPortrait() = menu("terminal-menu-portrait")
     @Test fun menuLandscape() { landscape(); menu("terminal-menu-landscape") }

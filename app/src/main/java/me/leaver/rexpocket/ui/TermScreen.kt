@@ -90,6 +90,7 @@ import me.leaver.rexpocket.core.keyPressFor
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
 import me.leaver.rexpocket.core.PocketState
+import me.leaver.rexpocket.core.PaletteEntry
 import me.leaver.rexpocket.core.ProgramMark
 import me.leaver.rexpocket.core.programMark
 import me.leaver.rexpocket.core.ProgramRecord
@@ -147,6 +148,7 @@ internal sealed interface Sheet {
     data object Sessions : Sheet
     data object Actions : Sheet
     data object Navigator : Sheet
+    data object Palette : Sheet
     data class TabActions(val windowId: String) : Sheet
     data class PaneActions(val blockId: String) : Sheet
 }
@@ -177,6 +179,8 @@ internal fun TermScreen(
     gestures: GestureSettings = GestureSettings(),
     /** True when this pane shares the window with the list, which is then the way back. */
     embedded: Boolean = false,
+    /** Shows a tab of this host: of the session on screen, or of another one, which is opened on it. */
+    onOpenTab: (sessionId: String, windowId: String) -> Unit = { sessionId, _ -> onOpenSession(sessionId) },
 ) {
     val context = LocalContext.current
     val ime = LocalSoftwareKeyboardController.current
@@ -398,6 +402,10 @@ internal fun TermScreen(
                         fullScreen = chrome.fullScreen,
                         onFullScreen = toggleFullScreen,
                         onError = { onAct { note(it.toProblem()) } },
+                        // Ctrl+Shift+P (or Cmd+Shift+P on a Mac keyboard) opens the palette, as on the Mac.
+                        onShortcut = { event ->
+                            opensPalette(event).also { if (it) sheet = Sheet.Palette }
+                        },
                         modifier = Modifier.fillMaxSize()
                             // Moved, not resized: see imeShift. An offset keeps the pane's measured size
                             // - and so the grid the program was given - exactly as it was.
@@ -499,6 +507,8 @@ internal fun TermScreen(
             // whatever the bar shows: a keyboard on the desk takes the bar away, Arrange keys can
             // hide them, and full screen hides it all. See terminal-controls.md, 4.
             Group {
+                // Everything below, and every tab and session, searchable: see command-palette.md.
+                SheetItem(stringResource(R.string.palette_title), icon = R.drawable.ic_command) { sheet = Sheet.Palette }
                 for (key in PHONE_ACTIONS) {
                     when (key) {
                         // Paste, Send a file and the keyboard act on the pane on screen.
@@ -564,6 +574,109 @@ internal fun TermScreen(
                     }
                 }
             }
+        }
+        Sheet.Palette -> {
+            val paneGroup = stringResource(R.string.level_pane)
+            val tabGroup = stringResource(R.string.level_tab)
+            val sessionGroup = stringResource(R.string.level_session)
+            val phoneGroup = stringResource(R.string.palette_group_phone)
+            val copied = stringResource(R.string.toast_copied)
+            val entries = buildList {
+                fun action(label: String, group: String, rexName: String? = null, run: () -> Unit) =
+                    add(PaletteEntry(label, group, null, PaletteRun(run = run), keywords = rexName))
+                // Actions, in the ⋮ menu's order: Pane, Tab, Session, then the phone's own.
+                if (focused != null) {
+                    if (showHolder) {
+                        action(stringResource(if (state.holder == Holder.Phone) R.string.action_release else R.string.action_take_over), paneGroup) { toggleHolder() }
+                    }
+                }
+                action(stringResource(R.string.menu_split_right), paneGroup, "Split Pane Right pane.split.right") { onAct { split(vertical = false) } }
+                action(stringResource(R.string.menu_split_below), paneGroup, "Split Pane Down pane.split.down") { onAct { split(vertical = true) } }
+                if (focused != null) {
+                    val index = panes.indexOfFirst { it.id == focused.id }
+                    if (panes.size > 1) {
+                        val next = panes[(index + 1) % panes.size]
+                        val previous = panes[(index - 1 + panes.size) % panes.size]
+                        action(stringResource(R.string.palette_next_pane), paneGroup, "Focus Next Pane pane.focus_next") { onAct { focusBlock(next.id) } }
+                        action(stringResource(R.string.palette_previous_pane), paneGroup, "Focus Previous Pane pane.focus_previous") { onAct { focusBlock(previous.id) } }
+                    }
+                    action(stringResource(R.string.menu_rename_pane), paneGroup, "Rename Pane pane.rename") { rename = Rename(Level.Pane, focused.id, focused.label) }
+                    if (panes.size > 1) {
+                        action(stringResource(R.string.menu_close_pane), paneGroup, "Close Pane pane.close") { confirm = Confirm(Level.Pane, focused.id, focused.label) }
+                    }
+                    action(stringResource(R.string.palette_copy_pane_id), paneGroup, "Copy Block ID pane.copy_id") {
+                        clipboardSet(context, focused.id)
+                        toast(context, copied)
+                    }
+                }
+                action(stringResource(R.string.menu_new_tab), tabGroup, "New Tab client.tab.new") { onAct { newWindow() } }
+                if (view != null && tab != null) {
+                    val windows = view.windows
+                    val at = windows.indexOfFirst { it.id == tab.id }
+                    if (windows.size > 1 && at >= 0) {
+                        val next = windows[(at + 1) % windows.size]
+                        val previous = windows[(at - 1 + windows.size) % windows.size]
+                        action(stringResource(R.string.palette_next_tab), tabGroup, "Show Next Tab client.tab.next") { onAct { focusWindow(next.id) } }
+                        action(stringResource(R.string.palette_previous_tab), tabGroup, "Show Previous Tab client.tab.previous") { onAct { focusWindow(previous.id) } }
+                    }
+                    val title = tabTitle(view, tab, state)
+                    action(stringResource(R.string.menu_rename_tab), tabGroup, "Rename Tab client.tab.rename") { rename = Rename(Level.Tab, tab.id, tab.label) }
+                    action(stringResource(R.string.menu_close_tab), tabGroup, "Close Tab client.tab.close") { confirm = Confirm(Level.Tab, tab.id, title) }
+                }
+                action(stringResource(R.string.session_new), sessionGroup, "New Session session.new") { onAct { createShell(null) } }
+                val sessions = state.sessions
+                val here = sessions.indexOfFirst { it.id == state.activeSessionId }
+                if (sessions.size > 1 && here >= 0) {
+                    val next = sessions[(here + 1) % sessions.size]
+                    val previous = sessions[(here - 1 + sessions.size) % sessions.size]
+                    action(stringResource(R.string.palette_next_session), sessionGroup, "Next Session session.next") { onOpenSession(next.id) }
+                    action(stringResource(R.string.palette_previous_session), sessionGroup, "Previous Session session.previous") { onOpenSession(previous.id) }
+                }
+                if (view != null) {
+                    action(stringResource(R.string.menu_rename_session), sessionGroup, "Rename Session session.rename") { rename = Rename(Level.Session, view.sessionId, view.label) }
+                    action(stringResource(R.string.menu_kill_session), sessionGroup, "Close Session session.close") { confirm = Confirm(Level.Session, view.sessionId, view.label) }
+                }
+                if (focused != null) {
+                    action(stringResource(R.string.key_paste), phoneGroup, "Paste into Pane pane.paste") { pasteClipboard() }
+                    if (upload?.running != true) action(stringResource(R.string.upload_attach), phoneGroup, "Insert File pane.insert_file") { filePicker.launch("*/*") }
+                    action(stringResource(if (imeUp) R.string.menu_hide_keyboard else R.string.menu_show_keyboard), phoneGroup, "Show Keyboard Hide Keyboard client.keyboard.show") { toggleKeyboard() }
+                }
+                action(stringResource(if (chrome.fullScreen) R.string.palette_leave_full_screen else R.string.action_full_screen), phoneGroup, "Toggle Full Screen client.window.fullscreen.toggle") { toggleFullScreen() }
+                action(stringResource(R.string.palette_font_bigger), phoneGroup, "Increase Font Size client.font.increase") { onFont(fontScale + FONT_STEP) }
+                action(stringResource(R.string.palette_font_smaller), phoneGroup, "Decrease Font Size client.font.decrease") { onFont(fontScale - FONT_STEP) }
+                action(stringResource(R.string.palette_font_reset), phoneGroup, "Reset Font Size client.font.reset") { onFont(1f) }
+                action(stringResource(R.string.palette_back_home), phoneGroup) { onBack() }
+                // Where to go: the tabs of the session on screen, then of the other sessions the
+                // phone has loaded, then every session.
+                val ordered = listOfNotNull(view) + state.sessions.mapNotNull { s -> state.views[s.id]?.takeIf { it.sessionId != view?.sessionId } }
+                for (v in ordered) {
+                    val sessionLabel = state.sessions.firstOrNull { it.id == v.sessionId }?.label ?: v.label
+                    for (window in v.windows) {
+                        val current = v.sessionId == view?.sessionId && window.id == tab?.id
+                        val word = window.blocks.firstNotNullOfOrNull { state.blockStatus[it.id] }?.let { statusWord(it) }
+                        add(
+                            PaletteEntry(
+                                tabTitle(v, window, state),
+                                tabGroup,
+                                listOfNotNull(sessionLabel, word).joinToString(" · "),
+                                PaletteRun(marked = current) {
+                                    when {
+                                        current -> Unit
+                                        v.sessionId == view?.sessionId -> onAct { focusWindow(window.id) }
+                                        else -> onOpenTab(v.sessionId, window.id)
+                                    }
+                                },
+                                keywords = "Go to Tab client.tab.goto",
+                            ),
+                        )
+                    }
+                }
+                for (s in state.sessions) {
+                    val active = s.id == state.activeSessionId
+                    add(PaletteEntry(s.label, sessionGroup, null, PaletteRun(marked = active) { if (!active) onOpenSession(s.id) }, "Go to Session session.select"))
+                }
+            }
+            CommandPalette(entries, onDismiss = { sheet = null })
         }
         Sheet.Navigator -> if (view != null) {
             ActionSheet(onDismiss = { sheet = null }, title = view.label) {

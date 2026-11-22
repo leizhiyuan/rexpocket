@@ -48,6 +48,8 @@ internal fun TermOnModel(
     state: PocketState,
     upload: UploadStatus? = null,
     onAct: (suspend PocketSession.() -> Unit) -> Unit = {},
+    onOpenSession: (String) -> Unit = {},
+    onOpenTab: (String, String) -> Unit = { _, _ -> },
 ) {
     val route by model.route.collectAsState()
     val keyBar by model.keyBar.collectAsState()
@@ -62,7 +64,8 @@ internal fun TermOnModel(
                 terminalTypeface = Typeface.MONOSPACE,
                 onFont = {},
                 onBack = model::showHome,
-                onOpenSession = {},
+                onOpenSession = onOpenSession,
+                onOpenTab = onOpenTab,
                 watchPane = { emptyFlow() },
                 onRetry = {},
                 onDismissNotice = {},
