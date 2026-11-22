@@ -133,7 +133,12 @@ own SSH daemon. How the transport works is described in
      Full screen - whatever the bar shows, then Pane (Release / Take over, new panes, rename, close),
      Tab (new, rename, close) and Session (sessions, rename, end).
 5. **On the home screen,** the eye keeps only the tabs with a program working or waiting, and
-   search filters hosts, sessions and tabs.
+   search filters hosts, sessions and tabs. A folded host or session stays folded - after a trip to
+   a terminal, a rotation or a restart.
+   - At launch the app connects to the host it had open and shows this list. It goes back into the
+     terminal only when Android closed the app while a terminal was on screen, or with
+     **Settings › Reopen the last tab on launch** (off by default) - and never once you have
+     touched anything: whatever you opened meanwhile stays open.
 6. **Background alerts:** Settings › Background alerts, and allow notifications. A quiet
    notification shows while the app watches; its **Stop** turns alerts off. The app does not start
    on its own after a reboot, and Android's battery saving can delay an alert.

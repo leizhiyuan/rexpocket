@@ -13,6 +13,8 @@ import org.json.JSONObject
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -61,6 +63,13 @@ class ScriptedRex : AutoCloseable {
     private val streams = CopyOnWriteArrayList<Stream>()
     private val tokens = ConcurrentHashMap.newKeySet<String>()
     private val refusals = ConcurrentHashMap<String, String>()
+    private val holds = ConcurrentHashMap<String, CountDownLatch>()
+
+    /**
+     * False for a Rex whose panes send no picture: a stream opens and is welcomed, then stays
+     * quiet. For the app's screen tests on the JVM, where libghostty is not there to draw one.
+     */
+    @Volatile var pictures: Boolean = true
 
     /** Every request that reached this Rex, as `method block-or-session`, in order. */
     val calls = CopyOnWriteArrayList<String>()
@@ -92,6 +101,18 @@ class ScriptedRex : AutoCloseable {
 
     fun allow(method: String) {
         refusals.remove(method)
+    }
+
+    /**
+     * Keeps every [method] call waiting for its answer until [release]: a slow network, so a test
+     * can act while the connection is still on its way.
+     */
+    fun hold(method: String) {
+        holds.putIfAbsent(method, CountDownLatch(1))
+    }
+
+    fun release(method: String) {
+        holds.remove(method)?.countDown()
     }
 
     /** Ends [clientId]'s control connection, as its network going away; it resumes on a new one. */
@@ -383,6 +404,7 @@ class ScriptedRex : AutoCloseable {
                     val id = message.getString("id")
                     val method = message.getString("method")
                     val payload = message.optJSONObject("payload") ?: JSONObject()
+                    holds[method]?.await(30, TimeUnit.SECONDS)
                     calls += "$method ${payload.optString("block_id").ifEmpty { payload.optJSONArray("block_ids")?.optString(0) ?: payload.optString("session_id") }}"
                     val events = mutableListOf<JSONObject>()
                     pending.set(events)
@@ -425,8 +447,10 @@ class ScriptedRex : AutoCloseable {
                     stream.socket = webSocket
                     streams += stream
                     welcome(webSocket, stream)
-                    webSocket.send(SNAPSHOT.toByteString())
-                    webSocket.send("$ ".toByteArray().toByteString())
+                    if (pictures) {
+                        webSocket.send(SNAPSHOT.toByteString())
+                        webSocket.send("$ ".toByteArray().toByteString())
+                    }
                 }
                 0x02 -> {
                     val token = hello.copyOfRange(1, 17).toByteString()
@@ -456,6 +480,7 @@ class ScriptedRex : AutoCloseable {
     }
 
     override fun close() {
+        holds.keys.toList().forEach(::release)
         clients.keys.forEach { runCatching { it.close(1001, "bye") } }
         server.shutdown()
     }

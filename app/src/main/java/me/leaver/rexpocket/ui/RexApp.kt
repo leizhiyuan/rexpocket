@@ -20,6 +20,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,7 +68,12 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val upload by model.upload.collectAsState()
     val update by model.update.collectAsState()
     val updateChannel by model.updateChannel.collectAsState()
+    val folds by model.folds.collectAsState()
+    val reopenLastTab by model.reopenLastTab.collectAsState()
     val context = LocalContext.current
+    // The home screen leaves the composition while a terminal fills the window; its saved state
+    // (the open sheet, search, eye, scroll) is kept here for when it comes back.
+    val saveable = rememberSaveableStateHolder()
     var tailnetOpen by remember { mutableStateOf(false) }
     // Each offer is shown once per app run; the settings row still has it afterwards.
     var offeredOnce by remember { mutableStateOf(emptySet<String>()) }
@@ -99,12 +108,30 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
         openLink(context, authUrl)
     }
     RexTheme {
-        Box(Modifier.fillMaxSize().background(Colors.bg)) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Colors.bg)
+                // Any touch or key is the person taking over: a launch resume still on its way
+                // gives way to it. Watched on the way down, never consumed.
+                .pointerInput(model) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            awaitPointerEvent(PointerEventPass.Initial)
+                            model.userActed()
+                        }
+                    }
+                }
+                .onPreviewKeyEvent {
+                    model.userActed()
+                    false
+                },
+        ) {
             val window = windowSize()
             // A tablet or a desk window keeps the list beside the pane: a session or a tab is
             // switched without leaving the terminal it was showing. With nothing open, the pane
             // side says so and waits for a pick.
-            val home: @Composable (Boolean) -> Unit = { detail ->
+            val home: @Composable (Boolean) -> Unit = { detail -> saveable.SaveableStateProvider("home") {
                 HomeScreen(
                     detail = detail,
                     hosts = hosts,
@@ -116,6 +143,9 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     tailnetPath = tailnetPath,
                     opening = opening,
                     cachedSessions = model::cachedSessions,
+                    folds = folds,
+                    onFoldHost = model::setHostFolded,
+                    onFoldSession = model::setSessionFolded,
                     onConnect = { model.connect(it) },
                     onOpenSession = model::openSessionOn,
                     onOpenTab = model::openTabOn,
@@ -143,8 +173,10 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onUpdate = { updateTapped(update) },
                     updateChannel = updateChannel,
                     onUpdateChannel = model::setUpdateChannel,
+                    reopenLastTab = reopenLastTab,
+                    onReopenLastTab = model::setReopenLastTab,
                 )
-            }
+            } }
             val term: @Composable (Boolean) -> Unit = { embedded ->
                 TermScreen(
                     embedded = embedded,
@@ -200,10 +232,14 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                 tag = offeredTag,
                 downloaded = offered is UpdateState.Ready,
                 onConfirm = {
+                    model.userActed()
                     offeredOnce = offeredOnce + offerKey
                     updateTapped(offered)
                 },
-                onLater = { offeredOnce = offeredOnce + offerKey },
+                onLater = {
+                    model.userActed()
+                    offeredOnce = offeredOnce + offerKey
+                },
             )
         }
         if (fontSettingsOpen) {

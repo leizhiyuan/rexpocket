@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.Endpoint
@@ -46,6 +47,7 @@ import me.leaver.rexpocket.data.SYSTEM_FONT
 import me.leaver.rexpocket.data.TerminalFontState
 import me.leaver.rexpocket.data.downloadedTypeface
 import me.leaver.rexpocket.data.SavedHost
+import me.leaver.rexpocket.data.HomeFolds
 import me.leaver.rexpocket.data.TailnetSettings
 import me.leaver.rexpocket.core.ReportedFact
 import me.leaver.rexpocket.diagnostics.Diagnostics
@@ -99,8 +101,16 @@ sealed interface Route {
     data object Term : Route
 }
 
-class RexViewModel(app: Application) : AndroidViewModel(app) {
+/**
+ * [saved] is the state Android keeps for the activity when it kills the process in the background:
+ * here only whether the terminal was on screen, which is what makes a reopen at launch a
+ * continuation rather than a surprise.
+ */
+class RexViewModel(app: Application, private val saved: SavedStateHandle = SavedStateHandle()) : AndroidViewModel(app) {
     private val store = HostStore(app)
+
+    /** True when this process was started again after Android killed it while the terminal was on screen. */
+    private val terminalWasOpen = saved.get<Boolean>(KEY_TERMINAL_OPEN) == true
     private val tailscaleBox = TailscaleBox(app)
     private val netbirdBox = NetbirdBox(app)
     private val updater = Updater(app)
@@ -164,6 +174,58 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     val route = MutableStateFlow<Route>(Route.Home)
+
+    /**
+     * Set while a connection may still take the person to the pane they had open: the launch after
+     * the process was killed on the terminal, or a reconnect asked for. Anything the person does in
+     * the meantime - a tap, a key, another host - ends it, so finishing the connection never pulls
+     * them out of the screen they went to.
+     */
+    private var resumePending = false
+
+    /** Whether the launch reopens the last tab even after a fresh start. Off by default. */
+    val reopenLastTab = MutableStateFlow(store.reopenLastTab())
+
+    fun setReopenLastTab(on: Boolean) {
+        store.setReopenLastTab(on)
+        reopenLastTab.value = on
+    }
+
+    /**
+     * The person touched the screen or pressed a key: whatever they do next is their own, so a
+     * resume still on its way is dropped. RexApp calls this for every touch and key.
+     */
+    fun userActed() {
+        if (resumePending) Diagnostics.event(CONN_TAG, "resume dropped: the person moved first")
+        resumePending = false
+    }
+
+    /** The folds of the home list, kept across going to a terminal, rotation and restarts. */
+    val folds = MutableStateFlow(store.folds())
+
+    fun setHostFolded(hostId: String, folded: Boolean) {
+        val current = folds.value
+        val next = current.copy(hosts = if (folded) current.hosts + hostId else current.hosts - hostId)
+        store.setFolds(next)
+        folds.value = next
+    }
+
+    fun setSessionFolded(hostId: String, sessionId: String, folded: Boolean) {
+        val current = folds.value
+        val key = HomeFolds.sessionKey(hostId, sessionId)
+        val next = current.copy(sessions = if (folded) current.sessions + key else current.sessions - key)
+        store.setFolds(next)
+        folds.value = next
+    }
+
+    /** Drops the folds of [hostId]'s sessions that are not in [alive], so gone sessions do not pile up. */
+    private fun pruneFolds(hostId: String, alive: Collection<String>) {
+        val current = folds.value
+        val next = current.keepSessions(hostId, alive)
+        if (next == current) return
+        store.setFolds(next)
+        folds.value = next
+    }
     private val _pocket = MutableStateFlow(PocketState())
     val pocket: StateFlow<PocketState> = _pocket
     val fontScale = MutableStateFlow(store.fontScale())
@@ -250,6 +312,8 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     }.also { it.start() }
 
     init {
+        // Kept for Android to hand back if it kills the process: see [terminalWasOpen].
+        viewModelScope.launch { route.collect { saved[KEY_TERMINAL_OPEN] = it == Route.Term } }
         viewModelScope.launch {
             val saved = store.terminalFont()
             val (available, face) = withContext(Dispatchers.IO) {
@@ -385,6 +449,10 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteHost(id: String) {
         store.delete(id)
         hosts.value = store.list()
+        val current = folds.value
+        val next = current.keepSessions(id, emptyList()).copy(hosts = current.hosts - id)
+        store.setFolds(next)
+        folds.value = next
     }
 
     /**
@@ -411,6 +479,7 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         store.setLastHost(target.id)
         val previousSession = store.lastSession(target.id)
         route.value = Route.Home
+        resumePending = resume
         val settings = store.tailnet()
         val endpoint = target.endpoint()
         if (target.viaTailscale && !settings.enabled) {
@@ -521,13 +590,19 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
      */
     private suspend fun follow(s: PocketSession, hostId: String, resumeTo: String?) = coroutineScope {
         launch { s.state.collect { _pocket.value = it } }
+        // The session a resume goes back to is the one that was on the terminal: connecting selects
+        // one on its own (the remembered one, or Rex's first), and that one was never on screen.
         launch {
-            s.state.mapNotNull { it.activeSessionId }.distinctUntilChanged()
+            combine(s.state, route) { st, r -> if (r == Route.Term) st.activeSessionId else null }
+                .filterNotNull().distinctUntilChanged()
                 .collect { store.setLastSession(hostId, it) }
         }
         launch {
             s.state.map { it.sessions }.filter { it.isNotEmpty() }.distinctUntilChanged()
-                .collect { store.setCachedSessions(hostId, it) }
+                .collect { sessions ->
+                    store.setCachedSessions(hostId, sessions)
+                    if (s.state.value.phase == Phase.Live) pruneFolds(hostId, sessions.map { it.id })
+                }
         }
         // Only a pane that was on the terminal screen counts. Connecting already selects a session,
         // and its Rex focus must not replace the pane remembered for it.
@@ -616,17 +691,28 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Reopens the remembered session on its remembered pane; stays on the list if it is gone. */
+    /**
+     * Reopens the remembered session on its remembered pane; stays on the list if it is gone, and
+     * stays wherever the person went if they did anything before the connection was up.
+     */
     private suspend fun resumeInto(s: PocketSession, sessionId: String?) {
-        val target = sessionId?.takeIf { id -> s.state.value.sessions.any { it.id == id } } ?: return
+        if (!resumePending) return
+        val target = sessionId?.takeIf { id -> s.state.value.sessions.any { it.id == id } }
+        if (target == null) {
+            resumePending = false
+            return
+        }
         try {
             s.openSession(target, rememberedPane(target))
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
+            resumePending = false
             return
         }
-        route.value = Route.Term
+        // Opening took a round trip, and the person may have moved in it.
+        if (resumePending && route.value == Route.Home && _opening.value == null) route.value = Route.Term
+        resumePending = false
     }
 
     private fun rememberedPane(sessionId: String): String? = host?.let { store.lastPane(it.id, sessionId) }
@@ -709,8 +795,11 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * After the process is killed in the background, reopen the host and session that were on
-     * screen. The Rex server keeps the session, so this is a reconnect rather than a new one.
+     * At launch, connects to the host that was open last, so its sessions are live on the list.
+     * The terminal comes back only as a continuation: after Android killed the process while the
+     * terminal was on screen, or on every launch with [reopenLastTab]; either way only while the
+     * person has not done anything yet ([userActed]). The Rex server keeps the session, so this is
+     * a reconnect rather than a new one.
      */
     fun restore() {
         // A phone that has joined a tailnet keeps the node up: the Tailscale row is the honest
@@ -718,7 +807,9 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         if (tailnet.value.enabled) startTailnet(tailnet.value)
         if (openedFromAlert || route.value != Route.Home || session != null) return
         val target = store.lastHost()?.let { store.find(it) } ?: return
-        connect(target, resume = true)
+        val resume = terminalWasOpen || reopenLastTab.value
+        Diagnostics.event(CONN_TAG, "launch: ${if (resume) "back to the last tab" else "the list"} (killed on the terminal: $terminalWasOpen)")
+        connect(target, resume = resume)
     }
 
     /**
@@ -1059,3 +1150,6 @@ private fun Problem.describe(): String = trouble.toString() + (detail?.let { ": 
 
 /** Connection diagnostics: `adb logcat -s RexPocketConn`. */
 internal const val CONN_TAG = "RexPocketConn"
+
+/** The saved-state key that says the terminal was on screen; see [RexViewModel.restore]. */
+internal const val KEY_TERMINAL_OPEN = "terminal_open"

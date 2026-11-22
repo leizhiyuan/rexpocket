@@ -72,7 +72,7 @@ classes below then run instead of skipping.
 
 ### What replaces it
 
-- **`ScriptedRex`** (`core/src/test/.../ScriptedRex.kt`) is a Rex in the test JVM, on
+- **`ScriptedRex`** (`core/src/testFixtures/.../ScriptedRex.kt`) is a Rex in the test JVM, on
   MockWebServer. It speaks the protocol the app speaks - hello and welcome with a client id and
   reconnect token, request and response, events wrapped as `session_event`, tickets from
   `data.connect`, and on `/api/data` the HELLO/RESUME handshake, a 32-byte WELCOME, a `GHOSTSNP`
@@ -83,7 +83,8 @@ classes below then run instead of skipping.
   closed, is refused with `block … is not in the session`; every change is told to every client
   after its answer; a closed pane's streams close with 4000 and a HELLO for it is refused with
   0x03; a tab's last pane closing closes the tab, a session's last tab its session. `refuse(method)`
-  makes a method fail, for the errors that must still show.
+  makes a method fail, for the errors that must still show; `hold(method)` keeps its answers back
+  until `release`, a slow network for a test to act in; `pictures = false` sends no snapshot.
 - **`Desk`** is a second client that changes sessions only through the protocol - new session,
   new tab, split, close a tab or pane, take a pane, ask who holds one - so a scenario means the
   same against `ScriptedRex` and a real Rex.
@@ -96,6 +97,12 @@ classes below then run instead of skipping.
   shown tab or pane itself, or one the desk closed first; a reconnect. Each asserts the screen: the
   closed note, the next pane on screen with its picture and held by the phone on Rex without a Take
   over, and an empty banner for a while after.
+
+`ScriptedRex` and `Desk` are core's test fixtures, so the app's screen tests connect to the same
+fake Rex: `LaunchTest` and `HomeStateTest` (`app/src/sharedTest`) run the whole app -
+`RexPocketApp` on its real view model and store - against it, on the JVM and on the emulator. On
+the JVM without libghostty's host build the panes send no picture (`pictures = false`), so the
+terminal screen opens on its pane with nothing to draw.
 
 `ScriptedRexLifecycleTest` runs them on every push, in the `rex-integration` workflow with the rest
 of `:core:test`. `RealRexLifecycleTest` runs the same scenarios against a real Rex and is skipped

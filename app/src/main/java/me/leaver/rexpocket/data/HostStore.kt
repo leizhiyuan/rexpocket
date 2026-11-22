@@ -40,6 +40,23 @@ data class TailnetSettings(
     val managementUrl: String = "",
 )
 
+/**
+ * Which hosts and sessions the home list has folded. A session is named with its host
+ * ([sessionKey]): two hosts can each have a session with the same id.
+ */
+data class HomeFolds(val hosts: Set<String> = emptySet(), val sessions: Set<String> = emptySet()) {
+    /** Keeps the session folds of [hostId] whose session is in [alive], and every other host's. */
+    fun keepSessions(hostId: String, alive: Collection<String>): HomeFolds {
+        val prefix = sessionKey(hostId, "")
+        val keep = alive.map { sessionKey(hostId, it) }.toSet()
+        return copy(sessions = sessions.filter { !it.startsWith(prefix) || it in keep }.toSet())
+    }
+
+    companion object {
+        fun sessionKey(hostId: String, sessionId: String) = "$hostId/$sessionId"
+    }
+}
+
 class HostStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("rexpocket", Context.MODE_PRIVATE)
     private val secrets = SecretBox()
@@ -239,6 +256,29 @@ class HostStore(context: Context) {
         prefs.edit().putString(KEY_KEY_BAR_CTRL_C, choice.pref).apply()
     }
 
+    /** The folds of the home list, kept across restarts like any other preference. */
+    fun folds(): HomeFolds = HomeFolds(
+        hosts = prefs.getStringSet(KEY_FOLDED_HOSTS, null).orEmpty().toSet(),
+        sessions = prefs.getStringSet(KEY_FOLDED_SESSIONS, null).orEmpty().toSet(),
+    )
+
+    fun setFolds(folds: HomeFolds) {
+        prefs.edit()
+            .putStringSet(KEY_FOLDED_HOSTS, folds.hosts.toSet())
+            .putStringSet(KEY_FOLDED_SESSIONS, folds.sessions.toSet())
+            .apply()
+    }
+
+    /**
+     * Whether every launch goes back to the tab that was open last. Off by default: a fresh start
+     * shows the list, and only a process Android killed on the terminal comes back to it.
+     */
+    fun reopenLastTab(): Boolean = prefs.getBoolean(KEY_REOPEN_LAST_TAB, false)
+
+    fun setReopenLastTab(on: Boolean) {
+        prefs.edit().putBoolean(KEY_REOPEN_LAST_TAB, on).apply()
+    }
+
     fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)
 
     fun terminalFont(): String = prefs.getString("terminal_font", null)
@@ -275,6 +315,9 @@ class HostStore(context: Context) {
 
     companion object {
         private const val KEY_HOSTS = "hosts"
+        private const val KEY_FOLDED_HOSTS = "folded_hosts"
+        private const val KEY_FOLDED_SESSIONS = "folded_sessions"
+        private const val KEY_REOPEN_LAST_TAB = "reopen_last_tab"
         private const val KEY_LAST_HOST = "last_host"
         private const val KEY_FONT = "font_scale"
         private const val KEY_ALERTS = "background_alerts"

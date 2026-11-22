@@ -95,7 +95,9 @@ jobs:
               me.leaver.rexpocket.ui.TermMenuTest \
               me.leaver.rexpocket.ui.TermFullScreenTest \
               me.leaver.rexpocket.ui.ClosedPaneTest \
-              me.leaver.rexpocket.ui.PaneHolderTest; do
+              me.leaver.rexpocket.ui.PaneHolderTest \
+              me.leaver.rexpocket.ui.LaunchTest \
+              me.leaver.rexpocket.ui.HomeStateTest; do
             adb logcat -c || true
             if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \
                 -Pandroid.testInstrumentationRunnerArguments.class="$class"; then

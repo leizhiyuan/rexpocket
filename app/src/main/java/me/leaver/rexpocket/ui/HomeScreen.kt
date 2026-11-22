@@ -47,7 +47,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.withContext
@@ -93,6 +92,7 @@ import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.UpdateChannel
 import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.data.HostStore
+import me.leaver.rexpocket.data.HomeFolds
 import me.leaver.rexpocket.data.SavedHost
 import me.leaver.rexpocket.data.TailnetSettings
 import me.leaver.rexpocket.update.UpdateState
@@ -132,12 +132,6 @@ private data class HomeSession(
 private fun PocketState.activityOf(block: BlockInfo): ProgramRecord? =
     blockStatus[block.id]?.takeIf { it.state == "working" || it.state == "blocked" }
 
-/** The folds of the list, as one saveable value: which hosts and sessions are open. */
-private val StringSetSaver = Saver<Set<String>, List<String>>(
-    save = { it.toList() },
-    restore = { it.toSet() },
-)
-
 @Composable
 internal fun HomeScreen(
     hosts: List<SavedHost>,
@@ -151,6 +145,10 @@ internal fun HomeScreen(
     tailnetPath: TailnetPath?,
     opening: Opening?,
     cachedSessions: (String) -> List<ListedSession>,
+    /** Which hosts and sessions are folded: the view model's, so they outlive this screen. */
+    folds: HomeFolds = HomeFolds(),
+    onFoldHost: (hostId: String, folded: Boolean) -> Unit = { _, _ -> },
+    onFoldSession: (hostId: String, sessionId: String, folded: Boolean) -> Unit = { _, _, _ -> },
     onConnect: (SavedHost) -> Unit,
     onOpenSession: (SavedHost, String) -> Unit,
     onOpenTab: (SavedHost, String, String) -> Unit,
@@ -182,6 +180,9 @@ internal fun HomeScreen(
     /** Which builds the updater offers, and the tap on the other one. */
     updateChannel: UpdateChannel,
     onUpdateChannel: (UpdateChannel) -> Unit,
+    /** Whether every launch goes back to the last tab, not only one after Android killed the app. */
+    reopenLastTab: Boolean = false,
+    onReopenLastTab: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     // Android 13 asks for notifications at run time; alerts come on once the person allows them.
@@ -199,20 +200,23 @@ internal fun HomeScreen(
             else -> onAlerts(true)
         }
     }
-    var editing by remember { mutableStateOf<SavedHost?>(null) }
-    var creating by remember { mutableStateOf(false) }
-    var settings by remember { mutableStateOf(false) }
-    var controlsPage by remember { mutableStateOf<ControlsPage?>(null) }
-    var diagnostics by remember { mutableStateOf(false) }
+    // What the person was looking at survives the window being rebuilt under it, which a rotation
+    // or a resize in a free-form window does, and a trip to the terminal and back (RexApp keeps
+    // this screen's saved state while it is away): the sheet that was open, the search on its
+    // query, the eye, and where the list was scrolled to. The folds are the view model's.
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    val editing = editingId?.let { id -> hosts.firstOrNull { it.id == id } }
+    var creating by rememberSaveable { mutableStateOf(false) }
+    var settings by rememberSaveable { mutableStateOf(false) }
+    var controlsPage by rememberSaveable { mutableStateOf<ControlsPage?>(null) }
+    var diagnostics by rememberSaveable { mutableStateOf(false) }
     var recording by remember { mutableStateOf(Diagnostics.capture(context) != null) }
-    var menuHost by remember { mutableStateOf<SavedHost?>(null) }
-    // What the person was looking at survives the window being rebuilt under it, which a resize in
-    // a free-form window does: the search stays open on its query, and the folds stay folded.
+    var menuHostId by rememberSaveable { mutableStateOf<String?>(null) }
+    val menuHost = menuHostId?.let { id -> hosts.firstOrNull { it.id == id } }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var activeOnly by rememberSaveable { mutableStateOf(false) }
-    var collapsedHosts by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(emptySet<String>()) }
-    var collapsedSessions by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(emptySet<String>()) }
+    val collapsedHosts = folds.hosts
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val closeSearch: () -> Unit = {
@@ -283,18 +287,18 @@ internal fun HomeScreen(
                                 expanded = hostExpanded,
                                 onToggle = {
                                     if (live) {
-                                        collapsedHosts = if (hostExpanded) collapsedHosts + host.id else collapsedHosts - host.id
+                                        onFoldHost(host.id, hostExpanded)
                                     } else {
                                         onConnect(host)
                                     }
                                 },
-                                onMenu = { menuHost = host },
+                                onMenu = { menuHostId = host.id },
                             )
                             if (live) HostStatus(state, tailnetPath, tailnetName(tailnet.backend), onRetry, onProbePath)
                         }
                         if (hostExpanded) {
                             sessions.forEach { row ->
-                                val sessionExpanded = row.session.id !in collapsedSessions || searchOpen
+                                val sessionExpanded = HomeFolds.sessionKey(host.id, row.session.id) !in folds.sessions || searchOpen
                                 val openingThis = opening == Opening.Existing(row.session.id)
                                 item(key = "session-${row.session.id}") {
                                     SessionHeader(
@@ -306,7 +310,7 @@ internal fun HomeScreen(
                                             if (row.view == null) {
                                                 onOpenSession(host, row.session.id)
                                             } else {
-                                                collapsedSessions = if (sessionExpanded) collapsedSessions + row.session.id else collapsedSessions - row.session.id
+                                                onFoldSession(host.id, row.session.id, sessionExpanded)
                                             }
                                         },
                                         onNewTab = { onNewTab(host, row.session.id) },
@@ -369,35 +373,35 @@ internal fun HomeScreen(
         HostDialog(
             initial = editing,
             tailnetEnabled = tailnet.enabled,
-            onDismiss = { creating = false; editing = null },
-            onDelete = editing?.let { host -> { onDelete(host.id); creating = false; editing = null } },
+            onDismiss = { creating = false; editingId = null },
+            onDelete = editing?.let { host -> { onDelete(host.id); creating = false; editingId = null } },
             onSave = {
                 onSave(it)
                 creating = false
-                editing = null
+                editingId = null
             },
             onJoinTailnet = {
                 creating = false
-                editing = null
+                editingId = null
                 onTailnet()
             },
         )
     }
 
     menuHost?.let { host ->
-        ActionSheet(onDismiss = { menuHost = null }, title = host.label) {
+        ActionSheet(onDismiss = { menuHostId = null }, title = host.label) {
             Group {
                 SheetItem(stringResource(R.string.session_new), icon = R.drawable.ic_add) {
-                    menuHost = null
+                    menuHostId = null
                     onNewSession(host)
                 }
                 SheetItem(stringResource(R.string.action_edit_host), icon = R.drawable.ic_edit) {
-                    menuHost = null
-                    editing = host
+                    menuHostId = null
+                    editingId = host.id
                 }
                 if (connected?.id == host.id) {
                     SheetItem(stringResource(R.string.action_disconnect), Colors.danger, icon = R.drawable.ic_disconnect) {
-                        menuHost = null
+                        menuHostId = null
                         onDisconnect()
                     }
                 }
@@ -422,6 +426,8 @@ internal fun HomeScreen(
                 controlsPage = ControlsPage.Controls
             },
             onFontSettings = onFontSettings,
+            reopenLastTab = reopenLastTab,
+            onReopenLastTab = { onReopenLastTab(!reopenLastTab) },
             recording = recording,
             onDiagnostics = {
                 settings = false
@@ -574,8 +580,11 @@ private fun SessionHeader(
         !live -> stringResource(R.string.session_cached)
         else -> null
     }
+    val folded = stringResource(R.string.state_folded)
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.chip)).clickable(onClick = onToggle)
+            // Said as the host's header says it, so a folded session is not only a turned chevron.
+            .semantics { if (row.view != null && !expanded) stateDescription = folded }
             .padding(start = KEY_MARK),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -827,6 +836,8 @@ private fun SettingsSheet(
     /** Opens the terminal's controls: its gestures and its key bar. */
     onControls: () -> Unit,
     onFontSettings: () -> Unit,
+    reopenLastTab: Boolean,
+    onReopenLastTab: () -> Unit,
     recording: Boolean,
     onDiagnostics: () -> Unit,
     update: UpdateState,
@@ -869,6 +880,15 @@ private fun SettingsSheet(
             // Gestures and keys have a sheet of their own, so this one stays a list of places to go.
             SheetItem(stringResource(R.string.controls_title), icon = R.drawable.ic_keyboard, onClick = onControls)
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
+            // Off, a fresh start shows this list; Android killing the app on the terminal still
+            // comes back to it, since that is the person's own place rather than a pick.
+            SheetItem(
+                label = stringResource(R.string.reopen_last_tab),
+                icon = R.drawable.ic_sessions,
+                detail = stringResource(if (reopenLastTab) R.string.reopen_last_tab_on else R.string.reopen_last_tab_off),
+                keepOpen = true,
+                onClick = onReopenLastTab,
+            )
         }
         Group(stringResource(R.string.settings_group_version)) {
             // The channel first: it is what the row under it looks on.
@@ -1090,9 +1110,9 @@ internal fun HostDialog(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var label by remember { mutableStateOf(initial?.label ?: "") }
+    var label by rememberSaveable { mutableStateOf(initial?.label ?: "") }
     var confirmDelete by remember { mutableStateOf(false) }
-    var address by remember {
+    var address by rememberSaveable {
         mutableStateOf(
             initial?.let { host ->
                 if (host.viaSsh) {
@@ -1104,7 +1124,7 @@ internal fun HostDialog(
             } ?: "",
         )
     }
-    var sshUser by remember { mutableStateOf(initial?.sshUser.orEmpty()) }
+    var sshUser by rememberSaveable { mutableStateOf(initial?.sshUser.orEmpty()) }
     var password by remember { mutableStateOf(initial?.sshPassword.orEmpty()) }
     var privateKey by remember { mutableStateOf(initial?.sshPrivateKey.orEmpty()) }
     var passphrase by remember { mutableStateOf(initial?.sshPassphrase.orEmpty()) }

@@ -192,6 +192,9 @@ dependencies {
     // The terminal screen's own controls, driven on a device: see FullScreenTest.
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    // The fake Rex the scenarios in core run on, for the screen tests that connect: see LaunchTest.
+    testImplementation(testFixtures(project(":core")))
+    androidTestImplementation(testFixtures(project(":core")))
     // The empty activity the Compose test rule hosts its content in is declared in
     // src/debug/AndroidManifest.xml, not by ui-test-manifest: that one is exported, and the debug
     // APK is the one people install.

@@ -204,6 +204,9 @@
     <string name="action_full_screen">Full screen</string>
     <string name="action_exit_full_screen">Exit full screen</string>
     <string name="controls_title">Terminal controls</string>
+    <string name="reopen_last_tab">Reopen the last tab on launch</string>
+    <string name="reopen_last_tab_on">On: every launch goes back to it</string>
+    <string name="reopen_last_tab_off">Off: only when Android closed the app on it</string>
     <string name="controls_group_gestures">Gestures</string>
     <string name="controls_group_keys">Key bar</string>
     <string name="gesture_tap">Tap</string>
