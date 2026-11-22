@@ -83,6 +83,15 @@ interface RexUnderTest : AutoCloseable {
 
     /** A network outage: the phone's connections drop and it resumes. */
     fun drop(phone: PocketSession) = phone.reconnectNow()
+
+    /**
+     * The program in [block] exits with [code]: on a real Rex its shell is told to, once it has run
+     * a while - Rex keeps the pane of a program that fails within 250 ms of starting.
+     */
+    suspend fun exit(desk: Desk, sid: String, block: String, code: Int) {
+        kotlinx.coroutines.delay(1_000)
+        desk.type(sid, block, "exit $code\n")
+    }
 }
 
 /** A real Rex listening without TLS on REX_TEST_HOST:REX_TEST_PORT, 127.0.0.1:7297 by default. */
@@ -108,6 +117,8 @@ class FakeRexUnderTest : RexUnderTest {
     override val endpoint get() = rex.endpoint
 
     override fun drop(phone: PocketSession) = rex.drop(phone.state.value.clientId!!)
+
+    override suspend fun exit(desk: Desk, sid: String, block: String, code: Int) = rex.exit(block, code)
 
     override fun close() = rex.close()
 }

@@ -48,6 +48,32 @@ abstract class PaneLifecycleScenarios {
     }
 
     @Test
+    fun theProgramInTheShownTabExitsAndTheNoteSaysSo() = scenario {
+        val (sid, tabs) = desk.newSession(tabs = 2)
+        val (window2, block2) = tabs[1]
+        phone.openSession(sid, windowId = window2)
+        showsAndHolds(sid, block2)
+
+        // Rex tells child_exited before the pane's block_closed and the tab's window_closed.
+        rex.exit(desk, sid, block2, 3)
+        val closed = until("the closed note") { it.closed != null }.closed
+        assertEquals(ClosedPane(sid, block2, tabClosed = true, exit = PaneExit(3, "exit status 3")), closed)
+        quietFor(500)
+    }
+
+    @Test
+    fun theProgramInTheShownPaneOfASplitEndsWell() = scenario {
+        val (sid, tabs) = desk.newSession(tabs = 1)
+        val split = desk.split(sid, tabs[0].second)
+        phone.openSession(sid, rememberedBlock = split)
+        showsAndHolds(sid, split)
+
+        rex.exit(desk, sid, split, 0)
+        val closed = until("the closed note") { it.closed != null }.closed
+        assertEquals(ClosedPane(sid, split, tabClosed = false, exit = PaneExit(0, null)), closed)
+    }
+
+    @Test
     fun theDeskClosesTheShownTabAndThePhoneOpensAnotherTabFromTheList() = scenario {
         val (sid, tabs) = desk.newSession(tabs = 3)
         phone.openSession(sid, windowId = tabs[1].first)

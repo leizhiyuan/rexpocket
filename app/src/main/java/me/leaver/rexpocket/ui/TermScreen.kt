@@ -1008,8 +1008,14 @@ private fun ClosedPaneNote(
             modifier = Modifier.widthIn(max = 360.dp),
         )
         Spacer(Modifier.height(8.dp))
+        val exit = closed.exit
         Text(
-            stringResource(R.string.closed_body),
+            when {
+                exit == null -> stringResource(R.string.closed_body_elsewhere)
+                exit.code >= 0 -> stringResource(R.string.closed_body_exited, exit.code)
+                // No code: a signal ended it, and Rex says which.
+                else -> stringResource(R.string.closed_body_ended, exit.error ?: "-1")
+            },
             color = Colors.muted,
             fontSize = TextStyles.label,
             textAlign = TextAlign.Center,

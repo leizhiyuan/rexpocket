@@ -202,7 +202,9 @@
     <string name="pane_none_body">Choose a tab on the left: its terminal opens here, and the list stays beside it.</string>
     <string name="closed_tab_title">This tab was closed</string>
     <string name="closed_pane_title">This pane was closed</string>
-    <string name="closed_body">It was closed on the desktop or another device, or the program in it exited. Nothing you type goes anywhere until you choose what to show.</string>
+    <string name="closed_body_elsewhere">It was closed on the desktop or another device. Nothing you type goes anywhere until you choose what to show.</string>
+    <string name="closed_body_exited">The program in it exited (code %1$d). Nothing you type goes anywhere until you choose what to show.</string>
+    <string name="closed_body_ended">The program in it ended (%1$s). Nothing you type goes anywhere until you choose what to show.</string>
     <string name="closed_show">Show %1$s</string>
     <string name="closed_sessions">Back to sessions</string>
     <string name="empty_session_title">No tabs in this session</string>

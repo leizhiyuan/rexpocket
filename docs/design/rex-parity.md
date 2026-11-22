@@ -66,7 +66,7 @@ own connection) and keeps the welcome's client id, reconnect token, `resumed`, `
 | `terminal.program_status_changed` (`id`, `record`, `reason`) | used: Activity, tab dots, alerts. `reason` is always `report` (verified on preview.22 / api 19) and is not read; the record's `updated_at` gives Activity its ages |
 | `terminal.program_status_removed` (`ids`, `reason`) | **was ignored, now used** (this change): Rex drops working and blocked records when the program exits or the shell prompts again (docs:program-status, "Lifetime"), and a `clear` removes records; the phone kept them, so a pane stayed "running" |
 | `terminal.pwd_changed`, `terminal.process_changed`, `terminal.title_changed` | used |
-| `terminal.child_exited` (`exit_code`, `error`) | ignored |
+| `terminal.child_exited` (`exit_code`, `error`) | used: the closed note says the program exited, with its code, when the pane closes within 5 s of it; otherwise that it was closed on another device |
 | `terminal.clipboard_written` (`text`, `id`, `bytes`) | used: an OSC 52 copy goes on the phone's clipboard, from the pane on screen while the app is in front (`PocketSession.copies`); when `text` is left out the copy is read with `clipboard_read` |
 | `terminal.bell`, `terminal.desktop_notification` (`title`, `body`), `terminal.progress_report` (`state`, `progress`) | ignored |
 
@@ -214,6 +214,13 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
   program that reports `state=error`, which then outlives its exit. A shell pane's program exiting
   closes the pane (and its tab, if it was the last), unless it failed within 250 ms (`exit.
   quick_exit_threshold_ms`) or the block was made with `exit.on_completion: false`.
+- **The order of a pane closed by its program's exit.** `program_status_removed` (reason
+  `child_exited`, for the records it drops), then `child_exited`, then `block_closed`, then - for a
+  tab's last pane - `window_closed`, (`active_window_changed` when it was the active tab) and
+  `session_view_changed`. So `child_exited` comes before the pane's and the tab's closed events,
+  and the phone knows why the pane went by the time it reads the view again (`RexShapeTest`, "the
+  program in a tab of one pane exits with 0"; `PaneLifecycleScenarios.theProgramInTheShownTabExits…`).
+  `exit 0` gives `{exit_code: 0}` with no `error`.
 - **OSC 52.** `printf '\e]52;c;%s\a' $(printf hi | base64)` in a pane: every client that may see
   the pane gets `block_event` `clipboard_written` `{text: "hi", id, bytes: 2}` (at the app's API
   revision 7 too), and `clipboard_read` (`{}` args: the newest copy) answers `{id, data, total, eof:

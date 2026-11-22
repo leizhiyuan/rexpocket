@@ -105,7 +105,19 @@ enum class Holder { Phone, Desk }
  * whole tab went with it. The view has already moved to what Rex shows instead; the screen holds
  * that back, so nobody types into a pane they did not pick, until the person moves on.
  */
-data class ClosedPane(val sessionId: String, val blockId: String, val tabClosed: Boolean)
+data class ClosedPane(
+    val sessionId: String,
+    val blockId: String,
+    val tabClosed: Boolean,
+    /** How its program ended, when that is what closed it; null when it was closed on another device. */
+    val exit: PaneExit? = null,
+)
+
+/**
+ * Rex's `terminal.child_exited` for a pane: the program's exit [code] (-1 when it has none, as when
+ * a signal ended it) and Rex's words for a failure, such as `exit status 3`.
+ */
+data class PaneExit(val code: Int, val error: String?)
 
 /** A pane's output as text; [cut] when it was longer than asked for and only its newest part is here. */
 data class PaneText(val text: String, val cut: Boolean)
@@ -183,6 +195,12 @@ class PocketSession(
      * place is its own; Rex's focus is left to the desktop.
      */
     private val places = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /**
+     * The last `child_exited` of each pane, and when it came. Rex sends it before the pane's
+     * `block_closed` (and its tab's `window_closed`), so the closed note can say the program exited.
+     */
+    private val exits = java.util.concurrent.ConcurrentHashMap<String, Pair<PaneExit, Long>>()
 
     /** Panes Rex reported on while a read of them was in flight; that read is older and must not win. */
     private val reportedDuringRead: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
@@ -1040,6 +1058,11 @@ class PocketSession(
                 publishStatus()
             }
             "clipboard_written" -> onCopied(block, body)
+            "child_exited" -> {
+                val now = clock()
+                exits.values.removeIf { now - it.second > EXIT_CLOSES_MS }
+                exits[block] = PaneExit(body.optInt("exit_code", -1), body.optNullableString("error")) to now
+            }
         }
     }
 
@@ -1287,7 +1310,10 @@ class PocketSession(
         // the phone closed the pane itself. [forgetClosedHere] drops it once the view has it gone.
         if (shown.id in closingHere) return st.closed
         val tab = before.activeWindow()?.id
-        return ClosedPane(next.sessionId, shown.id, tabClosed = next.windows.none { it.id == tab })
+        // A program that ended a while ago left its pane open (it failed at once, or the pane keeps
+        // its program's end on screen); then it was closed by someone, not by the exit.
+        val exit = exits[shown.id]?.takeIf { clock() - it.second <= EXIT_CLOSES_MS }?.first
+        return ClosedPane(next.sessionId, shown.id, tabClosed = next.windows.none { it.id == tab }, exit = exit)
     }
 
     /**
@@ -1825,6 +1851,9 @@ private const val PANE_RETRY_MAX_MS = 5_000L
  * half-minute a dead socket takes to be noticed otherwise.
  */
 private const val LIVENESS_MS = 4_000L
+
+/** How soon after its program's exit a pane closing is taken to be closed by that exit. */
+private const val EXIT_CLOSES_MS = 5_000L
 
 /** The largest copy put on the phone's clipboard: Android hands a clip to other apps through Binder, which takes about 1 MB. */
 private const val MAX_COPY_BYTES = 512 * 1024L
