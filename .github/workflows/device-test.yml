@@ -91,6 +91,7 @@ jobs:
               me.leaver.rexpocket.ui.TerminalViewTest \
               me.leaver.rexpocket.ui.TerminalAccessibilityTest \
               me.leaver.rexpocket.ui.FollowInputTest \
+              me.leaver.rexpocket.ui.KeyboardShiftTest \
               me.leaver.rexpocket.ui.FullScreenTest \
               me.leaver.rexpocket.ui.KeyBarLayoutInstrumentedTest \
               me.leaver.rexpocket.ui.ArrangeKeysTest \

@@ -144,6 +144,17 @@ internal class TerminalView(context: Context) : View(context) {
      */
     var onCursorRow: ((topPx: Int?) -> Unit)? = null
 
+    /**
+     * The bottom of what the program has drawn on the live screen, in this view's pixels, when that
+     * stops short of the pane's last row: the cursor's row, or a lower one that has something on it.
+     * Null when the drawing reaches the last row, or on the alternate screen, where a full-screen
+     * program owns every row. Reported with [onCursorRow], and not while the pane is scrolled back.
+     * The screen reads it so the keyboard moves a short screen - a new shell, a few prompts - only
+     * as far as its last row needs, and not up to the cursor's row.
+     */
+    var onDrawnBottom: ((bottomPx: Int?) -> Unit)? = null
+
+    private var drawnBottom: Int? = null
     private var cursorTop: Int? = null
     private var cursorReported = false
     private var cursorGonePending = false
@@ -647,11 +658,21 @@ internal class TerminalView(context: Context) : View(context) {
                 tapClock.removeCallbacks(cursorGone)
                 cursorGonePending = false
             }
+            reportDrawnBottom(frame)
             reportCursor((frame.cursorY * cellHeight).roundToInt())
         } else if (cursorTop != null && !cursorGonePending) {
             cursorGonePending = true
             tapClock.postDelayed(cursorGone, CURSOR_GONE_MS)
         }
+    }
+
+    private fun reportDrawnBottom(frame: TerminalFrame) {
+        val visible = min(frame.rows, ceil(height / cellHeight).toInt())
+        val last = max(frame.cursorY, frame.lastDrawnRow(visible))
+        val bottom = if (frame.alternateScreen || last >= visible - 1) null else ((last + 1) * cellHeight).roundToInt()
+        if (bottom == drawnBottom) return
+        drawnBottom = bottom
+        onDrawnBottom?.invoke(bottom)
     }
 
     private fun reportCursor(top: Int?) {

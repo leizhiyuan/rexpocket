@@ -78,6 +78,8 @@ internal fun TerminalPane(
     onKeyboard: (TerminalImeView?) -> Unit = {},
     /** The top of the cursor's row in the pane, in pixels, or null while it shows none; see TerminalView.onCursorRow. */
     onCursorTop: (Int?) -> Unit = {},
+    /** The bottom of what is drawn on a short screen, or null when it reaches the last row; see TerminalView.onDrawnBottom. */
+    onDrawnBottom: (Int?) -> Unit = {},
     /** True while a keyboard other than the screen's is attached: the pane keeps the focus then. */
     hardwareKeyboard: Boolean = false,
     /** A horizontal swipe across the pane: forward means towards the next pane. */
@@ -107,6 +109,7 @@ internal fun TerminalPane(
     val currentKeyboard = rememberUpdatedState(onKeyboard)
     val currentFont = rememberUpdatedState(onFont)
     val currentCursor = rememberUpdatedState(onCursorTop)
+    val currentDrawn = rememberUpdatedState(onDrawnBottom)
     val currentShortcut = rememberUpdatedState(onShortcut)
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
 
@@ -170,6 +173,7 @@ internal fun TerminalPane(
             view.onSwipe = { forward -> currentSwipe.value?.invoke(forward) }
             // The screen keeps the cursor's row in view while the keyboard is up.
             view.onCursorRow = { currentCursor.value(it) }
+            view.onDrawnBottom = { currentDrawn.value(it) }
             view.onShortcut = { currentShortcut.value(it) }
         }
     }

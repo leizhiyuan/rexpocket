@@ -56,10 +56,22 @@ internal fun imeCover(): Int =
  * the pane never slides past the top of the cursor's row: it moves less, the cursor stays in view,
  * and what the keyboard then covers is the rows under the cursor, which such a screen has yet to fill.
  *
+ * And the bottom of the grid only matters when something is drawn there. A short screen - a new
+ * shell, a few prompts, the screen after a clear - ends at the cursor's row with nothing under it,
+ * so the pane moves only as far as that last drawn row needs to clear the keyboard: not at all
+ * while it is already above it. Sliding it by the cursor's row alone put the cursor on the top
+ * line and the prompts above it out of view, for empty rows the keyboard could have covered.
+ *
  * [cursorTopPx] is the top of the cursor's row in the pane, or null when no cursor shows.
+ * [drawnBottomPx] is the bottom of the last drawn row, at or under the cursor's, or null when the
+ * drawing reaches the last row of the grid (or a full-screen program owns it).
  */
-internal fun imeShift(imePx: Int, paneHeightPx: Int, cursorTopPx: Int? = null): Float {
+internal fun imeShift(imePx: Int, paneHeightPx: Int, cursorTopPx: Int? = null, drawnBottomPx: Int? = null): Float {
     if (imePx <= 0 || paneHeightPx <= 0) return 0f
     val full = minOf(imePx, paneHeightPx)
-    return (if (cursorTopPx == null) full else minOf(full, maxOf(0, cursorTopPx))).toFloat()
+    if (cursorTopPx == null) return full.toFloat()
+    val toCursor = minOf(full, maxOf(0, cursorTopPx))
+    if (drawnBottomPx == null) return toCursor.toFloat()
+    val needed = drawnBottomPx - (paneHeightPx - imePx)
+    return minOf(toCursor, maxOf(0, needed)).toFloat()
 }

@@ -39,8 +39,9 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   while the program is idle (`ctrl` then `c` always sends it). Hold
   `ctrl` for `C-c` `C-d` `C-z` `C-r` `C-l` `C-a` `C-e` `C-w` `C-j`. A split shows one pane at a
   time, with a bar to move between them. **The keyboard never resizes the terminal** - the pane
-  slides up under it by what it covers, but never past the cursor's row - so the line being typed
-  into stays in view, even a new shell's prompt on the top row - and a program in
+  slides up under it by what it covers, but never past the cursor's row, and a short screen only as
+  far as its last line needs - so the line being typed into stays in view, even a new shell's prompt
+  on the top row, with the prompts above it - and a program in
   it is never redrawn for the keyboard coming or going - and **a keyboard on the desk takes the dock
   away**, since it has every key on it. Paste, Send a file, the keyboard and Full screen stay in the menu.
 - **Links.** Long-press a link a program printed, or one it set as a hyperlink, to open, copy or

@@ -347,7 +347,9 @@ internal fun TermScreen(
     // Where the pane's cursor is, so the slide never takes its row out of view; a new pane starts
     // with none until it has drawn.
     var cursorTopPx by remember(focused?.id) { mutableStateOf<Int?>(null) }
-    val slide = imeShift(imeCover(), panePx, cursorTopPx)
+    // And where what it has drawn ends, so a short screen is moved only as far as it needs.
+    var drawnBottomPx by remember(focused?.id) { mutableStateOf<Int?>(null) }
+    val slide = imeShift(imeCover(), panePx, cursorTopPx, drawnBottomPx)
 
     // In full screen the phone's bars are hidden, so the pane reaches the edges; a swipe brings them
     // over it for a moment without taking room. A camera cutout keeps the text out from under it at
@@ -433,6 +435,7 @@ internal fun TermScreen(
                         onSession = { termSession = it },
                         onKeyboard = { keyboard = it },
                         onCursorTop = { cursorTopPx = it },
+                        onDrawnBottom = { drawnBottomPx = it },
                         hardwareKeyboard = hardwareKeys,
                         // A horizontal swipe on the pane moves to the pane beside it, as the dots
                         // under it say there is one.

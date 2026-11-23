@@ -237,7 +237,16 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
 - **Clear, Reset and the pane as text.** `block.method` `clear` and `reset` answer `{}`; Rex then
   sends the clients' streams what redoes it on their own terminals: for `clear`
   `ESC 7 ESC[H ESC[<n>M ESC 8 ESC[<n>A ESC[3J` (the lines above the cursor deleted, the scrollback
-  erased), for `reset` `ESC c`. `format` with `{format: "text", trim: true, unwrap: true}` answers
+  erased), for `reset` `ESC c`. `<n>` is the cursor's row in Rex's own terminal, at the size of
+  whoever holds the pane. With the phone holding it the phone's grid is that size and the result is
+  the desk's: the cursor's line on the top row. With the desk holding it the phone's grid keeps the
+  phone's size, and once the desk's screen has scrolled the phone's cursor is lower than Rex's: a
+  desk of 27 rows after 40 prompts sends `<n>` = 26 to a phone of 51 rows whose cursor is on row 39,
+  so the phone's prompt lands on row 13 with 13 older prompts still above it (worked through on a
+  VT model, not seen on a device). That difference is the phone's, from its grid not following the
+  desk's size, and is not fixed here. The rest is Rex's own and the desk shows it too (owner's Mac
+  screenshots, 2026-11): a stray empty line at the top after some clears, and prompts that come
+  back. `reset` leaves the cursor at the top left, on the desk and the phone alike, which is right. `format` with `{format: "text", trim: true, unwrap: true}` answers
   `{content}`; with `max_bytes` set and more left, `{content, id, total}` (no `eof`, though the docs
   say it is sent with `max_bytes`), and `blob_read` with that `id` and `offset` then answers `{id,
   data, total, eof}`.
