@@ -66,6 +66,8 @@ fun RexPocketApp(
     val tailnetPath by model.tailnetPath.collectAsState()
     val tailnetStage by model.tailnetStage.collectAsState()
     val connectProgress by model.connectProgress.collectAsState()
+    val lives by model.lives.collectAsState()
+    val sshKeyQuestion by model.sshKeyQuestion.collectAsState()
     val alerts by model.alerts.collectAsState()
     val alertPrefs by model.alertPrefs.collectAsState()
     val keyArrangement by model.keyArrangement.collectAsState()
@@ -153,13 +155,12 @@ fun RexPocketApp(
                     detail = detail,
                     hosts = hosts,
                     connected = model.host,
-                    state = pocket,
+                    lives = lives,
                     tailnet = tailnet,
                     tailnetStatus = tailnetStatus,
                     tailnetError = tailnetError,
                     tailnetPath = tailnetPath,
                     tailnetStage = tailnetStage,
-                    connectProgress = connectProgress,
                     onSignIn = signIn,
                     onTailnetRetry = model::restartTailnet,
                     opening = opening,
@@ -173,10 +174,10 @@ fun RexPocketApp(
                     onOpenPane = model::openPaneOn,
                     onNewSession = model::createSessionOn,
                     onNewTab = model::newTabOn,
-                    onManage = model::manage,
-                    onDisconnect = model::disconnect,
-                    onRetry = model::retryNow,
-                    onProbePath = model::probeTailnetPath,
+                    onManage = { hostId, action -> model.manage(action, hostId) },
+                    onDisconnect = { model.disconnect(it) },
+                    onRetry = { model.retryNow(it) },
+                    onProbePath = { model.probeTailnetPath(it) },
                     onSave = model::saveHost,
                     onDelete = model::deleteHost,
                     onTailnet = { tailnetOpen = true },
@@ -220,7 +221,7 @@ fun RexPocketApp(
                     onOpenTab = model::openTab,
                     watchPane = model::watchPane,
                     paneCopies = model::paneCopies,
-                    onRetry = model::retryNow,
+                    onRetry = { model.retryNow() },
                     onDismissNotice = model::dismissNotice,
                     onAct = model::act,
                     upload = upload,
@@ -309,17 +310,15 @@ fun RexPocketApp(
                 },
             )
         }
-        val sshHost = model.host
-        val sshProblem = pocket.problem
-        if (sshHost != null && sshHost.viaSsh && sshProblem != null &&
-            (sshProblem.trouble == Trouble.SshHostKeyUnknown || sshProblem.trouble == Trouble.SshHostKeyChanged)
-        ) {
+        // Any connected SSH host can ask, not only the one on screen: it is waiting for the answer.
+        sshKeyQuestion?.let { asking ->
+            val sshProblem = asking.state.problem ?: return@let
             SshHostKeyDialog(
-                host = sshHost,
+                host = asking.target,
                 changed = sshProblem.trouble == Trouble.SshHostKeyChanged,
                 fingerprint = sshProblem.detail.orEmpty(),
-                onTrust = { fingerprint -> model.trustSshHostKey(fingerprint) },
-                onCancel = { model.disconnect() },
+                onTrust = { fingerprint -> model.trustSshHostKey(asking.target.id, fingerprint) },
+                onCancel = { model.disconnect(asking.target.id) },
             )
         }
     }

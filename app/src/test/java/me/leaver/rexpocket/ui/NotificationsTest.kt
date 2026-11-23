@@ -16,6 +16,7 @@ import me.leaver.rexpocket.alerts.AlertActionReceiver
 import me.leaver.rexpocket.alerts.AlertTarget
 import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.core.AlertPrefs
+import me.leaver.rexpocket.data.HostStore
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -57,18 +58,26 @@ class NotificationsTest {
 
     private fun away() = compose.runOnUiThread { model.setForeground(false) }
 
+    /** A second host, on a Rex of its own, for the tests of two hosts at once. */
+    private val second by lazy { RexOnDesk(sessions = 1, hostId = "second-host", hostLabel = "second") }
+    private var secondUsed = false
+
     @After
     fun stop() {
-        if (::model.isInitialized) compose.runOnUiThread { model.disconnect() }
+        if (::model.isInitialized) compose.runOnUiThread { model.disconnectAll() }
         Alerts.enabled.value = false
         desk.close()
+        if (secondUsed) second.close()
     }
+
+    /** A pane's notification tag: its host and its id. */
+    private fun tag(block: String) = Alerts.tagOf(desk.host.id, block)
 
     /** The pane's notification, once it is up and [ok]. */
     private fun paneNotification(block: String, ok: (Notification) -> Boolean = { true }): Notification {
         var found: Notification? = null
         await(5_000) {
-            found = manager.activeNotifications.firstOrNull { it.tag == block && it.id == Alerts.PANE_ID }?.notification?.takeIf(ok)
+            found = manager.activeNotifications.firstOrNull { it.tag == tag(block) && it.id == Alerts.PANE_ID }?.notification?.takeIf(ok)
             found != null
         }
         return found!!
@@ -124,9 +133,9 @@ class NotificationsTest {
     }
 
     private fun gone(block: String) = try {
-        await(5_000) { manager.activeNotifications.none { it.tag == block && it.id == Alerts.PANE_ID } }
+        await(5_000) { manager.activeNotifications.none { it.tag == tag(block) && it.id == Alerts.PANE_ID } }
     } catch (e: AssertionError) {
-        throw AssertionError("still up: " + manager.activeNotifications.filter { it.tag == block }.map { it.notification.text() }, e)
+        throw AssertionError("still up: " + manager.activeNotifications.filter { it.tag == tag(block) }.map { it.notification.text() }, e)
     }
 
     @Test
@@ -148,6 +157,44 @@ class NotificationsTest {
         AlertActionReceiver().onReceive(app, filled)
         awaitInputs(listOf("paste $block main", "key $block +enter"))
         gone(block)
+    }
+
+    /**
+     * Two hosts connected while the app is away: each one's program raises its own notification,
+     * which names its host, and a Reply goes to the host it came from and to no other.
+     */
+    @Test
+    fun twoHostsAlertEachWithItsHostAndAReplyGoesToItsHost() {
+        val block = start().first()
+        secondUsed = true
+        compose.runOnUiThread {
+            HostStore(app).upsert(second.host)
+            model.connect(second.host)
+        }
+        await(15_000) { model.lives.value[second.host.id]?.state?.let { it.phase == me.leaver.rexpocket.core.Phase.Live && second.ids[0] in it.views } == true }
+        val otherBlock = model.lives.value.getValue(second.host.id).state.views.getValue(second.ids[0]).allBlocks().first().id
+        away()
+        desk.rex.report(block, "blocked", kind = "question", app = "claude", msg = "First?")
+        second.rex.report(otherBlock, "blocked", kind = "question", app = "codex", msg = "Second?")
+        val first = paneNotification(block)
+        var other: Notification? = null
+        await(5_000) {
+            other = manager.activeNotifications.firstOrNull { it.tag == Alerts.tagOf(second.host.id, otherBlock) && it.id == Alerts.PANE_ID }?.notification
+            other != null
+        }
+        assertEquals("desk", first.extras.getCharSequence(Notification.EXTRA_SUB_TEXT).toString())
+        assertEquals("second", other!!.extras.getCharSequence(Notification.EXTRA_SUB_TEXT).toString())
+
+        val reply = other!!.actionNamed(app.getString(me.leaver.rexpocket.R.string.alerts_reply))!!
+        val input = reply.remoteInputs.single()
+        val filled = Intent(sent(reply.actionIntent))
+        RemoteInput.addResultsToIntent(arrayOf(input), filled, Bundle().apply { putCharSequence(input.resultKey, "yes") })
+        AlertActionReceiver().onReceive(app, filled)
+        await(5_000) { second.rex.inputs.toList() == listOf("paste $otherBlock yes", "key $otherBlock +enter") }
+        assertTrue("the first host got input meant for the second: ${desk.rex.inputs}", desk.rex.inputs.isEmpty())
+        // The first host's notification is still up; only the answered one went.
+        await(5_000) { manager.activeNotifications.none { it.tag == Alerts.tagOf(second.host.id, otherBlock) } }
+        assertEquals(1, manager.activeNotifications.count { it.tag == tag(block) && it.id == Alerts.PANE_ID })
     }
 
     @Test
@@ -189,7 +236,7 @@ class NotificationsTest {
         desk.rex.report(block, "done", msg = "built")
         desk.rex.report(other, "error", msg = "crashed")
         assertEquals(Alerts.CHANNEL_ATTENTION, paneNotification(other).channelId)
-        assertEquals(0, manager.activeNotifications.count { it.tag == block })
+        assertEquals(0, manager.activeNotifications.count { it.tag == tag(block) })
     }
 
     @Test
@@ -203,7 +250,7 @@ class NotificationsTest {
         desk.rex.report(block, "blocked", kind = "permission", msg = "Bash: rm -rf build")
         val status = paneNotification(block) { it.channelId == Alerts.CHANNEL_ATTENTION }
         assertTrue(status.text(), status.text().endsWith("Bash: rm -rf build"))
-        assertEquals(1, manager.activeNotifications.count { it.tag == block })
+        assertEquals(1, manager.activeNotifications.count { it.tag == tag(block) })
     }
 
     @Test
@@ -236,6 +283,6 @@ class NotificationsTest {
         compose.runOnUiThread { model.setAlertPrefs(AlertPrefs()) }
         desk.rex.bell(other)
         pause(300)
-        assertEquals(0, manager.activeNotifications.count { it.tag == other })
+        assertEquals(0, manager.activeNotifications.count { it.tag == tag(other) })
     }
 }

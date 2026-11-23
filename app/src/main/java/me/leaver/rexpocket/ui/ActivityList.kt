@@ -41,7 +41,7 @@ import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.activityAge
 import me.leaver.rexpocket.core.activitySections
 
-// The eye's view: the connected host's tabs with a program that reported its status, grouped by
+// The eye's view: each connected host's tabs with a program that reported its status, grouped by
 // that status in Rex's priority order (Waiting, Failed, Done, Running), as Rex's Activity sidebar
 // groups them. See docs/design/rex-parity.md for what comes from Rex and what does not.
 
@@ -89,10 +89,12 @@ internal fun activityRowTag(windowId: String) = "activity-row-$windowId"
 internal fun LazyListScope.activityItems(
     sections: List<ActivitySection>,
     state: PocketState,
+    /** Each host's rows have their own keys: two hosts list the same groups. */
+    keyPrefix: String = "",
     onOpen: (ActivityItem) -> Unit,
 ) {
     sections.forEachIndexed { index, section ->
-        item(key = "activity-${section.group.name}") {
+        item(key = "activity-$keyPrefix-${section.group.name}") {
             Text(
                 activityGroupName(section.group),
                 color = Colors.muted,

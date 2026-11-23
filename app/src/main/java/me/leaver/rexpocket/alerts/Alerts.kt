@@ -108,7 +108,10 @@ object Alerts {
         return intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
-    /** Starts watching [host]; called while the app is on screen, which is when Android allows it. */
+    /**
+     * Starts watching [host] (the connected hosts' names); called while the app is on screen, which
+     * is when Android allows it, and again when the connected hosts change.
+     */
     fun watch(context: Context, host: String) {
         ContextCompat.startForegroundService(context, Intent(context, WatchService::class.java).putExtra(EXTRA_HOST, host))
     }
@@ -127,7 +130,7 @@ object Alerts {
         val open = Intent(context, MainActivity::class.java)
             .setData(Uri.Builder().scheme(SCHEME).authority("open").appendPath(token).build())
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        val tap = PendingIntent.getActivity(context, target.blockId.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val tap = PendingIntent.getActivity(context, tagOf(target).hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val text = note ?: alert.text
         val group = groupOf(target)
         val builder = NotificationCompat.Builder(context, channelOf(alert.kind))
@@ -168,23 +171,24 @@ object Alerts {
                     .build(),
             )
         }
-        posted[target.blockId] = alert
+        posted[tagOf(target)] = alert
         val manager = NotificationManagerCompat.from(context)
-        manager.notify(target.blockId, PANE_ID, builder.build())
+        manager.notify(tagOf(target), PANE_ID, builder.build())
         summarize(context, group, alert)
     }
 
     /** The pane no longer waits, or the person went to it: its alert has said what it had to. */
-    fun settle(context: Context, blockId: String) {
-        NotificationManagerCompat.from(context).cancel(blockId, PANE_ID)
-        val gone = posted.remove(blockId) ?: return
+    fun settle(context: Context, hostId: String, blockId: String) {
+        val tag = tagOf(hostId, blockId)
+        NotificationManagerCompat.from(context).cancel(tag, PANE_ID)
+        val gone = posted.remove(tag) ?: return
         val group = groupOf(gone.target)
         if (posted.values.none { groupOf(it.target) == group }) NotificationManagerCompat.from(context).cancel(group, SUMMARY_ID)
     }
 
     /** Puts the pane's alert back up, quietly, saying [why] an action on it did not go through. */
-    fun failed(context: Context, blockId: String, why: String) {
-        val alert = posted[blockId] ?: return
+    fun failed(context: Context, hostId: String, blockId: String, why: String) {
+        val alert = posted[tagOf(hostId, blockId)] ?: return
         raise(context, alert, note = why)
     }
 
@@ -209,6 +213,14 @@ object Alerts {
 
     private fun groupOf(target: AlertTarget) = "${target.hostId}/${target.sessionId}"
 
+    /**
+     * A pane's notification tag: its host and its id, since two hosts - the same Rex saved twice,
+     * say - can have panes with the same id.
+     */
+    fun tagOf(hostId: String, blockId: String) = "$hostId/$blockId"
+
+    private fun tagOf(target: AlertTarget) = tagOf(target.hostId, target.blockId)
+
     private fun actionIntent(context: Context, target: AlertTarget, action: String, mutable: Boolean): PendingIntent {
         // Explicit, to a receiver nothing outside the app can reach; a reply's text is filled in by the system.
         val intent = Intent(context, AlertActionReceiver::class.java)
@@ -217,7 +229,7 @@ object Alerts {
             .putExtra(EXTRA_SESSION, target.sessionId)
             .putExtra(EXTRA_BLOCK, target.blockId)
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (mutable) PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_IMMUTABLE
-        return PendingIntent.getBroadcast(context, (target.blockId + action).hashCode(), intent, flags)
+        return PendingIntent.getBroadcast(context, (tagOf(target) + action).hashCode(), intent, flags)
     }
 
     /** The pane an alert's intent names, once; null for anything this process did not issue. */
@@ -309,7 +321,7 @@ class AlertActionReceiver : BroadcastReceiver() {
             try {
                 val handler = Alerts.actions
                 val sent = handler != null && withTimeoutOrNull(SEND_MS) { runCatching { handler(target, action) }.getOrDefault(false) } == true
-                if (sent) Alerts.settle(app, target.blockId) else Alerts.failed(app, target.blockId, app.getString(R.string.alerts_not_sent))
+                if (sent) Alerts.settle(app, target.hostId, target.blockId) else Alerts.failed(app, target.hostId, target.blockId, app.getString(R.string.alerts_not_sent))
             } finally {
                 pending?.finish()
             }

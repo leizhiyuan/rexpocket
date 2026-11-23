@@ -89,6 +89,9 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withTimeoutOrNull
@@ -99,11 +102,13 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.File
 
-// The app state: hosts, the tailnet node, and the one Rex connection the screens share.
+// The app state the screens share: hosts, the tailnet node, and which connected host the terminal
+// shows. The connections themselves are the process's ([Connections]); see docs/design/multi-host.md.
 
 /** What the session list is waiting on: one of its rows, or a session still being created. */
 sealed interface Opening {
-    data class Existing(val id: String) : Opening
+    /** A session of the host [hostId]: two hosts (the same Rex saved twice) can share session ids. */
+    data class Existing(val id: String, val hostId: String = "") : Opening
     data object New : Opening
 }
 
@@ -121,10 +126,17 @@ sealed interface Route {
 class RexViewModel @JvmOverloads constructor(
     app: Application,
     private val saved: SavedStateHandle = SavedStateHandle(),
-    /** The tailnet nodes; a test gives its own, since the real ones need the Go library. */
-    private val nodes: TailnetNodes = TailnetNodes.of(app),
+    /**
+     * The tailnet nodes; a test gives its own, since the real ones need the Go library. Null takes
+     * the process's: the nodes, like the connections, belong to [Connections], not to this screen.
+     */
+    tailnetNodes: TailnetNodes? = null,
 ) : AndroidViewModel(app) {
     private val store = HostStore(app)
+
+    /** Every connected host's connection, which outlives this model; see docs/design/multi-host.md. */
+    private val connections = Connections.of(app, tailnetNodes)
+    private val nodes: TailnetNodes get() = connections.nodes
 
     /** True when this process was started again after Android killed it while the terminal was on screen. */
     private val terminalWasOpen = saved.get<Boolean>(KEY_TERMINAL_OPEN) == true
@@ -137,18 +149,13 @@ class RexViewModel @JvmOverloads constructor(
     val updateChannel: StateFlow<UpdateChannel> = updater.channel
     private var updateJob: Job? = null
     val hosts = MutableStateFlow(store.list())
-    val tailnet = MutableStateFlow(store.tailnet())
+    val tailnet: MutableStateFlow<TailnetSettings> = connections.tailnet.also { it.value = store.tailnet() }
 
     /** The backends this build can run; see [TailnetNodes.of]. */
     val tailnetBackends: List<TailnetBackend> by lazy { nodes.available }
 
     /** The status of the backend that is selected, so the home screen follows the choice. */
-    val tailnetStatus: StateFlow<TailnetStatus> = combine(
-        tailnet,
-        combine(nodes.registered.map { backend -> nodes[backend].status.map { backend to it } }) { it.toMap() },
-    ) { settings, statuses ->
-        statuses[settings.backend] ?: statuses.getValue(TailnetBackend.Tailscale)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, TailnetStatus())
+    val tailnetStatus: StateFlow<TailnetStatus> = connections.tailnetStatus
 
     /**
      * Where the joined node is on its way to the network, as the home screen tells it: starting,
@@ -169,73 +176,39 @@ class RexViewModel @JvmOverloads constructor(
     }
 
     /**
-     * How far the connection to the open host has come, step by step, while it is on its way;
-     * null once it is live, and for a host that is not being connected.
+     * The host the terminal shows, or showed last: the one a session or tab was opened on, or the
+     * one connected last. The other connected hosts are on the home list, live, beside it.
      */
-    private val _connectProgress = MutableStateFlow<ConnectProgress?>(null)
-    val connectProgress: StateFlow<ConnectProgress?> = _connectProgress
+    private val focusId = MutableStateFlow<String?>(null)
+    private val focusedLink: StateFlow<Connections.Link?> = combine(focusId, connections.links) { id, links -> id?.let { links[it] } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    private val focused: Connections.Link? get() = connections[focusId.value]
 
-    /** Moves the connection to [host] on to [step]; a connection that is not on its way stays as it is. */
-    private fun progress(host: String, step: ConnectStep) {
-        while (true) {
-            val current = _connectProgress.value ?: return
-            if (current.host != host) return
-            val next = current.next(step, System.currentTimeMillis())
-            if (next === current) return
-            if (_connectProgress.compareAndSet(current, next)) {
-                Diagnostics.event(CONN_TAG, "connect step $step after ${current.step} ${next.took.last().second}ms")
-                return
-            }
-        }
-    }
+    /** Every connected host, live: its connection's state, its steps while connecting, its path. */
+    val lives: StateFlow<Map<String, HostLive>> = connections.lives
 
     /**
-     * The connection's state with its problem told from what the tailnet node knows, for a host on
-     * the tailnet: an offline device, a name the tailnet does not have, a port nothing listens on, a
-     * node that needs a sign-in. See [explainTailnetProblem].
+     * How far the connection to the focused host has come, step by step, while it is on its way;
+     * null once it is live, and for a host that is not being connected.
      */
-    private fun explained(st: PocketState, target: SavedHost): PocketState {
-        val problem = st.problem ?: return st
-        if (!target.viaTailscale || st.phase == Phase.Live) return st
-        val status = tailnetStatus.value
-        val dial = runCatching { nodeFor(tailnet.value.backend).dialError(target.host) }.getOrNull()
-        val better = explainTailnetProblem(problem, target.host, target.port, status.backendState, status.peers, status.peersKnown, dial)
-        return if (better == problem) st else st.copy(problem = better)
-    }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val connectProgress: StateFlow<ConnectProgress?> = focusedLink.flatMapLatest { it?.progress ?: flowOf(null) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** The node of [backend]: only one of them runs at a time. */
     private fun nodeFor(backend: TailnetBackend): TailnetNode = nodes[backend]
 
-    /** The node of the selected backend. */
-    private val activeNode: TailnetNode get() = nodeFor(tailnet.value.backend)
-
-    /** The credentials and settings a backend's node starts with. */
-    private fun configFor(settings: TailnetSettings, setupKey: String = ""): TailnetConfig = when (settings.backend) {
-        TailnetBackend.Tailscale -> TailscaleConfig(authKey = "", hostname = settings.hostname)
-        TailnetBackend.Netbird, TailnetBackend.NetbirdAddon -> NetbirdConfig(
-            setupKey = setupKey,
-            hostname = settings.hostname,
-            managementUrl = settings.managementUrl,
-        )
-    }
-
     /**
-     * How the open tailnet host is reached right now: direct, through a peer relay, or through a
+     * How the focused tailnet host is reached right now: direct, through a peer relay, or through a
      * DERP server. Null for a host on the phone's own network, and while it has not been measured.
      */
-    private val _tailnetPath = MutableStateFlow<TailnetPath?>(null)
-    val tailnetPath: StateFlow<TailnetPath?> = _tailnetPath
-    private var pathJob: Job? = null
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val tailnetPath: StateFlow<TailnetPath?> = focusedLink.flatMapLatest { it?.path ?: flowOf(null) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    /** Measures the path to the open host; a no-op unless that host goes through the tailnet. */
-    fun probeTailnetPath() {
-        val target = host?.takeIf { it.viaTailscale } ?: return
-        pathJob?.cancel()
-        pathJob = viewModelScope.launch {
-            val path = withContext(Dispatchers.IO) { activeNode.probePath(target.host) }
-            _tailnetPath.value = path
-            Diagnostics.event(CONN_TAG, "tailnet path to ${target.host}: $path")
-        }
+    /** Measures the path to [hostId] (the focused host by default); a no-op unless it goes through the tailnet. */
+    fun probeTailnetPath(hostId: String? = null) {
+        connections.probePath(hostId ?: focusId.value ?: return)
     }
     val route = MutableStateFlow<Route>(Route.Home)
 
@@ -307,8 +280,21 @@ class RexViewModel @JvmOverloads constructor(
         store.setFolds(next)
         folds.value = next
     }
-    private val _pocket = MutableStateFlow(PocketState())
-    val pocket: StateFlow<PocketState> = _pocket
+    /** The focused host's connection, as the terminal shows it; empty when no host is focused. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val pocket: StateFlow<PocketState> = focusedLink.flatMapLatest { it?.pocket ?: flowOf(PocketState()) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PocketState())
+
+    /** The focused host's state right now, without waiting for [pocket] to follow it. */
+    private val focusedState: PocketState get() = focused?.pocket?.value ?: PocketState()
+
+    /** A connected SSH host that waits for the person to confirm its host key, if any. */
+    val sshKeyQuestion: StateFlow<HostLive?> = connections.lives.map { lives ->
+        lives.values.firstOrNull { live ->
+            val trouble = live.state.problem?.trouble
+            live.target.viaSsh && (trouble == Trouble.SshHostKeyUnknown || trouble == Trouble.SshHostKeyChanged)
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val fontScale = MutableStateFlow(store.fontScale())
     private val fontRoot = File(app.filesDir, "terminal-fonts")
     private val fontFiles = FontCatalog.fonts.associate { it.id to FontFiles(fontRoot, it) }
@@ -367,20 +353,16 @@ class RexViewModel @JvmOverloads constructor(
     /** What the terminal's tap, double tap and long press do, and their times. */
     val gestures = MutableStateFlow(store.gestures())
     /** Which kinds of alert are on: the Notifications page's switches. */
-    val alertPrefs = MutableStateFlow(store.alertPrefs())
-    private val planner = AlertPlanner()
+    val alertPrefs: MutableStateFlow<AlertPrefs> = connections.alertPrefs.also { it.value = store.alertPrefs() }
 
-    /** This model's answer to a notification's Reply and Interrupt, while it holds the connection. */
-    private val alertActions: suspend (AlertTarget, AlertAction) -> Boolean = { target, action -> onAlertAction(target, action) }
-    var host: SavedHost? = null
-        private set
+    /** The focused host: the one whose terminal is on screen, or was last. */
+    val host: SavedHost? get() = focused?.target
 
-    private var session: PocketSession? = null
-    private var sshTunnel: SshTunnel? = null
+    private val session: PocketSession? get() = focused?.session
     private var foreground = true
-    private var sessionJob: Job? = null
-    private var watch: Job? = null
-    private var connectJob: Job? = null
+
+    /** Waits for a resumed connection to go back to its pane; see [resumeInto]. */
+    private var resumeJob: Job? = null
     private var tailnetJob: Job? = null
     private val _tailnetError = MutableStateFlow<TailnetFailure?>(null)
     val tailnetError: StateFlow<TailnetFailure?> = _tailnetError
@@ -388,14 +370,6 @@ class RexViewModel @JvmOverloads constructor(
     /** The session being opened or created from the list, shown as busy until it is on screen. */
     private val _opening = MutableStateFlow<Opening?>(null)
     val opening: StateFlow<Opening?> = _opening
-
-    /** Becomes the connection's session once it exists, so a tap before that can wait for it. */
-    private var sessionReady = CompletableDeferred<PocketSession>()
-
-    /** Wi-Fi to mobile data and back: redial at once instead of waiting for the old socket to die. */
-    private val network = NetworkWatcher(app) {
-        viewModelScope.launch { session?.reconnectNow() }
-    }.also { it.start() }
 
     init {
         // Kept for Android to hand back if it kills the process: see [terminalWasOpen].
@@ -421,14 +395,23 @@ class RexViewModel @JvmOverloads constructor(
                 failed = saved.takeIf { it != SYSTEM_FONT && face == null },
             )
         }
-        Alerts.actions = alertActions
+        // What is connected is what the list says: a host deleted or given a new address since
+        // these connections were made does not keep the old one.
+        connections.reconcile(store.list())
         // The watch notification's Stop turns alerts off from outside the app; the setting follows.
         viewModelScope.launch {
             Alerts.enabled.collect { on ->
                 Diagnostics.event(CONN_TAG, "alerts ${if (on) "on" else "off"}")
                 store.setAlerts(on)
-                session?.setWatching(on)
-                if (!on) Alerts.unwatch(app)
+            }
+        }
+        followFocus()
+        // Only a list a live connection read prunes the folds, never the cached one drawn while connecting.
+        viewModelScope.launch {
+            connections.lives.collect { lives ->
+                for ((id, live) in lives) {
+                    if (live.state.phase == Phase.Live && live.state.sessions.isNotEmpty()) pruneFolds(id, live.state.sessions.map { it.id })
+                }
             }
         }
         // The report a bug report needs follows the connection: which phase it reached, and why it
@@ -477,19 +460,24 @@ class RexViewModel @JvmOverloads constructor(
         alertPrefs.value = next
     }
 
+    /** Background alerts on or off; [Connections] starts the watch for every connected host. */
     fun setAlerts(on: Boolean) {
         Alerts.enabled.value = on
-        val open = host
-        if (on && open != null) Alerts.watch(getApplication(), open.label)
     }
 
+    /**
+     * The screen is going away. With Background alerts on the connections stay, since they are
+     * what the alerts come from (see docs/design/multi-host.md); otherwise they close, as before,
+     * and the hosts that were connected connect again at the next start.
+     */
     override fun onCleared() {
-        network.stop()
-        if (Alerts.actions === alertActions) Alerts.actions = null
-        Alerts.unwatch(getApplication())
-        // The pane goes back to the desktop's size; viewModelScope is already cancelled here.
-        disconnectQuiet()
-        nodes.all.forEach { it.stopAsync() }
+        connections.shown.value = null
+        if (!Alerts.enabled.value) {
+            // The panes go back to the desktop's size.
+            connections.disconnectAll(forget = false)
+            nodes.all.forEach { it.stopAsync() }
+            Alerts.unwatch(getApplication())
+        }
         super.onCleared()
     }
 
@@ -516,7 +504,7 @@ class RexViewModel @JvmOverloads constructor(
         _tailnetError.value = null
         tailnetJob = viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { nodeFor(settings.backend).start(configFor(settings, setupKey)) }
+                runCatching { nodeFor(settings.backend).start(connections.configFor(settings, setupKey)) }
                     .onFailure { _tailnetError.value = TailnetFailure(it.message) }
             }
         }
@@ -547,6 +535,7 @@ class RexViewModel @JvmOverloads constructor(
     }
 
     fun deleteHost(id: String) {
+        disconnect(id)
         store.delete(id)
         hosts.value = store.list()
         val current = folds.value
@@ -556,338 +545,122 @@ class RexViewModel @JvmOverloads constructor(
     }
 
     /**
-     * Remembers the SSH host key the person confirmed and connects again. An unknown key and a
-     * changed one take the same path: the dialog says which it was before this is called.
+     * Remembers the SSH host key the person confirmed for [hostId] and connects it again. An unknown
+     * key and a changed one take the same path: the dialog says which it was before this is called.
      */
-    fun trustSshHostKey(fingerprint: String) {
-        val current = host ?: return
+    fun trustSshHostKey(hostId: String, fingerprint: String) {
+        val current = connections[hostId]?.target ?: return
         if (!current.viaSsh || fingerprint.isBlank()) return
         val updated = current.copy(sshHostKey = fingerprint)
         saveHost(updated)
-        host = updated
         Diagnostics.event(CONN_TAG, "ssh host key confirmed for ${current.host}")
-        connect(updated, resume = resumeAgain())
+        connect(updated, resume = focusId.value == hostId && resumeAgain())
     }
 
     /**
-     * Connects and, when [resume] is set, goes back to the session and pane the app was showing
-     * before the process died. A plain connect stops at the session list.
+     * Connects [target] and, when [resume] is set, goes back to the session and pane the app was
+     * showing before the process died. A plain connect stops at the session list. Every other
+     * connected host stays connected; a host connected already starts over.
+     *
+     * [target] becomes the focused host unless the terminal shows another host's pane, which stays.
      */
     fun connect(target: SavedHost, resume: Boolean = false) {
-        disconnectQuiet()
-        host = target
-        store.setLastHost(target.id)
-        val previousSession = store.lastSession(target.id)
-        route.value = Route.Home
-        resumePending = resume
-        connectedToResume = resume
-        val settings = store.tailnet()
-        val endpoint = target.endpoint()
-        _connectProgress.value = null
-        if (target.viaTailscale && !settings.enabled) {
-            // The host is saved either way; without a joined node there is no route to it.
-            Diagnostics.event(CONN_TAG, "${target.label}: the tailnet is not joined")
-            _pocket.value = PocketState(
-                phase = Phase.Failed,
-                endpointLabel = endpoint.label(),
-                problem = Problem(Trouble.TailnetNotJoined, null),
-            )
-            return
+        val refocus = route.value != Route.Term || focusId.value == target.id || focused == null
+        if (focusId.value == target.id) {
+            cancelResume()
+            uploadJob?.cancel()
+            clearUpload()
         }
-        val viaTailscale = target.viaTailscale
-        Diagnostics.event(CONN_TAG, "connect ${endpoint.label()} tailnet=$viaTailscale ssh=${target.viaSsh} plaintext=${target.plaintext} resume=$resume")
-        // Draw the list the host had last time straight away; the live one replaces it below.
-        val cached = if (resume) emptyList() else store.cachedSessions(target.id)
-        _pocket.value = PocketState(
-            phase = Phase.Connecting,
-            endpointLabel = endpoint.label(),
-            sessions = cached,
-        )
-        if (Alerts.enabled.value) Alerts.watch(getApplication(), target.label)
-        _connectProgress.value = ConnectProgress(
-            host = target.host,
-            viaTailnet = viaTailscale,
-            step = if (viaTailscale) ConnectStep.StartTailnet else ConnectStep.Reach,
-            startedAt = System.currentTimeMillis(),
-        )
-        connectJob = viewModelScope.launch {
-            // A host on the phone's own network is dialed directly, and the tailnet node stays as it
-            // is: the home screen says the phone is in a tailnet, so that must not depend on which
-            // host happens to be open.
-            // The node has to be up before Rex is dialed, because the Rex connection itself is
-            // what goes through it. Joining the tailnet takes a moment on the first connect.
-            val node = nodeFor(settings.backend)
-            val socksPort = if (viaTailscale) {
-                val port = try {
-                    withContext(Dispatchers.IO) { node.start(configFor(settings)) }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    _pocket.value = PocketState(
-                        phase = Phase.Failed,
-                        endpointLabel = endpoint.label(),
-                        problem = Problem(Trouble.Tailnet, e.message),
-                    )
-                    return@launch
-                }
-                // The node reports Running only once its WireGuard session is up; dialing before
-                // that just gets a SOCKS failure, which looks like a broken tunnel.
-                val settled = withTimeoutOrNull(NODE_READY_MS) {
-                    node.status.first {
-                        it.backendState in setOf("Running", "NeedsLogin", "NeedsMachineAuth", "Stopped")
-                    }
-                }
-                // Running comes before the first netmap, and a MagicDNS name dialed before the
-                // netmap lists that peer fails in the node's DNS: that was the SOCKS error the first
-                // open showed for a moment. Waiting for the peer costs nothing once it is known.
-                if (settled?.backendState == "Running") {
-                    progress(target.host, ConnectStep.FindPeer)
-                    // A node that has its device list and no such name is not going to learn it in
-                    // the next ten seconds: dial soon, and let the failure say the name is unknown.
-                    val wait = if (node.status.value.peersKnown) PEER_LISTED_MS else PEER_READY_MS
-                    if (!node.awaitPeer(target.host, wait)) {
-                        Diagnostics.event(CONN_TAG, "${target.host} is not in the netmap yet; dialing anyway")
-                    }
-                }
-                progress(target.host, ConnectStep.Reach)
-                port
+        val link = connections.connect(target, resume = resume)
+        if (refocus) {
+            focus(target.id)
+            route.value = Route.Home
+            if (resume) {
+                resumeOn(link)
             } else {
-                0
+                resumePending = false
+                connectedToResume = false
             }
-            // A node in another app (the Netbird add-on) has no proxy: it dials for the connection.
-            val dialer = if (viaTailscale) node.dialer else null
-            val trace = { line: String -> if (BuildConfig.DEBUG) Log.i(CONN_TAG, line) }
-            // The SSH tunnel is per host and outlives a reconnect attempt: only the channels under it
-            // come and go. Every Rex connection of this host goes through the same route.
-            val ssh = if (target.viaSsh) {
-                SshTunnel(
-                    SshSettings(
-                        host = target.host,
-                        port = target.port,
-                        user = target.sshUser,
-                        credentials = SshCredentials(
-                            password = target.sshPassword.takeIf { it.isNotEmpty() },
-                            privateKey = target.sshPrivateKey.takeIf { it.isNotEmpty() },
-                            passphrase = target.sshPassphrase.takeIf { it.isNotEmpty() },
-                        ),
-                        hostKey = target.sshHostKey.takeIf { it.isNotEmpty() },
-                        socksPort = socksPort,
-                        dialer = dialer,
-                    ),
-                    trace,
-                ).also { sshTunnel = it }
-            } else {
-                null
-            }
-            val httpFactory: () -> OkHttpClient = { ssh?.http() ?: RexClient.defaultHttp(socksPort, dialer) }
-            val s = PocketSession(
-                endpoint,
-                httpFactory = httpFactory,
-                // The SSH client also carries the transport's own reason for a failure OkHttp hides.
-                clientFactory = { if (ssh != null) RexClient.forSsh(ssh) else RexClient(httpFactory()) },
-                // Uploads reserve a file on their own revision-11 connection, over the same route.
-                uploadClientFactory = {
-                    if (ssh != null) RexClient.forSsh(ssh, FileUpload.API_REVISION)
-                    else RexClient(httpFactory(), apiRevision = FileUpload.API_REVISION)
-                },
-                cachedSessions = cached,
-                trace = trace,
-            )
-            session = s
-            sessionReady.complete(s)
-            s.setActive(foreground)
-            s.setWatching(Alerts.enabled.value)
-            sessionJob = s.start(viewModelScope, previousSession)
-            watch = viewModelScope.launch { follow(s, target, if (resume) previousSession else null) }
+        }
+    }
+
+    /** Makes [hostId] the focused host, the one the terminal and the store's last host follow. */
+    private fun focus(hostId: String) {
+        if (focusId.value == hostId) return
+        if (focusId.value != null) {
+            // A file going to the other host's pane goes on; its pill is that pane's.
+            cancelResume()
+        }
+        focusId.value = hostId
+        store.setLastHost(hostId)
+    }
+
+    private fun cancelResume() {
+        resumeJob?.cancel()
+        resumeJob = null
+    }
+
+    /** Goes back to the pane remembered for [link]'s host once it is live, unless the person moved first. */
+    private fun resumeOn(link: Connections.Link) {
+        cancelResume()
+        resumePending = true
+        connectedToResume = true
+        val previousSession = store.lastSession(link.id)
+        resumeJob = viewModelScope.launch {
+            val s = link.ready.await()
+            s.state.first { it.phase == Phase.Live && it.sessions.isNotEmpty() }
+            resumeInto(link, s, previousSession)
         }
     }
 
     /**
-     * Everything that follows the connection's state, one flow per job: the screen shows every
-     * state, and the store only hears about what changed. Ends with the connection.
+     * What follows the focused host, which is what the terminal shows: the session and pane it
+     * showed, kept for the next start; a session gone from Rex taking the terminal back to the list;
+     * the pane on screen, whose news is seen as it comes.
      */
-    private suspend fun follow(s: PocketSession, target: SavedHost, resumeTo: String?) = coroutineScope {
-        val hostId = target.id
-        // The node's view of the host can change while the connection waits to retry - it signs in,
-        // the device comes online - so the problem is told again on either.
-        launch {
-            combine(s.state, tailnetStatus) { st, _ -> st }.collect { st ->
-                _pocket.value = explained(st, target)
-                // Rex answered the connection: the host was reached, and what is left is its sessions.
-                // (OkHttp's own socket events cannot tell: a WebSocket call drops its event listener.)
-                if (st.clientId != null && st.phase != Phase.Live) progress(target.host, ConnectStep.OpenRex)
-                if (st.phase == Phase.Live) {
-                    _connectProgress.value?.let { p ->
-                        Diagnostics.event(CONN_TAG, "connected in ${System.currentTimeMillis() - p.startedAt}ms: " + p.took.joinToString { "${it.first} ${it.second}ms" })
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun followFocus() {
+        viewModelScope.launch {
+            var lastSession: Pair<String, String>? = null
+            var lastPane: Triple<String, String, String>? = null
+            combine(focusedLink.flatMapLatest { l -> l?.pocket?.map { l to it } ?: flowOf(null) }, route) { pair, r -> pair to r }
+                .collect { (pair, r) ->
+                    val (link, st) = pair ?: run {
+                        connections.shown.value = null
+                        return@collect
                     }
-                    _connectProgress.value = null
-                }
-            }
-        }
-        // The session a resume goes back to is the one that was on the terminal: connecting selects
-        // one on its own (the remembered one, or Rex's first), and that one was never on screen.
-        launch {
-            combine(s.state, route) { st, r -> if (r == Route.Term) st.activeSessionId else null }
-                .filterNotNull().distinctUntilChanged()
-                .collect { store.setLastSession(hostId, it) }
-        }
-        launch {
-            // The list and whether it is Rex's come from one state: only a list a live connection
-            // read prunes the folds, never the cached one drawn while connecting.
-            s.state.map { it.sessions to (it.phase == Phase.Live) }.filter { it.first.isNotEmpty() }.distinctUntilChanged()
-                .collect { (sessions, live) ->
-                    store.setCachedSessions(hostId, sessions)
-                    if (live) pruneFolds(hostId, sessions.map { it.id })
-                }
-        }
-        // Only a pane that was on the terminal screen counts. Connecting already selects a session,
-        // and its Rex focus must not replace the pane remembered for it.
-        launch {
-            combine(s.state, route) { st, r -> if (r == Route.Term) shownPane(st) else null }
-                .filterNotNull().distinctUntilChanged()
-                .collect { (sid, block) -> store.setLastPane(hostId, sid, block, s.state.value.sessions.map { it.id }) }
-        }
-        // A session that is no longer on Rex, such as after Rex restarted, leaves nothing to show:
-        // back to the list rather than an empty terminal.
-        launch {
-            s.state.map { it.phase to it.activeSessionId }.distinctUntilChanged().collect { (phase, active) ->
-                if (phase == Phase.Live && active == null && route.value == Route.Term) route.value = Route.Home
-            }
-        }
-        // Measured once the connection is up, which is when Tailscale has had a chance to find a
-        // direct path; earlier it would almost always report the DERP fallback it starts on.
-        launch {
-            s.state.first { it.phase == Phase.Live }
-            delay(PATH_SETTLE_MS)
-            probeTailnetPath()
-        }
-        if (resumeTo != null) {
-            launch {
-                s.state.first { it.phase == Phase.Live && it.sessions.isNotEmpty() }
-                resumeInto(s, resumeTo)
-            }
-        }
-        if (BuildConfig.DEBUG) launch { logConnection(s) }
-        launch { raiseAlerts(s, hostId) }
-        launch { s.signals.collect { onSignal(s, hostId, it) } }
-    }
-
-    /**
-     * Turns the panes' status into alerts. Every change is noted, so a request already on screen is
-     * not news later; only one that arrives while the app is away is raised. An alert goes once its
-     * pane stops waiting, or once the person opens that pane. See docs/design/notifications.md.
-     */
-    private suspend fun raiseAlerts(s: PocketSession, hostId: String) {
-        val app = getApplication<Application>()
-        combine(s.state, route, alertPrefs) { st, r, p -> Triple(st, r, p) }.collect { (st, r, prefs) ->
-            // Away and watching: with alerts off, nothing keeps the connection up to tell anyway.
-            val away = !foreground && Alerts.enabled.value
-            for (move in planner.status(st.blockStatus, away, prefs)) {
-                when (move) {
-                    is AlertMove.Cancel -> Alerts.settle(app, move.block)
-                    is AlertMove.Post -> alertFor(app, st, hostId, move)?.let { Alerts.raise(app, it) }
-                }
-            }
-            if (r == Route.Term && foreground) shownPane(st)?.let { (_, block) -> seen(app, block) }
-        }
-    }
-
-    /** The person is looking at [block]: whatever its notification said, they can see it now. */
-    private fun seen(app: Application, block: String) {
-        planner.seen(block)
-        Alerts.settle(app, block)
-    }
-
-    /** A pane's bell or desktop notification: a buzz on screen, a notification while away. */
-    private fun onSignal(s: PocketSession, hostId: String, signal: PaneSignal) {
-        val app = getApplication<Application>()
-        val st = s.state.value
-        val prefs = alertPrefs.value
-        val away = !foreground && Alerts.enabled.value
-        when (signal) {
-            is PaneSignal.Bell -> {
-                val onScreen = foreground && route.value == Route.Term && shownPane(st)?.second == signal.blockId
-                when (planner.bell(signal.blockId, onScreen, away, prefs)) {
-                    BellMove.Vibrate -> Alerts.buzz(app)
-                    BellMove.Notify -> {
-                        val text = app.getString(R.string.alerts_bell)
-                        alertFor(app, st, hostId, AlertMove.Post(signal.blockId, AlertKind.Message, loud = true, bell = true), text)?.let { Alerts.raise(app, it) }
+                    val onTerm = r == Route.Term
+                    // Only a pane that was on the terminal screen counts: connecting selects a session
+                    // on its own, and its Rex focus must not replace the pane remembered for it.
+                    val shown = if (onTerm) shownPane(st) else null
+                    connections.shown.value = shown?.let { (sid, block) -> AlertTarget(link.id, sid, block) }
+                    if (onTerm) {
+                        st.activeSessionId?.let { sid ->
+                            if (lastSession != link.id to sid) {
+                                lastSession = link.id to sid
+                                store.setLastSession(link.id, sid)
+                            }
+                        }
+                        if (shown != null && lastPane != Triple(link.id, shown.first, shown.second)) {
+                            lastPane = Triple(link.id, shown.first, shown.second)
+                            store.setLastPane(link.id, shown.first, shown.second, st.sessions.map { it.id })
+                        }
+                        // A session that is no longer on Rex leaves nothing to show: back to the list.
+                        if (st.phase == Phase.Live && st.activeSessionId == null) route.value = Route.Home
                     }
-                    BellMove.Nothing -> Unit
                 }
-            }
-            is PaneSignal.Note -> {
-                val move = planner.message(signal.blockId, away, prefs) as? AlertMove.Post ?: return
-                val title = plainText(signal.title, max = 80)
-                val body = plainText(signal.body) ?: title ?: return
-                val text = if (title != null && title != body) "$title: $body" else body
-                alertFor(app, st, hostId, move, text)?.let { Alerts.raise(app, it) }
-            }
         }
-    }
-
-    /**
-     * The notification for [move]: titled by the pane and tab, which are the app's own words, so a
-     * program cannot pass itself off as another pane's (Program Status Protocol, Security). Its
-     * own words - the status's message, a notification's text - are the body, as plain text.
-     */
-    private fun alertFor(app: Application, st: PocketState, hostId: String, move: AlertMove.Post, message: String? = null): Alert? {
-        val block = move.block
-        val record = st.blockStatus[block]
-        val view = st.views.values.firstOrNull { v -> v.allBlocks().any { it.id == block } } ?: return null
-        val info = view.allBlocks().first { it.id == block }
-        val name = paneTitle(info, record, st.programs[block])
-        val text = message ?: run {
-            record ?: return null
-            val state = statusWordRes(record)?.let { app.getString(it) } ?: app.getString(R.string.alerts_failed)
-            plainText(record.msg)?.let { "$state: $it" } ?: state
-        }
-        val session = st.sessions.firstOrNull { it.id == view.sessionId }?.label ?: view.label
-        val busy = block in st.busy
-        return Alert(
-            target = AlertTarget(hostId, view.sessionId, block),
-            title = "$name · ${view.label}",
-            text = text,
-            host = host?.label.orEmpty(),
-            kind = move.kind,
-            loud = move.loud,
-            group = session,
-            // A credential is typed into the app, never into a notification that shows what was sent.
-            reply = when (move.kind) {
-                AlertKind.Waiting -> record?.kind != "auth"
-                AlertKind.Done, AlertKind.Message -> record?.takeIf { it.state == "blocked" }?.kind != "auth"
-                AlertKind.Failed -> false
-            },
-            interrupt = busy,
-        )
-    }
-
-    /** A notification's Reply or Interrupt, sent on the connection to the host it came from. */
-    private suspend fun onAlertAction(target: AlertTarget, action: AlertAction): Boolean {
-        val s = session ?: return false
-        if (host?.id != target.hostId) return false
-        // Android may have cut the connection while the app was away; it redials, so give it a moment.
-        withTimeoutOrNull(ACTION_CONNECT_MS) { s.state.first { it.phase == Phase.Live } } ?: return false
-        val sent = when (action) {
-            is AlertAction.Reply -> s.replyTo(target.sessionId, target.blockId, action.text)
-            AlertAction.Interrupt -> s.interrupt(target.sessionId, target.blockId)
-        }
-        if (sent) {
-            Diagnostics.event(CONN_TAG, "alert ${if (action is AlertAction.Reply) "reply" else "interrupt"} sent")
-            planner.seen(target.blockId)
-        }
-        return sent
     }
 
     /** Set once an alert has opened a pane, so the start-up resume does not replace it. */
     private var openedFromAlert = false
 
-    /** Opens the pane an alert names, connecting to its host first when another one is open. */
+    /** Opens the pane an alert names, connecting its host first when it is not connected. */
     fun openAlert(target: AlertTarget) {
         val saved = store.find(target.hostId) ?: return
         openedFromAlert = true
-        if (host?.id != saved.id || session == null) connect(saved)
-        enterSession(Opening.Existing(target.sessionId)) { openSession(target.sessionId, target.blockId) }
+        val link = connections.ensure(saved)
+        enterSession(link, Opening.Existing(target.sessionId, saved.id)) { openSession(target.sessionId, target.blockId) }
     }
 
     private fun shownPane(st: PocketState): Pair<String, String>? {
@@ -896,24 +669,11 @@ class RexViewModel @JvmOverloads constructor(
         return sid to block
     }
 
-    /** Connection diagnostics for `adb logcat -s RexPocketConn`: each phase change, and how long the first live state took. */
-    private suspend fun logConnection(s: PocketSession) {
-        val startedAt = SystemClock.elapsedRealtime()
-        var timedLive = false
-        s.state.map { it.phase to it.problem }.distinctUntilChanged().collect { (phase, problem) ->
-            Log.i(CONN_TAG, "phase=$phase problem=${problem ?: "-"}")
-            if (!timedLive && phase == Phase.Live) {
-                timedLive = true
-                Log.i(CONN_TAG, "first live after ${SystemClock.elapsedRealtime() - startedAt}ms")
-            }
-        }
-    }
-
     /**
      * Reopens the remembered session on its remembered pane; stays on the list if it is gone, and
      * stays wherever the person went if they did anything before the connection was up.
      */
-    private suspend fun resumeInto(s: PocketSession, sessionId: String?) {
+    private suspend fun resumeInto(link: Connections.Link, s: PocketSession, sessionId: String?) {
         if (!resumePending) return
         val target = sessionId?.takeIf { id -> s.state.value.sessions.any { it.id == id } }
         if (target == null) {
@@ -921,7 +681,7 @@ class RexViewModel @JvmOverloads constructor(
             return
         }
         try {
-            s.openSession(target, rememberedPane(target))
+            s.openSession(target, rememberedPane(link.id, target))
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -929,40 +689,42 @@ class RexViewModel @JvmOverloads constructor(
             return
         }
         // Opening took a round trip, and the person may have moved in it.
-        if (resumePending && route.value == Route.Home && _opening.value == null) route.value = Route.Term
+        if (resumePending && route.value == Route.Home && _opening.value == null && focusId.value == link.id) route.value = Route.Term
         resumePending = false
     }
 
-    private fun rememberedPane(sessionId: String): String? = host?.let { store.lastPane(it.id, sessionId) }
+    private fun rememberedPane(hostId: String, sessionId: String): String? = store.lastPane(hostId, sessionId)
 
     /**
-     * Opens a session on the pane the phone showed there last time, or, the first time and when
-     * that pane is gone, on the one Rex has focused, which is where the desktop is. Only that one
-     * pane is drawn; the tab bar and the pane strip move between the others.
+     * Opens a session of the focused host on the pane the phone showed there last time, or, the
+     * first time and when that pane is gone, on the one Rex has focused, which is where the desktop
+     * is. Only that one pane is drawn; the tab bar and the pane strip move between the others.
      */
-    fun openSession(id: String) = enterSession(Opening.Existing(id)) { openSession(id, rememberedPane(id)) }
+    fun openSession(id: String) {
+        val link = focused ?: return
+        enterSession(link, Opening.Existing(id, link.id)) { openSession(id, rememberedPane(link.id, id)) }
+    }
 
     /**
-     * Opens a session on [target] from the home list, connecting to that host first when it is not
-     * the one on screen. The row and the terminal both say *Opening* while it waits.
+     * Opens a session on [target] from the home list, connecting that host first when it is not
+     * connected. The row and the terminal both say *Opening* while it waits.
      */
     fun openSessionOn(target: SavedHost, id: String) {
-        if (host?.id != target.id) connect(target)
-        openSession(id)
+        val link = connections.ensure(target)
+        enterSession(link, Opening.Existing(id, target.id)) { openSession(id, rememberedPane(target.id, id)) }
     }
 
-    /** Makes a session on [target], connecting to it first when it is not the host on screen. */
+    /** Makes a session on [target], connecting it first when it is not connected. */
     fun createSessionOn(target: SavedHost) {
-        if (host?.id != target.id) connect(target)
-        createSession()
+        enterSession(connections.ensure(target), Opening.New) { createShell(null) }
     }
 
-    /** Opens one tab of [target]'s session, connecting to the host first when it is not on screen. */
+    /** Opens one tab of [target]'s session, connecting the host first when it is not connected. */
     fun openTabOn(target: SavedHost, sessionId: String, windowId: String) {
-        if (host?.id != target.id) connect(target)
+        val link = connections.ensure(target)
         // One open on the chosen tab, rather than opening the session and then switching tabs: each
         // step is a round trip, and the second one used to flash the session's other tab first.
-        enterSession(Opening.Existing(sessionId)) { openSession(sessionId, rememberedPane(sessionId), windowId) }
+        enterSession(link, Opening.Existing(sessionId, target.id)) { openSession(sessionId, rememberedPane(target.id, sessionId), windowId) }
     }
 
     /**
@@ -970,42 +732,47 @@ class RexViewModel @JvmOverloads constructor(
      * the pane whose program reported is the one on screen, not the tab's other pane.
      */
     fun openPaneOn(target: SavedHost, sessionId: String, windowId: String, blockId: String) {
-        if (host?.id != target.id) connect(target)
-        enterSession(Opening.Existing(sessionId)) { openSession(sessionId, blockId, windowId) }
+        val link = connections.ensure(target)
+        enterSession(link, Opening.Existing(sessionId, target.id)) { openSession(sessionId, blockId, windowId) }
     }
 
-    /** Opens a tab of the session on screen, or of another session of this host. */
+    /** Opens a tab of the session on screen, or of another session of the focused host. */
     fun openTab(sessionId: String, windowId: String) {
-        enterSession(Opening.Existing(sessionId)) { openSession(sessionId, rememberedPane(sessionId), windowId) }
+        val link = focused ?: return
+        enterSession(link, Opening.Existing(sessionId, link.id)) { openSession(sessionId, rememberedPane(link.id, sessionId), windowId) }
     }
 
-    /** Adds a tab to [target]'s session and shows it; connects to the host first when needed. */
+    /** Adds a tab to [target]'s session and shows it; connects the host first when needed. */
     fun newTabOn(target: SavedHost, sessionId: String) {
-        if (host?.id != target.id) connect(target)
-        enterSession(Opening.Existing(sessionId)) {
-            openSession(sessionId, rememberedPane(sessionId))
+        val link = connections.ensure(target)
+        enterSession(link, Opening.Existing(sessionId, target.id)) {
+            openSession(sessionId, rememberedPane(target.id, sessionId))
             newWindow()
         }
     }
 
-    /** The sessions this host had last time, for a host that is not the one on screen. */
+    /** The sessions this host had last time, for a host that is not connected. */
     fun cachedSessions(hostId: String): List<ListedSession> = store.cachedSessions(hostId)
 
-    /** Creates a shell session and shows it once Rex has made it, never the session before it. */
-    fun createSession(label: String? = null) = enterSession(Opening.New) { createShell(label) }
+    /** Creates a shell session on the focused host and shows it once Rex has made it. */
+    fun createSession(label: String? = null) {
+        val link = focused ?: return
+        enterSession(link, Opening.New) { createShell(label) }
+    }
 
     /**
-     * Runs [open] once the connection is up, then shows the terminal. A tap on the list from the
-     * cache, or while the tailnet is still coming up, waits for the connection instead of being
-     * dropped; the terminal only appears for the session that was asked for.
+     * Runs [open] once [link]'s connection is up, then shows the terminal on that host. A tap on the
+     * list from the cache, or while the tailnet is still coming up, waits for the connection instead
+     * of being dropped; the terminal only appears for the session that was asked for, and the host
+     * it is on becomes the focused one only then, so the pane on screen stays until it does.
      */
-    private fun enterSession(what: Opening, open: suspend PocketSession.() -> Unit) {
-        if (BuildConfig.DEBUG) Log.i(CONN_TAG, "open $what (busy=${_opening.value}, phase=${_pocket.value.phase})")
+    private fun enterSession(link: Connections.Link, what: Opening, open: suspend PocketSession.() -> Unit) {
+        if (BuildConfig.DEBUG) Log.i(CONN_TAG, "open $what (busy=${_opening.value}, phase=${link.pocket.value.phase})")
         if (_opening.value != null) return
         // A host that cannot be dialed at all (a tailnet host with no joined node) fails before a
         // connection exists; waiting for one would leave the row saying *Opening* forever.
-        if (_pocket.value.phase == Phase.Failed) return
-        val waiting = sessionReady
+        if (link.pocket.value.phase == Phase.Failed) return
+        val waiting = link.ready
         _opening.value = what
         val tappedAt = SystemClock.elapsedRealtime()
         viewModelScope.launch {
@@ -1014,12 +781,15 @@ class RexViewModel @JvmOverloads constructor(
                 s.awaitReady()
                 s.open()
                 if (BuildConfig.DEBUG) Log.i(CONN_TAG, "opened $what after ${SystemClock.elapsedRealtime() - tappedAt}ms")
-                if (session === s) route.value = Route.Term
+                if (connections[link.id] === link && link.session === s) {
+                    focus(link.id)
+                    route.value = Route.Term
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 if (BuildConfig.DEBUG) Log.i(CONN_TAG, "open $what failed: ${e.javaClass.simpleName}: ${e.message}")
-                session?.note(e.toProblem())
+                link.session?.note(e.toProblem())
             } finally {
                 if (_opening.value == what) _opening.value = null
             }
@@ -1037,11 +807,23 @@ class RexViewModel @JvmOverloads constructor(
         // A phone that has joined a tailnet keeps the node up: the Tailscale row is the honest
         // answer to "am I in the tailnet", and a host on a tailnet can then be dialed at once.
         if (tailnet.value.enabled) startTailnet(tailnet.value)
-        if (openedFromAlert || openedFromShare || route.value != Route.Home || session != null) return
-        val target = store.lastHost()?.let { store.find(it) } ?: return
+        if (openedFromAlert || openedFromShare || route.value != Route.Home || focusId.value != null) return
+        // Every host the person connected and did not disconnect, the one open last first.
+        val last = store.lastHost()?.let { store.find(it) }
+        val wanted = (listOfNotNull(last) + store.connectedHosts().mapNotNull { store.find(it) }).distinctBy { it.id }
+        if (wanted.isEmpty()) return
         val resume = terminalWasOpen || reopenLastTab.value
-        Diagnostics.event(CONN_TAG, "launch: ${if (resume) "back to the last tab" else "the list"} (killed on the terminal: $terminalWasOpen)")
-        connect(target, resume = resume)
+        Diagnostics.event(CONN_TAG, "launch: ${wanted.size} hosts, ${if (resume) "back to the last tab" else "the list"} (killed on the terminal: $terminalWasOpen)")
+        for (target in wanted.drop(1)) connections.ensure(target)
+        val first = wanted.first()
+        val existing = connections[first.id]?.takeIf { it.target == first }
+        if (existing != null) {
+            // Background alerts kept it connected while the screen was gone.
+            focus(first.id)
+            if (resume && last?.id == first.id) resumeOn(existing)
+        } else {
+            connect(first, resume = resume && last?.id == first.id)
+        }
     }
 
     /**
@@ -1077,17 +859,19 @@ class RexViewModel @JvmOverloads constructor(
     fun paneCopies(blockId: String): Flow<String> =
         session?.copies?.filter { it.blockId == blockId }?.map { it.text } ?: emptyFlow()
 
-    fun retryNow() {
+    /** Retries [hostId]'s connection now (the focused host's by default). */
+    fun retryNow(hostId: String? = null) {
+        val id = hostId ?: focusId.value ?: return
         Diagnostics.event(CONN_TAG, "retry asked for")
-        val open = host
-        val finished = sessionJob?.isCompleted ?: true
-        // A connection stopped by a wrong key or an unconfirmed host key has no loop left to wake.
-        // The retry starts a new one from the host as it is saved now, after an edit.
-        if (open != null && finished) {
-            connect(hosts.value.firstOrNull { it.id == open.id } ?: open, resume = resumeAgain())
+        val resume = id == focusId.value && resumeAgain()
+        val link = connections[id] ?: return
+        val finished = connections.fleet.member(id)?.job?.isCompleted ?: true
+        if (finished && id == focusId.value) {
+            // Connecting again from scratch: the same wish to go back to the terminal, or none.
+            connect(hosts.value.firstOrNull { it.id == id } ?: link.target, resume = resume)
             return
         }
-        session?.retryNow()
+        connections.retry(id, hosts.value.firstOrNull { it.id == id }, resume)
     }
 
     fun dismissNotice(id: Long) {
@@ -1100,10 +884,8 @@ class RexViewModel @JvmOverloads constructor(
      * the app was away.
      */
     fun setForeground(visible: Boolean) {
-        val returning = visible && !foreground
         foreground = visible
-        if (returning && host?.viaTailscale == true) viewModelScope.launch(Dispatchers.IO) { activeNode.resetNetwork() }
-        session?.setActive(visible)
+        connections.setForeground(visible)
     }
 
     /**
@@ -1155,7 +937,8 @@ class RexViewModel @JvmOverloads constructor(
                             append(known.host).append(':').append(known.port)
                             if (!known.viaSsh) append(if (known.plaintext) " · plaintext" else " · tls")
                             append(if (known.viaTailscale) " · tailnet" else " · local")
-                            append(if (known.id == open?.id) " · connected" else "")
+                            append(if (connections[known.id] != null) " · connected" else "")
+                            append(if (known.id == open?.id) " · focused" else "")
                         },
                     ),
                 )
@@ -1205,14 +988,29 @@ class RexViewModel @JvmOverloads constructor(
         return Diagnostics.report(getApplication(), facts, secrets, limit)
     }
 
-    fun disconnect() {
+    /**
+     * Disconnects [hostId] (the focused host by default) and keeps it disconnected at the next
+     * start; every other host stays connected.
+     */
+    fun disconnect(hostId: String? = null) {
+        val id = hostId ?: focusId.value ?: return
         Diagnostics.event(CONN_TAG, "disconnect")
-        disconnectQuiet()
-        Alerts.unwatch(getApplication())
-        store.setLastHost(null)
-        // The next tap on the host connects again; a host that is only on screen is not "on".
-        host = null
-        route.value = Route.Home
+        connections.disconnect(id)
+        if (focusId.value == id) {
+            cancelResume()
+            uploadJob?.cancel()
+            clearUpload()
+            _opening.value = null
+            focusId.value = null
+            route.value = Route.Home
+        }
+        // The next start focuses a host still connected, if there is one.
+        if (store.lastHost() == id) store.setLastHost(connections.links.value.keys.firstOrNull())
+    }
+
+    /** Disconnects every host. */
+    fun disconnectAll() {
+        connections.links.value.keys.toList().forEach { disconnect(it) }
     }
 
     /** Back from the terminal: the host list stays connected so its live sessions are still there. */
@@ -1233,18 +1031,17 @@ class RexViewModel @JvmOverloads constructor(
      */
     fun attachUpload(uri: Uri) {
         // The pane on screen now is the one the file is for, even if staging or the picker outlives it.
-        val sessionId = _pocket.value.activeSessionId ?: return
-        val blockId = _pocket.value.view?.focusedBlock()?.id ?: return
+        val sessionId = focusedState.activeSessionId ?: return
+        val blockId = focusedState.view?.focusedBlock()?.id ?: return
         val name = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "file"
-        startUploads(listOf(uri to name), sessionId, blockId)
+        startUploads(session ?: return, listOf(uri to name), sessionId, blockId)
     }
 
     /**
      * Sends [files] to one pane, one after another, through the pill. The first that fails stays on
      * the pill, and the ones after it are not sent.
      */
-    private fun startUploads(files: List<Pair<Uri, String>>, sessionId: String, blockId: String) {
-        val s = session ?: return
+    private fun startUploads(s: PocketSession, files: List<Pair<Uri, String>>, sessionId: String, blockId: String) {
         if (_upload.value?.running == true || files.isEmpty()) return
         uploadJob?.cancel()
         // A failure or an earlier sent file is done with; its staged copy goes too.
@@ -1344,7 +1141,10 @@ class RexViewModel @JvmOverloads constructor(
     }
 
     fun act(block: suspend PocketSession.() -> Unit) {
-        val s = session ?: return
+        act(session ?: return, block)
+    }
+
+    private fun act(s: PocketSession, block: suspend PocketSession.() -> Unit) {
         viewModelScope.launch {
             try {
                 s.block()
@@ -1356,10 +1156,11 @@ class RexViewModel @JvmOverloads constructor(
         }
     }
 
-    /** The home's session and tab sheets: on the connected host, without attaching the session. */
-    fun manage(action: HomeAction) {
+    /** The home's session and tab sheets: on [hostId] (the focused host by default), without attaching the session. */
+    fun manage(action: HomeAction, hostId: String? = null) {
         userActed()
-        act {
+        val s = connections[hostId ?: focusId.value]?.session ?: return
+        act(s) {
             when (action) {
                 is HomeAction.RenameSession -> renameSession(action.label, action.sessionId)
                 is HomeAction.NewTab -> newWindowIn(action.sessionId)
@@ -1391,7 +1192,7 @@ class RexViewModel @JvmOverloads constructor(
         val blockId = if (saved != null && sessionId != null) store.lastPane(saved.id, sessionId) else null
         val target = if (saved != null && sessionId != null && blockId != null) ShareTarget(saved.id, sessionId, blockId) else null
         _share.value = ShareOffer(request, target, choosing = target == null)
-        if (saved != null && (host?.id != saved.id || session == null)) connect(saved)
+        if (saved != null) shareConnect(saved)
     }
 
     /** Opens or closes the pane picker of the shared item's sheet. */
@@ -1404,12 +1205,16 @@ class RexViewModel @JvmOverloads constructor(
         val offer = _share.value ?: return
         _share.value = offer.copy(target = target, choosing = false)
         val saved = store.find(target.hostId) ?: return
-        if (host?.id != saved.id || session == null) connect(saved)
+        shareConnect(saved)
     }
 
-    /** The picker's host row: connects to it, so its sessions can be listed. */
+    /** The picker's host row: connects to it when it is not, and shows its sessions. */
     fun shareConnect(target: SavedHost) {
-        if (host?.id != target.id || session == null) connect(target)
+        connections.ensure(target)
+        if (focusId.value != target.id) {
+            focus(target.id)
+            route.value = Route.Home
+        }
     }
 
     fun cancelShare() {
@@ -1423,79 +1228,31 @@ class RexViewModel @JvmOverloads constructor(
     fun sendShare() {
         val offer = _share.value ?: return
         val target = offer.target ?: return
-        if (host?.id != target.hostId || _pocket.value.phase != Phase.Live) return
+        val link = connections[target.hostId] ?: return
+        if (link.pocket.value.phase != Phase.Live) return
         if (offer.request.files.any { (it.size ?: 0) > FileUpload.MAX_BYTES }) return
         _share.value = null
         val text = offer.request.text
-        enterSession(Opening.Existing(target.sessionId)) {
+        enterSession(link, Opening.Existing(target.sessionId, target.hostId)) {
             openSession(target.sessionId, target.blockId)
             if (!text.isNullOrEmpty()) paste(text, target.sessionId, target.blockId)
         }
-        startUploads(offer.request.files.map { it.uri to it.name }, target.sessionId, target.blockId)
+        val s = link.session ?: return
+        startUploads(s, offer.request.files.map { it.uri to it.name }, target.sessionId, target.blockId)
     }
 
     /** Set once something shared came in, so the start-up resume does not jump past its sheet. */
     private var openedFromShare = false
 
-    private fun disconnectQuiet() {
-        connectJob?.cancel()
-        connectJob = null
-        pathJob?.cancel()
-        _tailnetPath.value = null
-        _connectProgress.value = null
-        // A tap waiting for the old connection must not open anything on the next one.
-        sessionReady.cancel()
-        sessionReady = CompletableDeferred()
-        _opening.value = null
-        watch?.cancel()
-        watch = null
-        uploadJob?.cancel()
-        clearUpload()
-        val closing = session
-        val tunnel = sshTunnel
-        session = null
-        sshTunnel = null
-        sessionJob?.cancel()
-        _pocket.value = PocketState()
-        // The teardown waits for a disown round trip; leaving the screen must not wait with it, and it
-        // must still run when the view model itself is going away, so it is not on viewModelScope.
-        // The SSH session closes after that round trip, which may still need it.
-        if (closing != null) {
-            teardown.launch {
-                runCatching { closing.stop() }
-                tunnel?.close()
-            }
-        } else {
-            tunnel?.close()
-        }
-    }
 }
 
-private fun SavedHost.endpoint(): Endpoint = Endpoint(host, port, plaintext, sshUser = sshUser.takeIf { it.isNotBlank() })
-
 /**
- * Runs a session's teardown after whatever started it is gone. The disown it waits for is one
- * round trip with a time limit, so nothing here outlives the process by more than that.
+ * Runs a file's clean-up after whatever started it is gone.
  */
 private val teardown = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-/** How long after a connection goes live the path is measured: Tailscale needs a moment to go direct. */
-private const val PATH_SETTLE_MS = 3_000L
-
-/** How long a notification's Reply or Interrupt waits for a connection that is redialing. */
-private const val ACTION_CONNECT_MS = 6_000L
-
 /** How long a sent file stays on screen as green before the pill clears itself. */
 private const val UPLOAD_DONE_MS = 1_500L
-
-/** How long a connection waits for the tailnet node to come up before dialing anyway. */
-internal const val NODE_READY_MS = 30_000L
-
-/** How long a running node may take to list the host as a peer before it is dialed anyway. */
-private const val PEER_READY_MS = 10_000L
-
-/** How long a connection waits for a host its node's device list does not have: a device added a moment ago. */
-private const val PEER_LISTED_MS = 2_000L
 
 /** What a failure says in the report: its kind, then whatever the exception carried. */
 /** Why the tailnet node did not start: what the node said, when it said anything ([tailnetFailureText]). */

@@ -183,6 +183,7 @@
     <string name="confirm_delete_host">删除 %1$s？</string>
     <string name="confirm_delete_host_body">只删掉保存的地址，那台 Rex 上的会话不受影响。</string>
     <string name="action_back">返回</string>
+    <string name="action_connect">连接</string>
     <string name="action_disconnect">断开连接</string>
     <string name="action_search">搜索</string>
     <string name="settings">设置</string>

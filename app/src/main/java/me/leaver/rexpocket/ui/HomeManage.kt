@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.text.input.ImeAction
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.PocketState
+import me.leaver.rexpocket.data.SavedHost
 
 /**
  * What the home's session and tab sheets ask of the connected host. None of it attaches the session
@@ -199,4 +200,43 @@ internal fun RenameDialog(title: String, current: String, onDismiss: () -> Unit,
         confirmButton = { TextButton(onClick = { save() }) { Text(stringResource(R.string.action_save), color = Colors.accent) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Colors.muted) } },
     )
+}
+
+/**
+ * A host's ⋮ sheet: a new session, edit, and Connect or Disconnect. Disconnecting one host leaves
+ * every other connected; a host that is not connected connects only from here or its Connect button.
+ */
+@Composable
+internal fun HostSheet(
+    host: SavedHost,
+    connected: Boolean,
+    onDismiss: () -> Unit,
+    onNewSession: () -> Unit,
+    onEdit: () -> Unit,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+) {
+    ActionSheet(onDismiss = onDismiss, title = host.label) {
+        Group {
+            SheetItem(stringResource(R.string.session_new), icon = R.drawable.ic_add) {
+                onDismiss()
+                onNewSession()
+            }
+            SheetItem(stringResource(R.string.action_edit_host), icon = R.drawable.ic_edit) {
+                onDismiss()
+                onEdit()
+            }
+            if (connected) {
+                SheetItem(stringResource(R.string.action_disconnect), Colors.danger, icon = R.drawable.ic_disconnect) {
+                    onDismiss()
+                    onDisconnect()
+                }
+            } else {
+                SheetItem(stringResource(R.string.action_connect), icon = R.drawable.ic_host) {
+                    onDismiss()
+                    onConnect()
+                }
+            }
+        }
+    }
 }

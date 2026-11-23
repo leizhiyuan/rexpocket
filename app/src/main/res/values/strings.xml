@@ -187,6 +187,7 @@
     <string name="confirm_delete_host">Delete %1$s?</string>
     <string name="confirm_delete_host_body">Only the saved address goes; the sessions on that Rex stay.</string>
     <string name="action_back">Back</string>
+    <string name="action_connect">Connect</string>
     <string name="action_disconnect">Disconnect</string>
     <string name="action_search">Search</string>
     <string name="settings">Settings</string>

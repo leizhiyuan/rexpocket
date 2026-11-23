@@ -99,6 +99,7 @@ class HostStore(context: Context) {
 
     fun delete(id: String) {
         write(list().filter { it.id != id })
+        if (prefs.contains(KEY_CONNECTED_HOSTS)) setConnectedHosts(connectedHosts() - id)
         prefs.edit().remove(lastKey(id)).remove(panesKey(id)).remove(sessionsKey(id)).apply()
     }
 
@@ -139,6 +140,21 @@ class HostStore(context: Context) {
         prefs.edit().apply {
             if (id.isNullOrBlank()) remove(KEY_LAST_HOST) else putString(KEY_LAST_HOST, id)
         }.apply()
+    }
+
+    /**
+     * The hosts the person connected and did not disconnect, in the order they were connected: the
+     * app connects them all again when it starts. An app from before several hosts kept only
+     * [lastHost], which stands in for the list until one is written.
+     */
+    fun connectedHosts(): List<String> {
+        val raw = prefs.getString(KEY_CONNECTED_HOSTS, null) ?: return listOfNotNull(lastHost())
+        val arr = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+        return List(arr.length()) { arr.optString(it) }.filter { it.isNotBlank() }.distinct()
+    }
+
+    fun setConnectedHosts(ids: List<String>) {
+        prefs.edit().putString(KEY_CONNECTED_HOSTS, JSONArray(ids.distinct()).toString()).apply()
     }
 
     fun find(id: String): SavedHost? = list().firstOrNull { it.id == id }
@@ -385,6 +401,7 @@ class HostStore(context: Context) {
         private const val KEY_FOLDED_SESSIONS = "folded_sessions"
         private const val KEY_REOPEN_LAST_TAB = "reopen_last_tab"
         private const val KEY_LAST_HOST = "last_host"
+        private const val KEY_CONNECTED_HOSTS = "connected_hosts"
         private const val KEY_FONT = "font_scale"
         private const val KEY_ALERTS = "background_alerts"
         private const val KEY_ALERT_WAITING = "alerts.waiting"
