@@ -1,7 +1,10 @@
 package me.leaver.rexpocket.data
 
 import android.content.Context
+import me.leaver.rexpocket.core.Appearance
+import me.leaver.rexpocket.core.AppTheme
 import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.TerminalColors
 import me.leaver.rexpocket.core.BarKey
 import me.leaver.rexpocket.core.KeyArrangement
 import me.leaver.rexpocket.core.GestureSettings
@@ -296,6 +299,19 @@ class HostStore(context: Context) {
 
     fun setReopenLastTab(on: Boolean) {
         prefs.edit().putBoolean(KEY_REOPEN_LAST_TAB, on).apply()
+    }
+
+    /** Settings › Appearance: the app's theme and the terminal's colours; the phone's and the app's until set. */
+    fun appearance(): Appearance = Appearance(
+        app = AppTheme.fromPref(prefs.getString("app_theme", null)),
+        terminal = TerminalColors.fromPref(prefs.getString("terminal_colors", null)),
+    )
+
+    fun setAppearance(appearance: Appearance) {
+        prefs.edit()
+            .putString("app_theme", appearance.app.pref)
+            .putString("terminal_colors", appearance.terminal.pref)
+            .apply()
     }
 
     fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)

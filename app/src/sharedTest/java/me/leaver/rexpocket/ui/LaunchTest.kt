@@ -139,10 +139,13 @@ class LaunchTest {
         compose.awaitLive(m, desk.ids[1])
         compose.onNodeWithContentDescription(string(R.string.settings)).performClick()
         compose.waitForIdle()
-        for (opens in listOf(R.string.tailnet_title, R.string.controls_title, R.string.terminal_font_title, R.string.diagnostics)) {
-            assertTrue("${string(opens)} opens a page", compose.rowHasChevron(string(opens)))
+        for (opens in listOf(
+            R.string.tailnet_title, R.string.controls_title, R.string.terminal_font_title, R.string.appearance_title,
+            R.string.reopen_last_tab, R.string.update_channel, R.string.diagnostics,
+        )) {
+            assertTrue("${string(opens)} opens a page or a picker", compose.rowHasChevron(string(opens)))
         }
-        for (acts in listOf(R.string.alerts_title, R.string.reopen_last_tab, R.string.update_channel, R.string.update_title, R.string.settings_source)) {
+        for (acts in listOf(R.string.alerts_title, R.string.update_title, R.string.settings_source)) {
             assertFalse("${string(acts)} acts in place", compose.rowHasChevron(string(acts)))
         }
     }
@@ -154,11 +157,10 @@ class LaunchTest {
         compose.onNodeWithContentDescription(string(R.string.settings)).performClick()
         compose.waitForIdle()
         val row = compose.onNode(hasText(string(R.string.reopen_last_tab)) and hasClickAction()).performScrollTo()
-        row.assert(hasText(string(R.string.reopen_last_tab_off)))
-        row.performClick()
-        compose.waitForIdle()
+        row.assert(hasText(string(R.string.gesture_off)))
+        compose.pick(string(R.string.reopen_last_tab), string(R.string.gesture_on))
         compose.onNode(hasText(string(R.string.reopen_last_tab)) and hasClickAction())
-            .assert(hasText(string(R.string.reopen_last_tab_on)))
+            .assert(hasText(string(R.string.gesture_on)))
         assertTrue(m.reopenLastTab.value)
         assertTrue(HostStore(compose.activity).reopenLastTab())
         compose.assertStaysHome(m, ms = 500)

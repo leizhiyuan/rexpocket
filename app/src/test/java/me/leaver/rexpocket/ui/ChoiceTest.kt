@@ -7,6 +7,9 @@ import me.leaver.rexpocket.core.LongPressAction
 import me.leaver.rexpocket.core.TapAction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import me.leaver.rexpocket.core.AppTheme
+import me.leaver.rexpocket.core.TerminalColors
+import me.leaver.rexpocket.core.UpdateChannel
 import org.junit.Test
 
 /**
@@ -14,19 +17,35 @@ import org.junit.Test
  * changes with the setting, and one action looks the same on every gesture it can be put on.
  */
 class ChoiceTest {
+    /** What a row shows for a choice: its words and its icon. */
+    private fun looks(c: Choice) = c.label to c.icon
+
+    @Test
+    fun everyChoiceSaysWhatItDoes() {
+        val all = TapAction.entries.map(::choice) + DoubleTapAction.entries.map(::choice) +
+            LongPressAction.entries.map(::choice) + CtrlCKey.entries.map(::choice) +
+            ON_OFF.map(::waitChoice) + ON_OFF.map(::keyBarChoice) + ON_OFF.map(::reopenChoice) +
+            UpdateChannel.entries.map(::channelChoice) + AppTheme.entries.map(::choice) + TerminalColors.entries.map(::choice)
+        for (c in all) assertNotEquals("description of $c", 0, c.description)
+        // Within one setting, no two choices read alike in its picker.
+        for (setting in listOf(AppTheme.entries.map(::choice), TerminalColors.entries.map(::choice), TapAction.entries.map(::choice))) {
+            assertEquals(setting.size, setting.map { it.description }.distinct().size)
+        }
+    }
+
     @Test
     fun eachGestureShowsTheActionItIsSetTo() {
-        assertEquals(Choice(R.string.gesture_open_keyboard, R.drawable.ic_keyboard), choice(TapAction.Keyboard))
-        assertEquals(Choice(R.string.gesture_toggle_keyboard, R.drawable.ic_keyboard), choice(TapAction.Toggle))
-        assertEquals(Choice(R.string.gesture_nothing, R.drawable.ic_block), choice(TapAction.Nothing))
+        assertEquals(R.string.gesture_open_keyboard to R.drawable.ic_keyboard, looks(choice(TapAction.Keyboard)))
+        assertEquals(R.string.gesture_toggle_keyboard to R.drawable.ic_keyboard, looks(choice(TapAction.Toggle)))
+        assertEquals(R.string.gesture_nothing to R.drawable.ic_block, looks(choice(TapAction.Nothing)))
 
-        assertEquals(Choice(R.string.action_full_screen, R.drawable.ic_fullscreen), choice(DoubleTapAction.FullScreen))
-        assertEquals(Choice(R.string.gesture_toggle_keyboard, R.drawable.ic_keyboard), choice(DoubleTapAction.Keyboard))
-        assertEquals(Choice(R.string.gesture_nothing, R.drawable.ic_block), choice(DoubleTapAction.Nothing))
+        assertEquals(R.string.action_full_screen to R.drawable.ic_fullscreen, looks(choice(DoubleTapAction.FullScreen)))
+        assertEquals(R.string.gesture_toggle_keyboard to R.drawable.ic_keyboard, looks(choice(DoubleTapAction.Keyboard)))
+        assertEquals(R.string.gesture_nothing to R.drawable.ic_block, looks(choice(DoubleTapAction.Nothing)))
 
-        assertEquals(Choice(R.string.gesture_select, R.drawable.ic_text_select), choice(LongPressAction.Select))
-        assertEquals(Choice(R.string.action_full_screen, R.drawable.ic_fullscreen), choice(LongPressAction.FullScreen))
-        assertEquals(Choice(R.string.gesture_toggle_keyboard, R.drawable.ic_keyboard), choice(LongPressAction.Keyboard))
+        assertEquals(R.string.gesture_select to R.drawable.ic_text_select, looks(choice(LongPressAction.Select)))
+        assertEquals(R.string.action_full_screen to R.drawable.ic_fullscreen, looks(choice(LongPressAction.FullScreen)))
+        assertEquals(R.string.gesture_toggle_keyboard to R.drawable.ic_keyboard, looks(choice(LongPressAction.Keyboard)))
     }
 
     @Test
@@ -49,8 +68,8 @@ class ChoiceTest {
 
     @Test
     fun theCtrlCKeyIsATapOrAHold() {
-        assertEquals(Choice(R.string.keybar_ctrl_c_tap, R.drawable.ic_touch_app), choice(CtrlCKey.Tap))
-        assertEquals(Choice(R.string.keybar_ctrl_c_hold, R.drawable.ic_touch_long), choice(CtrlCKey.Hold))
+        assertEquals(R.string.keybar_ctrl_c_tap to R.drawable.ic_touch_app, looks(choice(CtrlCKey.Tap)))
+        assertEquals(R.string.keybar_ctrl_c_hold to R.drawable.ic_touch_long, looks(choice(CtrlCKey.Hold)))
         // Hidden is Arrange keys' business; the row shows it as the tap it steps from.
         assertEquals(choice(CtrlCKey.Tap), choice(CtrlCKey.Hidden))
     }

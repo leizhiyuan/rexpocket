@@ -153,7 +153,7 @@ internal fun TerminalPane(
         }
     }
 
-    val theme = remember(Colors.isDark) { terminalTheme() }
+    val theme = remember(Colors.paneDark) { terminalTheme() }
     // The keyboard types into this, not into the pane: see TerminalImeView for why the pane cannot
     // hold it itself. It sits under the terminal, so every gesture still lands on the pane.
     val keyboard = remember(context) { TerminalImeView(context) }
@@ -295,7 +295,7 @@ private fun WaitingForPane(blockId: String, onRetry: () -> Unit, modifier: Modif
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 stringResource(if (waited) R.string.pane_no_picture else R.string.pane_reading),
-                color = Colors.muted,
+                color = Colors.paneMuted,
                 fontSize = TextStyles.label,
             )
             if (waited) {

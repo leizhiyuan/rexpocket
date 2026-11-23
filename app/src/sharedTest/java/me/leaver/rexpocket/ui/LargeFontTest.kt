@@ -12,7 +12,11 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
@@ -81,6 +85,32 @@ class LargeFontTest {
     @Test fun controls15() = controls(1.5f, ControlsPage.Controls)
     @Test fun arrangeKeys13() = controls(1.3f, ControlsPage.ArrangeKeys)
     @Test fun arrangeKeys15() = controls(1.5f, ControlsPage.ArrangeKeys)
+
+    /** A choice row's picker, open over Terminal controls: every option's words and what it does. */
+    private fun picker(scale: Float, row: Int) {
+        val model = RexViewModel(freshApp())
+        show(scale) { ControlsOnModel(model, ControlsPage.Controls, onPage = {}, bar = false) }
+        compose.onNode(hasText(compose.activity.getString(row)) and hasClickAction()).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNode(hasTestTag(PICKER_TAG)).assertExists()
+        assertNothingCutOff()
+    }
+
+    @Test fun tapPicker15() = picker(1.5f, R.string.gesture_tap)
+    @Test fun ctrlCPicker15() = picker(1.5f, R.string.keybar_ctrl_c)
+
+    private fun appearance(scale: Float, pickerOf: Int? = null) {
+        val model = RexViewModel(freshApp())
+        show(scale) { AppearanceOnModel(model, open = true) }
+        if (pickerOf != null) {
+            compose.onNode(hasText(compose.activity.getString(pickerOf)) and hasClickAction()).performClick()
+            compose.waitForIdle()
+        }
+        assertNothingCutOff()
+    }
+
+    @Test fun appearance15() = appearance(1.5f)
+    @Test fun terminalColoursPicker15() = appearance(1.5f, R.string.appearance_terminal)
 
     private fun home(scale: Float, status: TailnetStatus, joined: Boolean = true, hosts: List<me.leaver.rexpocket.data.SavedHost>? = null) {
         val node = FakeTailnetNode()

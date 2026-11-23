@@ -10,6 +10,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelectable
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,4 +97,20 @@ internal fun ControlsOnModel(
             onKeyArrangement = model::setKeyArrangement,
         )
     }
+}
+
+/** The option called [option] in the picker that is open: its radio row, words and description in one node. */
+internal fun AppRule.pickerOption(option: String): SemanticsNodeInteraction =
+    onNode(hasText(option) and isSelectable() and hasAnyAncestor(hasTestTag(PICKER_TAG)))
+
+/**
+ * Opens the picker of the sheet row called [label], as a tap on it does, and picks [option] there.
+ * The picker closes on the pick; the sheet under it stays.
+ */
+internal fun AppRule.pick(label: String, option: String) {
+    onNode(hasText(label) and hasClickAction()).performScrollTo().performClick()
+    waitForIdle()
+    pickerOption(option).performClick()
+    waitForIdle()
+    onNode(hasTestTag(PICKER_TAG)).assertDoesNotExist()
 }

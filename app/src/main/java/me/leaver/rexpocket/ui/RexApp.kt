@@ -77,6 +77,7 @@ fun RexPocketApp(
     val updateChannel by model.updateChannel.collectAsState()
     val folds by model.folds.collectAsState()
     val reopenLastTab by model.reopenLastTab.collectAsState()
+    val appearance by model.appearance.collectAsState()
     val context = LocalContext.current
     // The home screen leaves the composition while a terminal fills the window; its saved state
     // (the open sheet, search, eye, scroll) is kept here for when it comes back.
@@ -122,7 +123,7 @@ fun RexPocketApp(
             loginGate.asked(tailnetStage)
         }
     }
-    RexTheme {
+    RexTheme(appearance.app, appearance.terminal) {
         Box(
             Modifier
                 .fillMaxSize()
@@ -195,6 +196,8 @@ fun RexPocketApp(
                     onUpdateChannel = model::setUpdateChannel,
                     reopenLastTab = reopenLastTab,
                     onReopenLastTab = model::setReopenLastTab,
+                    appearance = appearance,
+                    onAppearance = model::setAppearance,
                 )
             } }
             val term: @Composable (Boolean) -> Unit = { embedded ->

@@ -81,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.leaver.rexpocket.BuildConfig
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.Appearance
 import me.leaver.rexpocket.core.BlockInfo
 import me.leaver.rexpocket.core.HostAddress
 import me.leaver.rexpocket.core.HostAddressParser
@@ -201,6 +202,9 @@ internal fun HomeScreen(
     /** Whether every launch goes back to the last tab, not only one after Android killed the app. */
     reopenLastTab: Boolean = false,
     onReopenLastTab: (Boolean) -> Unit = {},
+    /** Settings › Appearance: the app's theme and the terminal's colours. */
+    appearance: Appearance = Appearance(),
+    onAppearance: (Appearance) -> Unit = {},
 ) {
     val context = LocalContext.current
     // Android 13 asks for notifications at run time; alerts come on once the person allows them.
@@ -231,6 +235,7 @@ internal fun HomeScreen(
     var tailnetDetails by rememberSaveable { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
     var controlsPage by rememberSaveable { mutableStateOf<ControlsPage?>(null) }
+    var appearanceOpen by rememberSaveable { mutableStateOf(false) }
     var diagnostics by rememberSaveable { mutableStateOf(false) }
     var recording by remember { mutableStateOf(Diagnostics.capture(context) != null) }
     var menuHostId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -536,8 +541,12 @@ internal fun HomeScreen(
                 controlsPage = ControlsPage.Controls
             },
             onFontSettings = onFontSettings,
+            onAppearance = {
+                settings = false
+                appearanceOpen = true
+            },
             reopenLastTab = reopenLastTab,
-            onReopenLastTab = { onReopenLastTab(!reopenLastTab) },
+            onReopenLastTab = onReopenLastTab,
             recording = recording,
             onDiagnostics = {
                 settings = false
@@ -562,6 +571,8 @@ internal fun HomeScreen(
         keyArrangement = keyArrangement,
         onKeyArrangement = onKeyArrangement,
     )
+
+    if (appearanceOpen) AppearanceSheet(appearance, onAppearance, onDismiss = { appearanceOpen = false })
 
     if (diagnostics) {
         DiagnosticsSheet(
@@ -978,8 +989,10 @@ private fun SettingsSheet(
     /** Opens the terminal's controls: its gestures and its key bar. */
     onControls: () -> Unit,
     onFontSettings: () -> Unit,
+    /** Opens Appearance: the app's theme and the terminal's colours. */
+    onAppearance: () -> Unit,
     reopenLastTab: Boolean,
-    onReopenLastTab: () -> Unit,
+    onReopenLastTab: (Boolean) -> Unit,
     recording: Boolean,
     onDiagnostics: () -> Unit,
     update: UpdateState,
@@ -988,9 +1001,6 @@ private fun SettingsSheet(
     onChannel: (UpdateChannel) -> Unit,
 ) {
     val context = LocalContext.current
-    // Said on the tap, because the row's own detail is the only other sign the channel moved.
-    val switchedToStable = stringResource(R.string.update_channel_switched_stable)
-    val switchedToPreview = stringResource(R.string.update_channel_switched_preview)
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.settings)) {
         // Four cards, each one answer to a different question: how the phone reaches a computer,
         // what the terminal looks and feels like, which build it installs, and what the app is. A
@@ -1018,30 +1028,21 @@ private fun SettingsSheet(
             // Gestures and keys have a sheet of their own, so this one stays a list of places to go.
             SheetItem(stringResource(R.string.controls_title), icon = R.drawable.ic_touch_app, opens = true, onClick = onControls)
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_text_fields, opens = true, onClick = onFontSettings)
+            // The app's light or dark, and the terminal's apart from it.
+            SheetItem(stringResource(R.string.appearance_title), icon = R.drawable.ic_contrast, opens = true, onClick = onAppearance)
             // Off, a fresh start shows this list; Android killing the app on the terminal still
             // comes back to it, since that is the person's own place rather than a pick.
-            SheetItem(
-                label = stringResource(R.string.reopen_last_tab),
-                icon = R.drawable.ic_history,
-                detail = stringResource(if (reopenLastTab) R.string.reopen_last_tab_on else R.string.reopen_last_tab_off),
-                keepOpen = true,
-                onClick = onReopenLastTab,
+            ChoiceRow(
+                label = stringResource(R.string.reopen_last_tab), options = ON_OFF, current = reopenLastTab,
+                choice = ::reopenChoice, icon = R.drawable.ic_history, onPick = onReopenLastTab,
             )
         }
         Group(stringResource(R.string.settings_group_version)) {
-            // The channel first: it is what the row under it looks on.
-            SheetItem(
-                label = stringResource(R.string.update_channel),
-                icon = R.drawable.ic_swap,
-                detail = stringResource(
-                    if (channel == UpdateChannel.Preview) R.string.update_channel_preview else R.string.update_channel_stable,
-                ),
-                keepOpen = true,
-                onClick = {
-                    val next = if (channel == UpdateChannel.Preview) UpdateChannel.Stable else UpdateChannel.Preview
-                    onChannel(next)
-                    toast(context, if (next == UpdateChannel.Preview) switchedToPreview else switchedToStable)
-                },
+            // The channel first: it is what the row under it looks on. Its picker says what each
+            // channel offers.
+            ChoiceRow(
+                label = stringResource(R.string.update_channel), options = listOf(UpdateChannel.Stable, UpdateChannel.Preview),
+                current = channel, choice = ::channelChoice, icon = R.drawable.ic_swap, onPick = onChannel,
             )
             SheetItem(
                 label = stringResource(R.string.update_title),

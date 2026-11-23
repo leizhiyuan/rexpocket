@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import me.leaver.rexpocket.core.AppTheme
+import me.leaver.rexpocket.core.TerminalColors
 import me.leaver.rexpocket.terminal.TerminalTheme
 
 /**
@@ -190,20 +192,52 @@ object Colors {
     /** True while the night palette is in use. */
     val isDark: Boolean get() = palette.dark
 
-    internal fun use(dark: Boolean) {
+    /**
+     * The terminal's own appearance, which Settings › Appearance can set apart from the app's: a
+     * dark terminal in a light app, or the other way round. Only the pane itself follows it.
+     */
+    private var panePalette by mutableStateOf(Light)
+
+    /** The pane's paper while a terminal is on it: [terminal], or the other appearance's. */
+    val pane: Color get() = panePalette.terminal
+
+    /** Secondary words drawn on [pane], such as the line a pane shows before its first picture. */
+    val paneMuted: Color get() = panePalette.muted
+
+    /** True while the pane draws in the night palette. */
+    val paneDark: Boolean get() = panePalette.dark
+
+    internal fun use(dark: Boolean, paneDark: Boolean = dark) {
         val next = if (dark) Dark else Light
         if (palette != next) palette = next
+        val pane = if (paneDark) Dark else Light
+        if (panePalette != pane) panePalette = pane
     }
+
+    /** The terminal's default colours for the pane's appearance; see [terminalTheme]. */
+    internal fun paneTheme(): TerminalTheme = TerminalTheme(
+        foreground = panePalette.ink.toArgb(),
+        background = panePalette.terminal.toArgb(),
+        cursor = panePalette.accent.toArgb(),
+        selection = panePalette.line.toArgb(),
+    )
 }
 
 /**
- * Picks the palette from the phone's appearance and keeps the system bars in step with it. The
- * Material theme under it carries the same colours, so the platform's own pieces - the ripple on a
- * press, a dialog, a menu - look like the rest of the app.
+ * Picks the palette from [appTheme] (the phone's appearance unless Settings › Appearance says
+ * otherwise) and the pane's from [terminalColors], and keeps the system bars in step. Both are
+ * state: a change in settings recomposes every screen in place, with no new activity. The Material
+ * theme under it carries the same colours, so the platform's own pieces - the ripple on a press, a
+ * dialog, a menu - look like the rest of the app.
  */
 @Composable
-fun RexTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun RexTheme(
+    appTheme: AppTheme = AppTheme.System,
+    terminalColors: TerminalColors = TerminalColors.MatchApp,
+    content: @Composable () -> Unit,
+) {
+    val dark = appTheme.isDark(isSystemInDarkTheme())
+    val paneDark = terminalColors.isDark(dark)
     val p = if (dark) Dark else Light
     val scheme = if (dark) {
         darkColorScheme(
@@ -222,7 +256,7 @@ fun RexTheme(content: @Composable () -> Unit) {
     }
     val view = LocalView.current
     SideEffect {
-        Colors.use(dark)
+        Colors.use(dark, paneDark)
         val window = view.context.findActivity()?.window ?: return@SideEffect
         WindowCompat.getInsetsController(window, view).apply {
             isAppearanceLightStatusBars = !dark
@@ -273,12 +307,8 @@ object TextStyles {
 val labelLeading: TextUnit = 18.sp
 
 /**
- * The terminal's own paper and ink, for the appearance in use: white paper in the day, the page at
- * night. Every palette entry stays the program's; only the defaults a program never sets bend.
+ * The terminal's own paper and ink, for the pane's appearance: white paper in the day, the page at
+ * night, or whichever one Settings › Appearance › Terminal colours holds to. Every palette entry
+ * stays the program's; only the defaults a program never sets bend.
  */
-internal fun terminalTheme(): TerminalTheme = TerminalTheme(
-    foreground = Colors.ink.toArgb(),
-    background = Colors.terminal.toArgb(),
-    cursor = Colors.accent.toArgb(),
-    selection = Colors.line.toArgb(),
-)
+internal fun terminalTheme(): TerminalTheme = Colors.paneTheme()

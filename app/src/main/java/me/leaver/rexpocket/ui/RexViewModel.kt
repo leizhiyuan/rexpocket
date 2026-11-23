@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import me.leaver.rexpocket.core.Appearance
 import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.Endpoint
 import me.leaver.rexpocket.core.AttentionLedger
@@ -254,6 +255,14 @@ class RexViewModel @JvmOverloads constructor(
     fun setReopenLastTab(on: Boolean) {
         store.setReopenLastTab(on)
         reopenLastTab.value = on
+    }
+
+    /** Settings › Appearance; RexTheme reads it, so a change shows at once, with no new activity. */
+    val appearance = MutableStateFlow(store.appearance())
+
+    fun setAppearance(value: Appearance) {
+        store.setAppearance(value)
+        appearance.value = value
     }
 
     /**

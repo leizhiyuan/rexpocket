@@ -8,9 +8,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -25,7 +31,6 @@ import me.leaver.rexpocket.core.LongPressAction
 import me.leaver.rexpocket.core.TapAction
 import me.leaver.rexpocket.data.HostStore
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -34,8 +39,9 @@ import org.junit.runner.RunWith
 
 /**
  * Settings › Terminal controls as a person uses it: each row is tapped on the page the app shows, on
- * the app's view model, and the row must then say the new value, the store must keep it, and the
- * page opened again must still say it. Runs on the JVM (Robolectric) and on the emulator.
+ * the app's view model, an option picked in the picker it opens, and the row must then say the new
+ * value, the store must keep it, and the page opened again must still say it. Runs on the JVM
+ * (Robolectric) and on the emulator.
  */
 @RunWith(AndroidJUnit4::class)
 class TerminalControlsTest {
@@ -63,6 +69,8 @@ class TerminalControlsTest {
         compose.waitForIdle()
     }
 
+    private fun pick(label: Int, option: Int) = compose.pick(string(label), string(option))
+
     private fun assertRowSays(label: Int, detail: String) {
         row(label).assert(hasText(detail))
     }
@@ -84,20 +92,22 @@ class TerminalControlsTest {
     @Test
     fun eachGestureRowSaysWhatItWasJustSetTo() {
         assertRowSays(R.string.gesture_tap, string(R.string.gesture_open_keyboard))
-        tapRow(R.string.gesture_tap)
+        pick(R.string.gesture_tap, R.string.gesture_toggle_keyboard)
         assertRowSays(R.string.gesture_tap, string(R.string.gesture_toggle_keyboard))
 
         assertRowSays(R.string.gesture_double_tap, string(R.string.action_full_screen))
-        tapRow(R.string.gesture_double_tap)
+        pick(R.string.gesture_double_tap, R.string.gesture_toggle_keyboard)
         assertRowSays(R.string.gesture_double_tap, string(R.string.gesture_toggle_keyboard))
 
         assertRowSays(R.string.gesture_long_press, string(R.string.gesture_select))
-        tapRow(R.string.gesture_long_press)
+        pick(R.string.gesture_long_press, R.string.action_full_screen)
         assertRowSays(R.string.gesture_long_press, string(R.string.action_full_screen))
 
         assertRowSays(R.string.gesture_wait, string(R.string.gesture_off))
-        tapRow(R.string.gesture_wait)
+        pick(R.string.gesture_wait, R.string.gesture_on)
         assertRowSays(R.string.gesture_wait, string(R.string.gesture_on))
+        // The line under the label follows: what a tap does now.
+        assertRowSays(R.string.gesture_wait, string(R.string.gesture_wait_on))
 
         val expected = GestureSettings(
             tap = TapAction.Toggle,
@@ -119,17 +129,16 @@ class TerminalControlsTest {
         assertRowShows(R.string.gesture_long_press, R.drawable.ic_text_select)
         assertRowShows(R.string.keybar_ctrl_c, R.drawable.ic_touch_app)
 
-        tapRow(R.string.gesture_tap)
-        tapRow(R.string.gesture_tap)
+        pick(R.string.gesture_tap, R.string.gesture_nothing)
         assertRowSays(R.string.gesture_tap, string(R.string.gesture_nothing))
         assertRowShows(R.string.gesture_tap, R.drawable.ic_block)
-        tapRow(R.string.gesture_double_tap)
+        pick(R.string.gesture_double_tap, R.string.gesture_toggle_keyboard)
         assertRowShows(R.string.gesture_double_tap, R.drawable.ic_keyboard)
-        tapRow(R.string.gesture_double_tap)
+        pick(R.string.gesture_double_tap, R.string.gesture_nothing)
         assertRowShows(R.string.gesture_double_tap, R.drawable.ic_block)
-        tapRow(R.string.gesture_long_press)
+        pick(R.string.gesture_long_press, R.string.action_full_screen)
         assertRowShows(R.string.gesture_long_press, R.drawable.ic_fullscreen)
-        tapRow(R.string.keybar_ctrl_c)
+        pick(R.string.keybar_ctrl_c, R.string.keybar_ctrl_c_hold)
         assertRowShows(R.string.keybar_ctrl_c, R.drawable.ic_touch_long)
 
         // The times are times, not more gears.
@@ -143,21 +152,34 @@ class TerminalControlsTest {
     }
 
     @Test
-    fun rowsThatOpenAPageEndInAChevronAndChoicesDoNot() {
-        for (opens in listOf(R.string.gesture_double_tap_time, R.string.gesture_long_press_time, R.string.arrange_title)) {
-            assertTrue("${string(opens)} opens a page", compose.rowHasChevron(string(opens)))
-        }
-        for (steps in listOf(R.string.gesture_tap, R.string.gesture_double_tap, R.string.gesture_long_press, R.string.gesture_wait, R.string.keybar_title, R.string.keybar_ctrl_c)) {
-            assertFalse("${string(steps)} steps through values", compose.rowHasChevron(string(steps)))
+    fun everyRowOpensAPickerOrAPageSoEveryRowEndsInAChevron() {
+        for (opens in listOf(
+            R.string.gesture_tap, R.string.gesture_double_tap, R.string.gesture_long_press, R.string.gesture_wait,
+            R.string.gesture_double_tap_time, R.string.gesture_long_press_time,
+            R.string.keybar_title, R.string.arrange_title, R.string.keybar_ctrl_c,
+        )) {
+            row(opens)
+            assertTrue("${string(opens)} opens a picker or a page", compose.rowHasChevron(string(opens)))
         }
     }
 
     @Test
-    fun aRowStepsRoundAllItsChoices() {
+    fun aPickerListsEveryChoiceWithItsIconAndWhatItDoesTheCurrentOneSelected() {
         tapRow(R.string.gesture_tap)
-        tapRow(R.string.gesture_tap)
-        assertRowSays(R.string.gesture_tap, string(R.string.gesture_nothing))
-        tapRow(R.string.gesture_tap)
+        val options = compose.onAllNodes(isSelectable() and hasAnyAncestor(hasTestTag(PICKER_TAG)))
+        options.assertCountEquals(TapAction.entries.size)
+        for (action in TapAction.entries) {
+            val c = choice(action)
+            val option = compose.pickerOption(string(c.label))
+            option.assert(hasText(string(c.description)))
+            option.assert(SemanticsMatcher.expectValue(Drawable, c.icon))
+            if (action == TapAction.Keyboard) option.assertIsSelected() else option.assertIsNotSelected()
+        }
+        // Cancel leaves the setting as it was.
+        compose.onNode(hasText(string(R.string.action_cancel)) and hasClickAction())
+            .performClick()
+        compose.waitForIdle()
+        compose.onNode(hasTestTag(PICKER_TAG)).assertDoesNotExist()
         assertRowSays(R.string.gesture_tap, string(R.string.gesture_open_keyboard))
         assertEquals(TapAction.Keyboard, stored().tap)
     }
@@ -167,7 +189,7 @@ class TerminalControlsTest {
         val phone = ViewConfiguration.getLongPressTimeout()
         assertRowSays(R.string.gesture_long_press_time, string(R.string.gesture_time_system, phone))
         tapRow(R.string.gesture_long_press_time)
-        compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))[0]
+        compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))[0]
             .performSemanticsAction(SemanticsActions.SetProgress) { it(700f) }
         compose.onNodeWithText(string(R.string.action_save)).performClick()
         compose.waitForIdle()
@@ -184,12 +206,12 @@ class TerminalControlsTest {
     @Test
     fun theKeyBarRowsSayWhatTheyWereJustSetTo() {
         assertRowSays(R.string.keybar_title, string(R.string.keybar_auto))
-        tapRow(R.string.keybar_title)
+        pick(R.string.keybar_title, R.string.keybar_always)
         assertRowSays(R.string.keybar_title, string(R.string.keybar_always))
         assertEquals(true, HostStore(compose.activity).keyBarAlways())
 
         assertRowSays(R.string.keybar_ctrl_c, string(R.string.keybar_ctrl_c_tap))
-        tapRow(R.string.keybar_ctrl_c)
+        pick(R.string.keybar_ctrl_c, R.string.keybar_ctrl_c_hold)
         assertRowSays(R.string.keybar_ctrl_c, string(R.string.keybar_ctrl_c_hold))
         assertEquals(CtrlCKey.Hold, HostStore(compose.activity).keyBarCtrlC())
 

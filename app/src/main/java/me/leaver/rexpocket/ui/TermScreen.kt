@@ -361,7 +361,7 @@ internal fun TermScreen(
     // are known all along, so leaving full screen makes room for them at once too.
     val cutout = if (chrome.fullScreen) WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal) else WindowInsets.displayCutout
     val bars = if (chrome.fullScreen) Modifier else Modifier.windowInsetsPadding(systemBarsRoom())
-    Box(Modifier.fillMaxSize().background(Colors.terminal).then(bars).windowInsetsPadding(cutout)) {
+    Box(Modifier.fillMaxSize().background(if (chrome.fullScreen) Colors.pane else Colors.terminal).then(bars).windowInsetsPadding(cutout)) {
         Column(Modifier.fillMaxSize().padding(bottom = with(density) { bottomPx.toDp() })) {
             if (chrome.topBar) {
                 SessionTopBar(
@@ -397,9 +397,11 @@ internal fun TermScreen(
             }
             TermBanner(state, onRetry = onRetry, onDismiss = onDismissNotice)
             // The pane sits on its own paper: white in the day, the page at night, edge to edge, the
-            // way a terminal fills the screen.
-            Box(Modifier.weight(1f).fillMaxWidth().background(Colors.terminal).clipToBounds().testTag(PANE_TAG)) {
-                val shown = focused?.id
+            // way a terminal fills the screen. A terminal on it has the terminal's colours, which
+            // Settings › Appearance can set apart from the app's; the notes in its place are the app's.
+            val shown = focused?.id
+            val paper = if (closed != null && view != null || empty) Colors.terminal else Colors.pane
+            Box(Modifier.weight(1f).fillMaxWidth().background(paper).clipToBounds().testTag(PANE_TAG)) {
                 if (closed != null && view != null) {
                     ClosedPaneNote(
                         closed = closed,

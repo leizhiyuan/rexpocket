@@ -198,6 +198,40 @@ class ScreenshotsTest {
 
     @Test fun controlsChangedPortrait() = controlsChanged("controls-changed-portrait")
     @Test fun controlsChangedLandscape() { landscape(); controlsChanged("controls-changed-landscape") }
+
+    /**
+     * The Tap row's picker, the current choice selected. Shown on its own: under Robolectric the
+     * tall Terminal controls sheet's window is drawn over a dialog opened from it (on a phone the
+     * dialog is on top; AppearanceTest's picker shot shows both, its sheet being short).
+     */
+    private fun picker(name: String) {
+        compose.setContent {
+            RexTheme {
+                ChoicePicker(compose.activity.getString(R.string.gesture_tap), TapAction.entries, TapAction.Keyboard, ::choice, {}, {})
+            }
+        }
+        compose.waitForIdle()
+        captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    @Test fun tapPickerPortrait() = picker("picker-tap-portrait")
+    @Test fun tapPickerLandscape() { landscape(); picker("picker-tap-landscape") }
+
+    /** Settings › Appearance with a light app and an always-dark terminal; with [row], that row's picker. */
+    private fun appearance(name: String, row: Int? = null) {
+        val model = RexViewModel(freshApp())
+        compose.runOnUiThread {
+            model.setAppearance(me.leaver.rexpocket.core.Appearance(me.leaver.rexpocket.core.AppTheme.Light, me.leaver.rexpocket.core.TerminalColors.Dark))
+        }
+        compose.setContent { AppearanceOnModel(model, open = true) }
+        compose.waitForIdle()
+        if (row != null) open(compose.activity.getString(row))
+        captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    @Test fun appearancePortrait() = appearance("appearance-light-app-dark-terminal-portrait")
+    @Test fun appearanceLandscape() { landscape(); appearance("appearance-light-app-dark-terminal-landscape") }
+    @Test fun appearancePickerPortrait() = appearance("picker-terminal-colours-portrait", R.string.appearance_terminal)
     @Test fun settingsPortrait() = settings("settings-portrait")
     @Test fun settingsLandscape() { landscape(); settings("settings-landscape") }
     @Test fun diagnosticsPortrait() = settings("diagnostics-portrait", R.string.diagnostics)
