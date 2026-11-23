@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 
 
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -131,14 +133,14 @@ internal fun Field(
     Column {
         // The hint is the field's name for TalkBack too: it is said with the field, not as a line of its own.
         Text(hint, color = Colors.muted, fontSize = TextStyles.label, modifier = Modifier.clearAndSetSemantics {})
-        // The placeholder is painted behind the field, which stays the thing that takes the tap.
-        Box(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        // The placeholder is painted behind the field, which stays the thing that takes the tap. It
+        // wraps rather than being cut off with large text, and the field's box grows to hold it.
+        Box(Modifier.fillMaxWidth().padding(top = 4.dp).height(IntrinsicSize.Min)) {
             if (placeholder != null && field.text.isEmpty()) {
                 Text(
                     placeholder,
                     color = Colors.muted,
                     fontSize = TextStyles.body,
-                    maxLines = 1,
                     modifier = Modifier.padding(horizontal = 13.dp, vertical = 13.dp),
                 )
             }
@@ -164,7 +166,7 @@ internal fun Field(
                     onDone = if (onDone != null) { { currentDone.value?.invoke() } } else null,
                     onNext = next?.let { field -> { field.requestFocus() } },
                 ),
-                modifier = Modifier.fillMaxWidth().border(1.dp, Colors.line, RoundedCornerShape(Radius.chip))
+                modifier = Modifier.fillMaxWidth().fillMaxHeight().border(1.dp, Colors.line, RoundedCornerShape(Radius.chip))
                     .padding(horizontal = 12.dp, vertical = 12.dp)
                     .focusRequester(focus)
                     .semantics { contentDescription = hint },
