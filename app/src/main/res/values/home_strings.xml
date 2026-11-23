@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The home list: its rows, filters, sheets and snackbars. See docs/design/home.md. -->
+<resources>
+    <string name="home_count_waiting">%1$d waiting</string>
+    <string name="home_count_failed">%1$d failed</string>
+    <string name="home_count_done">%1$d done</string>
+    <string name="home_count_running">%1$d running</string>
+    <string name="home_pane_line">pane %1$s %2$s</string>
+</resources>

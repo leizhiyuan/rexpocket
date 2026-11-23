@@ -56,6 +56,9 @@ internal class RexOnDesk(
 
     fun rename(session: String, label: String) = runBlocking { desk.rename(session, label) }
 
+    /** Splits [anchor]'s tab at the desk without moving its focus: the new pane stays hidden on the phone. */
+    fun split(session: String, anchor: String): String = runBlocking { desk.split(session, anchor) }
+
     /** Rex's sessions, in its order. */
     fun order(): List<String> = runBlocking { desk.sessions().map { it.id } }
 

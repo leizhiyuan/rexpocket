@@ -19,6 +19,12 @@ enum class ActivityGroup(val state: String) {
     Running("working"),
     ;
 
+    /**
+     * A failed or done tab has news until it is seen; a waiting one until it stops waiting, and a
+     * running one never has any.
+     */
+    val needsSeeing: Boolean get() = this == Failed || this == Done
+
     companion object {
         fun of(state: String): ActivityGroup? = entries.firstOrNull { it.state == state }
     }
@@ -43,23 +49,43 @@ data class ActivityItem(
 data class ActivitySection(val group: ActivityGroup, val items: List<ActivityItem>)
 
 /**
- * The activity view of [state]: each group that has a tab in it, in [ActivityGroup] order. A tab
- * stands where its most pressing pane puts it, and shows that pane. Inside a group the tab whose
- * state the phone saw begin last comes first, as the newest news; tabs with no known time follow
- * in the order of the sessions and their tabs.
+ * A tab's most pressing pane, the one the activity view shows it by, with that pane's report and its
+ * group: Waiting before Failed before Done before Running. A done or failed report that [seen] says
+ * was seen no longer counts, so a pane running beside it speaks for the tab.
  */
-fun activitySections(state: PocketState): List<ActivitySection> {
+data class TabAttention(val block: BlockInfo, val record: ProgramRecord, val group: ActivityGroup)
+
+fun tabAttention(
+    window: WindowInfo,
+    state: PocketState,
+    seen: (blockId: String, record: ProgramRecord) -> Boolean = { _, _ -> false },
+): TabAttention? = window.blocks
+    .mapNotNull { block ->
+        val record = state.blockStatus[block.id] ?: return@mapNotNull null
+        val group = ActivityGroup.of(record.state) ?: return@mapNotNull null
+        if (group.needsSeeing && seen(block.id, record)) null else TabAttention(block, record, group)
+    }
+    .minByOrNull { it.group.ordinal }
+
+/**
+ * The activity view of [state]: each group that has a tab in it, in [ActivityGroup] order. A tab
+ * stands where its most pressing pane puts it ([tabAttention]), and shows that pane. Inside a group
+ * the tab whose state the phone saw begin last comes first, as the newest news; tabs with no known
+ * time follow in the order of the sessions and their tabs. With [seen], a done or failed pane that
+ * was seen is left out, as the home's Needs you leaves it.
+ */
+fun activitySections(
+    state: PocketState,
+    seen: (blockId: String, record: ProgramRecord) -> Boolean = { _, _ -> false },
+): List<ActivitySection> {
     val items = ArrayList<ActivityItem>()
     val order = state.sessions.map { it.id } + state.views.keys.filter { id -> state.sessions.none { it.id == id } }
     for (sid in order) {
         val view = state.views[sid] ?: continue
         val label = state.sessions.firstOrNull { it.id == sid }?.label ?: view.label
         for (window in view.windows) {
-            val pane = window.blocks
-                .mapNotNull { block -> state.blockStatus[block.id]?.let { record -> ActivityGroup.of(record.state)?.let { Triple(block, record, it) } } }
-                .minByOrNull { it.third.ordinal }
-                ?: continue
-            items += ActivityItem(sid, label, window, pane.first, pane.second, state.statusSince[pane.first.id])
+            val pane = tabAttention(window, state, seen) ?: continue
+            items += ActivityItem(sid, label, window, pane.block, pane.record, state.statusSince[pane.block.id])
         }
     }
     return ActivityGroup.entries.mapNotNull { group ->

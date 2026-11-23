@@ -170,6 +170,36 @@ class HomeStateTest {
         assertTrue(key in RexViewModel(compose.activity.application).folds.value.sessions)
     }
 
+    /**
+     * Each tab says what its program is doing in words, a waiting one with the first line of its
+     * question; the session's chip and the host's summary count them; and a pane the tab does not
+     * show that failed is named on a line of its own, which opens that pane.
+     */
+    @Test
+    fun theListSaysEachTabsStateAndNamesAHiddenPane() {
+        val m = start()
+        compose.awaitThat { other in m.pocket.value.views }
+        val tabs = m.pocket.value.views.getValue(other).windows
+        val hidden = desk.split(other, tabs[1].blocks[0].id)
+        compose.awaitThat { m.pocket.value.views.getValue(other).windows[1].blocks.size == 2 }
+        desk.rex.report(tabs[0].blocks[0].id, "blocked", kind = "permission", msg = "Allow edit of src/app.ts?\nsecond line", app = "claude")
+        desk.rex.report(hidden, "error", msg = "3 tests failed", app = "pi")
+        compose.awaitThat { m.pocket.value.blockStatus.size == 2 }
+        compose.waitForIdle()
+        val res = compose.activity.resources
+        val sessions = res.getQuantityString(R.plurals.session_count, 2, 2)
+        val summary = compose.activity.getString(R.string.home_count_waiting, 1) + " · " +
+            compose.activity.getString(R.string.home_count_failed, 1) + " · " + sessions
+        compose.onNodeWithText(summary).assertExists()
+        compose.onNodeWithText(string(R.string.state_waiting_approval) + " · " + res.getQuantityString(R.plurals.pane_count, 1, 1)).assertExists()
+        compose.onNodeWithText("Allow edit of src/app.ts?").assertExists()
+        // The session's chip: its most pressing state, in a word.
+        compose.onNodeWithText(string(R.string.activity_waiting)).assertExists()
+        val line = compose.activity.getString(R.string.home_pane_line, "pi", string(R.string.state_failed))
+        compose.onNode(hasText(line) and hasClickAction()).performClick()
+        compose.awaitThat { m.route.value == Route.Term && m.pocket.value.view?.focusedBlock()?.id == hidden }
+    }
+
     @Test
     fun theSearchIsStillThereAfterATabWasOpened() {
         val m = start()

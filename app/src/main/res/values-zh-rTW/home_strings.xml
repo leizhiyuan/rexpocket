@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_count_waiting">%1$d 個等待中</string>
+    <string name="home_count_failed">%1$d 個失敗</string>
+    <string name="home_count_done">%1$d 個已完成</string>
+    <string name="home_count_running">%1$d 個執行中</string>
+    <string name="home_pane_line">窗格 %1$s %2$s</string>
+</resources>
