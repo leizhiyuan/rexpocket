@@ -45,7 +45,7 @@ It works in a temporary worktree and with git plumbing, so the working tree is n
 7. checks the invariant below and moves the two branches.
 
 The library is the one input that is not reproducible: two gomobile builds of the same sources
-differ by a few bytes (the APK size does not move). The script caches it under the git directory,
+differ by a few bytes (64 B of `libgojni.so` between two builds here). The script caches it under the git directory,
 named by the `tailnet/` tree and the build script it came from, so a rerun with the same Go
 sources reuses it and gives the same commits. `--aar` hands in one built elsewhere.
 
@@ -169,6 +169,9 @@ On split/ui:
 - The tests and assemble tasks above pass, and the debug APK is the tip's default less about 19 KB
   (see Verification).
 - Settings › Tailnet shows no backend choice and joins Tailscale as before.
+- `device-test` on API 34: the three clipboard tests (`EmptyHomeTest.theCommandIsCopiedWithATap`,
+  `FollowInputTest.pasteBringsThePaneToTheNewestOutput`, `LaunchTest.aProgramsCopyInThePaneOnScreenGoesOnTheClipboard`)
+  sometimes never get the focus back from the system's copied overlay and time out; a rerun passes.
 
 On split/netbird:
 
@@ -190,10 +193,10 @@ have no libghostty either):
 | `go test -tags netbird ./...` | - | 27 passed |
 | `:app:assembleDebug`, `:app:assembleDebugAndroidTest` | built | built |
 | debug APK (default) | 32,490,726 B | 32,509,462 B |
-| `libgojni.so` | 21,213,832 B | 21,228,296 B |
+| `libgojni.so` | 21,213,896 B (21,213,832 B in the build the APK was measured with) | 21,228,296 B |
 | `git grep -i netbird` | nothing | - |
 
 A has four core tests fewer (the Netbird name, its relay path twice and its ping) and one
 screenshot fewer (the Netbird details); its tailnet tests lack the stub's. The APKs differ by
-18,736 B: the stub's native code (14,464 B) and the Netbird classes, dialog code and strings.
+18,736 B: the stub's native code (about 14.4 KB) and the Netbird classes, dialog code and strings.
 
