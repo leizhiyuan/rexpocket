@@ -33,6 +33,20 @@ event block_closed {block_id:<block>}
 event session_destroyed {session_id:<session>}
 event session_view_changed {revision:num}
 response session.destroy {}
+## desk makes a second session with two tabs
+event session_created {session:{label:str,session_id:<session>}}
+## phone moves a session it has not attached, first and then last
+event session_moved {before_session_id:<session>,session_id:<session>}
+event session_moved {session_id:<session>}
+response session.move error bad_request 400 "before_session_id must identify a different session"
+response session.move {}
+response session.move {}
+response session.move {}
+## phone moves a tab of that session first, and a tab that is not there
+event session_view_changed {revision:num}
+response session.move_window error bad_request 400 "input: validating: before_window_id must identify a different window"
+response session.move_window error not_found 404 "window <window> not found"
+response session.move_window {revision:num}
 ## phone attaches
 response session.attach {client_id:<client>,view:{active_window_id:<window>,label:str,revision:num,session_id:<session>,windows:[{focused_block_id:<block>,label:str,layers:[{blocks:[{block_id:<block>,creator_name:str,flavor:str,label:str}],kind:"tiled",layer_id:<layer>}],window_id:<window>}]}}
 ## desk makes a tab

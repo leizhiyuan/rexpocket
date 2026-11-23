@@ -89,6 +89,9 @@
     <string name="menu_new_tab">新增分頁</string>
     <string name="menu_rename_tab">重新命名分頁</string>
     <string name="menu_close_tab">關閉分頁</string>
+    <string name="action_move_up">上移</string>
+    <string name="action_move_down">下移</string>
+    <string name="order_place">第 %1$d 個，共 %2$d 個</string>
     <string name="menu_split_right">在右側新增窗格</string>
     <string name="menu_split_below">在下方新增窗格</string>
     <string name="action_close">關閉</string>

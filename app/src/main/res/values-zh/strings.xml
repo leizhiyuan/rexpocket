@@ -89,6 +89,9 @@
     <string name="menu_new_tab">新标签页</string>
     <string name="menu_rename_tab">重命名标签页</string>
     <string name="menu_close_tab">关闭标签页</string>
+    <string name="action_move_up">上移</string>
+    <string name="action_move_down">下移</string>
+    <string name="order_place">第 %1$d 个，共 %2$d 个</string>
     <string name="menu_split_right">右侧新建窗格</string>
     <string name="menu_split_below">下方新建窗格</string>
     <string name="action_close">关闭</string>

@@ -188,6 +188,32 @@ class RexShapeTest {
                 phone.take()
                 phone.call("session.destroy", JSONObject().put("session_id", other))
             }
+            // The home's Move up and Move down: a session in Rex's order, then a tab in its session's.
+            lateinit var moved: String
+            lateinit var movedTabs: List<String>
+            step("desk makes a second session with two tabs") {
+                val made = desk.call(
+                    "session.create",
+                    JSONObject().put("label", "rexpocket-shapes-4")
+                        .put("initial_windows", JSONArray().put(JSONObject().put("layout", SHELL)).put(JSONObject().put("layout", SHELL))),
+                ).getJSONObject("payload")
+                moved = made.getString("session_id")
+                movedTabs = List(2) { made.getJSONArray("initial_windows").getJSONObject(it).getString("window_id") }
+            }
+            step("phone moves a session it has not attached, first and then last", unordered = true) {
+                phone.call("session.move", JSONObject().put("session_id", moved).put("before_session_id", s))
+                phone.call("session.move", JSONObject().put("session_id", moved))
+                phone.call("session.move", JSONObject().put("session_id", moved))
+                phone.call("session.move", JSONObject().put("session_id", moved).put("before_session_id", moved))
+            }
+            step("phone moves a tab of that session first, and a tab that is not there", unordered = true) {
+                phone.call("session.move_window", JSONObject().put("session_id", moved).put("window_id", movedTabs[1]).put("before_window_id", movedTabs[0]))
+                phone.call("session.move_window", JSONObject().put("session_id", moved).put("window_id", movedTabs[1]).put("before_window_id", movedTabs[1]))
+                phone.call("session.move_window", JSONObject().put("session_id", moved).put("window_id", "window:00000000-0000-7000-8000-000000000000"))
+            }
+            phone.call("session.destroy", JSONObject().put("session_id", moved))
+            Thread.sleep(quiet)
+            phone.take()
             step("phone attaches") { phone.call("session.attach", JSONObject().put("session_id", s)) }
             lateinit var second: String
             step("desk makes a tab") {

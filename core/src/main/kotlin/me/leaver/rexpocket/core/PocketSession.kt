@@ -685,6 +685,38 @@ class PocketSession(
         rpc("session.set_label", JSONObject().put("session_id", sid).put("label", label))
     }
 
+    /**
+     * Moves [sessionId] to place [to] in Rex's session order, the one every client shows
+     * (`session.move`). The bootstrapped connection may move any session without attaching it.
+     * The list here changes with Rex's `session_moved`, which every client gets, this one too: one
+     * order, applied in the order Rex made the moves, whoever made them.
+     */
+    suspend fun moveSession(sessionId: String, to: Int) {
+        val order = _state.value.sessions.map { it.id }
+        val place = placement(order, sessionId, to) ?: return
+        val body = JSONObject().put("session_id", sessionId)
+        if (place.before != null) body.put("before_session_id", place.before)
+        rpc("session.move", body)
+    }
+
+    /**
+     * Moves tab [windowId] of [sessionId] to place [to] in its session's tab order
+     * (`session.move_window`), the order of Rex's tab bar; the active tab and the panes stay.
+     */
+    suspend fun moveWindow(sessionId: String, windowId: String, to: Int) {
+        val view = _state.value.views[sessionId] ?: return
+        val place = placement(view.windows.map { it.id }, windowId, to) ?: return
+        val body = JSONObject().put("session_id", sessionId).put("window_id", windowId)
+        if (place.before != null) body.put("before_window_id", place.before)
+        val revision = rpc("session.move_window", body).optLong("revision", -1)
+        // The answer can come before session_view_changed; the view is read again unless it came.
+        if ((_state.value.views[sessionId]?.revision ?: -1) < revision) refreshView(sessionId)
+    }
+
+    private fun reorderSessions(id: String, before: String?) {
+        updateState { it.copy(sessions = it.sessions.movedBefore(id, before) { s -> s.id }) }
+    }
+
     /** Renames a tab of the shown session, or of [sessionId] without attaching it. */
     suspend fun renameWindow(label: String, windowId: String? = null, sessionId: String? = null) {
         val sid = sessionId ?: requireSession()
@@ -1059,7 +1091,14 @@ class PocketSession(
                     ?: return
                 dropSession(id)
             }
-            "session_moved" -> refreshSessionList()
+            // Applied as it says when both sessions are known here; otherwise the list is read again.
+            "session_moved" -> {
+                val payload = event.optJSONObject("payload") ?: JSONObject()
+                val id = payload.optNullableString("session_id")
+                val before = payload.optNullableString("before_session_id")
+                val known = _state.value.sessions.map { it.id }
+                if (id != null && id in known && (before == null || before in known)) reorderSessions(id, before) else refreshSessionList()
+            }
             "session_event" -> {
                 val payload = event.optJSONObject("payload") ?: return
                 val sid = payload.optNullableString("session_id") ?: return

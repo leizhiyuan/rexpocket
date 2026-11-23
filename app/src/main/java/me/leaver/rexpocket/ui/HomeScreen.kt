@@ -69,7 +69,9 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -413,6 +415,13 @@ internal fun HomeScreen(
                                         } else {
                                             null
                                         },
+                                        moves = if (manageable(live, state, row)) {
+                                            moveActions(state.sessions.indexOfFirst { it.id == row.session.id }, state.sessions.size) { to ->
+                                                onManage(HomeAction.MoveSession(row.session.id, to))
+                                            }
+                                        } else {
+                                            emptyList()
+                                        },
                                     )
                                 }
                                 if (sessionExpanded) {
@@ -437,6 +446,11 @@ internal fun HomeScreen(
                                                 onOpen = { windowId -> onOpenTab(host, row.session.id, windowId) },
                                                 onManage = if (manageable(live, state, row)) {
                                                     { windowId -> manage = ManageTarget.Tab(row.session.id, windowId) }
+                                                } else {
+                                                    null
+                                                },
+                                                onMove = if (manageable(live, state, row)) {
+                                                    { windowId, to -> onManage(HomeAction.MoveTab(row.session.id, windowId, to)) }
                                                 } else {
                                                     null
                                                 },
@@ -764,6 +778,8 @@ private fun SessionHeader(
     onNewTab: () -> Unit,
     /** Opens the session's sheet (rename, new tab, end); null where the session cannot be managed now. */
     onManage: (() -> Unit)? = null,
+    /** Move up and Move down, for TalkBack's actions menu. */
+    moves: List<CustomAccessibilityAction> = emptyList(),
 ) {
     val tabs = row.view?.windows?.size ?: 0
     val detail = when {
@@ -778,7 +794,12 @@ private fun SessionHeader(
         Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.chip))
             .combinedClickable(onLongClickLabel = onManage?.let { manageLabel }, onLongClick = onManage, onClick = onToggle)
             // Said as the host's header says it, so a folded session is not only a turned chevron.
-            .semantics { if (row.view != null && !expanded) stateDescription = folded }
+            // A fold shows before the session's tabs are known too - from the cached list while the
+            // host connects, as after a launch or an update - rather than reading as open until then.
+            .semantics {
+                if (!expanded) stateDescription = folded
+                if (moves.isNotEmpty()) customActions = moves
+            }
             .padding(start = KEY_MARK),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -812,7 +833,7 @@ private fun SessionHeader(
             size = 48.dp,
             enabled = !opening,
         )
-        FoldChevron(expanded || row.view == null)
+        FoldChevron(expanded)
     }
 }
 
@@ -827,6 +848,8 @@ private fun TabCard(
     onOpen: (String) -> Unit,
     /** Opens a tab's sheet (rename, close); null where the tabs cannot be managed now. */
     onManage: ((String) -> Unit)? = null,
+    /** Moves a tab to a place in its session's order; null where the tabs cannot be managed now. */
+    onMove: ((windowId: String, to: Int) -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Colors.surface)) {
         row.tabs.forEachIndexed { index, window ->
@@ -843,6 +866,11 @@ private fun TabCard(
                 open = open && window.id == state.view?.activeWindowId,
                 onOpen = { onOpen(window.id) },
                 onManage = onManage?.let { manage -> { manage(window.id) } },
+                // Places in the session's whole order: the eye and the search may show only some tabs.
+                moves = onMove?.let { move ->
+                    val all = row.view?.windows.orEmpty()
+                    moveActions(all.indexOfFirst { it.id == window.id }, all.size) { to -> move(window.id, to) }
+                }.orEmpty(),
             )
         }
     }
@@ -871,6 +899,7 @@ private fun TabRow(
     open: Boolean,
     onOpen: () -> Unit,
     onManage: (() -> Unit)? = null,
+    moves: List<CustomAccessibilityAction> = emptyList(),
 ) {
     val selected = stringResource(R.string.state_selected)
     val manageLabel = stringResource(R.string.manage_actions_for, title)
@@ -884,7 +913,10 @@ private fun TabRow(
                 onLongClick = onManage,
                 onClick = onOpen,
             )
-            .semantics { if (open) stateDescription = selected }
+            .semantics {
+                if (open) stateDescription = selected
+                if (moves.isNotEmpty()) customActions = moves
+            }
             .padding(start = KEY_MARK, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.data.HomeFolds
 import me.leaver.rexpocket.data.HostStore
 import org.junit.After
@@ -125,6 +126,48 @@ class HomeStateTest {
         compose.waitForIdle()
         header(m, shown).assert(!folded)
         assertFalse(key in HostStore(compose.activity).folds().sessions)
+    }
+
+    private fun top(m: RexViewModel, session: String) = header(m, session).fetchSemanticsNode().boundsInRoot.top
+
+    /**
+     * A fold is the session's, by its id: it stays through a move at the desk (the row moves on
+     * screen, folded), a rename, and the phone connecting again after the desk moved it again.
+     */
+    @Test
+    fun aFoldFollowsTheSessionThroughMovesARenameAndAReconnect() {
+        val m = start()
+        compose.awaitThat { other in m.pocket.value.views }
+        fold(m, other)
+        val key = HomeFolds.sessionKey(desk.host.id, other)
+
+        desk.moveSession(other, before = shown)
+        compose.awaitThat { m.pocket.value.sessions.map { it.id } == listOf(other, shown) }
+        header(m, other).assert(folded)
+        header(m, shown).assert(!folded)
+        assertTrue("the moved session is not above the other on screen", top(m, other) < top(m, shown))
+
+        desk.rename(other, "moved and renamed")
+        compose.awaitThat { label(m, other) == "moved and renamed" }
+        header(m, other).assert(folded)
+
+        // Away while the desk moves it again: the list is drawn from the one cached in the old
+        // order until Rex answers with the new one.
+        compose.runOnUiThread { m.disconnect() }
+        desk.moveSession(other, before = null)
+        desk.rex.hold("session.bootstrap")
+        compose.runOnUiThread { m.connect(desk.host) }
+        // Its tabs are not known yet, and the row still says it is folded, as it was left: this is
+        // what a launch shows, an update's included, until Rex answers.
+        compose.awaitThat { desk.rex.calls.any { it.startsWith("session.bootstrap") } && m.pocket.value.phase != Phase.Live }
+        header(m, other).assert(folded)
+        desk.rex.release("session.bootstrap")
+        compose.awaitThat { m.pocket.value.let { it.phase == Phase.Live && it.sessions.map { s -> s.id } == listOf(shown, other) } }
+        compose.awaitThat { other in m.pocket.value.views }
+        header(m, other).assert(folded)
+        assertTrue(top(m, shown) < top(m, other))
+        assertTrue(key in HostStore(compose.activity).folds().sessions)
+        assertTrue(key in RexViewModel(compose.activity.application).folds.value.sessions)
     }
 
     @Test

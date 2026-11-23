@@ -135,7 +135,11 @@ the JVM without libghostty's host build the panes send no picture (`pictures = f
 terminal screen opens on its pane with nothing to draw.
 
 `HomeManageTest` drives the home's session and tab sheets (long press and ⋮) and checks Rex got the
-rename, new tab, close or end with no `session.attach` of that session and no pane taken; its rename
+rename, new tab, close, end or move (Move up and Move down, from the sheet and from TalkBack's
+actions, the rows' new places on screen) with no `session.attach` of that session and no pane taken;
+`HomeStateTest` holds a fold to its session through a move at the desk, a rename and connecting
+again, folded on screen while the list is still the cached one; `OrderTest` (core, on both servers)
+moves sessions and tabs from the phone and the desk; its rename
 dialog runs on the emulator only. `ShareTest` is a share from another app: the app started by it,
 connecting while the sheet is up, the sheet naming the last pane, nothing sent until Paste or Send,
 then the text in ScriptedRex's `pastes` (no Enter typed) or the file in its `uploads`; the picker

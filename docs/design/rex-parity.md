@@ -40,13 +40,14 @@ own connection) and keeps the welcome's client id, reconnect token, `resumed`, `
 | `session.bootstrap` (with `event_scope: all`), `session.list`, `session.view`, `session.attach` | used | the host list, each session's tabs and panes, opening a session |
 | `session.create`, `session.new_window`, `session.new_split`, `session.close_window`, `block.close`, `session.destroy` | used | new session, tab and pane; close tab, pane, session |
 | `session.set_label`, `session.set_window_label`, `session.set_block_label` | used | rename |
+| `session.move`, `session.move_window` | used | Move up and Move down for a session or a tab on the home ("Ordering") |
 | `session.own_block`, `session.disown_block` | used | the phone's size for the pane on screen; Release / Take over |
 | `block.event` (`paste`), `client.key` | used | paste, keys |
 | `block.method` by full name: terminal `write`, `resize`, `size`, `program_status`, `pwd`, `process`, `title`, `upload_begin`, `clipboard_read` | used | typing, sizing, status, directory, program, title, Send a file, a program's large copy |
 | `block.method` by short name: terminal `clear`, `reset`, `format` (`text`, `trim`, `unwrap`, `max_bytes`), `blob_read` | used | the palette's Clear terminal and Reset terminal; Copy output and Share output |
 | `data.connect` | used | the pane's stream (**fixture**) |
 | `session.focus_block`, `session.focus_window`, `session.focus_next_*`, `session.focus_previous_*`, `focus_history.reverse` | not used, on purpose | moving between tabs and panes is the phone's own; Rex's focus is the desktop's (README, "Ownership") |
-| `session.zoom_block`, `session.swap_blocks`, `session.move_block`, `session.move_window`, `session.move`, `session.resize_pane` | not used | see the verdicts below |
+| `session.zoom_block`, `session.swap_blocks`, `session.move_block`, `session.resize_pane` | not used | see the verdicts below |
 | floating layers: `session.new_layer`, `float_block`, `close_layer`, `raise_layer`, `lower_layer`, `resize_layer`, `set_layer_state` | not used | the app shows only a window's tiled blocks (**code**: `parseView` reads every layer's blocks as one list) |
 | `session.detach_block`, `session.new_block`, `session.list_blocks`, `session.describe_block`, `session.help`, `help.all`, `block_creator.list` | not used | |
 | `client.action`, `client.keymap`, `client.reply`, `client.perform`, `client.inspect`, `client.list`, `client.set_label`, `client.set_script` | not used | custom actions and prompts, below |
@@ -161,7 +162,7 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 | Idle in Activity, seen/unseen, Mark as Unread (docs:mac-settings, `client.tab.unread`) | Adapt, 1-2 days | needs the phone's own seen state per tab (a tab shown on the phone counts as seen), stored per host |
 | Custom actions in the palette (`rex.action`; `client.keymap` lists them, `client.action` runs them; docs:actions, docs:api) | Adapt, 1-2 days | the palette's next step: list the configuration file's actions with a `title` and no required `args`, run with `origin: palette`; the shape of `client.keymap`'s `actions` must be checked on a real Rex first |
 | Prompts from actions (`rex.ui`, `client_prompt_requested`, answered with `client.reply`; docs:api) | Adapt, 2 days | in the palette's sheet; without it an action that asks waits until another app answers |
-| Move Tab, Move Tab Backward/Forward (`session.move_window`) | Adapt, 0.5 day | reorder in the title sheet |
+| Move Tab, Move Tab Backward/Forward (`session.move_window`); session order (`session.move`) | Done | Move up and Move down in the home's session and tab sheets and in TalkBack's actions ("Ordering") |
 | Zoom Pane (`session.zoom_block`) | Skip | the phone shows one pane at a time already; zooming would change the desktop's layout |
 | Swap/Move Pane, Balance, Resize Pane, floating panes, Move Tab to New Window (docs:mac-actions) | Skip | layout editing for a screen that shows several panes; the phone shows one |
 | Go to Directory…, Insert Path… (`terminal.list_dir`, docs:lua) | Adapt, 1 day | a directory picker that types a path; useful with agents |
@@ -256,6 +257,21 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
   and `…reset` ("Reset Terminal") have a `title`, `category` (`Pane`) and `keywords` - the ones a
   palette would list (the phone's palette has both, as `block.method` `clear` and `reset`). Custom `rex.action`s need an `init.lua`, which was not tried. Saved in
   `rex-protocol/client-keymap.json`.
+- **Ordering** (verified on preview.22 / api 19, at the app's revision 7). `session.move` takes
+  `session_id` and `before_session_id` (left out: to the end) and answers `{}`; a bootstrapped
+  connection may move a session it never attached, one that did neither gets `conflict` "stream is
+  not attached to session …". Every bootstrapped client, the mover too, gets `session_moved` with
+  the same two ids (no `before_session_id` when last); a move to where it already is answers `{}`
+  and sends nothing. `before_session_id` naming the session itself is `bad_request` "before_session_id
+  must identify a different session"; an unknown one `session_not_found` "session … not found" or
+  "before session … not found". `session.move_window` (`session_id`, `window_id`,
+  `before_window_id`) answers `{revision}` and sends `session_view_changed`, the active tab
+  unchanged; in place, the revision is unchanged and no event comes; the same window twice is
+  `bad_request`, an unknown one `not_found` "window … not found". Session order and ids survive a
+  Rex restart. The phone applies `session_moved` to its list as it says (no `session.list` round
+  trip) and reads the view again after a tab move, so its order is always Rex's, in the order Rex
+  made the moves. Panes are not ordered: `session.move_block` puts a pane in a new split beside
+  another, a layout change for a screen that shows several ("Swap/Move Pane", Skip).
 - **Managing sessions from the home.** A connection that bootstrapped (`event_scope: all`) and never
   attached a session may call `session.set_label`, `session.set_window_label`, `session.new_window`,
   `session.close_window` and `session.destroy` on it; each answers `{revision}` (`destroy` `{}`).

@@ -114,6 +114,29 @@ class Desk(private val endpoint: Endpoint) : AutoCloseable {
         ).optString("content")
     }
 
+    /** Moves [sid] just before [before] in Rex's session order, or to the end, as dragging it at the desk does. */
+    suspend fun moveSession(sid: String, before: String?) {
+        attach(sid)
+        client.call("session.move", JSONObject().put("session_id", sid).apply { if (before != null) put("before_session_id", before) })
+    }
+
+    /** Moves tab [window] of [sid] just before [before], or to the end. */
+    suspend fun moveTab(sid: String, window: String, before: String?) {
+        attach(sid)
+        client.call(
+            "session.move_window",
+            JSONObject().put("session_id", sid).put("window_id", window).apply { if (before != null) put("before_window_id", before) },
+        )
+    }
+
+    suspend fun rename(sid: String, label: String) {
+        attach(sid)
+        client.call("session.set_label", JSONObject().put("session_id", sid).put("label", label))
+    }
+
+    /** Rex's sessions, in its order. */
+    suspend fun sessions(): List<ListedSession> = parseSessions(client.call("session.list").optJSONArray("sessions"))
+
     suspend fun destroy(sid: String) {
         runCatching { client.call("session.destroy", JSONObject().put("session_id", sid)) }
     }

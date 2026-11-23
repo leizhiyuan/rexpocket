@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.text.input.ImeAction
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.PocketState
@@ -16,8 +17,8 @@ import me.leaver.rexpocket.core.PocketState
 /**
  * What the home's session and tab sheets ask of the connected host. None of it attaches the session
  * or takes a pane, so a desktop showing it keeps its sizes: Rex lets a connection that bootstrapped
- * rename, add and close tabs and end sessions it is not attached to (rex-parity.md, "Managing
- * sessions from the home").
+ * rename, add, move and close tabs, and move and end sessions, it is not attached to (rex-parity.md,
+ * "Managing sessions from the home" and "Ordering").
  */
 sealed interface HomeAction {
     data class RenameSession(val sessionId: String, val label: String) : HomeAction
@@ -25,6 +26,45 @@ sealed interface HomeAction {
     data class EndSession(val sessionId: String) : HomeAction
     data class RenameTab(val sessionId: String, val windowId: String, val label: String) : HomeAction
     data class CloseTab(val sessionId: String, val windowId: String) : HomeAction
+
+    /** Moves a session to place [to] (0 is first) in Rex's order, the one every client shows. */
+    data class MoveSession(val sessionId: String, val to: Int) : HomeAction
+
+    /** Moves a tab to place [to] in its session's tab order, as Rex's tab bar has it. */
+    data class MoveTab(val sessionId: String, val windowId: String, val to: Int) : HomeAction
+}
+
+/**
+ * Move up and Move down for a row at [index] of [count], for TalkBack's actions menu: the same moves
+ * the sheet offers, without opening it. None where the row cannot move that way.
+ */
+@Composable
+internal fun moveActions(index: Int, count: Int, onMove: (to: Int) -> Unit): List<CustomAccessibilityAction> {
+    val up = stringResource(R.string.action_move_up)
+    val down = stringResource(R.string.action_move_down)
+    if (index < 0) return emptyList()
+    return buildList {
+        if (index > 0) add(CustomAccessibilityAction(up) { onMove(index - 1); true })
+        if (index < count - 1) add(CustomAccessibilityAction(down) { onMove(index + 1); true })
+    }
+}
+
+/**
+ * The sheet's Move up and Move down, under a caption that says where the row is now. They keep the
+ * sheet open, so a row can be moved several places in a row, and stay in place greyed out at the
+ * ends so the buttons do not jump under the finger.
+ */
+@Composable
+private fun SheetScope.MoveRows(index: Int, count: Int, onMove: (to: Int) -> Unit) {
+    if (index < 0 || count < 2) return
+    Group(label = stringResource(R.string.order_place, index + 1, count)) {
+        SheetItem(stringResource(R.string.action_move_up), icon = R.drawable.ic_arrow_up, keepOpen = true, enabled = index > 0) {
+            onMove(index - 1)
+        }
+        SheetItem(stringResource(R.string.action_move_down), icon = R.drawable.ic_arrow_down, keepOpen = true, enabled = index < count - 1) {
+            onMove(index + 1)
+        }
+    }
 }
 
 /** The session or tab whose sheet is open on the home. */
@@ -64,6 +104,9 @@ internal fun HomeManageSheet(target: ManageTarget?, state: PocketState, onDismis
                             dialog = ManageDialog.Confirm(target, label)
                         }
                     }
+                    MoveRows(state.sessions.indexOfFirst { it.id == target.sessionId }, state.sessions.size) { to ->
+                        onAction(HomeAction.MoveSession(target.sessionId, to))
+                    }
                 }
             }
         }
@@ -82,6 +125,9 @@ internal fun HomeManageSheet(target: ManageTarget?, state: PocketState, onDismis
                         SheetItem(stringResource(R.string.menu_close_tab), Colors.danger, icon = R.drawable.ic_close) {
                             dialog = ManageDialog.Confirm(target, title)
                         }
+                    }
+                    MoveRows(view.windows.indexOf(window), view.windows.size) { to ->
+                        onAction(HomeAction.MoveTab(target.sessionId, target.windowId, to))
                     }
                 }
             }

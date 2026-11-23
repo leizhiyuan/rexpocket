@@ -777,7 +777,40 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
                 changed(s)
                 JSONObject().put("revision", s.revision)
             }
-            "client.keymap" -> JSONObject().put("bindings", JSONArray()).put("diagnostics", JSONArray()).put("actions", JSONArray())
+            "session.move" -> {
+                val id = payload.optString("session_id")
+                val s = sessions[id] ?: throw Refused("session_not_found", 404, "session $id not found")
+                if (client.scope == null && s.id !in client.attached) throw notAttached(s)
+                val before = payload.optNullableString("before_session_id")
+                if (before == s.id) throw Refused("bad_request", 400, "before_session_id must identify a different session")
+                if (before != null && before !in sessions) throw Refused("session_not_found", 404, "before session $before not found")
+                val order = sessions.values.toList().movedBefore(s.id, before) { it.id }
+                if (order != sessions.values.toList()) {
+                    sessions.clear()
+                    order.forEach { sessions[it.id] = it }
+                    val moved = JSONObject().put("session_id", s.id)
+                    if (before != null) moved.put("before_session_id", before)
+                    announce(Outgoing(null, block = false, JSONObject().put("type", "session_moved").put("payload", moved)))
+                }
+                JSONObject()
+            }
+            "session.move_window" -> {
+                val s = reached(client, payload)
+                val window = payload.optString("window_id")
+                val before = payload.optNullableString("before_window_id")
+                for (id in listOfNotNull(window, before)) {
+                    if (s.tabs.none { it.id == id }) throw Refused("not_found", 404, "window $id not found")
+                }
+                if (before == window) throw Refused("bad_request", 400, "input: validating: before_window_id must identify a different window")
+                val order = s.tabs.movedBefore(window, before) { it.id }
+                if (order != s.tabs) {
+                    s.tabs.clear()
+                    s.tabs += order
+                    changed(s)
+                }
+                JSONObject().put("revision", s.revision)
+            }
+            "client.keymap" ->JSONObject().put("bindings", JSONArray()).put("diagnostics", JSONArray()).put("actions", JSONArray())
             else -> JSONObject()
         }
     }

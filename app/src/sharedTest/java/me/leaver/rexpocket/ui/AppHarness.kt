@@ -46,6 +46,16 @@ internal class RexOnDesk(sessions: Int = 2) : AutoCloseable {
         desk.view(session).windows.forEach { desk.closeTab(session, it.id) }
     }
 
+    /** Moves [session] just before [before] in Rex's order, or to the end, as dragging it at the desk does. */
+    fun moveSession(session: String, before: String?) = runBlocking { desk.moveSession(session, before) }
+
+    fun rename(session: String, label: String) = runBlocking { desk.rename(session, label) }
+
+    /** Rex's sessions, in its order. */
+    fun order(): List<String> = runBlocking { desk.sessions().map { it.id } }
+
+    fun tabs(session: String): List<String> = runBlocking { desk.view(session).windows.map { it.id } }
+
     val host = SavedHost(id = "desk-host", label = "desk", host = "127.0.0.1", port = rex.endpoint.port, plaintext = true)
 
     /**

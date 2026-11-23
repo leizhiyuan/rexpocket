@@ -59,6 +59,35 @@ data class Welcome(
 
 data class ListedSession(val id: String, val label: String)
 
+/**
+ * Where an item goes in Rex's order when it moves to place [to] (0 is first), as `session.move` and
+ * `session.move_window` take it: the id it is then just before, or null for the end. Null for the
+ * whole answer when it is already there or not in [order], so no call is made for nothing.
+ */
+data class Placement(val before: String?)
+
+fun placement(order: List<String>, id: String, to: Int): Placement? {
+    val from = order.indexOf(id)
+    if (from < 0) return null
+    val target = to.coerceIn(0, order.lastIndex)
+    if (target == from) return null
+    return Placement(order.filter { it != id }.getOrNull(target))
+}
+
+/**
+ * [items] with the one whose id is [id] moved just before [before] (to the end when null), as a
+ * `session_moved` event says. Unchanged when either is not there.
+ */
+fun <T> List<T>.movedBefore(id: String, before: String?, idOf: (T) -> String): List<T> {
+    val item = firstOrNull { idOf(it) == id } ?: return this
+    if (before == id) return this
+    val rest = filter { idOf(it) != id }
+    if (before == null) return rest + item
+    val at = rest.indexOfFirst { idOf(it) == before }
+    if (at < 0) return this
+    return rest.subList(0, at) + item + rest.subList(at, rest.size)
+}
+
 data class BlockInfo(
     val id: String,
     val label: String,

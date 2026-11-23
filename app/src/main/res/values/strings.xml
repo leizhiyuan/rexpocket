@@ -90,6 +90,10 @@
     <string name="menu_new_tab">New tab</string>
     <string name="menu_rename_tab">Rename tab</string>
     <string name="menu_close_tab">Close tab</string>
+    <string name="action_move_up">Move up</string>
+    <string name="action_move_down">Move down</string>
+    <!-- Where a session or tab is in Rex's order, above the sheet's Move up and Move down: "2 of 5". -->
+    <string name="order_place">%1$d of %2$d</string>
     <string name="menu_split_right">New pane on the right</string>
     <string name="menu_split_below">New pane below</string>
     <string name="action_close">Close</string>

@@ -732,10 +732,12 @@ class RexViewModel @JvmOverloads constructor(
                 .collect { store.setLastSession(hostId, it) }
         }
         launch {
-            s.state.map { it.sessions }.filter { it.isNotEmpty() }.distinctUntilChanged()
-                .collect { sessions ->
+            // The list and whether it is Rex's come from one state: only a list a live connection
+            // read prunes the folds, never the cached one drawn while connecting.
+            s.state.map { it.sessions to (it.phase == Phase.Live) }.filter { it.first.isNotEmpty() }.distinctUntilChanged()
+                .collect { (sessions, live) ->
                     store.setCachedSessions(hostId, sessions)
-                    if (s.state.value.phase == Phase.Live) pruneFolds(hostId, sessions.map { it.id })
+                    if (live) pruneFolds(hostId, sessions.map { it.id })
                 }
         }
         // Only a pane that was on the terminal screen counts. Connecting already selects a session,
@@ -1364,6 +1366,8 @@ class RexViewModel @JvmOverloads constructor(
                 is HomeAction.EndSession -> destroySession(action.sessionId)
                 is HomeAction.RenameTab -> renameWindow(action.label, action.windowId, action.sessionId)
                 is HomeAction.CloseTab -> closeWindow(action.windowId, action.sessionId)
+                is HomeAction.MoveSession -> moveSession(action.sessionId, action.to)
+                is HomeAction.MoveTab -> moveWindow(action.sessionId, action.windowId, action.to)
             }
         }
     }

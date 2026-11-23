@@ -1,6 +1,9 @@
 package me.leaver.rexpocket.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -145,6 +148,44 @@ class HomeManageTest {
         compose.onNode(hasSetTextAction()).performTextReplacement("logs")
         compose.onNode(hasSetTextAction()).performImeAction()
         compose.awaitThat { view(m).windows.first { it.id == tab.id }.label == "logs" }
+        assertNotAttached()
+    }
+
+    /** What TalkBack's actions menu does with one of a row's actions. */
+    private fun SemanticsNodeInteraction.act(label: String) {
+        val action = fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == label }
+        compose.runOnUiThread { action.action() }
+        compose.waitForIdle()
+    }
+
+    private fun top(text: String) = compose.onNode(hasText(text) and hasClickAction() and !hasAnyAncestorTagged()).fetchSemanticsNode().boundsInRoot.top
+
+    /**
+     * Move up and Move down, from TalkBack's actions and from the sheet: Rex's order changes
+     * (`session.move_window`, `session.move`), the rows move on screen, and the sheet says the new
+     * place and greys out the way that is closed. Nothing attaches the session.
+     */
+    @Test
+    fun movesReachRexAndTheListWithoutAttaching() {
+        val m = start()
+        val tabs = desk.tabs(other)
+        // The second session's second tab, by its place: the first session's has the same title.
+        compose.onAllNodes(hasText(string(R.string.tab_number, 2)) and hasClickAction())[1].act(string(R.string.action_move_up))
+        compose.awaitThat { view(m).windows.map { it.id } == tabs.reversed() }
+        assertEquals(tabs.reversed(), desk.tabs(other))
+
+        val name = label(m)
+        compose.onNode(hasContentDescription(string(R.string.manage_actions_for, name)) and hasClickAction()).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(string(R.string.order_place, 2, 2)).assertExists()
+        inSheet(string(R.string.action_move_down)).assertIsNotEnabled()
+        inSheet(string(R.string.action_move_up)).performClick()
+        compose.awaitThat { m.pocket.value.sessions.map { it.id } == listOf(other, shown) }
+        assertEquals(listOf(other, shown), desk.order())
+        // The sheet stays for another move, and says where the session is now.
+        compose.onNodeWithText(string(R.string.order_place, 1, 2)).assertExists()
+        inSheet(string(R.string.action_move_up)).assertIsNotEnabled()
+        assertTrue("the moved session is not first on screen", top(name) < top(m.pocket.value.sessions.first { it.id == shown }.label))
         assertNotAttached()
     }
 }
