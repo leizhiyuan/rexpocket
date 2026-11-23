@@ -3,11 +3,12 @@ name: device-test
 # Runs the instrumented tests (app/src/androidTest) on an x86_64 emulator, with KVM.
 #
 # The app ships arm64-v8a native code only. The x86_64 images' ARM translation (libndk_translation,
-# API 30 to 35) runs libghostty, but not the Go tailnet library: when the Netbird node starts, the
-# library executes `mrs x0, midr_el1` (Go CPU-feature detection), which the translator does not
-# implement, and the app dies with SIGILL. A real arm64 kernel traps and answers that read. So the test build here is an x86_64 one: both native libraries are built for x86_64 from
-# the same sources and pinned versions, and -Prexpocket.abi=x86_64 packs them. The release build and
-# the scripts it uses are unchanged; the x86_64 copies of the build scripts below exist only on the runner.
+# API 30 to 35) runs libghostty, but not the Go tailnet library: when the Netbird node starts, it executes
+# `mrs x0, midr_el1` (Go CPU-feature detection), which the translator does not implement, and the app
+# dies with SIGILL. A real arm64 kernel traps and answers that read. So the test build here is an
+# x86_64 one: both native libraries are built for x86_64 from the same sources and pinned versions,
+# and -Prexpocket.abi=x86_64 packs them. The release build and the scripts it uses are unchanged; the
+# x86_64 copies of the build scripts below exist only on the runner.
 on:
   workflow_dispatch:
   push:
