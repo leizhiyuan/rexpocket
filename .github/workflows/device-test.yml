@@ -124,6 +124,8 @@ jobs:
               me.leaver.rexpocket.ui.MultiHostTest \
               me.leaver.rexpocket.ui.HostImportScreenTest \
               me.leaver.rexpocket.ui.ShareTest \
+              me.leaver.rexpocket.ui.QuickRepliesScreenTest \
+              me.leaver.rexpocket.ui.TermAgentTest \
               me.leaver.rexpocket.alerts.BackgroundServiceTest; do
             adb logcat -c || true
             if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \

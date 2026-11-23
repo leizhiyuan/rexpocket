@@ -18,6 +18,8 @@ import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.core.AlertEvent
 import me.leaver.rexpocket.core.AlertPrefs
 import me.leaver.rexpocket.core.HostBackground
+import me.leaver.rexpocket.core.QuickReplies
+import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.with
 import me.leaver.rexpocket.data.HostStore
 import org.junit.After
@@ -219,6 +221,104 @@ class NotificationsTest {
         desk.rex.report(block, "blocked", kind = "auth", msg = "Password")
         val n = paneNotification(block)
         assertEquals(null, n.actionNamed(app.getString(me.leaver.rexpocket.R.string.alerts_reply)))
+    }
+
+    private fun label(id: Int) = app.getString(id)
+
+    /**
+     * An agent the app knows (Claude Code) waiting for approval: Approve, Deny and Reply - no
+     * Interrupt, as a notification shows three actions - with Approve and Deny wanting the phone
+     * unlocked, and Reply offering the quick replies. Approve types the agent's key and the alert goes.
+     */
+    @Test
+    fun anAgentsApprovalPromptOffersApproveAndDenyThatWantThePhoneUnlocked() {
+        val block = start().first()
+        away()
+        desk.rex.report(block, "blocked", kind = "permission", app = "claude", msg = "Allow Bash: npm test?")
+        val n = paneNotification(block)
+        assertEquals(
+            listOf(label(R.string.alerts_approve), label(R.string.alerts_deny), label(R.string.alerts_reply)),
+            n.actions.map { it.title.toString() },
+        )
+        val approve = n.actionNamed(label(R.string.alerts_approve))!!
+        val deny = n.actionNamed(label(R.string.alerts_deny))!!
+        assertTrue("Approve wants the phone unlocked", approve.isAuthenticationRequired)
+        assertTrue("Deny wants the phone unlocked", deny.isAuthenticationRequired)
+        val reply = n.actionNamed(label(R.string.alerts_reply))!!
+        assertEquals(listOf("yes", "continue", "/compact"), reply.remoteInputs.single().choices.map { it.toString() })
+
+        AlertActionReceiver().onReceive(app, sent(approve.actionIntent))
+        awaitInputs(listOf("key $block +enter"))
+        gone(block)
+    }
+
+    @Test
+    fun denyForCodexIsEscape() {
+        val block = start().first()
+        away()
+        desk.rex.report(block, "blocked", kind = "permission", app = "codex", msg = "Run cargo test?")
+        val deny = paneNotification(block).actionNamed(label(R.string.alerts_deny))!!
+        AlertActionReceiver().onReceive(app, sent(deny.actionIntent))
+        awaitInputs(listOf("key $block +escape"))
+        gone(block)
+    }
+
+    /**
+     * The program asked something else since the alert, and the phone did not hear it (Rex's
+     * event was lost while it reconnected): Approve reads the record again, types nothing, and the
+     * alert comes back saying the prompt changed, without Approve and Deny, its tap opening the pane.
+     */
+    @Test
+    fun approveForAPromptThatChangedTypesNothingAndSaysSo() {
+        val block = start().first()
+        away()
+        desk.rex.report(block, "blocked", kind = "permission", app = "claude", msg = "Allow Bash: ls?")
+        val approve = paneNotification(block).actionNamed(label(R.string.alerts_approve))!!
+        Thread.sleep(5)
+        desk.rex.report(block, "blocked", kind = "permission", app = "claude", msg = "Allow Bash: rm -rf /?", quiet = true)
+        AlertActionReceiver().onReceive(app, sent(approve.actionIntent))
+        val changed = paneNotification(block) { it.text() == label(R.string.alerts_prompt_changed) }
+        assertEquals(null, changed.actionNamed(label(R.string.alerts_approve)))
+        assertEquals(null, changed.actionNamed(label(R.string.alerts_deny)))
+        assertNotNull("its tap still opens the pane", changed.contentIntent)
+        pause(300)
+        assertTrue("nothing was typed: ${desk.rex.inputs}", desk.rex.inputs.isEmpty())
+    }
+
+    /** No Approve for a program the app has no keys for, for a question, or for a login. */
+    @Test
+    fun onlyAKnownAgentsApprovalPromptGetsApprove() {
+        val (block, other) = start()
+        away()
+        desk.rex.report(block, "blocked", kind = "permission", app = "terraform", msg = "Apply 3 to add?")
+        val unknown = paneNotification(block)
+        assertEquals(null, unknown.actionNamed(label(R.string.alerts_approve)))
+        assertNotNull("Interrupt stays", unknown.actionNamed(label(R.string.alerts_interrupt)))
+        assertNotNull("Reply stays", unknown.actionNamed(label(R.string.alerts_reply)))
+        desk.rex.report(other, "blocked", kind = "auth", app = "claude", msg = "Sign in")
+        val login = paneNotification(other)
+        assertEquals(null, login.actionNamed(label(R.string.alerts_approve)))
+        assertEquals(null, login.actionNamed(label(R.string.alerts_reply)))
+        desk.rex.report(block, "blocked", kind = "question", app = "claude", msg = "Which branch?")
+        val question = paneNotification(block) { it.text().endsWith("Which branch?") }
+        assertEquals(null, question.actionNamed(label(R.string.alerts_approve)))
+    }
+
+    /** Reply's choices are Settings › Quick replies, the short one-line ones, as they are now. */
+    @Test
+    fun replyOffersTheQuickRepliesAsSetNow() {
+        val block = start().first()
+        compose.runOnUiThread { model.setQuickReplies(QuickReplies(listOf("lgtm", "a longer\nprompt", "/clear"))) }
+        away()
+        desk.rex.report(block, "blocked", kind = "question", app = "claude", msg = "Next?")
+        val reply = paneNotification(block).actionNamed(label(R.string.alerts_reply))!!
+        val input = reply.remoteInputs.single()
+        assertEquals(listOf("lgtm", "/clear"), input.choices.map { it.toString() })
+        // A choice is sent as Reply sends text: pasted, then Return.
+        val filled = Intent(sent(reply.actionIntent))
+        RemoteInput.addResultsToIntent(arrayOf(input), filled, Bundle().apply { putCharSequence(input.resultKey, "/clear") })
+        AlertActionReceiver().onReceive(app, filled)
+        awaitInputs(listOf("paste $block /clear", "key $block +enter"))
     }
 
     @Test

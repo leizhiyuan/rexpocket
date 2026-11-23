@@ -95,6 +95,7 @@ import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.PaletteEntry
+import me.leaver.rexpocket.core.QuickReplies
 import me.leaver.rexpocket.core.ProgramMark
 import me.leaver.rexpocket.core.programMark
 import me.leaver.rexpocket.core.ProgramRecord
@@ -155,6 +156,9 @@ internal sealed interface Sheet {
     data object Palette : Sheet
     data class TabActions(val windowId: String) : Sheet
     data class PaneActions(val blockId: String) : Sheet
+
+    /** The prompt composer, for the pane that was on screen when it opened. */
+    data class Composer(val sessionId: String, val blockId: String, val title: String) : Sheet
 }
 
 @Composable
@@ -187,6 +191,11 @@ internal fun TermScreen(
     onOpenTab: (sessionId: String, windowId: String) -> Unit = { sessionId, _ -> onOpenSession(sessionId) },
     /** What the program in a pane copies with OSC 52; see [PocketSession.copies]. */
     paneCopies: (String) -> Flow<String> = { emptyFlow() },
+    /** The person's quick replies: the key bar's Quick replies key, the palette and the composer. */
+    quickReplies: List<String> = emptyList(),
+    /** The composer's drafts, by host and pane; [draftHost] is the host on screen. */
+    drafts: PromptDrafts = remember { PromptDrafts() },
+    draftHost: String? = null,
 ) {
     val context = LocalContext.current
     val ime = LocalSoftwareKeyboardController.current
@@ -244,6 +253,21 @@ internal fun TermScreen(
             followNewest()
             onAct { paste(text) }
         }
+    }
+
+    /** The composer for the pane on screen; it keeps that pane while it is open. */
+    fun openComposer() {
+        val v = view ?: return
+        val pane = focused ?: return
+        sheet = Sheet.Composer(v.sessionId, pane.id, paneTitle(pane, state.blockStatus[pane.id], state.programs[pane.id]))
+    }
+
+    /** A quick reply from the key bar or the palette: pasted into the pane on screen, then Return. */
+    fun sendQuickReply(text: String) {
+        val v = view ?: return
+        val pane = focused ?: return
+        followNewest()
+        onAct { replyTo(v.sessionId, pane.id, text) }
     }
 
     /** Sends a key with the modifiers the key row holds; the ones on for one key are then used up. */
@@ -522,6 +546,9 @@ internal fun TermScreen(
                             attachReady = upload?.running != true,
                             onKeyboard = { toggleKeyboard() },
                             onFullScreen = toggleFullScreen,
+                            quickReplies = quickReplies,
+                            onQuickReply = ::sendQuickReply,
+                            onCompose = ::openComposer,
                         )
                     }
                 }
@@ -579,6 +606,9 @@ internal fun TermScreen(
                             ) { toggleKeyboard() }
                         }
                         BarKey.FullScreen -> SheetItem(stringResource(R.string.action_full_screen), icon = R.drawable.ic_fullscreen) { toggleFullScreen() }
+                        BarKey.Compose -> if (focused != null) {
+                            SheetItem(stringResource(R.string.composer_title), icon = R.drawable.ic_edit) { openComposer() }
+                        }
                         else -> Unit
                     }
                 }
@@ -730,6 +760,14 @@ internal fun TermScreen(
                 action(stringResource(R.string.palette_font_smaller), phoneGroup, "Decrease Font Size client.font.decrease") { onFont(fontScale - FONT_STEP) }
                 action(stringResource(R.string.palette_font_reset), phoneGroup, "Reset Font Size client.font.reset") { onFont(1f) }
                 action(stringResource(R.string.palette_back_home), phoneGroup) { onBack() }
+                if (focused != null) {
+                    // Rex's own Compose Input… opens its composer; the phone's sends one paste.
+                    action(stringResource(R.string.composer_title), phoneGroup, "Compose Input client.composer.open prompt message") { openComposer() }
+                    val replyGroup = stringResource(R.string.palette_group_quick_reply)
+                    for (reply in quickReplies) {
+                        add(PaletteEntry(QuickReplies.short(reply), replyGroup, null, PaletteRun { sendQuickReply(reply) }, keywords = "send reply snippet $reply"))
+                    }
+                }
                 // Where to go: the tabs of the session on screen, then of the other sessions the
                 // phone has loaded, then every session.
                 val ordered = listOfNotNull(view) + state.sessions.mapNotNull { s -> state.views[s.id]?.takeIf { it.sessionId != view?.sessionId } }
@@ -812,6 +850,20 @@ internal fun TermScreen(
                     }
                 }
             }
+        }
+        is Sheet.Composer -> {
+            val key = PromptDrafts.key(draftHost, open.blockId)
+            PromptComposer(
+                target = open.title,
+                draft = drafts[key],
+                onDraft = { drafts[key] = it },
+                quickReplies = quickReplies,
+                onSend = { text, enter ->
+                    followNewest()
+                    onAct { replyTo(open.sessionId, open.blockId, text, enter) }
+                },
+                onDismiss = { sheet = null },
+            )
         }
         is Sheet.PaneActions -> {
             val block = tab?.blocks?.firstOrNull { it.id == open.blockId }
@@ -1299,9 +1351,11 @@ private fun holderShown(state: PocketState, tab: WindowInfo?): Boolean = state.p
  */
 internal val BarKey.actsOnPhone: Boolean
     get() = when (this) {
-        BarKey.Paste, BarKey.Attach, BarKey.Keyboard, BarKey.FullScreen -> true
+        BarKey.Paste, BarKey.Attach, BarKey.Keyboard, BarKey.FullScreen, BarKey.Compose -> true
         BarKey.Escape, BarKey.CtrlC, BarKey.Tab, BarKey.Enter, BarKey.Ctrl, BarKey.Shift, BarKey.Alt,
         BarKey.Slash, BarKey.Arrows -> false
+        // Quick replies type, as the keys do; the palette lists each one too.
+        BarKey.Replies -> false
         // Group keys open a panel; the rest of the catalogue types.
         is BarKey.Group, is BarKey.Desk, is BarKey.Arrow, is BarKey.Chord, is BarKey.Typed -> false
     }

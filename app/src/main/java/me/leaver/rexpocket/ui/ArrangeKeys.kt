@@ -623,6 +623,8 @@ internal fun keyName(key: BarKey, arrangement: KeyArrangement? = null): String =
     BarKey.Alt -> stringResource(R.string.key_alt)
     BarKey.Paste -> stringResource(R.string.key_paste)
     BarKey.Attach -> stringResource(R.string.upload_attach)
+    BarKey.Compose -> stringResource(R.string.key_compose)
+    BarKey.Replies -> stringResource(R.string.key_quick_replies)
     BarKey.Slash -> stringResource(R.string.arrange_slash)
     BarKey.Arrows -> stringResource(R.string.key_arrows)
     BarKey.Keyboard -> stringResource(R.string.key_keyboard)

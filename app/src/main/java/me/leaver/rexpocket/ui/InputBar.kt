@@ -142,6 +142,12 @@ internal fun KeyBar(
     onDeskKey: (DeskKey) -> Unit = {},
     /** Full screen, from its key in the small pill; null leaves the key out. */
     onFullScreen: (() -> Unit)? = null,
+    /** The person's quick replies, for the Quick replies key's panel. */
+    quickReplies: List<String> = emptyList(),
+    /** A quick reply picked in its panel: sent to the pane, then Return. */
+    onQuickReply: (String) -> Unit = {},
+    /** The Compose key: the prompt composer for the pane. */
+    onCompose: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     val pill = RoundedCornerShape(50)
@@ -149,8 +155,9 @@ internal fun KeyBar(
     // One group's panel at a time; it goes when its key leaves the bar.
     // Kept across a rotation, as the screen's other state is.
     var pinned by rememberSaveable { mutableStateOf<String?>(null) }
-    val openGroup = pinned?.takeIf { id -> keys.any { it is BarKey.Group && it.id == id } }
-    val actions = KeyActions(mods, busy, ctrlC, onMod, onKey, onNewLine, onPaste, onAttach, attachReady, onDeskKey)
+    val openGroup = pinned?.takeIf { id -> id != REPLIES_PANEL && keys.any { it is BarKey.Group && it.id == id } }
+    val repliesOpen = pinned == REPLIES_PANEL && BarKey.Replies in keys
+    val actions = KeyActions(mods, busy, ctrlC, onMod, onKey, onNewLine, onPaste, onAttach, attachReady, onDeskKey, onCompose)
     val restKeys = arrangement.shown(Pill.Rest).filter { it != BarKey.FullScreen || onFullScreen != null }
     BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         // How many keys each pill has decides how they share the width, so both show their hint
@@ -175,6 +182,16 @@ internal fun KeyBar(
                             val group = arrangement.group(barKey.id) ?: continue
                             GroupKey(group, key, open = openGroup == group.id, actions = actions) {
                                 pinned = if (openGroup == group.id) null else group.id
+                            }
+                        } else if (barKey == BarKey.Replies) {
+                            RepliesKey(
+                                quickReplies,
+                                key,
+                                open = repliesOpen,
+                                onToggle = { pinned = if (repliesOpen) null else REPLIES_PANEL },
+                            ) { reply ->
+                                pinned = null
+                                onQuickReply(reply)
                             }
                         } else {
                             BarKeyFace(barKey, key, Colors.clear, actions)
@@ -387,6 +404,7 @@ private class KeyActions(
     val onAttach: () -> Unit,
     val attachReady: Boolean,
     val onDeskKey: (DeskKey) -> Unit,
+    val onCompose: () -> Unit,
 )
 
 /**
@@ -475,7 +493,95 @@ private fun BarKeyFace(barKey: BarKey, modifier: Modifier, plate: Color, a: KeyA
                 description = if (c == ' ') stringResource(R.string.key_space) else null,
             ) { typedPress(c)?.let { a.onKey(it, "") } }
         }
-        is BarKey.Group, BarKey.Arrows, BarKey.Keyboard, BarKey.FullScreen -> Unit
+        BarKey.Compose -> Key(stringResource(R.string.key_compose), modifier, plate = plate, icon = R.drawable.ic_edit) { a.onCompose() }
+        is BarKey.Group, BarKey.Arrows, BarKey.Keyboard, BarKey.FullScreen, BarKey.Replies -> Unit
+    }
+}
+
+/** What [KeyBar]'s pinned panel is when it is the quick replies' rather than a group's. */
+private const val REPLIES_PANEL = "@replies"
+
+internal const val REPLIES_KEY_TAG = "quick-replies-key"
+internal const val REPLIES_PANEL_TAG = "quick-replies-panel"
+
+/**
+ * The Quick replies key: a tap pins a panel of the person's quick replies above the bar, as a
+ * group's key pins its keys, and a tap on one sends it to the pane, then Return, and puts the panel
+ * away. Each reply is a row of its own, 48 dp high, read out whole by TalkBack. With none yet, the
+ * panel says so; they are made in Settings › Quick replies.
+ */
+@Composable
+private fun RepliesKey(replies: List<String>, modifier: Modifier, open: Boolean, onToggle: () -> Unit, onPick: (String) -> Unit) {
+    val label = stringResource(R.string.key_quick_replies)
+    val state = stringResource(if (open) R.string.arrows_pinned else R.string.mod_off)
+    val density = LocalDensity.current
+    val edge = with(density) { POPUP_EDGE.roundToPx() }
+    var top by remember { mutableIntStateOf(0) }
+    val above = remember(edge) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+                val x = (anchorBounds.center.x - popupContentSize.width / 2)
+                    .coerceIn(edge, maxOf(edge, windowSize.width - popupContentSize.width - edge))
+                val y = (anchorBounds.top - popupContentSize.height - edge).coerceAtLeast(0)
+                return IntOffset(x, y)
+            }
+        }
+    }
+    Box(
+        modifier.height(KEY_HEIGHT)
+            .onGloballyPositioned { top = it.boundsInWindow().top.toInt() }
+            .clip(RoundedCornerShape(Radius.chip))
+            .background(if (open) Colors.keyOn else Colors.clear)
+            .clickable(role = Role.Button, onClick = onToggle)
+            .semantics { contentDescription = label; stateDescription = state }
+            .testTag(REPLIES_KEY_TAG)
+            .padding(horizontal = KEY_PAD),
+        contentAlignment = Alignment.Center,
+    ) {
+        Glyph(R.drawable.ic_return, if (open) Colors.accent else Colors.ink, size = 22.dp)
+        if (open) {
+            val room = with(density) { (top - 2 * edge).toDp() }.coerceAtLeast(MORE_PANEL_MIN)
+            Popup(popupPositionProvider = above, properties = PopupProperties(focusable = false)) {
+                AppTextScale {
+                    Column(
+                        Modifier.width(MORE_PANEL_WIDTH).heightIn(max = if (top > 0) room else Dp.Infinity)
+                            .floating(RoundedCornerShape(Radius.card))
+                            .verticalScroll(rememberScrollState())
+                            .padding(PAD_INSET)
+                            .testTag(REPLIES_PANEL_TAG),
+                        verticalArrangement = Arrangement.spacedBy(CHORD_GAP),
+                    ) {
+                        if (replies.isEmpty()) {
+                            Text(
+                                stringResource(R.string.quick_replies_none),
+                                color = Colors.muted,
+                                fontSize = TextStyles.label,
+                                modifier = Modifier.padding(12.dp),
+                            )
+                        }
+                        for (reply in replies) {
+                            val spoken = stringResource(R.string.quick_reply_send, reply)
+                            Box(
+                                Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.chip)).background(Colors.key)
+                                    .clickable(role = Role.Button) { onPick(reply) }
+                                    .semantics { contentDescription = spoken }
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.CenterStart,
+                            ) {
+                                Text(
+                                    me.leaver.rexpocket.core.QuickReplies.short(reply),
+                                    color = Colors.ink,
+                                    fontSize = TextStyles.label,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

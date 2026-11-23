@@ -7,6 +7,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import me.leaver.rexpocket.alerts.Alerts
+import me.leaver.rexpocket.core.QuickReplies
+import me.leaver.rexpocket.core.promptStamp
 import me.leaver.rexpocket.core.AlertPrefs
 import me.leaver.rexpocket.core.BackgroundHosts
 import me.leaver.rexpocket.core.HostBackground
@@ -165,6 +167,15 @@ internal fun HomeScreen(
     /** A Needs you row's Reply and Interrupt, on the pane's host. */
     onReply: (hostId: String, sessionId: String, blockId: String, text: String) -> Unit = { _, _, _, _ -> },
     onInterrupt: (hostId: String, sessionId: String, blockId: String) -> Unit = { _, _, _ -> },
+    /** A Needs you row's Approve or Deny, for the prompt [stamp] names (see [promptStamp]). */
+    onAnswer: (hostId: String, sessionId: String, windowId: String, blockId: String, stamp: String, approve: Boolean) -> Unit = { _, _, _, _, _, _ -> },
+    /** The composer's send from a Needs you row's Reply: the text, then Return when [enter]. */
+    onSendPrompt: (hostId: String, sessionId: String, blockId: String, text: String, enter: Boolean) -> Unit = { h, s, b, t, _ -> onReply(h, s, b, t) },
+    /** Settings › Quick replies, and Reply's and the composer's chips. */
+    quickReplies: QuickReplies = QuickReplies(),
+    onQuickReplies: (QuickReplies) -> Unit = {},
+    /** The composer's drafts, by host and pane. */
+    drafts: PromptDrafts = remember { PromptDrafts() },
     /** Moves a host in the phone's own order. */
     onMoveHost: (hostId: String, to: Int) -> Unit = { _, _ -> },
     /** Removes a host; gives back what Undo needs. */
@@ -263,6 +274,9 @@ internal fun HomeScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var homeMenu by rememberSaveable { mutableStateOf(false) }
     var replyTo by remember { mutableStateOf<ReplyTarget?>(null) }
+    // Reply's Compose: the same pane, in the composer, with what Reply had so far.
+    var composeTo by remember { mutableStateOf<ReplyTarget?>(null) }
+    var quickRepliesOpen by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val snackScope = rememberCoroutineScope()
     // One message at a time, the newest: an Undo belongs to what was just done.
@@ -466,6 +480,11 @@ internal fun HomeScreen(
                                     } else {
                                         null
                                     },
+                                    answer = if (filter == HomeFilter.NeedsYou) {
+                                        { item, approve -> onAnswer(host.id, item.sessionId, item.window.id, item.block.id, promptStamp(item.record), approve) }
+                                    } else {
+                                        null
+                                    },
                                 ),
                             )
                         }
@@ -544,10 +563,33 @@ internal fun HomeScreen(
         ReplyDialog(
             title = stringResource(R.string.home_reply_title, target.title),
             onDismiss = { replyTo = null },
+            quickReplies = quickReplies.items,
+            onCompose = { text ->
+                val key = PromptDrafts.key(target.hostId, target.blockId)
+                if (text.isNotBlank()) drafts[key] = joinReply(drafts[key], text)
+                replyTo = null
+                composeTo = target
+            },
         ) { text ->
             replyTo = null
             onReply(target.hostId, target.sessionId, target.blockId, text)
         }
+    }
+
+    composeTo?.let { target ->
+        val key = PromptDrafts.key(target.hostId, target.blockId)
+        PromptComposer(
+            target = target.title,
+            draft = drafts[key],
+            onDraft = { drafts[key] = it },
+            quickReplies = quickReplies.items,
+            onSend = { text, enter -> onSendPrompt(target.hostId, target.sessionId, target.blockId, text, enter) },
+            onDismiss = { composeTo = null },
+        )
+    }
+
+    if (quickRepliesOpen) {
+        QuickRepliesSheet(quickReplies, onQuickReplies, onDismiss = { quickRepliesOpen = false })
     }
 
     if (creating || editing != null) {
@@ -609,6 +651,13 @@ internal fun HomeScreen(
         notices.collect { notice ->
             when (notice) {
                 is HomeNotice.Ended -> snack(context.getString(R.string.home_ended_elsewhere, notice.session, notice.host))
+                // Nothing was typed: the pane opens, so the person sees what it asks now. A toast,
+                // as the home it would be a snackbar of goes as the terminal comes up.
+                is HomeNotice.PromptChanged -> {
+                    toast(context, context.getString(R.string.home_prompt_changed))
+                    hosts.firstOrNull { it.id == notice.hostId }?.let { onOpenPane(it, notice.sessionId, notice.windowId, notice.blockId) }
+                }
+                is HomeNotice.NotAnswered -> snack(context.getString(R.string.home_answer_failed))
                 is HomeNotice.Failed -> snack(
                     context.getString(failedText(notice.action), notice.detail.ifBlank { context.getString(R.string.status_failed) }),
                     context.getString(R.string.action_retry),
@@ -636,6 +685,11 @@ internal fun HomeScreen(
             onControls = {
                 settings = false
                 controlsPage = ControlsPage.Controls
+            },
+            quickReplies = quickRepliesDetail(quickReplies),
+            onQuickReplies = {
+                settings = false
+                quickRepliesOpen = true
             },
             onFontSettings = onFontSettings,
             onAppearance = {
@@ -724,6 +778,9 @@ private fun SettingsSheet(
     onChannel: (UpdateChannel) -> Unit,
     /** Import hosts, and export them. */
     onImportHosts: () -> Unit = {},
+    /** The Quick replies row's detail, and the row's tap. */
+    quickReplies: String? = null,
+    onQuickReplies: () -> Unit = {},
 ) {
     val context = LocalContext.current
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.settings)) {
@@ -754,6 +811,8 @@ private fun SettingsSheet(
         Group(stringResource(R.string.settings_group_terminal)) {
             // Gestures and keys have a sheet of their own, so this one stays a list of places to go.
             SheetItem(stringResource(R.string.controls_title), icon = R.drawable.ic_touch_app, opens = true, onClick = onControls)
+            // What agents are told most, in one tap from a notification, the key bar and the palette.
+            SheetItem(stringResource(R.string.quick_replies_title), icon = R.drawable.ic_return, detail = quickReplies, opens = true, onClick = onQuickReplies)
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_text_fields, opens = true, onClick = onFontSettings)
             // The app's light or dark, and the terminal's apart from it.
             SheetItem(stringResource(R.string.appearance_title), icon = R.drawable.ic_contrast, opens = true, onClick = onAppearance)

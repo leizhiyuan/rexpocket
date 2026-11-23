@@ -83,6 +83,7 @@ class TermMenuTest {
         string(R.string.upload_attach),
         string(keyboard),
         string(R.string.action_full_screen),
+        string(R.string.composer_title),
         "# " + string(R.string.level_pane),
         string(holder),
         string(R.string.menu_split_right),

@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -44,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.approvalKeys
 import me.leaver.rexpocket.core.ActivityGroup
 import me.leaver.rexpocket.core.ActivityItem
 import me.leaver.rexpocket.core.ActivitySection
@@ -157,6 +159,8 @@ internal class AttentionOps(
     val actionsOf: @Composable (ActivityItem) -> List<CustomAccessibilityAction>,
     val reply: ((ActivityItem) -> Unit)?,
     val interrupt: ((ActivityItem) -> Unit)?,
+    /** Approve (true) or Deny an agent's approval prompt; Needs you's only. */
+    val answer: ((ActivityItem, Boolean) -> Unit)? = null,
 )
 
 /** The rows of one host's filtered list: one card, in priority order, no folds. */
@@ -245,8 +249,16 @@ private fun AttentionRow(item: ActivityItem, state: PocketState, ops: AttentionO
         }
         val reply = ops.reply?.takeIf { item.group == ActivityGroup.Waiting && item.record.kind != "auth" }
         val interrupt = ops.interrupt?.takeIf { item.block.id in state.busy }
-        if (reply != null || interrupt != null) {
+        // Approve and Deny for an agent's approval prompt the app knows the keys of; never a login.
+        val answer = ops.answer?.takeIf { item.group == ActivityGroup.Waiting && approvalKeys(item.record) != null }
+        if (reply != null || interrupt != null || answer != null) {
             FlowRow(Modifier.fillMaxWidth().padding(start = 52.dp, end = 8.dp, bottom = 4.dp)) {
+                if (answer != null) {
+                    val approveFor = stringResource(R.string.home_approve_for, title)
+                    val denyFor = stringResource(R.string.home_deny_for, title)
+                    RowButton(stringResource(R.string.alerts_approve), { answer(item, true) }, Modifier.semantics { contentDescription = approveFor })
+                    RowButton(stringResource(R.string.alerts_deny), { answer(item, false) }, Modifier.semantics { contentDescription = denyFor })
+                }
                 if (reply != null) RowButton(stringResource(R.string.alerts_reply), { reply(item) })
                 if (interrupt != null) RowButton(stringResource(R.string.alerts_interrupt), { interrupt(item) })
             }

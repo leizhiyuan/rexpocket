@@ -86,7 +86,7 @@ jobs:
           # Classes that skip without a Rex: here they must have run, every case.
           want = {"RealRexLifecycleTest", "PocketSessionTest", "RexShapeTest", "ReconnectTest", "ForegroundTest",
                   "ForegroundStreamTest", "HelloFirstTest", "ResumeTest", "InputPipelineTest", "RealRexAppTest",
-                  "RealRexPaneTextTest", "RealRexPaneSignalsTest", "RealRexOrderTest", "ClientViewProbeTest"}
+                  "RealRexPaneTextTest", "RealRexPaneSignalsTest", "RealRexPromptAnswerTest", "RealRexOrderTest", "ClientViewProbeTest"}
           seen, bad = {}, []
           for f in glob.glob("core/build/test-results/test/*.xml") + glob.glob("app/build/test-results/testDebugUnitTest/*.xml"):
               for case in ET.parse(f).getroot().iter("testcase"):

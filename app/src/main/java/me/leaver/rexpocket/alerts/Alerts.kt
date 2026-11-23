@@ -41,7 +41,10 @@ data class AlertTarget(val hostId: String, val sessionId: String, val blockId: S
 
 /**
  * One alert, already in the person's words. [group] is its session's label, under which the
- * notifications of one session sit together; [reply] and [interrupt] offer those actions.
+ * notifications of one session sit together; [reply] and [interrupt] offer those actions. [answer]
+ * is the prompt Approve and Deny answer ([me.leaver.rexpocket.core.promptStamp]), null when the
+ * program is not an agent's approval prompt the app can answer; [choices] are the quick replies
+ * Reply offers.
  */
 data class Alert(
     val target: AlertTarget,
@@ -53,12 +56,29 @@ data class Alert(
     val group: String = "",
     val reply: Boolean = false,
     val interrupt: Boolean = false,
+    val answer: String? = null,
+    val choices: List<String> = emptyList(),
 )
 
 /** What a notification's action asks of the pane. */
 sealed interface AlertAction {
     data class Reply(val text: String) : AlertAction
     data object Interrupt : AlertAction
+
+    /** Approve or Deny the prompt [stamp] names: sent only while the pane's record is still that prompt. */
+    data class Answer(val approve: Boolean, val stamp: String) : AlertAction
+}
+
+/** How a notification's action went. */
+enum class AlertOutcome {
+    /** Rex has the input: the alert has done its job. */
+    Sent,
+
+    /** The pane could not be reached. */
+    NotSent,
+
+    /** Approve or Deny found another prompt, or none, in the pane: nothing was typed. */
+    Changed,
 }
 
 object Alerts {
@@ -69,10 +89,10 @@ object Alerts {
     val enabled = MutableStateFlow(false)
 
     /**
-     * What carries out a notification's Reply or Interrupt: the view model that holds the
-     * connection sets it, and answers true once Rex has the input. Null while there is none.
+     * What carries out a notification's Reply, Interrupt, Approve or Deny: the connections set it,
+     * and answer [AlertOutcome.Sent] once Rex has the input. Null while there is none.
      */
-    @Volatile var actions: (suspend (AlertTarget, AlertAction) -> Boolean)? = null
+    @Volatile var actions: (suspend (AlertTarget, AlertAction) -> AlertOutcome)? = null
 
     private val tokens = AlertTokens<AlertTarget>()
 
@@ -170,8 +190,29 @@ object Alerts {
             .setGroup(group)
             // Only the pane's own notification sounds; its group's summary stays quiet.
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+        // Approve and Deny answer an agent's approval prompt with its own keys. They want the phone
+        // unlocked (Android 12 and later ask for it on a lock screen): an approval runs something
+        // on the computer. A notification shows three actions, so they take Interrupt's place;
+        // Deny stops the agent's action as Interrupt would.
+        val answer = alert.answer
+        if (answer != null) {
+            builder.addAction(
+                NotificationCompat.Action.Builder(R.drawable.ic_check, context.getString(R.string.alerts_approve), actionIntent(context, target, ACTION_APPROVE, mutable = false, stamp = answer))
+                    .setShowsUserInterface(false)
+                    .setAuthenticationRequired(true)
+                    .build(),
+            )
+            builder.addAction(
+                NotificationCompat.Action.Builder(R.drawable.ic_block, context.getString(R.string.alerts_deny), actionIntent(context, target, ACTION_DENY, mutable = false, stamp = answer))
+                    .setShowsUserInterface(false)
+                    .setAuthenticationRequired(true)
+                    .build(),
+            )
+        }
         if (alert.reply) {
-            val input = RemoteInput.Builder(KEY_REPLY).setLabel(context.getString(R.string.alerts_reply_hint)).build()
+            val input = RemoteInput.Builder(KEY_REPLY).setLabel(context.getString(R.string.alerts_reply_hint))
+                .apply { if (alert.choices.isNotEmpty()) setChoices(alert.choices.toTypedArray<CharSequence>()) }
+                .build()
             builder.addAction(
                 NotificationCompat.Action.Builder(R.drawable.ic_return, context.getString(R.string.alerts_reply), actionIntent(context, target, ACTION_REPLY, mutable = true))
                     .addRemoteInput(input)
@@ -181,7 +222,7 @@ object Alerts {
                     .build(),
             )
         }
-        if (alert.interrupt) {
+        if (alert.interrupt && answer == null) {
             builder.addAction(
                 NotificationCompat.Action.Builder(R.drawable.ic_stop, context.getString(R.string.alerts_interrupt), actionIntent(context, target, ACTION_INTERRUPT, mutable = false))
                     .setShowsUserInterface(false)
@@ -208,6 +249,15 @@ object Alerts {
     fun failed(context: Context, hostId: String, blockId: String, why: String) {
         val alert = posted[tagOf(hostId, blockId)] ?: return
         raise(context, alert, note = why)
+    }
+
+    /**
+     * Approve or Deny found the pane asking something else, or nothing: the alert comes back,
+     * quietly, saying so, without Approve and Deny, and its tap opens the pane to see what it asks.
+     */
+    fun changed(context: Context, hostId: String, blockId: String) {
+        val alert = posted[tagOf(hostId, blockId)] ?: return
+        raise(context, alert.copy(answer = null), note = context.getString(R.string.alerts_prompt_changed))
     }
 
     /**
@@ -248,13 +298,14 @@ object Alerts {
 
     private fun tagOf(target: AlertTarget) = tagOf(target.hostId, target.blockId)
 
-    private fun actionIntent(context: Context, target: AlertTarget, action: String, mutable: Boolean): PendingIntent {
+    private fun actionIntent(context: Context, target: AlertTarget, action: String, mutable: Boolean, stamp: String? = null): PendingIntent {
         // Explicit, to a receiver nothing outside the app can reach; a reply's text is filled in by the system.
         val intent = Intent(context, AlertActionReceiver::class.java)
             .setAction(action)
             .putExtra(EXTRA_HOST_ID, target.hostId)
             .putExtra(EXTRA_SESSION, target.sessionId)
             .putExtra(EXTRA_BLOCK, target.blockId)
+            .apply { if (stamp != null) putExtra(EXTRA_STAMP, stamp) }
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (mutable) PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_IMMUTABLE
         return PendingIntent.getBroadcast(context, (tagOf(target) + action).hashCode(), intent, flags)
     }
@@ -314,12 +365,15 @@ object Alerts {
     internal const val EXTRA_HOST_ID = "host_id"
     internal const val EXTRA_SESSION = "session"
     internal const val EXTRA_BLOCK = "block"
+    internal const val EXTRA_STAMP = "stamp"
     internal const val KEY_REPLY = "reply"
     internal const val ACTION_STOP = "me.leaver.rexpocket.alerts.STOP"
     internal const val ACTION_RESTORE = "me.leaver.rexpocket.alerts.RESTORE"
     internal const val ACTION_DISCONNECT = "me.leaver.rexpocket.alerts.DISCONNECT"
     internal const val ACTION_REPLY = "me.leaver.rexpocket.alerts.REPLY"
     internal const val ACTION_INTERRUPT = "me.leaver.rexpocket.alerts.INTERRUPT"
+    internal const val ACTION_APPROVE = "me.leaver.rexpocket.alerts.APPROVE"
+    internal const val ACTION_DENY = "me.leaver.rexpocket.alerts.DENY"
     internal const val PANE_ID = 2
     private const val SUMMARY_ID = 3
     private const val SUMMARY_LINES = 6
@@ -342,6 +396,8 @@ class AlertActionReceiver : BroadcastReceiver() {
         val action = when (intent.action) {
             Alerts.ACTION_REPLY -> AlertAction.Reply(RemoteInput.getResultsFromIntent(intent)?.getCharSequence(Alerts.KEY_REPLY)?.toString() ?: return)
             Alerts.ACTION_INTERRUPT -> AlertAction.Interrupt
+            Alerts.ACTION_APPROVE, Alerts.ACTION_DENY ->
+                AlertAction.Answer(intent.action == Alerts.ACTION_APPROVE, intent.getStringExtra(Alerts.EXTRA_STAMP) ?: return)
             else -> return
         }
         val app = context.applicationContext
@@ -350,8 +406,12 @@ class AlertActionReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 val handler = Alerts.actions
-                val sent = handler != null && withTimeoutOrNull(SEND_MS) { runCatching { handler(target, action) }.getOrDefault(false) } == true
-                if (sent) Alerts.settle(app, target.hostId, target.blockId) else Alerts.failed(app, target.hostId, target.blockId, app.getString(R.string.alerts_not_sent))
+                val outcome = handler?.let { withTimeoutOrNull(SEND_MS) { runCatching { it(target, action) }.getOrDefault(AlertOutcome.NotSent) } }
+                when (outcome) {
+                    AlertOutcome.Sent -> Alerts.settle(app, target.hostId, target.blockId)
+                    AlertOutcome.Changed -> Alerts.changed(app, target.hostId, target.blockId)
+                    AlertOutcome.NotSent, null -> Alerts.failed(app, target.hostId, target.blockId, app.getString(R.string.alerts_not_sent))
+                }
             } finally {
                 pending?.finish()
             }
