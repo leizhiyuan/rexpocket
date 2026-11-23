@@ -86,12 +86,12 @@ netbird-paths.txt. The script then keeps its worktree and says where it is. To f
   embedded build's stand-in), `values*/netbird_addon_strings.xml`, and `core/…/DialedSocket.kt`
   with its test (the socket an add-on dial gives the connection).
 
-### Shared files, with Netbird hunks (netbird.patch, 40 files)
+### Shared files, with Netbird hunks (netbird.patch, 42 files)
 
 | Area | Files | What PR B adds |
 | --- | --- | --- |
 | Backend choice | `core/…/TailnetBackend.kt`, `app/…/net/TailnetNode.kt` | the `Netbird` and `NetbirdAddon` entries (no sign-in step), their `TailnetEntry`s in `TailnetNodes.of` (`addonEntries`); `NetbirdConfig`; `TailnetNode.dialer` |
-| Dialing without SOCKS | `core/…/RexClient.kt`, `core/…/SshTunnel.kt`, `ui/RexViewModel.kt` | a `StreamDialer` beside the SOCKS port: `defaultHttp(socksPort, dialer)`, `SshSettings.dialer`, and the view model passing the node's |
+| Dialing without SOCKS | `core/…/RexClient.kt`, `core/…/SshTunnel.kt`, `ui/Connections.kt` | a `StreamDialer` beside the SOCKS port: `defaultHttp(socksPort, dialer)`, `SshSettings.dialer`, and the connections passing the node's; the Netbird branch of `Connections.configFor` |
 | Settings | `data/HostStore.kt`, `ui/HomeScreen.kt`, `ui/RexApp.kt`, `ui/RexViewModel.kt` | the management server setting, the setup key, the Netbird fields and hint in the Tailnet dialog (and `TailnetBackendNote`, the add-on's line), `joinTailnet`'s two Netbird arguments, the config of a Netbird node |
 | Tailnet details | `core/…/TailnetState.kt`, `TailnetPath.kt`, `ui/TailnetUi.kt` | `PeerLink.Relay`, a peer's `latencyMs`, `TailnetPath.Relay` and the ping's `relayServer` |
 | Names | `core/…/HostAddress.kt` | `.netbird.cloud` is on the tailnet |
