@@ -89,6 +89,7 @@ jobs:
               me.leaver.rexpocket.data.FontPreferenceTest \
               me.leaver.rexpocket.ui.TerminalImeTest \
               me.leaver.rexpocket.ui.TerminalViewTest \
+              me.leaver.rexpocket.ui.TerminalAccessibilityTest \
               me.leaver.rexpocket.ui.FollowInputTest \
               me.leaver.rexpocket.ui.FullScreenTest \
               me.leaver.rexpocket.ui.KeyBarLayoutInstrumentedTest \
@@ -96,6 +97,7 @@ jobs:
               me.leaver.rexpocket.ui.KeyBarBytesTest \
               me.leaver.rexpocket.ui.KeyBarStateTest \
               me.leaver.rexpocket.ui.TerminalControlsTest \
+              me.leaver.rexpocket.ui.AppearanceTest \
               me.leaver.rexpocket.ui.TermMenuTest \
               me.leaver.rexpocket.ui.TermFullScreenTest \
               me.leaver.rexpocket.ui.ClosedPaneTest \

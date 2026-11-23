@@ -309,6 +309,9 @@ internal class TerminalView(context: Context) : View(context) {
         },
     )
 
+    /** The lines TalkBack reads; see [TerminalAccessibility]. */
+    internal val access = TerminalAccessibility(this)
+
     init {
         // Typing goes through TerminalImeView, which sits under this view: its own input connection
         // would answer the keyboard with no text type at all.
@@ -317,7 +320,31 @@ internal class TerminalView(context: Context) : View(context) {
         isLongClickable = true
         applyTiming()
         measureFont()
+        // TalkBack reads the pane line by line, and the output that comes while it listens there.
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
+        contentDescription = context.getString(R.string.terminal_a11y_label)
+        androidx.core.view.ViewCompat.setAccessibilityDelegate(this, access)
     }
+
+    /** What the pane shows now, for [access]. */
+    internal fun screenFrame(): TerminalFrame? = selection?.frame ?: currentFrame()
+
+    /** How many of [frame]'s rows the pane has room to show, for [access]. */
+    internal fun visibleRows(frame: TerminalFrame): Int =
+        if (height <= 0) 0 else min(frame.rows, ceil(height / cellHeight).toInt())
+
+    /** A row's height in pixels, for [access]. */
+    internal val rowHeight: Float get() = cellHeight
+
+    /** TalkBack's double tap on the pane, or on a line of it: what a tap does. */
+    override fun performClick(): Boolean {
+        super.performClick()
+        onTap?.invoke()
+        return true
+    }
+
+    override fun dispatchHoverEvent(event: MotionEvent): Boolean =
+        access.dispatchHoverEvent(event) || super.dispatchHoverEvent(event)
 
     /**
      * True while a keyboard other than the screen's is attached. The pane then takes the focus - it
@@ -398,6 +425,7 @@ internal class TerminalView(context: Context) : View(context) {
         }
         drawHandles(canvas)
         drawScrollbar(canvas, frame)
+        access.screenChanged(frame)
     }
 
     /**
@@ -899,6 +927,7 @@ internal class TerminalView(context: Context) : View(context) {
         clearSelection()
         dropBitmaps()
         scroller.abortAnimation()
+        access.release()
         super.onDetachedFromWindow()
     }
 

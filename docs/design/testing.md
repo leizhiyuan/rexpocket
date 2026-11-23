@@ -29,7 +29,7 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 ## Where the tests run
 
 - `app/src/sharedTest` holds the screen tests (`ArrangeKeysTest`, `TerminalControlsTest`, `TermMenuTest`,
-  `TermFullScreenTest`, `CommandPaletteTest`, `ActivityViewTest`, `EmptyHomeTest`, `LargeFontTest`). They are
+  `TermFullScreenTest`, `CommandPaletteTest`, `ActivityViewTest`, `EmptyHomeTest`, `LargeFontTest`, `AppearanceTest`). They are
   compiled into both the JVM unit tests and the instrumented tests:
   - on the JVM with Robolectric, in seconds on any computer:
     `./gradlew -x :app:buildGhostty -x :app:buildGhosttyHost :app:testDebugUnitTest --tests 'me.leaver.rexpocket.ui.*'`
@@ -52,7 +52,17 @@ when a change touches a screen. Nothing is compared against stored images yet, a
 differently between computers; once CI is the only place that records, golden images can be
 committed and verified with Roborazzi's compare mode.
 
-**Large text.** `LargeFontTest` shows Terminal controls, Arrange keys, Settings, Home with the
+**Pickers and Appearance.** `ScreenshotsTest` also takes a choice row's picker (`picker-tap-*`, the
+dialog on its own: under Robolectric a tall sheet's window is drawn over a dialog opened from it),
+and Settings › Appearance with a light app and an always-dark terminal, with and without the
+Terminal colours picker open (`appearance-light-app-dark-terminal-*`, `picker-terminal-colours-*`).
+
+**TalkBack.** `TerminalAccessibilityTest` (emulator only: it needs libghostty) reads the pane's
+node tree as TalkBack does: a node per line with its words, wrapped rows joined, blank rows left
+out, the nodes following the screen, a double tap on a line acting as a tap. Which new lines are
+read out, and how often, is `ScreenSpeechTest` in core.
+
+**Large text.** `LargeFontTest` shows Terminal controls, Arrange keys, Appearance, the Tap, C-c and Terminal colours pickers, Settings, Home with the
 tailnet's card, the first run and the host dialog on a 360 dp phone with the font 1.3 and 1.5 times
 larger, and fails on any text that is ellipsized or runs past the lines it may take (each Text's own
 layout says so). The host dialog runs on the emulator only: a text field in a dialog never lets

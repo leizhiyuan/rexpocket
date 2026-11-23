@@ -88,6 +88,16 @@ bar never opens it. How it closes: the keyboard key, Back, a tap set to toggle, 
 screen (2.1), or a double tap / long press set to toggle. A keyboard on the desk keeps the focus on
 the pane and needs no screen keyboard.
 
+**TalkBack.** The pane is read line by line (`TerminalAccessibility`, an `ExploreByTouchHelper`):
+each line on screen is a node with its words, rows the terminal wrapped joined into the line the
+program wrote and blank rows left out, so touching reads a line and a swipe goes to the next. A
+double tap on a line or on the pane does what a tap does (by default, the keyboard). While a line
+of the pane holds TalkBack's focus, new output is announced: only lines that were not on screen
+before, not the line the cursor is on (the prompt, or what is being typed), at most every 1.5 s and
+400 characters (`OutputAnnouncer`, core), and nothing while a full-screen program (the alternate
+screen) redraws itself. The keyboard stays `TerminalImeView`'s, which TalkBack does not see, so
+typing is unchanged.
+
 ## 4. The key bar
 
 The controls screen keeps "with a desk keyboard" and C-c (tap · hold unless busy), and opens
@@ -357,13 +367,35 @@ turns these off.
 
 ## 8. Settings screen and storage
 
-Settings › Terminal shows **Terminal controls ›**, **Terminal font ›** and Reopen last tab. A row
-that opens another page or dialog ends in a chevron (›); a row that steps through values does not.
+Settings › Terminal shows **Terminal controls ›**, **Terminal font ›**, **Appearance ›** and
+**Reopen the last tab ›**. A row that opens another page or dialog ends in a chevron (›); a row that
+acts at once (Check for updates, Source code) does not.
+
+**Pickers.** No row steps blindly through its values any more: a tap used to move to the next
+option, so a person had to tap round to find what the others were, and with three options could
+not go back one. A row of a setting with named options now opens a Material single-choice dialog
+(`ChoicePicker`, Pickers.kt): a radio row per option with the option's icon, its words and a line
+on what it does, the current one selected. A tap on an option picks it and closes the dialog;
+Cancel leaves the setting as it was. The sheet stays open under it, so the row's detail shows the
+new value as the dialog goes. Since every such row opens a dialog, each ends in a chevron. That
+covers Tap, Double tap, Long press, Wait for a double tap (On · Off), With a desk keyboard and C-c
+here; Reopen the last tab (On · Off) and Update channel (Stable · Preview) in Settings; and both
+rows of Appearance. Background alerts stays a switch: turning it on asks Android for permission
+first, and it is moving to the Notifications page.
+
+**Appearance** (Settings › Appearance) has two rows: **App theme** (System · Light · Dark; System
+by default) and **Terminal colours** (Match app · Always dark · Always light; Match app by
+default), so a light app can have a dark terminal. They are stored as `app_theme` (`system`,
+`light`, `dark`) and `terminal_colors` (`app`, `dark`, `light`); missing or unknown is the default.
+`RexTheme` reads them from the view model, so a pick shows at once, with no new activity. Terminal
+colours set only the pane's paper, ink, cursor and selection (`Colors.pane`, `terminalTheme()`):
+the bars around it stay the app's, and the closed-pane and empty notes, which are app text, keep
+the app's paper. Matching the desk's own terminal colours is not offered yet (rex-parity.md).
+
 Terminal controls is a sheet with two groups:
 
 - **Gestures**: Tap, Double tap, Long press, Wait for double tap, Double-tap time, Long-press
-  time. Choice rows step through their options on tap and stay open, as the C-c row does; the two
-  times open a slider with "Use the phone's", so they end in a chevron. "Wait for a double tap" says what it does in a line
+  time. Choice rows open their picker; the two times open a slider with "Use the phone's". "Wait for a double tap" says what it does in a line
   under its label ("A tap waits in case a second follows" / "A tap acts at once"), its detail
   just On or Off. Every sheet row wraps - a label to three lines, a detail to two, at most 152 dp
   wide - so nothing is cut off on a narrow phone or with large text.
@@ -374,8 +406,9 @@ Terminal controls is a sheet with two groups:
 changes with the setting: a keyboard for Open keyboard and for Open or close keyboard, the four
 corners for Full screen, a text cursor and selection for Select text, the "block" mark for Nothing
 (a neutral mark rather than no icon, so the group keeps one keyline); C-c is a finger tapping or a
-finger held. The detail and the icon come from one function per setting (`choice` in Controls.kt,
-JVM-tested in `ChoiceTest`), so they cannot disagree. Rows about time have time icons: an hourglass
+finger held. The detail, the icon and the picker's line for each option come from one function per
+setting (`choice` in Controls.kt and Appearance.kt, JVM-tested in `ChoiceTest`), so they cannot
+disagree. Rows about time have time icons: an hourglass
 for the wait, a timer for both durations. Icons are Material Symbols Rounded.
 
 Stored in the app's shared preferences beside the existing keys:
@@ -411,6 +444,11 @@ keeps its own setting. Values out of range are clamped; unknown strings fall bac
 - `KeyBarLayoutTest` (app, JVM): the widths at 360, 393, 411, 426 and 891 dp, a sweep of every
   width from 300 to 1400 dp for 8 to 40 keys, a group's panel rows (Fn's as before), small pills of one and two keys, no wide-pill keys.
 - `ClosedPaneTest` / size test (core): a size set while a resize is out is still sent.
+- `ScreenSpeechTest` (core, JVM): lines from rows and wraps, which lines are new, the throttle and
+  the cap; `TerminalAccessibilityTest` (emulator): the pane's node tree.
+- `TerminalControlsTest` and `AppearanceTest` (shared): each choice row's picker - every option
+  with its icon and line, the current one selected, a pick shown on the row and stored, Cancel
+  changing nothing - and the pane's colours following Appearance at once.
 - `TermChromeTest` (app, JVM): which bars show for tall and short windows, keyboard up or down, in
   and out of full screen.
 - Instrumented: `TerminalViewTest` for the real view (wait mode, the person's long-press time, a

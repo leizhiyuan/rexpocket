@@ -174,7 +174,7 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 | `terminal.progress_report` (OSC 9;4) | Adapt, 0.5 day | a terminal MAY map OSC 9;4 to the root record (docs:program-status); whether Rex does is unconfirmed. If not, a progress pie for programs that only send OSC 9;4 |
 | Rex's host list (`hosts.list`, `hosts_changed`) | Adapt, 1 day | offer Rex's hosts as hosts to add; they are Rex servers the desktop reaches by label |
 | Switch Host, Add/Remove Remote Host, Forward Port (docs:ios-actions Host) | Done / Skip | the home list is the hosts; port forwarding is Rex's client feature, not the server's |
-| Settings, themes, cursor, appearance (docs:ios-settings) | Done in part | font, key bar and gestures are the app's; themes: adapt, 2 days |
+| Settings, themes, cursor, appearance (docs:ios-settings) | Done in part | font, key bar, gestures and Settings › Appearance (app theme; terminal colours: match app, always dark, always light) are the app's. "Match the desk": adapt, 1 day - the stream's `theme` message (docs:llms "The Terminal Stream") carries the desk's default colours, but `StreamDecoder` drops it today and the app paints its own over the snapshot's; it needs the message decoded into a feed, kept per pane and applied instead of the app's, which no emulator here can check (libghostty runs on CI only). `set_theme` is not for this: it changes the desk's colours too |
 | Diagnostics, Copy Debug/Version Info (docs:ios-actions) | Done | Settings › Diagnostics |
 | Install Rex for Agents (`client.agents.setup`) | Skip | runs on the computer, not the phone |
 | Server and Tailscale management (`server.*`) | Skip | administration of the computer; the desktop app's job |
