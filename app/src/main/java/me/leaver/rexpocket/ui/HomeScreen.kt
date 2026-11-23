@@ -1215,7 +1215,7 @@ internal fun tailnetState(status: TailnetStatus): String = when (status.backendS
 }
 
 /** The network a backend's node is called in the app's own words. */
-internal fun tailnetName(backend: TailnetBackend): String = if (backend == TailnetBackend.Netbird) "Netbird" else "Tailscale"
+internal fun tailnetName(backend: TailnetBackend): String = backend.displayName
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1246,14 +1246,17 @@ internal fun TailnetDialog(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(stringResource(R.string.tailnet_backend_label), color = Colors.muted, fontSize = TextStyles.label)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (choice in backends) {
-                        FilterChip(
-                            selected = backend == choice,
-                            onClick = { backend = choice },
-                            label = { Text(tailnetName(choice)) },
-                        )
+                // A choice only when this build has more than one backend.
+                if (backends.size > 1) {
+                    Text(stringResource(R.string.tailnet_backend_label), color = Colors.muted, fontSize = TextStyles.label)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (choice in backends) {
+                            FilterChip(
+                                selected = backend == choice,
+                                onClick = { backend = choice },
+                                label = { Text(tailnetName(choice)) },
+                            )
+                        }
                     }
                 }
                 Field(stringResource(R.string.tailscale_hostname), hostname) { hostname = it }

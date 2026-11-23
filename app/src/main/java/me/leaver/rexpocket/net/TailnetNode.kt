@@ -1,6 +1,7 @@
 package me.leaver.rexpocket.net
 
 import kotlinx.coroutines.flow.StateFlow
+import me.leaver.rexpocket.core.TailnetBackend
 import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.TailnetPeer
 import me.leaver.rexpocket.core.TailnetSelf
@@ -96,16 +97,46 @@ interface TailnetNode {
 }
 
 /**
- * The nodes the app can run, one per backend; [netbirdAvailable] says whether this build has the
- * Netbird one. A test hands in its own: the real nodes need the Go library, which only a phone loads.
+ * One backend the app can run: its [node], and whether this build has it. A backend whose library
+ * was left out of the build is still listed, so a choice stored by another build has a node to
+ * stop, but it is not offered.
  */
-class TailnetNodes(
-    val tailscale: TailnetNode,
-    val netbird: TailnetNode,
-    val netbirdAvailable: () -> Boolean,
-) {
+class TailnetEntry(
+    val backend: TailnetBackend,
+    val node: TailnetNode,
+    val available: () -> Boolean = { true },
+)
+
+/**
+ * The nodes the app can run, one per backend. [of] is the one place a backend is registered; a
+ * test hands in its own, since the real nodes need the Go library, which only a phone loads.
+ */
+class TailnetNodes(entries: List<TailnetEntry>) {
+    private val byBackend: Map<TailnetBackend, TailnetEntry> = entries.associateBy { it.backend }
+
+    init {
+        require(TailnetBackend.Tailscale in byBackend) { "the Tailscale node is always registered" }
+    }
+
+    /** The node of [backend]; one that is not registered falls back to Tailscale. */
+    operator fun get(backend: TailnetBackend): TailnetNode =
+        (byBackend[backend] ?: byBackend.getValue(TailnetBackend.Tailscale)).node
+
+    /** Every registered backend, in [TailnetBackend] order. */
+    val registered: List<TailnetBackend> get() = TailnetBackend.entries.filter { it in byBackend }
+
+    /** The backends this build can run, in [TailnetBackend] order. */
+    val available: List<TailnetBackend> get() = registered.filter { byBackend.getValue(it).available() }
+
+    /** Every registered node, so all of them can be stopped. */
+    val all: List<TailnetNode> get() = registered.map { byBackend.getValue(it).node }
+
     companion object {
-        fun of(context: android.content.Context): TailnetNodes =
-            TailnetNodes(TailscaleBox(context), NetbirdBox(context)) { NetbirdBox.available() }
+        fun of(context: android.content.Context): TailnetNodes = TailnetNodes(
+            listOf(
+                TailnetEntry(TailnetBackend.Tailscale, TailscaleBox(context)),
+                TailnetEntry(TailnetBackend.Netbird, NetbirdBox(context), NetbirdBox::available),
+            ),
+        )
     }
 }

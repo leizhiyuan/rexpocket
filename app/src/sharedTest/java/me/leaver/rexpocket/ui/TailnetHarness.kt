@@ -18,6 +18,7 @@ import me.leaver.rexpocket.data.TailnetSettings
 import me.leaver.rexpocket.net.TailnetConfig
 import me.leaver.rexpocket.net.TailnetException
 import me.leaver.rexpocket.net.TailnetNode
+import me.leaver.rexpocket.net.TailnetEntry
 import me.leaver.rexpocket.net.TailnetNodes
 import me.leaver.rexpocket.net.TailnetStatus
 import java.io.DataInputStream
@@ -134,7 +135,12 @@ internal fun tailnetModel(
         .putLong("update.checkedAt", System.currentTimeMillis()).commit()
     lateinit var model: RexViewModel
     val other = FakeTailnetNode()
-    val nodes = if (backend == TailnetBackend.Netbird) TailnetNodes(other, node) { true } else TailnetNodes(node, other) { false }
+    val nodes = TailnetNodes(
+        listOf(
+            TailnetEntry(TailnetBackend.Tailscale, if (backend == TailnetBackend.Tailscale) node else other),
+            TailnetEntry(TailnetBackend.Netbird, if (backend == TailnetBackend.Netbird) node else other) { backend == TailnetBackend.Netbird },
+        ),
+    )
     compose.runOnUiThread { model = RexViewModel(app as Application, SavedStateHandle(), nodes) }
     return model
 }

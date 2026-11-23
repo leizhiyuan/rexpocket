@@ -114,15 +114,12 @@ class RexViewModel @JvmOverloads constructor(
     app: Application,
     private val saved: SavedStateHandle = SavedStateHandle(),
     /** The tailnet nodes; a test gives its own, since the real ones need the Go library. */
-    nodes: TailnetNodes = TailnetNodes.of(app),
+    private val nodes: TailnetNodes = TailnetNodes.of(app),
 ) : AndroidViewModel(app) {
     private val store = HostStore(app)
 
     /** True when this process was started again after Android killed it while the terminal was on screen. */
     private val terminalWasOpen = saved.get<Boolean>(KEY_TERMINAL_OPEN) == true
-    private val tailscaleBox = nodes.tailscale
-    private val netbirdBox = nodes.netbird
-    private val netbirdAvailable = nodes.netbirdAvailable
     private val updater = Updater(app)
 
     /** The newer build the app found, from the check through to the downloaded APK. */
@@ -134,18 +131,15 @@ class RexViewModel @JvmOverloads constructor(
     val hosts = MutableStateFlow(store.list())
     val tailnet = MutableStateFlow(store.tailnet())
 
-    /** The backends this build can run: Netbird only when it was built in. */
-    val tailnetBackends: List<TailnetBackend> by lazy {
-        TailnetBackend.entries.filter { it == TailnetBackend.Tailscale || netbirdAvailable() }
-    }
+    /** The backends this build can run; see [TailnetNodes.of]. */
+    val tailnetBackends: List<TailnetBackend> by lazy { nodes.available }
 
     /** The status of the backend that is selected, so the home screen follows the choice. */
     val tailnetStatus: StateFlow<TailnetStatus> = combine(
-        tailscaleBox.status,
-        netbirdBox.status,
         tailnet,
-    ) { tailscale, netbird, settings ->
-        if (settings.backend == TailnetBackend.Netbird) netbird else tailscale
+        combine(nodes.registered.map { backend -> nodes[backend].status.map { backend to it } }) { it.toMap() },
+    ) { settings, statuses ->
+        statuses[settings.backend] ?: statuses.getValue(TailnetBackend.Tailscale)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, TailnetStatus())
 
     /**
@@ -202,8 +196,7 @@ class RexViewModel @JvmOverloads constructor(
     }
 
     /** The node of [backend]: only one of them runs at a time. */
-    private fun nodeFor(backend: TailnetBackend): TailnetNode =
-        if (backend == TailnetBackend.Netbird) netbirdBox else tailscaleBox
+    private fun nodeFor(backend: TailnetBackend): TailnetNode = nodes[backend]
 
     /** The node of the selected backend. */
     private val activeNode: TailnetNode get() = nodeFor(tailnet.value.backend)
@@ -468,8 +461,7 @@ class RexViewModel @JvmOverloads constructor(
         Alerts.unwatch(getApplication())
         // The pane goes back to the desktop's size; viewModelScope is already cancelled here.
         disconnectQuiet()
-        tailscaleBox.stopAsync()
-        netbirdBox.stopAsync()
+        nodes.all.forEach { it.stopAsync() }
         super.onCleared()
     }
 

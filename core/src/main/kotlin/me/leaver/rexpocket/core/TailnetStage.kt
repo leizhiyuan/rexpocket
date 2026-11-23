@@ -61,10 +61,10 @@ fun tailnetStage(
 /** The steps a backend goes through to connect, for a "step 2 of 3" line. */
 enum class TailnetStep { Start, SignIn, Connect }
 
-/** The steps [backend] shows: a Netbird node joins with a setup key, so it has no sign-in step. */
+/** The steps [backend] shows: a node that joins with a key has no sign-in step ([TailnetBackend.signsIn]). */
 fun tailnetSteps(backend: TailnetBackend): List<TailnetStep> =
-    if (backend == TailnetBackend.Netbird) listOf(TailnetStep.Start, TailnetStep.Connect)
-    else listOf(TailnetStep.Start, TailnetStep.SignIn, TailnetStep.Connect)
+    if (backend.signsIn) listOf(TailnetStep.Start, TailnetStep.SignIn, TailnetStep.Connect)
+    else listOf(TailnetStep.Start, TailnetStep.Connect)
 
 /** The step [this] stage is on, or null when it is not on its way: off, connected, stopped, failed. */
 fun TailnetStage.step(): TailnetStep? = when (this) {

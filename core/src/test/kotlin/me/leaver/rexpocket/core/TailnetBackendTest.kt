@@ -18,4 +18,21 @@ class TailnetBackendTest {
         assertEquals(TailnetBackend.Tailscale, TailnetBackend.fromStorage(""))
         assertEquals(TailnetBackend.Tailscale, TailnetBackend.fromStorage("wireguard"))
     }
+
+    @Test
+    fun aBackendThatSignsInShowsTheSignInStep() {
+        for (backend in TailnetBackend.entries) {
+            assertEquals(backend.signsIn, TailnetStep.SignIn in tailnetSteps(backend))
+            assertEquals(TailnetStep.Start, tailnetSteps(backend).first())
+            assertEquals(TailnetStep.Connect, tailnetSteps(backend).last())
+        }
+    }
+
+    @Test
+    fun everyBackendHasItsOwnNameAndStorageKey() {
+        assertEquals(TailnetBackend.entries.size, TailnetBackend.entries.map { it.displayName }.toSet().size)
+        assertEquals(TailnetBackend.entries.size, TailnetBackend.entries.map { it.storageKey }.toSet().size)
+        assertEquals("Tailscale", TailnetBackend.Tailscale.displayName)
+        assertEquals(true, TailnetBackend.Tailscale.signsIn)
+    }
 }
