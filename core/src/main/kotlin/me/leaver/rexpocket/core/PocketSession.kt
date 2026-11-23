@@ -768,8 +768,21 @@ class PocketSession(
             }
             "session_destroyed" -> dropSession(sid)
             "block_event" -> onBlockEvent(payload)
+            "block_closed" -> {
+                val closed = payload.optNullableString("block_id") ?: event.optNullableString("block_id")
+                if (closed != null) {
+                    ownership.withLock {
+                        if (ownedBlock == closed) {
+                            ownedBlock = null
+                            ownedSession = null
+                        }
+                    }
+                    releasedBlocks -= closed
+                }
+                refreshView(sid)
+            }
             // Which client owns a pane decides its size, so a change here redraws it as owned or not.
-            "block_owner_changed", "block_closed", "window_closed", "window_created", "active_window_changed" ->
+            "block_owner_changed", "window_closed", "window_created", "active_window_changed" ->
                 refreshView(sid)
         }
     }
@@ -1021,10 +1034,16 @@ class PocketSession(
             val previous = ownedBlock
             val previousSession = ownedSession
             if (previous != null && previous != block) {
-                rpc(
-                    "session.disown_block",
-                    JSONObject().put("session_id", previousSession ?: sid).put("block_ids", JSONArray().put(previous)),
-                )
+                try {
+                    rpc(
+                        "session.disown_block",
+                        JSONObject().put("session_id", previousSession ?: sid).put("block_ids", JSONArray().put(previous)),
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // A closed pane has nothing left to hand back; clear it and still take the new one.
+                }
                 ownedBlock = null
                 ownedSession = null
             }
