@@ -137,8 +137,8 @@ class HomeManageTest {
         compose.waitForIdle()
         inSheet(string(R.string.home_rename)).performClick()
         compose.waitForIdle()
-        compose.onNode(hasSetTextAction()).performTextReplacement("renamed at home")
-        compose.onNode(hasSetTextAction()).performImeAction()
+        compose.onNode(hasSetTextAction() and !hasTestTag(HOME_SEARCH_TAG)).performTextReplacement("renamed at home")
+        compose.onNode(hasSetTextAction() and !hasTestTag(HOME_SEARCH_TAG)).performImeAction()
         compose.awaitThat { view(m).label == "renamed at home" }
 
         val tab = view(m).windows.first()
@@ -146,8 +146,8 @@ class HomeManageTest {
         compose.waitForIdle()
         inSheet(string(R.string.home_rename)).performClick()
         compose.waitForIdle()
-        compose.onNode(hasSetTextAction()).performTextReplacement("logs")
-        compose.onNode(hasSetTextAction()).performImeAction()
+        compose.onNode(hasSetTextAction() and !hasTestTag(HOME_SEARCH_TAG)).performTextReplacement("logs")
+        compose.onNode(hasSetTextAction() and !hasTestTag(HOME_SEARCH_TAG)).performImeAction()
         compose.awaitThat { view(m).windows.first { it.id == tab.id }.label == "logs" }
         assertNotAttached()
     }
