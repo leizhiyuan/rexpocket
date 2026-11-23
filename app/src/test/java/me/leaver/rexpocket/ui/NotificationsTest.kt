@@ -15,7 +15,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.leaver.rexpocket.alerts.AlertActionReceiver
 import me.leaver.rexpocket.alerts.AlertTarget
 import me.leaver.rexpocket.alerts.Alerts
+import me.leaver.rexpocket.core.AlertEvent
 import me.leaver.rexpocket.core.AlertPrefs
+import me.leaver.rexpocket.core.HostBackground
+import me.leaver.rexpocket.core.with
 import me.leaver.rexpocket.data.HostStore
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -147,7 +150,8 @@ class NotificationsTest {
         assertEquals(Alerts.CHANNEL_ATTENTION, n.channelId)
         assertTrue(n.title(), n.title().startsWith("claude"))
         assertEquals("${app.getString(me.leaver.rexpocket.R.string.state_waiting_answer)}: Which branch?", n.text())
-        assertEquals("$sid", n.group.substringAfter('/'))
+        // Grouped by host, whatever the session: with many hosts, each is one group in the shade.
+        assertEquals("host/${desk.host.id}", n.group)
         assertNotNull("a blocked program can be interrupted", n.actionNamed(app.getString(me.leaver.rexpocket.R.string.alerts_interrupt)))
 
         val reply = n.actionNamed(app.getString(me.leaver.rexpocket.R.string.alerts_reply))!!
@@ -251,6 +255,30 @@ class NotificationsTest {
         val status = paneNotification(block) { it.channelId == Alerts.CHANNEL_ATTENTION }
         assertTrue(status.text(), status.text().endsWith("Bash: rm -rf build"))
         assertEquals(1, manager.activeNotifications.count { it.tag == tag(block) })
+    }
+
+    /**
+     * A host's own choices win over the defaults, the rest follow them; a silenced host posts
+     * nothing at all. Settings › Background and notifications, a host's page.
+     */
+    @Test
+    fun aHostsOwnChoicesDecideItsNotifications() {
+        val (block, other) = start()
+        compose.runOnUiThread {
+            model.setHostBackground(desk.host.id, HostBackground().with(AlertEvent.Waiting, false, AlertPrefs()))
+        }
+        away()
+        desk.rex.report(block, "blocked", kind = "question", msg = "Which?")
+        // Done is not this host's own choice: it follows the default, which is on.
+        desk.rex.report(other, "done", msg = "built")
+        paneNotification(other)
+        assertEquals(0, manager.activeNotifications.count { it.tag == tag(block) })
+        // Silenced, the host says nothing, whatever the kind.
+        compose.runOnUiThread { model.setHostBackground(desk.host.id, HostBackground(notify = false)) }
+        desk.rex.report(block, "error", msg = "crashed")
+        pause(500)
+        assertEquals(0, manager.activeNotifications.count { it.tag == tag(block) })
+        assertEquals(HostBackground(notify = false), me.leaver.rexpocket.data.BackgroundStore(app).hosts().of(desk.host.id))
     }
 
     @Test

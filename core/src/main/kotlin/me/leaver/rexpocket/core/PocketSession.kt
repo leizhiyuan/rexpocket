@@ -298,7 +298,10 @@ class PocketSession(
                         )
                     }
                     val woken = withTimeoutOrNull(backoff) { retry.receive() } != null
-                    backoff = if (woken) MIN_BACKOFF_MS else (backoff * 2).coerceAtMost(MAX_BACKOFF_MS)
+                    // Away from the screen (background mode) a host that stays down is tried less
+                    // often: a network change, or the screen coming back, wakes the wait at once.
+                    val cap = if (active.value) MAX_BACKOFF_MS else MAX_AWAY_BACKOFF_MS
+                    backoff = if (woken) MIN_BACKOFF_MS else (backoff * 2).coerceAtMost(cap)
                     // A wrong key or an unconfirmed host key stays wrong until the person changes it.
                     if (e.isFatalConnectionProblem()) break
                 }
@@ -1976,6 +1979,9 @@ class PocketSession(
 private const val MIN_BACKOFF_MS = 400L
 
 private const val MAX_BACKOFF_MS = 8_000L
+
+/** The longest wait between attempts while the app is away: a minute, so a host that is off costs little. */
+private const val MAX_AWAY_BACKOFF_MS = 60_000L
 
 /** How long to wait before taking a pane the first time, and the longest wait after retries. */
 private const val FIRST_TAKE_BACK_MS = 1_000L

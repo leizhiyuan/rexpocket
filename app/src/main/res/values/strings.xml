@@ -376,8 +376,8 @@
     <string name="alerts_interrupt">Interrupt</string>
     <string name="alerts_not_sent">Not sent: the pane could not be reached. Open it to answer.</string>
     <string name="alerts_bell">Rang the bell</string>
-    <string name="notifications_title">Notifications</string>
-    <string name="notifications_background_body">Keeps RexPocket connected while it is away, so it can tell you about the programs below.</string>
+    <string name="notifications_title">Background and notifications</string>
+    <string name="notifications_background_body">Keeps RexPocket connected while it is away - also after you swipe it from recent apps, and after the phone restarts or the app updates - so it can tell you about the programs below.</string>
     <string name="notifications_android">Allowed by Android</string>
     <string name="notifications_allowed">Yes</string>
     <string name="notifications_not_allowed">No</string>

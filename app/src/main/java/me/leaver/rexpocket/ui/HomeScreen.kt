@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.core.AlertPrefs
+import me.leaver.rexpocket.core.BackgroundHosts
+import me.leaver.rexpocket.core.HostBackground
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -193,6 +195,9 @@ internal fun HomeScreen(
     /** The Notifications page's switches: which kinds of alert are on. */
     alertPrefs: AlertPrefs = AlertPrefs(),
     onAlertPrefs: (AlertPrefs) -> Unit = {},
+    /** Each host's background choices, on its page under Settings › Background and notifications. */
+    background: BackgroundHosts = BackgroundHosts(),
+    onHostBackground: (String, HostBackground) -> Unit = { _, _ -> },
     keyArrangement: KeyArrangement,
     onKeyArrangement: (KeyArrangement) -> Unit,
     keyBarCtrlC: CtrlCKey,
@@ -633,6 +638,9 @@ internal fun HomeScreen(
             onAlerts = toggleAlerts,
             prefs = alertPrefs,
             onPrefs = onAlertPrefs,
+            hosts = hosts,
+            background = background,
+            onHostBackground = onHostBackground,
         )
     }
 

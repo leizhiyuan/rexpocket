@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -128,11 +129,16 @@ class Fleet(private val scope: CoroutineScope) {
      * never settles or repeats another's. [away] is asked at each change.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun alertMoves(prefs: Flow<AlertPrefs>, away: () -> Boolean): Flow<HostAlerts> = _members.flatMapLatest { members ->
+    fun alertMoves(prefs: Flow<AlertPrefs>, away: () -> Boolean): Flow<HostAlerts> =
+        alertMovesBy(prefs.map { p -> { _: String -> p } }, away)
+
+    /** As [alertMoves], with each host's own choices: [prefsOf] gives them by host id. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun alertMovesBy(prefsOf: Flow<(String) -> AlertPrefs>, away: () -> Boolean): Flow<HostAlerts> = _members.flatMapLatest { members ->
         merge(
             *members.values.map { member ->
-                combine(member.session.state, prefs) { st, p ->
-                    HostAlerts(member.hostId, st, member.planner.status(st.blockStatus, away(), p))
+                combine(member.session.state, prefsOf) { st, of ->
+                    HostAlerts(member.hostId, st, member.planner.status(st.blockStatus, away(), of(member.hostId)))
                 }
             }.toTypedArray(),
         )
@@ -148,7 +154,9 @@ class Fleet(private val scope: CoroutineScope) {
 
     private suspend fun onLive(hostId: String, waitMs: Long, send: suspend (PocketSession) -> Boolean): Boolean {
         val session = this[hostId] ?: return false
-        // Android may have cut the connection while the app was away; it redials, so give it a moment.
+        // Android may have cut the connection while the app was away; it redials, so give it a
+        // moment, and skip whatever wait its backoff was in.
+        session.retryNow()
         withTimeoutOrNull(waitMs) { session.state.first { it.phase == Phase.Live } } ?: return false
         return send(session)
     }

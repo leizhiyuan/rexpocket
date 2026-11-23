@@ -71,6 +71,7 @@ fun RexPocketApp(
     val sshKeyQuestion by model.sshKeyQuestion.collectAsState()
     val alerts by model.alerts.collectAsState()
     val alertPrefs by model.alertPrefs.collectAsState()
+    val background by model.background.collectAsState()
     val keyArrangement by model.keyArrangement.collectAsState()
     val keyBarCtrlC by model.keyBarCtrlC.collectAsState()
     val gestures by model.gestures.collectAsState()
@@ -187,6 +188,8 @@ fun RexPocketApp(
                     onAlerts = model::setAlerts,
                     alertPrefs = alertPrefs,
                     onAlertPrefs = model::setAlertPrefs,
+                    background = background,
+                    onHostBackground = model::setHostBackground,
                     keyArrangement = keyArrangement,
                     onKeyArrangement = model::setKeyArrangement,
                     keyBarCtrlC = keyBarCtrlC,

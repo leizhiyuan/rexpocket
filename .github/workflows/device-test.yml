@@ -123,7 +123,8 @@ jobs:
               me.leaver.rexpocket.ui.HomeManageTest \
               me.leaver.rexpocket.ui.MultiHostTest \
               me.leaver.rexpocket.ui.HostImportScreenTest \
-              me.leaver.rexpocket.ui.ShareTest; do
+              me.leaver.rexpocket.ui.ShareTest \
+              me.leaver.rexpocket.alerts.BackgroundServiceTest; do
             adb logcat -c || true
             if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \
                 -Pandroid.testInstrumentationRunnerArguments.class="$class"; then
@@ -138,6 +139,11 @@ jobs:
             adb logcat -d > "out/$class/logcat.txt" || true
             grep -E "ndk_translation|SIGILL|SIGSEGV|Fatal signal|FATAL EXCEPTION|UnsatisfiedLinkError" "out/$class/logcat.txt" | head -20 || true
           done
+          # Background mode across a real boot and a real process death (docs/design/multi-host.md,
+          # "Background"): the app is left with background mode on and a host stored, a boot is
+          # broadcast (as root, the only sender Android takes it from), and the process is killed;
+          # the watch must come back in the foreground on its own (START_STICKY).
+          sh "$RUNNER_TEMP/background.sh" || status=1
           # The Netbird add-on: installed first, then the default app's add-on tests against it.
           ADDON_ARGS="-x :app:buildGhostty -Prexpocket.abi=x86_64"
           adb logcat -c || true
@@ -154,6 +160,45 @@ jobs:
           cp -r app/build/outputs/androidTest-results "out/addon/" 2>/dev/null || true
           adb logcat -d > "out/addon/logcat.txt" || true
           exit $status
+          SH
+
+      - name: Write the background mode script
+        run: |
+          cat > "$RUNNER_TEMP/background.sh" <<'SH'
+          set -u
+          PKG=me.leaver.rexpocket
+          SVC=$PKG/.alerts.WatchService
+          ./gradlew --no-daemon -q $GRADLE_ARGS :app:installDebug :app:installDebugAndroidTest || exit 1
+          adb root >/dev/null; sleep 3; adb wait-for-device
+          foreground() { adb shell dumpsys activity services "$SVC" | grep -q 'isForeground=true'; }
+          wait_foreground() {
+            i=0
+            while [ $i -lt "$1" ]; do foreground && return 0; sleep 1; i=$((i + 1)); done
+            return 1
+          }
+          # Background mode on, one host stored; then a boot, as the system sends it.
+          adb shell am instrument -w -e class me.leaver.rexpocket.alerts.BackgroundShellPrep \
+            $PKG.test/androidx.test.runner.AndroidJUnitRunner | tail -3
+          adb logcat -c || true
+          adb shell am broadcast -a android.intent.action.BOOT_COMPLETED -p $PKG -f 0x20
+          if wait_foreground 30; then echo "RESULT background boot: passed"; else echo "RESULT background boot: FAILED"; adb logcat -d | grep -E "RexPocket|ActivityManager.*$PKG" | tail -40; exit 1; fi
+          # Killed without the battery exemption: recorded, not required (Android may refuse the restart).
+          pid=$(adb shell pidof $PKG); adb shell kill -9 "$pid"; sleep 2
+          if wait_foreground 90; then echo "INFO background restart without the battery exemption: came back"; else echo "INFO background restart without the battery exemption: did not come back"; fi
+          # With the exemption Settings › Background and notifications asks for, it must come back.
+          adb shell dumpsys deviceidle whitelist +$PKG
+          adb shell am broadcast -a android.intent.action.BOOT_COMPLETED -p $PKG -f 0x20
+          wait_foreground 30 || { echo "RESULT background restart: FAILED (not started)"; exit 1; }
+          pid=$(adb shell pidof $PKG); adb shell kill -9 "$pid"; sleep 2
+          if wait_foreground 90 && [ "$(adb shell pidof $PKG)" != "$pid" ]; then
+            echo "RESULT background restart: passed"
+          else
+            echo "RESULT background restart: FAILED"; adb logcat -d | grep -E "RexPocket|ActivityManager.*$PKG" | tail -40; exit 1
+          fi
+          mkdir -p out/background; adb logcat -d > out/background/logcat.txt || true
+          adb shell dumpsys deviceidle whitelist -$PKG >/dev/null
+          adb shell am force-stop $PKG
+          adb unroot >/dev/null 2>&1; sleep 3; adb wait-for-device
           SH
 
       - name: Run the instrumented tests

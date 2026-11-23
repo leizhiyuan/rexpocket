@@ -4,17 +4,14 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
-import android.os.IBinder
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -23,7 +20,6 @@ import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
-import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -109,11 +105,32 @@ object Alerts {
     }
 
     /**
-     * Starts watching [host] (the connected hosts' names); called while the app is on screen, which
-     * is when Android allows it, and again when the connected hosts change.
+     * Starts the watch, which keeps the connections up while the app is away; it follows the
+     * connected hosts itself from then on. Called while the app is on screen, which is when Android
+     * allows it, or from the watch Android restarted.
      */
-    fun watch(context: Context, host: String) {
-        ContextCompat.startForegroundService(context, Intent(context, WatchService::class.java).putExtra(EXTRA_HOST, host))
+    fun watch(context: Context) {
+        if (WatchService.running) return
+        start(context, Intent(context, WatchService::class.java))
+    }
+
+    /**
+     * Starts the watch with no screen, to connect the hosts kept in the background: after a reboot
+     * or an update ([BootReceiver]), both moments Android lets an app start a foreground service from.
+     */
+    fun restore(context: Context) {
+        start(context, Intent(context, WatchService::class.java).setAction(ACTION_RESTORE))
+    }
+
+    private fun start(context: Context, intent: Intent) {
+        try {
+            ContextCompat.startForegroundService(context, intent)
+        } catch (e: IllegalStateException) {
+            // Android 12 and later refuse a foreground service started from the background outside
+            // the moments it allows (ForegroundServiceStartNotAllowedException); the next time the
+            // app is on screen starts it.
+            me.leaver.rexpocket.diagnostics.Diagnostics.event("RexPocketWatch", "watch not started: ${e.javaClass.simpleName}")
+        }
     }
 
     fun unwatch(context: Context) {
@@ -174,7 +191,7 @@ object Alerts {
         posted[tagOf(target)] = alert
         val manager = NotificationManagerCompat.from(context)
         manager.notify(tagOf(target), PANE_ID, builder.build())
-        summarize(context, group, alert)
+        summarize(context, target.hostId, alert)
     }
 
     /** The pane no longer waits, or the person went to it: its alert has said what it had to. */
@@ -183,7 +200,8 @@ object Alerts {
         NotificationManagerCompat.from(context).cancel(tag, PANE_ID)
         val gone = posted.remove(tag) ?: return
         val group = groupOf(gone.target)
-        if (posted.values.none { groupOf(it.target) == group }) NotificationManagerCompat.from(context).cancel(group, SUMMARY_ID)
+        val left = posted.values.filter { it.target.hostId == hostId }
+        if (left.isEmpty()) NotificationManagerCompat.from(context).cancel(group, SUMMARY_ID) else summarize(context, hostId, left.last())
     }
 
     /** Puts the pane's alert back up, quietly, saying [why] an action on it did not go through. */
@@ -193,15 +211,23 @@ object Alerts {
     }
 
     /**
-     * One summary per host and session, so the system shows a session's panes as one group; it
-     * goes with the last of them.
+     * One summary per host, so the system shows a host's panes as one group, whatever session they
+     * are in: with many hosts each is one line in the shade, which opens to its panes. It lists
+     * them, and goes with the last of them.
      */
     @android.annotation.SuppressLint("MissingPermission")
-    private fun summarize(context: Context, group: String, alert: Alert) {
+    private fun summarize(context: Context, hostId: String, alert: Alert) {
+        val group = groupOf(alert.target)
+        val alerts = posted.values.filter { it.target.hostId == hostId }
+        val count = context.resources.getQuantityString(R.plurals.alerts_summary, alerts.size, alerts.size)
+        val inbox = NotificationCompat.InboxStyle().setSummaryText(alert.host)
+        alerts.takeLast(SUMMARY_LINES).forEach { inbox.addLine("${it.title}: ${it.text}") }
         val summary = NotificationCompat.Builder(context, channelOf(alert.kind))
             .setSmallIcon(R.drawable.ic_notifications)
-            .setContentTitle(alert.group.ifEmpty { alert.host })
+            .setContentTitle(alert.host)
+            .setContentText(count)
             .setSubText(alert.host)
+            .setStyle(inbox)
             .setGroup(group)
             .setGroupSummary(true)
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
@@ -211,7 +237,8 @@ object Alerts {
         NotificationManagerCompat.from(context).notify(group, SUMMARY_ID, summary)
     }
 
-    private fun groupOf(target: AlertTarget) = "${target.hostId}/${target.sessionId}"
+    /** A host's group: every pane of that host that has something to say, in any session. */
+    internal fun groupOf(target: AlertTarget) = "host/${target.hostId}"
 
     /**
      * A pane's notification tag: its host and its id, since two hosts - the same Rex saved twice,
@@ -289,10 +316,13 @@ object Alerts {
     internal const val EXTRA_BLOCK = "block"
     internal const val KEY_REPLY = "reply"
     internal const val ACTION_STOP = "me.leaver.rexpocket.alerts.STOP"
+    internal const val ACTION_RESTORE = "me.leaver.rexpocket.alerts.RESTORE"
+    internal const val ACTION_DISCONNECT = "me.leaver.rexpocket.alerts.DISCONNECT"
     internal const val ACTION_REPLY = "me.leaver.rexpocket.alerts.REPLY"
     internal const val ACTION_INTERRUPT = "me.leaver.rexpocket.alerts.INTERRUPT"
     internal const val PANE_ID = 2
     private const val SUMMARY_ID = 3
+    private const val SUMMARY_LINES = 6
     private const val BUZZ_MS = 60L
     private const val SCHEME = "rexpocket-alert"
 }
@@ -333,52 +363,5 @@ class AlertActionReceiver : BroadcastReceiver() {
 
         /** A broadcast may run for 10 s; the input has that, less a margin to put the alert back. */
         const val SEND_MS = 8_000L
-    }
-}
-
-/**
- * Holds the app in the foreground while it is away, so its connection - and the tailnet node it
- * runs over - stay up and Rex's status events keep arriving. It watches nothing itself: the
- * connection the screens already have does, and this only keeps it alive. It ends with the task.
- */
-class WatchService : Service() {
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == Alerts.ACTION_STOP) {
-            Alerts.enabled.value = false
-            stopSelf()
-            return START_NOT_STICKY
-        }
-        Alerts.channels(this)
-        val host = intent?.getStringExtra(Alerts.EXTRA_HOST).orEmpty()
-        val stop = PendingIntent.getService(
-            this, 0, Intent(this, WatchService::class.java).setAction(Alerts.ACTION_STOP), PendingIntent.FLAG_IMMUTABLE,
-        )
-        val open = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE,
-        )
-        val notification = NotificationCompat.Builder(this, Alerts.CHANNEL_WATCH)
-            .setSmallIcon(R.drawable.ic_notifications)
-            .setContentTitle(getString(R.string.alerts_title))
-            .setContentText(getString(R.string.alerts_watching, host))
-            .setOngoing(true)
-            .setSilent(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setContentIntent(open)
-            .addAction(0, getString(R.string.alerts_stop), stop)
-            .build()
-        ServiceCompat.startForeground(this, WATCH_ID, notification, foregroundType())
-        // Killed for memory, the connection is gone with the process; the app restarts it, not this.
-        return START_NOT_STICKY
-    }
-
-    // Keeping a remote terminal connection open fits none of the platform's named types; the app is
-    // installed from its releases, not a store, so the special-use type says what it is instead.
-    private fun foregroundType(): Int =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
-
-    private companion object {
-        const val WATCH_ID = 1
     }
 }

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bg_fix">修复</string>
+    <string name="bg_group_checks">允许在后台运行</string>
+    <string name="bg_battery">电池用量</string>
+    <string name="bg_battery_ok">不受限制</string>
+    <string name="bg_battery_body">电池优化会在手机休眠时暂停连接，并可能在 Android 停止 RexPocket 后不让它重新启动。</string>
+    <string name="bg_restricted">后台活动</string>
+    <string name="bg_restricted_body">电池用量为“受限”：RexPocket 一离开屏幕就会被 Android 停止。请改为“不受限制”。</string>
+    <string name="bg_allowed">已允许</string>
+    <string name="bg_data">后台数据</string>
+    <string name="bg_data_body">流量节省程序会让 RexPocket 在后台时无法使用移动数据。</string>
+    <string name="bg_oem">如果手机仍然停止它</string>
+    <string name="bg_oem_body">有些手机会在 Android 设置之外自行停止应用。dontkillmyapp.com 说明了你的手机要改哪些设置。</string>
+    <string name="bg_group_hosts">主机</string>
+    <string name="bg_host_kept">保持连接</string>
+    <string name="bg_host_not_kept">不在后台保持</string>
+    <string name="bg_host_silent">静音</string>
+    <string name="bg_stay">在后台保持连接</string>
+    <string name="bg_stay_body">关闭后，RexPocket 离开屏幕一分钟后会断开这台主机，回来时再重新连接。</string>
+    <string name="bg_always">始终连接</string>
+    <string name="bg_always_body">RexPocket 每次启动时都会连接，包括重启后或断开连接后，并在后台保持连接。</string>
+    <string name="bg_notify">来自这台主机的通知</string>
+    <string name="bg_default">%1$s（默认）</string>
+    <string name="bg_reset">使用默认设置</string>
+    <string name="bg_stopped_title">后台提醒已停止</string>
+    <string name="bg_stopped_body">Android 没有让 RexPocket 在后台重新启动。打开它即可重新连接；设置 › 后台与通知中列出了需要允许的项目。</string>
+    <string name="bg_watch_starting">正在连接…</string>
+    <string name="bg_host_live">已连接</string>
+    <string name="bg_host_trying">正在重新连接</string>
+    <string name="bg_host_failed">未连接</string>
+    <string name="bg_disconnect_host">断开 %1$s</string>
+    <plurals name="bg_watch_title">
+        <item quantity="other">已连接 %1$d 台主机</item>
+    </plurals>
+    <plurals name="alerts_summary">
+        <item quantity="other">%1$d 个程序</item>
+    </plurals>
+</resources>

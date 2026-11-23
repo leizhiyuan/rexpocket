@@ -370,8 +370,8 @@
     <string name="alerts_interrupt">中斷</string>
     <string name="alerts_not_sent">未傳送：無法連線到窗格。開啟它來回答。</string>
     <string name="alerts_bell">響鈴了</string>
-    <string name="notifications_title">通知</string>
-    <string name="notifications_background_body">RexPocket 不在前景時保持連線，以便告訴你下面這些程式的狀況。</string>
+    <string name="notifications_title">背景與通知</string>
+    <string name="notifications_background_body">RexPocket 不在前景時保持連線（包括從最近使用的應用程式中滑掉後，以及手機重新啟動或應用程式更新後），以便告訴你下面這些程式的狀況。</string>
     <string name="notifications_android">Android 已允許</string>
     <string name="notifications_allowed">是</string>
     <string name="notifications_not_allowed">否</string>

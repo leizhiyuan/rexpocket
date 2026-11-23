@@ -19,6 +19,8 @@ import me.leaver.rexpocket.core.AlertKind
 import me.leaver.rexpocket.core.AlertMove
 import me.leaver.rexpocket.core.AlertPlanner
 import me.leaver.rexpocket.core.AlertPrefs
+import me.leaver.rexpocket.core.BackgroundHosts
+import me.leaver.rexpocket.core.HostBackground
 import me.leaver.rexpocket.core.BellMove
 import me.leaver.rexpocket.core.PaneSignal
 import me.leaver.rexpocket.core.plainText
@@ -364,6 +366,9 @@ class RexViewModel @JvmOverloads constructor(
     /** Which kinds of alert are on: the Notifications page's switches. */
     val alertPrefs: MutableStateFlow<AlertPrefs> = connections.alertPrefs.also { it.value = store.alertPrefs() }
 
+    /** Each host's background choices: Settings › Background, a host's page. */
+    val background: StateFlow<BackgroundHosts> = connections.background
+
     /** The focused host: the one whose terminal is on screen, or was last. */
     val host: SavedHost? get() = focused?.target
 
@@ -381,6 +386,7 @@ class RexViewModel @JvmOverloads constructor(
     val opening: StateFlow<Opening?> = _opening
 
     init {
+        connections.attachScreen()
         // Kept for Android to hand back if it kills the process: see [terminalWasOpen].
         viewModelScope.launch { route.collect { saved[KEY_TERMINAL_OPEN] = it == Route.Term } }
         viewModelScope.launch {
@@ -469,6 +475,11 @@ class RexViewModel @JvmOverloads constructor(
         alertPrefs.value = next
     }
 
+    /** [hostId]'s background choices; an always-connected host connects at once. */
+    fun setHostBackground(hostId: String, next: HostBackground) {
+        connections.setBackground(hostId, next)
+    }
+
     /** Background alerts on or off; [Connections] starts the watch for every connected host. */
     fun setAlerts(on: Boolean) {
         Alerts.enabled.value = on
@@ -481,6 +492,7 @@ class RexViewModel @JvmOverloads constructor(
      */
     override fun onCleared() {
         connections.shown.value = null
+        connections.detachScreen()
         if (!Alerts.enabled.value) {
             // The panes go back to the desktop's size.
             connections.disconnectAll(forget = false)
@@ -817,9 +829,12 @@ class RexViewModel @JvmOverloads constructor(
         // answer to "am I in the tailnet", and a host on a tailnet can then be dialed at once.
         if (tailnet.value.enabled) startTailnet(tailnet.value)
         if (openedFromAlert || openedFromShare || route.value != Route.Home || focusId.value != null) return
-        // Every host the person connected and did not disconnect, the one open last first.
+        // Every host the person connected and did not disconnect, the one open last first, and
+        // the hosts set to be always connected.
         val last = store.lastHost()?.let { store.find(it) }
-        val wanted = (listOfNotNull(last) + store.connectedHosts().mapNotNull { store.find(it) }).distinctBy { it.id }
+        val saved = store.list()
+        val wanted = background.value.atLaunch(last?.id, store.connectedHosts(), saved.map { it.id })
+            .mapNotNull { id -> saved.firstOrNull { it.id == id } }
         if (wanted.isEmpty()) return
         val resume = terminalWasOpen || reopenLastTab.value
         Diagnostics.event(CONN_TAG, "launch: ${wanted.size} hosts, ${if (resume) "back to the last tab" else "the list"} (killed on the terminal: $terminalWasOpen)")

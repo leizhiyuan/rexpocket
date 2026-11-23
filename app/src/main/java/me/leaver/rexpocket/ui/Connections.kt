@@ -34,6 +34,8 @@ import me.leaver.rexpocket.alerts.AlertAction
 import me.leaver.rexpocket.alerts.AlertTarget
 import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.core.AlertKind
+import me.leaver.rexpocket.core.AlertPrefs
+import me.leaver.rexpocket.core.HostBackground
 import me.leaver.rexpocket.core.AlertMove
 import me.leaver.rexpocket.core.BellMove
 import me.leaver.rexpocket.core.ConnectProgress
@@ -56,6 +58,7 @@ import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.Trouble
 import me.leaver.rexpocket.core.explainTailnetProblem
 import me.leaver.rexpocket.core.plainText
+import me.leaver.rexpocket.data.BackgroundStore
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.SavedHost
 import me.leaver.rexpocket.data.TailnetSettings
@@ -92,8 +95,17 @@ class Connections private constructor(private val app: Application, val nodes: T
     /** The tailnet settings; the view model's Tailnet dialog changes them. */
     val tailnet = MutableStateFlow(store.tailnet())
 
-    /** Which kinds of alert are on: the Notifications page's switches. */
+    /** Which kinds of alert are on: the Notifications page's switches, every host's defaults. */
     val alertPrefs = MutableStateFlow(store.alertPrefs())
+
+    private val backgroundStore = BackgroundStore(app)
+
+    /** Each host's background choices: kept connected, always connected, its own notifications. */
+    val background = MutableStateFlow(backgroundStore.hosts().keep(store.list().map { it.id }))
+
+    /** The choices that apply to each host: the defaults with the host's own on top. */
+    private val prefsOf: StateFlow<(String) -> AlertPrefs> = combine(alertPrefs, background) { base, bg -> bg.prefsOf(base) }
+        .stateIn(scope, SharingStarted.Eagerly, background.value.prefsOf(alertPrefs.value))
 
     /** The status of the backend that is selected. */
     val tailnetStatus: StateFlow<TailnetStatus> = combine(
@@ -141,6 +153,16 @@ class Connections private constructor(private val app: Application, val nodes: T
 
     private val foreground = MutableStateFlow(true)
 
+    /** Whether a screen has said whether it is visible yet: a start without one is in the background. */
+    private var screenSeen = false
+
+    /**
+     * The hosts let go while the app is away because they are not kept in the background
+     * ([HostBackground.stay] off); they come back with the screen. Still in `connected_hosts`.
+     */
+    private val parked = LinkedHashSet<String>()
+    private var parkJob: Job? = null
+
     /** The pane on the terminal screen, while it is on screen: its news is seen as it comes. */
     val shown = MutableStateFlow<AlertTarget?>(null)
 
@@ -151,17 +173,29 @@ class Connections private constructor(private val app: Application, val nodes: T
 
     init {
         Alerts.actions = alertActions
+        // Background mode is the process's, not a screen's: the watch reads it when Android starts
+        // the app again without one, and its Stop turns it off with no screen to save that.
+        Alerts.enabled.value = store.alerts()
         scope.launch {
-            Alerts.enabled.collect { on -> fleet.setWatching(on) }
+            Alerts.enabled.collect { on ->
+                fleet.setWatching(on)
+                if (store.alerts() != on) store.setAlerts(on)
+            }
         }
-        // The watch notification names every connected host, and goes with the last of them.
+        // The watch runs while background mode is on and a host is connected, and goes with the
+        // last of them. The first look is skipped when nothing is connected yet: a watch Android
+        // started again is about to connect them (see [restoreBackground]).
         scope.launch {
-            combine(Alerts.enabled, _links) { on, links -> if (on) links.values.joinToString(", ") { it.target.label } else "" }
+            var first = true
+            combine(Alerts.enabled, _links) { on, links -> on && links.isNotEmpty() }
                 .distinctUntilChanged()
-                .collect { names -> if (names.isNotEmpty()) Alerts.watch(app, names) else Alerts.unwatch(app) }
+                .collect { watch ->
+                    if (watch) Alerts.watch(app) else if (!first) Alerts.unwatch(app)
+                    first = false
+                }
         }
         scope.launch {
-            fleet.alertMoves(alertPrefs) { !foreground.value && Alerts.enabled.value }.collect { (hostId, st, moves) ->
+            fleet.alertMovesBy(prefsOf) { !foreground.value && Alerts.enabled.value }.collect { (hostId, st, moves) ->
                 for (move in moves) {
                     when (move) {
                         is AlertMove.Cancel -> Alerts.settle(app, hostId, move.block)
@@ -179,12 +213,91 @@ class Connections private constructor(private val app: Application, val nodes: T
     }
 
     fun setForeground(visible: Boolean) {
+        screenSeen = true
         val returning = visible && !foreground.value
         foreground.value = visible
         if (returning && _links.value.values.any { it.target.viaTailscale }) {
             scope.launch(Dispatchers.IO) { nodeFor(tailnet.value.backend).resetNetwork() }
         }
         fleet.setActive(visible)
+        parkJob?.cancel()
+        if (visible) unpark() else if (Alerts.enabled.value) parkJob = scope.launch {
+            // A trip to another app and back keeps them; a while away lets them go.
+            delay(PARK_MS)
+            park()
+        }
+    }
+
+    /** How many screens (view models) watch these connections; none after the task was swiped away. */
+    private var screens = 0
+
+    fun attachScreen() {
+        screens++
+    }
+
+    fun detachScreen() {
+        screens = (screens - 1).coerceAtLeast(0)
+    }
+
+    /**
+     * The watch notification's Stop turned background mode off. With no screen left, nothing is
+     * watching the connections: they close, as a screen closing with background mode off closes
+     * them, and connect again at the next start.
+     */
+    fun backgroundStopped() {
+        if (screens > 0) return
+        disconnectAll(forget = false)
+        nodes.all.forEach { it.stopAsync() }
+    }
+
+    /** Lets go of the connected hosts that are not kept in the background; see [parked]. */
+    private fun park() {
+        val onScreen = shown.value?.hostId
+        for (id in background.value.toPark(_links.value.keys, onScreen)) {
+            Diagnostics.event(CONN_TAG, "background: letting ${id.take(6)} go while away")
+            parked += id
+            disconnect(id, forget = false)
+        }
+    }
+
+    /** The hosts let go while away connect again, now the screen is back. */
+    private fun unpark() {
+        if (parked.isEmpty()) return
+        val ids = parked.toList()
+        parked.clear()
+        val saved = store.list()
+        for (id in ids) saved.firstOrNull { it.id == id }?.let { ensure(it) }
+    }
+
+    /**
+     * Android started the app without a screen: the watch was restarted after its process was
+     * killed (START_STICKY), or the phone booted or the app was updated with background mode on.
+     * Connects the hosts that were connected and are kept in the background, and the
+     * always-connected ones; returns how many hosts are connected now.
+     */
+    fun restoreBackground(): Int {
+        // No screen has said it is on screen: news is for notifications, and no screen polls run.
+        if (!screenSeen) {
+            foreground.value = false
+            fleet.setActive(false)
+        }
+        val saved = store.list()
+        val wanted = background.value.inBackground(Alerts.enabled.value, store.connectedHosts(), saved.map { it.id })
+        Diagnostics.event(CONN_TAG, "background restore: ${wanted.size} hosts, ${_links.value.size} connected")
+        for (id in wanted) {
+            if (this[id] != null) continue
+            saved.firstOrNull { it.id == id }?.let { connect(it) }
+        }
+        return _links.value.size
+    }
+
+    /** Changes [hostId]'s background choices, and acts on them now. */
+    fun setBackground(hostId: String, next: HostBackground) {
+        val all = background.value.with(hostId, next)
+        backgroundStore.setHosts(all)
+        background.value = all
+        // An always-connected host connects at once, as it would at the next start.
+        if (next.always && this[hostId] == null) store.list().firstOrNull { it.id == hostId }?.let { connect(it) }
     }
 
     private fun nodeFor(backend: TailnetBackend): TailnetNode = nodes[backend]
@@ -199,7 +312,7 @@ class Connections private constructor(private val app: Application, val nodes: T
         )
     }
 
-    private fun remember() = store.setConnectedHosts(_links.value.keys.toList())
+    private fun remember() = store.setConnectedHosts(_links.value.keys.toList() + parked)
 
     /**
      * Connects [target], and keeps every other host as it is. A host that was connected already
@@ -219,6 +332,7 @@ class Connections private constructor(private val app: Application, val nodes: T
 
     /** Disconnects [hostId]; with [forget] the next start does not connect it again. */
     fun disconnect(hostId: String, forget: Boolean = true) {
+        if (forget) parked -= hostId
         if (this[hostId] == null) return
         Diagnostics.event(CONN_TAG, "disconnect ${hostId.take(6)}")
         drop(hostId)
@@ -462,7 +576,7 @@ class Connections private constructor(private val app: Application, val nodes: T
         val (hostId, signal) = hostSignal
         val planner = fleet.member(hostId)?.planner ?: return
         val st = this[hostId]?.pocket?.value ?: return
-        val prefs = alertPrefs.value
+        val prefs = prefsOf.value(hostId)
         val away = !foreground.value && Alerts.enabled.value
         when (signal) {
             is PaneSignal.Bell -> {
@@ -569,6 +683,9 @@ private val teardown = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
 /** How long after a connection goes live the path is measured: Tailscale needs a moment to go direct. */
 private const val PATH_SETTLE_MS = 3_000L
+
+/** How long the app is away before the hosts not kept in the background are let go. */
+private const val PARK_MS = 60_000L
 
 /** How long a notification's Reply or Interrupt waits for a connection that is redialing. */
 private const val ACTION_CONNECT_MS = 6_000L
