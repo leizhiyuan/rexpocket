@@ -154,6 +154,17 @@ object SettingsFormat {
                 if (both.isNotEmpty()) refuse(SettingsProblem.Kind.BadValue, "home.folded", both.first())
             }
         }
+        val quickReplies = root.opt("quickReplies").let { v ->
+            if (v == null || v == JSONObject.NULL) null else {
+                val arr = v as? JSONArray ?: refuse(SettingsProblem.Kind.BadValue, "quickReplies")
+                if (arr.length() > QuickReplies.MAX_ITEMS) refuse(SettingsProblem.Kind.BadValue, "quickReplies", arr.length().toString())
+                List(arr.length()) { i ->
+                    val text = arr.opt(i) as? String ?: refuse(SettingsProblem.Kind.BadValue, "quickReplies[${i + 1}]")
+                    if (text.length > QuickReplies.MAX_LENGTH) refuse(SettingsProblem.Kind.BadValue, "quickReplies[${i + 1}]")
+                    QuickReplies.clean(text) ?: refuse(SettingsProblem.Kind.BadValue, "quickReplies[${i + 1}]")
+                }.distinct()
+            }
+        }
         val secrets = section(root, "secrets")?.let { s -> readSealed(s) }
         return SettingsBackup(
             appearance = appearance,
@@ -163,6 +174,7 @@ object SettingsFormat {
             home = home,
             hosts = hosts,
             hostBackground = hostBackground,
+            quickReplies = quickReplies,
             secrets = secrets,
         )
     }
@@ -264,6 +276,7 @@ object SettingsFormat {
             root.put("home", home)
         }
         root.put("hosts", hostList)
+        snapshot.quickReplies?.let { root.put("quickReplies", JSONArray(it.take(QuickReplies.MAX_ITEMS))) }
         var sealedCount = 0
         if (passphrase != null) {
             // Only an SSH host signs in: a Rex port has nothing to carry.
@@ -343,6 +356,8 @@ data class SettingsBackup(
     val hosts: List<ImportedHost> = emptyList(),
     /** Each host's background choices, by its name in [hosts]. */
     val hostBackground: Map<String, HostBackground> = emptyMap(),
+    /** Settings › Quick replies, in order: the replies and prompts the person sends often. */
+    val quickReplies: List<String>? = null,
     val secrets: SealedSecrets? = null,
 )
 
@@ -378,6 +393,7 @@ data class SettingsSnapshot(
     val home: HomePrefs? = null,
     val hosts: List<ExportedHost> = emptyList(),
     val hostBackground: Map<String, HostBackground> = emptyMap(),
+    val quickReplies: List<String>? = null,
     /** Written only when a passphrase is given. */
     val secrets: List<HostSecret> = emptyList(),
 )
@@ -423,12 +439,13 @@ data class CurrentSettings(
     val hostBackground: Map<String, HostBackground> = emptyMap(),
     val folded: Set<String> = emptySet(),
     val unfolded: Set<String> = emptySet(),
+    val quickReplies: List<String> = QuickReplies.DEFAULTS,
 )
 
 enum class SettingKey {
     Theme, TerminalColors, TextSize, TerminalFontScale,
     AlertWaiting, AlertFailed, AlertDone, AlertMessages, AlertBells, AlertVibrate,
-    BackgroundMode, HomeFilter, ReopenLastTab, HostOrder, HostFolds, HostBackground,
+    BackgroundMode, HomeFilter, ReopenLastTab, HostOrder, HostFolds, HostBackground, QuickReplies,
 }
 
 /** One preference an import changes: [old] → [new], for [host] when it is one host's. */
@@ -459,6 +476,7 @@ fun settingChanges(backup: SettingsBackup, current: CurrentSettings, plan: Impor
         change(SettingKey.AlertVibrate, c.vibrate, n.vibrate)
     }
     change(SettingKey.BackgroundMode, current.backgroundMode, backup.backgroundMode)
+    change(SettingKey.QuickReplies, current.quickReplies, backup.quickReplies)
     backup.home?.let { h ->
         change(SettingKey.HomeFilter, current.homeFilter, h.filter)
         change(SettingKey.ReopenLastTab, current.reopenLastTab, h.reopenLastTab)

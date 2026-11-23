@@ -18,6 +18,7 @@ the way to move a phone's setup instead: one file the person makes, keeps and op
 | `background.hosts[]` | each host's page | `name`, `stay`, `always`, `notify`, `events` (`Waiting`, `Failed`, `Done`, `Message`, `Bell` → on or off) |
 | `home` | the Home | `filter` (`All`, `NeedsYou`, `Running`), `reopenLastTab`, `hostOrder`, `folded` and `unfolded` (host names) |
 | `hosts` | the saved hosts | a `rexpocket-hosts/1` list, below |
+| `quickReplies` | Settings › Quick replies | the replies and prompts in order, at most 20 of at most 2,000 characters; an import replaces the list |
 | `secrets` | SSH passwords and keys | only with **Include SSH keys**, sealed |
 
 Never in it: the tailnet's state, its node key, its login or setup key, the management server; the
@@ -41,6 +42,7 @@ means nothing on a phone that has not connected yet.
       { "name": "Desk mac", "uri": null, "dnsUri": "ws://desk.local:7297", "hostKeyFingerprint": null, "keyComment": null }
     ]
   },
+  "quickReplies": ["yes", "continue", "/compact"],
   "secrets": { "kdf": "PBKDF2-HMAC-SHA256", "iterations": 600000, "salt": "…", "cipher": "AES-256-GCM", "nonce": "…", "hosts": 1, "data": "…" }
 }
 ```

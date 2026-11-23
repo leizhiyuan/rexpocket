@@ -50,6 +50,7 @@ import me.leaver.rexpocket.core.ImportPlan
 import me.leaver.rexpocket.core.ImportStatus
 import me.leaver.rexpocket.core.OpenedSecrets
 import me.leaver.rexpocket.core.PublicKeyList
+import me.leaver.rexpocket.core.QuickReplies
 import me.leaver.rexpocket.core.SettingChange
 import me.leaver.rexpocket.core.SettingKey
 import me.leaver.rexpocket.core.SettingsBackup
@@ -81,6 +82,7 @@ data class PhoneSettings(
     val reopenLastTab: Boolean,
     val folds: HomeFolds,
     val background: BackgroundHosts,
+    val quickReplies: List<String>,
 )
 
 /** What an import writes beside the hosts; null leaves a setting as it is. Hosts by id. */
@@ -93,6 +95,7 @@ data class SettingsWrite(
     val reopenLastTab: Boolean? = null,
     val folds: HomeFolds? = null,
     val background: Map<String, HostBackground> = emptyMap(),
+    val quickReplies: List<String>? = null,
 )
 
 /** The sealed SSH credentials of the file being imported. */
@@ -191,6 +194,7 @@ class SettingsBackupper(
                 )
             },
             hostBackground = now.background.hosts.mapNotNull { (id, b) -> label[id]?.let { it to b } }.toMap(),
+            quickReplies = now.quickReplies,
             secrets = if (!withSecrets) emptyList() else hosts.filter { it.viaSsh }.map { h ->
                 HostSecret(h.label, h.sshPassword.ifEmpty { null }, h.sshPrivateKey.ifBlank { null }, h.sshPassphrase.ifEmpty { null })
             },
@@ -330,6 +334,7 @@ class SettingsBackupper(
             hostBackground = now.background.hosts,
             folded = now.folds.hosts,
             unfolded = now.folds.openHosts,
+            quickReplies = now.quickReplies,
         )
     }
 
@@ -418,6 +423,7 @@ class SettingsBackupper(
                     reopenLastTab = b.home?.reopenLastTab,
                     folds = folds,
                     background = b.hostBackground.mapNotNull { (n, bg) -> id(n)?.let { it to bg } }.toMap(),
+                    quickReplies = b.quickReplies,
                 ),
             )
             Diagnostics.event(TAG, "import: " + result.summary() + ", ${preview.changes.size} settings, ${secrets.size} sign-ins")
@@ -675,6 +681,11 @@ private fun ChangeRow(c: SettingChange) {
     val text = when (c.key) {
         SettingKey.HostFolds -> stringResource(R.string.backup_setting_folds_value, (c.new as? List<*>).orEmpty().joinToString(", "))
         SettingKey.HostOrder -> stringResource(R.string.import_change_short, (c.old as? List<*>).orEmpty().joinToString(", "), (c.new as? List<*>).orEmpty().joinToString(", "))
+        SettingKey.QuickReplies -> stringResource(
+            R.string.import_change_short,
+            (c.old as? List<*>).orEmpty().joinToString(", ") { QuickReplies.short(it.toString()) },
+            (c.new as? List<*>).orEmpty().joinToString(", ") { QuickReplies.short(it.toString()) }.ifEmpty { stringResource(R.string.import_none) },
+        )
         else -> stringResource(R.string.import_change_short, settingValue(c.old), settingValue(c.new))
     }
     Column(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -702,6 +713,7 @@ private fun settingName(key: SettingKey): String = stringResource(
         SettingKey.HostOrder -> R.string.backup_setting_order
         SettingKey.HostFolds -> R.string.backup_setting_folds
         SettingKey.HostBackground -> R.string.backup_setting_host_background
+        SettingKey.QuickReplies -> R.string.quick_replies_title
     },
 )
 

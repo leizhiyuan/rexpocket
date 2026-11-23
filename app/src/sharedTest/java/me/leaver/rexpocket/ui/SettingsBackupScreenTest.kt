@@ -16,6 +16,7 @@ import me.leaver.rexpocket.core.HostBackground
 import me.leaver.rexpocket.core.HostListFormat
 import me.leaver.rexpocket.core.HostSecret
 import me.leaver.rexpocket.core.ImportAddress
+import me.leaver.rexpocket.core.QuickReplies
 import me.leaver.rexpocket.core.SettingsFormat
 import me.leaver.rexpocket.core.SettingsSnapshot
 import me.leaver.rexpocket.core.TerminalColors
@@ -96,6 +97,7 @@ class SettingsBackupScreenTest {
             m.setAlertPrefs(AlertPrefs(bells = true, done = false))
             m.setHomeFilter(HomeFilter.Running)
             m.setHostBackground("agents-id", HostBackground(stay = false, notify = false))
+            m.setQuickReplies(QuickReplies(listOf("ship it", "/compact")))
         }
         val text = SettingsFormat.write(m.settingsBackup.snapshot(withSecrets = false)).text
         assertFalse("no credential without a passphrase", text.contains("secrets") || text.contains("\"pw\""))
@@ -108,6 +110,7 @@ class SettingsBackupScreenTest {
             m.setAlertPrefs(AlertPrefs())
             m.setHomeFilter(HomeFilter.All)
             m.setHostBackground("agents-id", HostBackground())
+            m.setQuickReplies(QuickReplies())
             m.saveHost(extra)
         }
         share(m, text)
@@ -116,6 +119,7 @@ class SettingsBackupScreenTest {
         assertTrue(seen(string(R.string.backup_setting_host_background, "agents")))
         assertTrue(seen(string(R.string.appearance_app)))
         assertTrue(seen(string(R.string.backup_setting_filter)))
+        assertTrue(seen(string(R.string.quick_replies_title)))
         // Nothing changes before the confirm.
         assertEquals(Appearance(), store.appearance())
 
@@ -125,6 +129,7 @@ class SettingsBackupScreenTest {
         assertEquals(dark, store.appearance())
         assertEquals(AlertPrefs(bells = true, done = false), store.alertPrefs())
         assertEquals(HomeFilter.Running, m.homeFilter.value)
+        assertEquals(listOf("ship it", "/compact"), m.quickReplies.value.items)
         assertEquals(HostBackground(stay = false, notify = false), m.background.value.of("agents-id"))
         // No host removed; the one the file does not name keeps its place.
         assertEquals(listOf("desk", "agents", "extra"), store.list().map { it.label })

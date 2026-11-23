@@ -184,6 +184,7 @@ class RexViewModel @JvmOverloads constructor(
                 reopenLastTab = reopenLastTab.value,
                 folds = folds.value,
                 background = background.value,
+                quickReplies = quickReplies.value.items,
             )
         },
         write = { writeSettings(it) },
@@ -607,6 +608,7 @@ class RexViewModel @JvmOverloads constructor(
         w.reopenLastTab?.let(::setReopenLastTab)
         w.folds?.let(::setFolds)
         w.background.forEach { (id, b) -> setHostBackground(id, b) }
+        w.quickReplies?.let { setQuickReplies(QuickReplies(it)) }
         val on = w.backgroundMode ?: return true
         if (on == Alerts.enabled.value) return true
         if (on && !Alerts.allowed(getApplication())) return false

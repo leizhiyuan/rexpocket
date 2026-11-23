@@ -42,6 +42,7 @@ class SettingsBackupTest {
             "agents" to HostBackground(stay = true, always = true, notify = true, overrides = mapOf(AlertEvent.Bell to true)),
             "Desk mac" to HostBackground(stay = false),
         ),
+        quickReplies = listOf("yes", "/compact", "Run the tests,\nthen commit"),
         secrets = listOf(HostSecret("agents", password = null, privateKey = key.privateKey, passphrase = null)),
     )
 
@@ -67,6 +68,7 @@ class SettingsBackupTest {
         assertEquals(true, b.backgroundMode)
         assertEquals(snapshot.home!!.copy(), b.home)
         assertEquals(snapshot.hostBackground, b.hostBackground)
+        assertEquals(snapshot.quickReplies, b.quickReplies)
         assertEquals(listOf("agents", "Desk mac", "studio"), b.hosts.map { it.name })
         val agents = b.hosts[0]
         assertEquals(ssh.address, agents.address)
@@ -203,6 +205,8 @@ class SettingsBackupTest {
         assertEquals("terminal.fontScale", with { getJSONObject("terminal").put("fontScale", 9) }.field)
         assertEquals("notifications.bells", with { getJSONObject("notifications").put("bells", "yes") }.field)
         assertEquals("home.filter", with { getJSONObject("home").put("filter", "Everything") }.field)
+        assertEquals("quickReplies[2]", with { put("quickReplies", JSONArray(listOf("ok", "  "))) }.field)
+        assertEquals("quickReplies", with { put("quickReplies", JSONArray(List(QuickReplies.MAX_ITEMS + 1) { "r$it" })) }.field)
         with { getJSONObject("home").put("hostOrder", JSONArray(listOf("agents", "ghost"))) }.let {
             assertEquals(SettingsProblem.Kind.UnknownHost, it.kind)
             assertEquals("ghost", it.detail)
@@ -259,6 +263,7 @@ class SettingsBackupTest {
         assertFalse(SettingKey.Theme in keys)
         assertTrue(SettingKey.TerminalColors in keys)
         assertTrue(SettingKey.AlertFailed in keys)
+        assertEquals(snapshot.quickReplies, changes.single { it.key == SettingKey.QuickReplies }.new)
         assertFalse(SettingKey.AlertWaiting in keys)
         assertEquals(listOf("Desk mac"), changes.filter { it.key == SettingKey.HostBackground }.map { it.host })
         val order = changes.single { it.key == SettingKey.HostOrder }
