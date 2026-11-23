@@ -80,6 +80,16 @@ internal class TerminalAccessibility(private val view: TerminalView) : ExploreBy
         node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK)
     }
 
+    /**
+     * TalkBack's double tap on the pane itself. The view is not clickable - its touches are its own,
+     * and a clickable view would click on every lift - so the click is taken here.
+     */
+    override fun performAccessibilityAction(host: View, action: Int, args: Bundle?): Boolean {
+        if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return super.performAccessibilityAction(host, action, args)
+        view.performClick()
+        return true
+    }
+
     override fun onPerformActionForVirtualView(virtualViewId: Int, action: Int, arguments: Bundle?): Boolean {
         if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return false
         view.performClick()

@@ -55,7 +55,8 @@ class TerminalAccessibilityTest {
         onMain { view.invalidate() }
     }
 
-    private fun provider(): AccessibilityNodeProvider = onMainResult { requireNotNull(view.accessibilityNodeProvider) }
+    /** The pane's node provider; on the main thread. */
+    private fun provider(): AccessibilityNodeProvider = requireNotNull(view.accessibilityNodeProvider)
 
     private fun host(): AccessibilityNodeInfo = onMainResult { provider().createAccessibilityNodeInfo(AccessibilityNodeProvider.HOST_VIEW_ID)!! }
 
