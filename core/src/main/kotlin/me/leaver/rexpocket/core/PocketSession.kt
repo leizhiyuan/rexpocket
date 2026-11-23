@@ -1253,6 +1253,9 @@ class PocketSession(
         var before: String? = null
         var after: ProgramRecord? = null
         statusRecords.compute(block) { _, old ->
+            // Marked under the same lock a first read writes under, so that read cannot put an
+            // older answer over this change after checking for it.
+            reportedDuringRead += block
             before = summarizeStatus(old.orEmpty().values.toList())?.state
             change(old.orEmpty()).also { after = summarizeStatus(it.values.toList()) }
         }
@@ -1896,16 +1899,27 @@ class PocketSession(
                 val program = process.await()?.let { foregroundProgram(it) }
                 val named = title.await()?.let { programTitle(it) }
                 // An event that landed while this was in flight is newer than the answer; it wins.
-                if (block !in reportedDuringRead) {
+                // The check and the write are one step on the pane's entry, which a status event
+                // also changes in one step (changeStatus).
+                var wrote = false
+                var before: String? = null
+                statusRecords.compute(block) { _, old ->
+                    if (block in reportedDuringRead) {
+                        old
+                    } else {
+                        wrote = true
+                        before = old?.let { summarizeStatus(it.values.toList())?.state }
+                        records
+                    }
+                }
+                if (wrote) {
                     // The time a state began comes with its record; from a Rex that stamps none, a
                     // state that was already there (or changed while the phone was away) has no time.
-                    val before = statusRecords[block]?.let { summarizeStatus(it.values.toList())?.state }
                     val now = summarizeStatus(records.values.toList())
                     when {
                         now?.updatedAt != null -> sinceOf[block] = sinceFor(now)
                         before != now?.state -> sinceOf -= block
                     }
-                    statusRecords[block] = records
                     if (dir != null) pwds[block] = dir
                     if (program != null) foregrounds[block] = program
                     if (named != null) titleOf[block] = named
