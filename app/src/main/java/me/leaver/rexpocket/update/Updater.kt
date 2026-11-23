@@ -21,6 +21,7 @@ import me.leaver.rexpocket.core.UpdateChannel
 import me.leaver.rexpocket.core.defaultChannel
 import me.leaver.rexpocket.core.newestFor
 import me.leaver.rexpocket.diagnostics.Diagnostics
+import me.leaver.rexpocket.net.addon.isUpdateAsset
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -155,7 +156,7 @@ class Updater(context: Context) {
         val release = try {
             val feed = get(FEED)
             if (!feed.isSuccessful) throw HttpStatusException(feed.code, "releases")
-            AppRelease.parseFeed(feed.body?.string().orEmpty()).newestFor(running, _channel.value)
+            AppRelease.parseFeed(feed.body?.string().orEmpty(), ::isUpdateAsset).newestFor(running, _channel.value)
         } catch (e: IOException) {
             // Offline or GitHub is down: nothing to say while it is only the app starting up.
             Diagnostics.event(TAG, "check failed: ${e.javaClass.simpleName}: ${e.message}")

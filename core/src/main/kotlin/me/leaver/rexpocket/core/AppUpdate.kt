@@ -100,9 +100,10 @@ data class AppRelease(
         /**
          * Reads the GitHub releases feed. A draft is not published, and a release without an APK
          * cannot be installed, so neither is offered; a version the app cannot parse is skipped
-         * rather than guessed at.
+         * rather than guessed at. A release can carry more than one APK, for more than one build:
+         * [wanted] says by its file name which one this build installs; by default the first APK.
          */
-        fun parseFeed(json: String): List<AppRelease> {
+        fun parseFeed(json: String, wanted: (String) -> Boolean = { true }): List<AppRelease> {
             val releases = JSONArray(json)
             return buildList {
                 for (i in 0 until releases.length()) {
@@ -115,19 +116,19 @@ data class AppRelease(
                             tag = tag,
                             version = version,
                             preRelease = release.optBoolean("prerelease"),
-                            apk = apkOf(release),
+                            apk = apkOf(release, wanted),
                         ),
                     )
                 }
             }
         }
 
-        private fun apkOf(release: JSONObject): UpdateApk? {
+        private fun apkOf(release: JSONObject, wanted: (String) -> Boolean): UpdateApk? {
             val assets = release.optJSONArray("assets") ?: return null
             for (i in 0 until assets.length()) {
                 val asset = assets.optJSONObject(i) ?: continue
                 val name = asset.optString("name")
-                if (!name.endsWith(".apk")) continue
+                if (!name.endsWith(".apk") || !wanted(name)) continue
                 val url = asset.optString("browser_download_url")
                 if (url.isEmpty()) continue
                 return UpdateApk(
