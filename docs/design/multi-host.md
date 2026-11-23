@@ -137,6 +137,9 @@ person wants them, not as long as the screen. Code: `WatchService` (the anchor),
 - `BackgroundServiceTest` (emulator, API 30 and 34): MainActivity connected to ScriptedRex with the
   mode on, `finishAndRemoveTask()` (what a swipe does to the task), and the watch, the connection
   and an alert are still there; a boot (the receiver) connects the stored host again and alerts.
-  Then device-test's shell steps, as root: a real `BOOT_COMPLETED` broadcast starts the watch, and
-  `kill -9` of the process brings it back in the foreground on its own (START_STICKY), checked with
-  the battery exemption; without it the result is only printed.
+  Then device-test's shell steps: the app opened once and left with Home starts the watch; `kill -9`
+  of the process (as root) brings it back in the foreground on its own (START_STICKY), required with
+  the battery exemption, only printed without it; then the emulator really reboots, without the
+  exemption, and the system's `BOOT_COMPLETED` must start it. A boot broadcast sent from the shell
+  is no test on Android 14: it carries no exemption, and the watch is refused
+  (`ForegroundServiceStartNotAllowedException`, which `Alerts.start` catches).

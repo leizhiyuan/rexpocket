@@ -176,29 +176,44 @@ jobs:
             while [ $i -lt "$1" ]; do foreground && return 0; sleep 1; i=$((i + 1)); done
             return 1
           }
-          # Background mode on, one host stored; then a boot, as the system sends it.
+          fail() { echo "RESULT background $1: FAILED"; adb logcat -d | grep -E "RexPocket|ActivityManager.*$PKG|FGS" | tail -40; exit 1; }
+          # Background mode on, one host stored; the app opened once and left with Home, as a person does.
           adb shell am instrument -w -e class me.leaver.rexpocket.alerts.BackgroundShellPrep \
             $PKG.test/androidx.test.runner.AndroidJUnitRunner | tail -3
           adb logcat -c || true
-          adb shell am broadcast -a android.intent.action.BOOT_COMPLETED -p $PKG -f 0x20
-          if wait_foreground 30; then echo "RESULT background boot: passed"; else echo "RESULT background boot: FAILED"; adb logcat -d | grep -E "RexPocket|ActivityManager.*$PKG" | tail -40; exit 1; fi
-          # Killed without the battery exemption: recorded, not required (Android may refuse the restart).
-          pid=$(adb shell pidof $PKG); adb shell kill -9 "$pid"; sleep 2
-          if wait_foreground 90; then echo "INFO background restart without the battery exemption: came back"; else echo "INFO background restart without the battery exemption: did not come back"; fi
+          adb shell am start -W -n $PKG/.MainActivity >/dev/null
+          sleep 5; adb shell input keyevent KEYCODE_HOME
+          wait_foreground 30 && echo "RESULT background from the app: passed" || fail "from the app"
+          # The process killed without the battery exemption: recorded, not required (Android 12+ may
+          # refuse a sticky restart's foreground start).
+          pid=$(adb shell pidof $PKG); adb shell kill -9 "$pid"; sleep 3
+          if wait_foreground 90 && [ "$(adb shell pidof $PKG)" != "$pid" ]; then
+            echo "INFO background restart without the battery exemption: came back"
+          else
+            echo "INFO background restart without the battery exemption: did not come back"
+            adb logcat -d | grep -E "RexPocket|FGS|WatchService" | tail -15
+          fi
           # With the exemption Settings › Background and notifications asks for, it must come back.
           adb shell dumpsys deviceidle whitelist +$PKG
-          adb shell am broadcast -a android.intent.action.BOOT_COMPLETED -p $PKG -f 0x20
-          wait_foreground 30 || { echo "RESULT background restart: FAILED (not started)"; exit 1; }
-          pid=$(adb shell pidof $PKG); adb shell kill -9 "$pid"; sleep 2
-          if wait_foreground 90 && [ "$(adb shell pidof $PKG)" != "$pid" ]; then
-            echo "RESULT background restart: passed"
-          else
-            echo "RESULT background restart: FAILED"; adb logcat -d | grep -E "RexPocket|ActivityManager.*$PKG" | tail -40; exit 1
+          if ! foreground; then
+            adb shell am start -W -n $PKG/.MainActivity >/dev/null; sleep 5; adb shell input keyevent KEYCODE_HOME
+            wait_foreground 30 || fail "restart (not started)"
           fi
-          mkdir -p out/background; adb logcat -d > out/background/logcat.txt || true
+          pid=$(adb shell pidof $PKG); adb shell kill -9 "$pid"; sleep 3
+          if wait_foreground 90 && [ "$(adb shell pidof $PKG)" != "$pid" ]; then echo "RESULT background restart: passed"; else fail restart; fi
+          # A real reboot, without the exemption: BOOT_COMPLETED from the system starts the watch.
+          # (A boot broadcast sent from the shell carries no exemption on Android 14, so it is not one.)
           adb shell dumpsys deviceidle whitelist -$PKG >/dev/null
+          mkdir -p out/background; adb logcat -d > out/background/logcat-before-reboot.txt || true
+          adb reboot; sleep 10; adb wait-for-device
+          i=0; until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ] || [ $i -ge 180 ]; do sleep 2; i=$((i + 1)); done
+          adb shell input keyevent 82 || true
+          if wait_foreground 120; then echo "RESULT background boot: passed"; else fail boot; fi
+          adb logcat -d > out/background/logcat.txt || true
+          adb shell settings put global window_animation_scale 0.0
+          adb shell settings put global transition_animation_scale 0.0
+          adb shell settings put global animator_duration_scale 0.0
           adb shell am force-stop $PKG
-          adb unroot >/dev/null 2>&1; sleep 3; adb wait-for-device
           SH
 
       - name: Run the instrumented tests

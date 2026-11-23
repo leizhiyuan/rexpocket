@@ -27,7 +27,7 @@ import org.junit.runner.RunWith
  * connection and its alerts stay; then the connections are dropped as a new process would have
  * none, and a boot starts the watch, which connects the stored host again and alerts.
  * The real process death (START_STICKY) and a real BOOT_COMPLETED are checked from the shell in
- * device-test, after [BackgroundShellPrep]. See docs/design/multi-host.md, "Background".
+ * device-test, after [BackgroundShellPrep] (a real reboot). See docs/design/multi-host.md, "Background".
  */
 @RunWith(AndroidJUnit4::class)
 class BackgroundServiceTest {
