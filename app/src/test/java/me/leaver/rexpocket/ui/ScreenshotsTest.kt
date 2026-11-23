@@ -145,7 +145,7 @@ class ScreenshotsTest {
      * The home screen's activity view, the whole app on ScriptedRex: a failed tab with its message,
      * one waiting, one done and one running.
      */
-    private fun activity(name: String) {
+    private fun activity(name: String, approval: Boolean = false) {
         RexOnDesk(sessions = 2).use { desk ->
             val app = freshApp()
             desk.saveFor(app, lastSession = desk.ids[0])
@@ -159,7 +159,12 @@ class ScreenshotsTest {
             desk.rex.report(first[0].blocks[0].id, "error", msg = "failed: prompt_failed: 401 Unauthorized", app = "pi")
             desk.rex.report(first[1].blocks[0].id, "blocked", kind = "permission", msg = "Apply 3 to add, 1 to change, 0 to destroy?", app = "terraform")
             desk.rex.report(second[0].blocks[0].id, "done", msg = "Upgraded 12 packages", app = "brew")
-            desk.rex.report(second[1].blocks[0].id, "working", app = "claude")
+            if (approval) {
+                // An agent whose keys the app knows: Approve and Deny beside Reply.
+                desk.rex.report(second[1].blocks[0].id, "blocked", kind = "permission", msg = "Allow Bash: npm test?", app = "claude")
+            } else {
+                desk.rex.report(second[1].blocks[0].id, "working", app = "claude")
+            }
             compose.awaitThat { model.pocket.value.blockStatus.size == 4 }
             compose.onNodeWithTag(filterChipTag(HomeFilter.NeedsYou)).performClick()
             compose.waitForIdle()
@@ -413,6 +418,38 @@ class ScreenshotsTest {
     @Test fun palettePortrait() = palette("command-palette-portrait")
     @Test fun paletteLandscape() { landscape(); palette("command-palette-landscape") }
     @Test fun paletteSearchPortrait() = palette("command-palette-search-portrait", "tab")
+    @Test fun activityApprovalPortrait() = activity("activity-approval-portrait", approval = true)
+    @Test fun activityApprovalLandscape() { landscape(); activity("activity-approval-landscape", approval = true) }
+
+    /** Settings › Quick replies, on its view model. */
+    private fun quickReplies(name: String) {
+        val model = RexViewModel(freshApp())
+        compose.setContent { QuickRepliesOnModel(model) }
+        compose.waitForIdle()
+        captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    @Test fun quickRepliesPortrait() = quickReplies("quick-replies-portrait")
+    @Test fun quickRepliesLandscape() { landscape(); quickReplies("quick-replies-landscape") }
+
+    /** The prompt composer over a live terminal, from the ⋮ menu, with a prompt written. */
+    private fun composer(name: String) {
+        val model = termModel()
+        compose.setContent { TermOnModel(model, liveState()) }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_more)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(compose.activity.getString(R.string.composer_title)).performClick()
+        compose.waitForIdle()
+        compose.onNode(androidx.compose.ui.test.hasSetTextAction() and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(COMPOSER_FIELD_TAG)))
+            .performTextInput("Look at the failing test in core.\nFix it, then run the whole suite.")
+        compose.waitForIdle()
+        captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    @Test fun composerPortrait() = composer("composer-portrait")
+    @Test fun composerLandscape() { landscape(); composer("composer-landscape") }
+
     @Test fun activityPortrait() = activity("activity-portrait")
     @Test fun activityLandscape() { landscape(); activity("activity-landscape") }
 

@@ -12,6 +12,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
@@ -114,6 +115,9 @@ class ActivityViewTest {
         compose.onNode(hasTestTag(activityRowTag(doneTab.id)) and hasText(labels.getValue(other), substring = true)).assertExists()
         compose.onNodeWithText(string(R.string.state_waiting_approval)).assertExists()
         assertTrue(compose.onAllNodes(hasText(string(R.string.action_add_host))).fetchSemanticsNodes().isEmpty())
+        // Terraform asks for approval too, but its keys are its own: no Approve or Deny, Reply stays.
+        assertTrue(compose.onAllNodes(hasText(string(R.string.alerts_approve)) and hasClickAction()).fetchSemanticsNodes().isEmpty())
+        assertEquals(1, compose.onAllNodes(hasText(string(R.string.alerts_reply)) and hasClickAction()).fetchSemanticsNodes().size)
 
         chip(HomeFilter.Running).performClick()
         compose.waitForIdle()
@@ -205,6 +209,74 @@ class ActivityViewTest {
         compose.onAllNodes(interrupt)[0].performClick()
         compose.awaitThat { desk.rex.inputs.any { it == "key $question ctrl+key_c" || it == "key $login ctrl+key_c" } }
         assertTrue("the home took no pane to interrupt", m.route.value == Route.Home)
+    }
+
+    private val approveButton get() = hasText(string(R.string.alerts_approve)) and hasClickAction()
+    private val denyButton get() = hasText(string(R.string.alerts_deny)) and hasClickAction()
+
+    /** An agent's approval prompt: Approve types its key for yes, Deny its key for no, from the list. */
+    @Test
+    fun approveAndDenyAnswerAnAgentsPromptFromTheList() {
+        val m = start()
+        val claude = tabs(m, other)[0].blocks[0].id
+        val codex = tabs(m, other)[1].blocks[0].id
+        desk.rex.report(claude, "blocked", kind = "permission", msg = "Allow Bash: npm test?", app = "claude")
+        compose.awaitThat { m.pocket.value.blockStatus[claude]?.state == "blocked" }
+        needsYou()
+        compose.awaitThat { compose.onAllNodes(approveButton).fetchSemanticsNodes().size == 1 }
+        assertEquals(1, compose.onAllNodes(denyButton).fetchSemanticsNodes().size)
+        compose.onNode(approveButton).performClick()
+        compose.awaitThat { desk.rex.inputs.toList() == listOf("key $claude +enter") }
+        assertTrue("the home took no pane to answer", m.route.value == Route.Home)
+
+        desk.rex.report(claude, null)
+        desk.rex.report(codex, "blocked", kind = "permission", msg = "Run cargo test?", app = "codex")
+        compose.awaitThat { m.pocket.value.blockStatus[codex]?.state == "blocked" && claude !in m.pocket.value.blockStatus }
+        compose.awaitThat { compose.onAllNodes(denyButton).fetchSemanticsNodes().size == 1 }
+        compose.onNode(denyButton).performClick()
+        compose.awaitThat { desk.rex.inputs.toList() == listOf("key $claude +enter", "key $codex +escape") }
+    }
+
+    /**
+     * The prompt changed after the row showed it, and the phone did not hear (a lost event): Approve
+     * reads it again, types nothing, says so (a toast) and opens the pane to show what it asks now.
+     */
+    @Test
+    fun approveForAPromptThatChangedOpensThePaneAndTypesNothing() {
+        val m = start()
+        val window = tabs(m, other)[0]
+        val block = window.blocks[0].id
+        desk.rex.report(block, "blocked", kind = "permission", msg = "Allow Bash: ls?", app = "claude")
+        compose.awaitThat { m.pocket.value.blockStatus[block]?.state == "blocked" }
+        needsYou()
+        compose.awaitThat { compose.onAllNodes(approveButton).fetchSemanticsNodes().size == 1 }
+        Thread.sleep(5)
+        desk.rex.report(block, "blocked", kind = "permission", msg = "Allow Bash: rm -rf /?", app = "claude", quiet = true)
+        compose.onNode(approveButton).performClick()
+        compose.awaitThat { m.route.value == Route.Term && m.pocket.value.view?.focusedBlock()?.id == block }
+        assertTrue("nothing was typed: ${desk.rex.inputs}", desk.rex.inputs.isEmpty())
+    }
+
+    /**
+     * Reply's Compose takes the pane to the composer: a longer prompt, sent in one paste, then
+     * Return. The emulator only: a text field in a dialog never lets Compose idle on Robolectric.
+     */
+    @Test
+    fun replysComposeSendsALongerPromptInOnePaste() {
+        org.junit.Assume.assumeFalse(onRobolectric)
+        val m = start()
+        val block = tabs(m, other)[0].blocks[0].id
+        desk.rex.report(block, "blocked", kind = "question", msg = "What next?", app = "claude")
+        compose.awaitThat { m.pocket.value.blockStatus[block]?.state == "blocked" }
+        needsYou()
+        compose.onNode(hasText(string(R.string.alerts_reply)) and hasClickAction()).performClick()
+        compose.waitForIdle()
+        compose.onNode(hasText(string(R.string.home_reply_compose)) and hasClickAction()).performClick()
+        compose.waitForIdle()
+        compose.onNode(androidx.compose.ui.test.hasSetTextAction() and hasAnyAncestor(hasTestTag(COMPOSER_FIELD_TAG)))
+            .performTextInput("Fix the failing test.\nThen commit.")
+        compose.onNodeWithTag(COMPOSER_SEND_TAG).performClick()
+        compose.awaitThat { desk.rex.inputs.toList() == listOf("paste $block Fix the failing test.\nThen commit.", "key $block +enter") }
     }
 
     @Test

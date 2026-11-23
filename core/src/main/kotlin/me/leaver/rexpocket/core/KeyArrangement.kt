@@ -20,7 +20,7 @@ enum class KeyKind { Bar, Group, Rest, Desk, Arrow, Control, Symbol, LetterOrDig
 sealed class BarKey(val pref: String, val kind: KeyKind) {
     val pill: Pill get() = if (kind == KeyKind.Rest) Pill.Rest else Pill.Keys
     val removable: Boolean get() = this != Keyboard
-    val inGroups: Boolean get() = kind != KeyKind.Group && kind != KeyKind.Rest
+    val inGroups: Boolean get() = kind != KeyKind.Group && kind != KeyKind.Rest && this != Replies
 
     /** True when the key's face is one narrow character, so a panel row takes seven of them. */
     val narrow: Boolean get() = this is Typed || this is Arrow || this == Slash
@@ -34,6 +34,15 @@ sealed class BarKey(val pref: String, val kind: KeyKind) {
     data object Alt : BarKey("alt", KeyKind.Bar)
     data object Paste : BarKey("paste", KeyKind.Bar)
     data object Attach : BarKey("attach", KeyKind.Bar)
+
+    /** Opens the prompt composer for the pane: a longer prompt, sent in one paste. */
+    data object Compose : BarKey("compose", KeyKind.Bar)
+
+    /**
+     * Pins a panel of the person's quick replies (Settings › Quick replies); a tap on one sends it,
+     * then Return. A panel of its own, so it never sits in a group's.
+     */
+    data object Replies : BarKey("quick_replies", KeyKind.Bar)
     data object Slash : BarKey("slash", KeyKind.Bar)
     data object Arrows : BarKey("arrows", KeyKind.Rest)
     data object Keyboard : BarKey("keyboard", KeyKind.Rest)
@@ -77,7 +86,7 @@ sealed class BarKey(val pref: String, val kind: KeyKind) {
          * Group keys are the arrangement's own (see [KeyArrangement.catalogue]).
          */
         val catalogue: List<BarKey> by lazy {
-            listOf(Escape, CtrlC, Tab, Enter, Ctrl, Shift, Alt, Paste, Attach, Slash, Arrows, Keyboard, FullScreen) +
+            listOf(Escape, CtrlC, Tab, Enter, Ctrl, Shift, Alt, Paste, Attach, Slash, Arrows, Keyboard, FullScreen, Compose, Replies) +
                 DeskKey.entries.map { Desk(it) } +
                 ARROW_CODES.map { Arrow(it) } +
                 ('a'..'z').filter { it != 'c' }.map { Chord(it) } +

@@ -890,12 +890,32 @@ class PocketSession(
      * that, then Enter. False when the pane is gone. The bootstrap lets this connection send keys
      * to any session's panes (rex-parity.md, verified on preview.22).
      */
-    suspend fun replyTo(sessionId: String, blockId: String, text: String): Boolean =
+    suspend fun replyTo(sessionId: String, blockId: String, text: String, enter: Boolean = true): Boolean =
         onPane(sessionId, blockId) {
             if (text.isNotEmpty()) input(pasteCall(sessionId, blockId, text)).await()
-            input(keyCall(sessionId, blockId, "enter", "", "", 0, "")).await()
+            if (enter) input(keyCall(sessionId, blockId, "enter", "", "", 0, "")).await()
             true
         } ?: false
+
+    /**
+     * Approve or Deny for the approval prompt in [blockId] of [sessionId]: the pane's records are
+     * read again from Rex first, and the agent's keys ([approvalKeys]) go only when its prompt is
+     * still the one [stamp] names ([promptStamp]) - the one the person saw. Anything else, a new
+     * question, a record gone or a program that stopped asking, is [PromptAnswer.Changed] and
+     * nothing is typed.
+     */
+    suspend fun answerPrompt(sessionId: String, blockId: String, stamp: String, approve: Boolean): PromptAnswer {
+        val args = JSONObject().put("session_id", sessionId).put("block_id", blockId).put("args", JSONObject())
+        val read = onPane(sessionId, blockId) { rpc("com.superlogical.terminal.program_status", args) } ?: return PromptAnswer.NotSent
+        val now = summarizeStatus(parseProgramRecords(read))
+        if (now == null || promptStamp(now) != stamp) return PromptAnswer.Changed
+        val keys = approvalKeys(now)?.keys(approve) ?: return PromptAnswer.Changed
+        val sent = onPane(sessionId, blockId) {
+            for (key in keys) input(keyCall(sessionId, blockId, key.code, "", key.text, key.codepoint, "")).await()
+            true
+        }
+        return if (sent == true) PromptAnswer.Sent else PromptAnswer.NotSent
+    }
 
     /** Ctrl+C to the program in [blockId] of [sessionId]: a notification's Interrupt. False when the pane is gone. */
     suspend fun interrupt(sessionId: String, blockId: String): Boolean =

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Approve and Deny, quick replies and the prompt composer: answering agents. See docs/design/notifications.md. -->
+<resources>
+    <string name="alerts_approve">Approve</string>
+    <string name="alerts_deny">Deny</string>
+    <string name="alerts_prompt_changed">Prompt changed, nothing was sent. Open the pane to see what it asks now.</string>
+    <string name="home_prompt_changed">Prompt changed, nothing was sent</string>
+    <string name="home_answer_failed">Not sent: the pane could not be reached</string>
+    <string name="home_approve_for">Approve for %1$s</string>
+    <string name="home_deny_for">Deny for %1$s</string>
+    <string name="home_reply_compose">Compose</string>
+
+    <string name="quick_replies_title">Quick replies</string>
+    <string name="quick_replies_body">Sent in one tap, then Return: from a notification\'s Reply, the key bar\'s Quick replies key and the command palette. The composer and Reply put them in the text instead, to change before sending.</string>
+    <string name="quick_replies_none">No quick replies</string>
+    <string name="quick_replies_add">Add quick reply</string>
+    <string name="quick_replies_edit">Edit quick reply</string>
+    <string name="quick_replies_field">Quick reply</string>
+    <string name="quick_replies_full">The list is full</string>
+    <string name="quick_reply_send">Send %1$s</string>
+    <string name="quick_reply_insert">Put %1$s in the text</string>
+    <string name="quick_reply_actions">Actions for %1$s</string>
+    <string name="palette_group_quick_reply">Quick reply</string>
+
+    <string name="key_quick_replies">Quick replies</string>
+    <string name="key_compose">Compose prompt</string>
+    <string name="composer_title">Compose prompt</string>
+    <string name="composer_for">To %1$s</string>
+    <string name="composer_hint">Write a prompt</string>
+    <string name="composer_enter_after">Press Return after it</string>
+    <string name="composer_enter_after_body">Off, the text waits in the program\'s prompt for you to send it.</string>
+    <string name="composer_send">Send</string>
+    <string name="composer_clear">Clear</string>
+</resources>

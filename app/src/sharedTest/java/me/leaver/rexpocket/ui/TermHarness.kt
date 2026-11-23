@@ -59,6 +59,7 @@ internal fun TermOnModel(
     val arrangement by model.keyArrangement.collectAsState()
     val ctrlC by model.keyBarCtrlC.collectAsState()
     val gestures by model.gestures.collectAsState()
+    val quickReplies by model.quickReplies.collectAsState()
     RexTheme {
         if (route == Route.Term) {
             TermScreen(
@@ -82,6 +83,8 @@ internal fun TermOnModel(
                 keyArrangement = arrangement,
                 keyBarCtrlC = ctrlC,
                 gestures = gestures,
+                quickReplies = quickReplies.items,
+                drafts = model.drafts,
             )
         }
     }

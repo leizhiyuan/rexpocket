@@ -51,6 +51,9 @@ import me.leaver.rexpocket.core.UpdateChannel
 import me.leaver.rexpocket.core.toProblem
 import me.leaver.rexpocket.core.RexClient
 import me.leaver.rexpocket.data.HostStore
+import me.leaver.rexpocket.data.QuickReplyStore
+import me.leaver.rexpocket.core.PromptAnswer
+import me.leaver.rexpocket.core.QuickReplies
 import me.leaver.rexpocket.data.FontFiles
 import me.leaver.rexpocket.data.FontCatalog
 import me.leaver.rexpocket.data.SYSTEM_FONT
@@ -357,6 +360,43 @@ class RexViewModel @JvmOverloads constructor(
         userActed()
         viewModelScope.launch { connections.fleet.interrupt(hostId, sessionId, blockId) }
     }
+
+    /** The composer's send from Needs you: [text] pasted into the pane, then Return when [enter]. */
+    fun sendPrompt(hostId: String, sessionId: String, blockId: String, text: String, enter: Boolean) {
+        userActed()
+        viewModelScope.launch { connections.fleet.reply(hostId, sessionId, blockId, text, enter = enter) }
+    }
+
+    /**
+     * A Needs you row's Approve or Deny, for the prompt [stamp] names. When the pane asks something
+     * else by now, nothing is sent and the home says so, then opens the pane to show what it asks.
+     */
+    fun answerPrompt(hostId: String, sessionId: String, windowId: String, blockId: String, stamp: String, approve: Boolean) {
+        userActed()
+        viewModelScope.launch {
+            val answer = runCatching { connections.fleet.answerPrompt(hostId, sessionId, blockId, stamp, approve) }
+                .getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it else PromptAnswer.NotSent }
+            when (answer) {
+                // Answered: its notification has done its job.
+                PromptAnswer.Sent -> Alerts.settle(getApplication(), hostId, blockId)
+                PromptAnswer.Changed -> _homeNotices.tryEmit(HomeNotice.PromptChanged(hostId, sessionId, windowId, blockId))
+                PromptAnswer.NotSent -> _homeNotices.tryEmit(HomeNotice.NotAnswered(hostId))
+            }
+        }
+    }
+
+    private val quickReplyStore = QuickReplyStore(app)
+
+    /** Settings › Quick replies, in the person's order. */
+    val quickReplies = MutableStateFlow(quickReplyStore.get())
+
+    fun setQuickReplies(next: QuickReplies) {
+        quickReplyStore.set(next)
+        quickReplies.value = next
+    }
+
+    /** The prompt composer's drafts, by host and pane, while the app runs. */
+    val drafts = PromptDrafts()
 
     /** Drops the folds of [hostId]'s sessions that are not in [alive], so gone sessions do not pile up. */
     private fun pruneFolds(hostId: String, alive: Collection<String>) {
@@ -1446,6 +1486,12 @@ sealed interface HomeNotice {
 
     /** A sheet's action that Rex refused or that did not get through; Retry sends it again. */
     data class Failed(val hostId: String, val action: HomeAction, val detail: String) : HomeNotice
+
+    /** Approve or Deny found the pane asking something else: nothing was sent, and the pane opens. */
+    data class PromptChanged(val hostId: String, val sessionId: String, val windowId: String, val blockId: String) : HomeNotice
+
+    /** Approve or Deny could not reach the pane. */
+    data class NotAnswered(val hostId: String) : HomeNotice
 }
 
 /** Connection diagnostics: `adb logcat -s RexPocketConn`. */

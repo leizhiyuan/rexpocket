@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="alerts_approve">批准</string>
+    <string name="alerts_deny">拒绝</string>
+    <string name="alerts_prompt_changed">提示已变化，未发送任何内容。打开窗格查看它现在问什么。</string>
+    <string name="home_prompt_changed">提示已变化，未发送任何内容</string>
+    <string name="home_answer_failed">未发送：无法连接到窗格</string>
+    <string name="home_approve_for">为 %1$s 批准</string>
+    <string name="home_deny_for">为 %1$s 拒绝</string>
+    <string name="home_reply_compose">撰写</string>
+
+    <string name="quick_replies_title">快捷回复</string>
+    <string name="quick_replies_body">一点即发送并回车：在通知的回复、按键栏的快捷回复键和命令面板中。撰写框和回复对话框会把它放进文本，发送前可以修改。</string>
+    <string name="quick_replies_none">没有快捷回复</string>
+    <string name="quick_replies_add">添加快捷回复</string>
+    <string name="quick_replies_edit">编辑快捷回复</string>
+    <string name="quick_replies_field">快捷回复</string>
+    <string name="quick_replies_full">列表已满</string>
+    <string name="quick_reply_send">发送 %1$s</string>
+    <string name="quick_reply_insert">把 %1$s 放进文本</string>
+    <string name="quick_reply_actions">%1$s 的操作</string>
+    <string name="palette_group_quick_reply">快捷回复</string>
+
+    <string name="key_quick_replies">快捷回复</string>
+    <string name="key_compose">撰写提示</string>
+    <string name="composer_title">撰写提示</string>
+    <string name="composer_for">发给 %1$s</string>
+    <string name="composer_hint">写一段提示</string>
+    <string name="composer_enter_after">发送后按回车</string>
+    <string name="composer_enter_after_body">关闭时，文本留在程序的输入框里，由你来发送。</string>
+    <string name="composer_send">发送</string>
+    <string name="composer_clear">清空</string>
+</resources>

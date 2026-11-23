@@ -31,6 +31,11 @@ import me.leaver.rexpocket.BuildConfig
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.alerts.Alert
 import me.leaver.rexpocket.alerts.AlertAction
+import me.leaver.rexpocket.alerts.AlertOutcome
+import me.leaver.rexpocket.core.PromptAnswer
+import me.leaver.rexpocket.core.approvalKeys
+import me.leaver.rexpocket.core.promptStamp
+import me.leaver.rexpocket.data.QuickReplyStore
 import me.leaver.rexpocket.alerts.AlertTarget
 import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.core.ActivityGroup
@@ -178,7 +183,10 @@ class Connections private constructor(private val app: Application, val nodes: T
     /** Wi-Fi to mobile data and back: every host redials at once instead of waiting for its old socket to die. */
     private val network = NetworkWatcher(app) { scope.launch { fleet.reconnectAll() } }.also { it.start() }
 
-    private val alertActions: suspend (AlertTarget, AlertAction) -> Boolean = { target, action -> onAlertAction(target, action) }
+    private val alertActions: suspend (AlertTarget, AlertAction) -> AlertOutcome = { target, action -> onAlertAction(target, action) }
+
+    /** The person's quick replies, offered as a notification's Reply choices. */
+    private val quickReplies = QuickReplyStore(app)
 
     init {
         Alerts.actions = alertActions
@@ -667,6 +675,9 @@ class Connections private constructor(private val app: Application, val nodes: T
             plainText(record.msg)?.let { "$state: $it" } ?: state
         }
         val session = st.sessions.firstOrNull { it.id == view.sessionId }?.label ?: view.label
+        // Approve and Deny for an agent's approval prompt, with the prompt they are for: a status
+        // alert only, as a message has no record to answer (notifications.md, "Approve and Deny").
+        val answer = record?.takeIf { move.kind == AlertKind.Waiting && message == null && approvalKeys(it) != null }?.let(::promptStamp)
         return Alert(
             target = AlertTarget(hostId, view.sessionId, block),
             title = "$name · ${view.label}",
@@ -682,21 +693,33 @@ class Connections private constructor(private val app: Application, val nodes: T
                 AlertKind.Failed -> false
             },
             interrupt = block in st.busy,
+            answer = answer,
+            choices = quickReplies.get().choices(),
         )
     }
 
-    /** A notification's Reply or Interrupt, sent on the connection to the host it came from. */
-    private suspend fun onAlertAction(target: AlertTarget, action: AlertAction): Boolean {
-        val sent = when (action) {
-            is AlertAction.Reply -> fleet.reply(target.hostId, target.sessionId, target.blockId, action.text, ACTION_CONNECT_MS)
-            AlertAction.Interrupt -> fleet.interrupt(target.hostId, target.sessionId, target.blockId, ACTION_CONNECT_MS)
+    /** A notification's Reply, Interrupt, Approve or Deny, sent on the connection to the host it came from. */
+    private suspend fun onAlertAction(target: AlertTarget, action: AlertAction): AlertOutcome {
+        val outcome = when (action) {
+            is AlertAction.Reply -> fleet.reply(target.hostId, target.sessionId, target.blockId, action.text, ACTION_CONNECT_MS).outcome()
+            AlertAction.Interrupt -> fleet.interrupt(target.hostId, target.sessionId, target.blockId, ACTION_CONNECT_MS).outcome()
+            is AlertAction.Answer -> when (fleet.answerPrompt(target.hostId, target.sessionId, target.blockId, action.stamp, action.approve, ACTION_CONNECT_MS)) {
+                PromptAnswer.Sent -> AlertOutcome.Sent
+                PromptAnswer.Changed -> AlertOutcome.Changed
+                PromptAnswer.NotSent -> AlertOutcome.NotSent
+            }
         }
-        if (sent) {
-            Diagnostics.event(CONN_TAG, "alert ${if (action is AlertAction.Reply) "reply" else "interrupt"} sent")
-            fleet.member(target.hostId)?.planner?.seen(target.blockId)
+        val what = when (action) {
+            is AlertAction.Reply -> "reply"
+            AlertAction.Interrupt -> "interrupt"
+            is AlertAction.Answer -> if (action.approve) "approve" else "deny"
         }
-        return sent
+        Diagnostics.event(CONN_TAG, "alert $what: $outcome")
+        if (outcome == AlertOutcome.Sent) fleet.member(target.hostId)?.planner?.seen(target.blockId)
+        return outcome
     }
+
+    private fun Boolean.outcome() = if (this) AlertOutcome.Sent else AlertOutcome.NotSent
 
     /** Stops everything this holds: for a test that wants a new one, and nothing else. */
     private fun close() {

@@ -239,7 +239,9 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
      * record [id] ("" is the root record), as a Rex-aware program does with OSC 7501: its record is
      * what `program_status` answers from now on, and every client that may see it is told with a
      * `program_status_changed` block event. Null [state] is the program clearing the record (and the
-     * records under it), told with `program_status_removed`, reason `clear`.
+     * records under it), told with `program_status_removed`, reason `clear`. [quiet] changes what
+     * `program_status` answers without telling anyone: an event a client missed, as one does while
+     * it reconnects.
      */
     fun report(
         block: String,
@@ -249,6 +251,7 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
         app: String? = null,
         title: String? = null,
         id: String = ROOT,
+        quiet: Boolean = false,
     ) {
         synchronized(this) {
             val session = sessions.values.firstOrNull { it.tabOf(block) != null } ?: return
@@ -257,6 +260,7 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
                 val gone = records.keys.filter { id == ROOT || it == id || it.startsWith("$id/") }
                 if (gone.isEmpty()) return
                 gone.forEach(records::remove)
+                if (quiet) return
                 blockEvent(session.id, block, "program_status_removed", JSONObject().put("ids", JSONArray(gone)).put("reason", "clear"))
                 return
             }
@@ -271,6 +275,7 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
             record.put("updated_at", Instant.ofEpochMilli(clock()).toString())
             record.put("owner", JSONObject().put("pid", 4242).put("name", "bash"))
             records[id] = record
+            if (quiet) return
             blockEvent(session.id, block, "program_status_changed", JSONObject().put("id", id).put("record", record).put("reason", "report"))
         }
     }

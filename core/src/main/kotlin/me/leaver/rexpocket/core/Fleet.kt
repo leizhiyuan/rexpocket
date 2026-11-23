@@ -145,19 +145,24 @@ class Fleet(private val scope: CoroutineScope) {
     }
 
     /** Types [text] and Enter into [blockId] of [hostId]'s [sessionId], once that host is live. */
-    suspend fun reply(hostId: String, sessionId: String, blockId: String, text: String, waitMs: Long = LIVE_WAIT_MS): Boolean =
-        onLive(hostId, waitMs) { it.replyTo(sessionId, blockId, text) }
+    suspend fun reply(hostId: String, sessionId: String, blockId: String, text: String, waitMs: Long = LIVE_WAIT_MS, enter: Boolean = true): Boolean =
+        onLive(hostId, waitMs) { it.replyTo(sessionId, blockId, text, enter) } ?: false
+
+    /** Approve or Deny the prompt [stamp] names in [blockId] of [hostId]'s [sessionId], once that host is live. */
+    suspend fun answerPrompt(hostId: String, sessionId: String, blockId: String, stamp: String, approve: Boolean, waitMs: Long = LIVE_WAIT_MS): PromptAnswer =
+        onLive(hostId, waitMs) { it.answerPrompt(sessionId, blockId, stamp, approve) } ?: PromptAnswer.NotSent
 
     /** Ctrl+C in [blockId] of [hostId]'s [sessionId], once that host is live. */
     suspend fun interrupt(hostId: String, sessionId: String, blockId: String, waitMs: Long = LIVE_WAIT_MS): Boolean =
-        onLive(hostId, waitMs) { it.interrupt(sessionId, blockId) }
+        onLive(hostId, waitMs) { it.interrupt(sessionId, blockId) } ?: false
 
-    private suspend fun onLive(hostId: String, waitMs: Long, send: suspend (PocketSession) -> Boolean): Boolean {
-        val session = this[hostId] ?: return false
+    /** [send] on [hostId]'s session once it is live; null when there is none, or it did not come up in [waitMs]. */
+    private suspend fun <T> onLive(hostId: String, waitMs: Long, send: suspend (PocketSession) -> T): T? {
+        val session = this[hostId] ?: return null
         // Android may have cut the connection while the app was away; it redials, so give it a
         // moment, and skip whatever wait its backoff was in.
         session.retryNow()
-        withTimeoutOrNull(waitMs) { session.state.first { it.phase == Phase.Live } } ?: return false
+        withTimeoutOrNull(waitMs) { session.state.first { it.phase == Phase.Live } } ?: return null
         return send(session)
     }
 

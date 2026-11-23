@@ -73,6 +73,7 @@ fun RexPocketApp(
     val alertPrefs by model.alertPrefs.collectAsState()
     val background by model.background.collectAsState()
     val keyArrangement by model.keyArrangement.collectAsState()
+    val quickReplies by model.quickReplies.collectAsState()
     val keyBarCtrlC by model.keyBarCtrlC.collectAsState()
     val gestures by model.gestures.collectAsState()
     val keyBar by model.keyBar.collectAsState()
@@ -182,6 +183,11 @@ fun RexPocketApp(
                     onRestoreSeen = model::restoreSeen,
                     onReply = model::reply,
                     onInterrupt = model::interrupt,
+                    onAnswer = model::answerPrompt,
+                    onSendPrompt = model::sendPrompt,
+                    quickReplies = quickReplies,
+                    onQuickReplies = model::setQuickReplies,
+                    drafts = model.drafts,
                     onMoveHost = model::moveHost,
                     onRemoveHost = model::removeHost,
                     onRestoreHost = model::restoreHost,
@@ -253,6 +259,9 @@ fun RexPocketApp(
                     onCancelUpload = model::cancelUpload,
                     onDismissUpload = model::dismissUpload,
                     onRetryUpload = model::retryUpload,
+                    quickReplies = quickReplies.items,
+                    drafts = model.drafts,
+                    draftHost = model.host?.id,
                 )
             }
             when (layoutFor(window, hasHosts = hosts.isNotEmpty(), terminalOpen = route == Route.Term)) {

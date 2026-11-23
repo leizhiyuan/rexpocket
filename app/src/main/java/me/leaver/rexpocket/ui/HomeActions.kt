@@ -526,9 +526,19 @@ internal fun HomeSheetsHost(
 /** The pane a Needs you row's Reply answers, and the name the dialog calls it by. */
 internal data class ReplyTarget(val hostId: String, val sessionId: String, val blockId: String, val title: String)
 
-/** A reply to a waiting program: what is typed, then Enter, as the notification's Reply sends it. */
+/**
+ * A reply to a waiting program: what is typed, then Enter, as the notification's Reply sends it. The
+ * quick replies under the field put their text in it; Compose takes what is there to the composer,
+ * for a longer prompt.
+ */
 @Composable
-internal fun ReplyDialog(title: String, onDismiss: () -> Unit, onSend: (String) -> Unit) {
+internal fun ReplyDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    quickReplies: List<String> = emptyList(),
+    onCompose: ((String) -> Unit)? = null,
+    onSend: (String) -> Unit,
+) {
     var text by androidx.compose.runtime.remember { mutableStateOf("") }
     fun send() {
         if (text.isNotBlank()) onSend(text) else onDismiss()
@@ -537,9 +547,19 @@ internal fun ReplyDialog(title: String, onDismiss: () -> Unit, onSend: (String) 
         onDismissRequest = onDismiss,
         containerColor = Colors.surface,
         title = { Text(title, color = Colors.ink) },
-        text = { Field(stringResource(R.string.alerts_reply), text, autoFocus = true, imeAction = androidx.compose.ui.text.input.ImeAction.Done, onDone = { send() }) { text = it } },
+        text = {
+            androidx.compose.foundation.layout.Column {
+                Field(stringResource(R.string.alerts_reply), text, autoFocus = true, imeAction = androidx.compose.ui.text.input.ImeAction.Done, onDone = { send() }) { text = it }
+                if (quickReplies.isNotEmpty()) QuickReplyChips(quickReplies, insert = true) { text = joinReply(text, it) }
+            }
+        },
         confirmButton = { TextButton(onClick = { send() }) { Text(stringResource(R.string.home_reply_send), color = Colors.accent) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Colors.muted) } },
+        dismissButton = {
+            androidx.compose.foundation.layout.Row {
+                if (onCompose != null) TextButton(onClick = { onCompose(text) }) { Text(stringResource(R.string.home_reply_compose), color = Colors.accent) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
+            }
+        },
     )
 }
 
