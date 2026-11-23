@@ -6,4 +6,21 @@
     <string name="home_count_done">%1$d done</string>
     <string name="home_count_running">%1$d running</string>
     <string name="home_pane_line">pane %1$s %2$s</string>
+    <string name="home_action_collapse">Collapse</string>
+    <string name="home_action_expand">Expand</string>
+    <string name="home_action_open">Open</string>
+    <string name="home_collapse_sessions">Collapse all sessions</string>
+    <string name="home_expand_sessions">Expand all sessions</string>
+    <string name="home_copy_address">Copy address</string>
+    <string name="home_address_copied">Address copied</string>
+    <string name="home_tailnet_details">Tailnet details</string>
+    <string name="home_needs_connect">Connect first</string>
+    <string name="home_rename">Rename…</string>
+    <string name="home_end_session">End session…</string>
+    <string name="home_close_tab">Close tab…</string>
+    <string name="home_no_sessions">No sessions</string>
+    <string name="home_loading">Loading…</string>
+    <string name="home_cached_note">Sessions from the last connection</string>
+    <string name="home_tabs_load">Tabs load when opened</string>
+    <string name="home_connect_to_see">Connect %1$s to see tabs</string>
 </resources>

@@ -139,8 +139,10 @@ internal fun HomeScreen(
     cachedSessions: (String) -> List<ListedSession>,
     /** Which hosts and sessions are folded: the view model's, so they outlive this screen. */
     folds: HomeFolds = HomeFolds(),
-    onFoldHost: (hostId: String, folded: Boolean) -> Unit = { _, _ -> },
+    /** Opens or folds a host's sessions: the person's choice, kept for that host from then on. */
+    onHostOpen: (hostId: String, open: Boolean) -> Unit = { _, _ -> },
     onFoldSession: (hostId: String, sessionId: String, folded: Boolean) -> Unit = { _, _, _ -> },
+    onFoldSessions: (hostId: String, sessionIds: List<String>, folded: Boolean) -> Unit = { _, _, _ -> },
     onConnect: (SavedHost) -> Unit,
     onOpenSession: (SavedHost, String) -> Unit,
     onOpenTab: (SavedHost, String, String) -> Unit,
@@ -224,15 +226,49 @@ internal fun HomeScreen(
     var appearanceOpen by rememberSaveable { mutableStateOf(false) }
     var diagnostics by rememberSaveable { mutableStateOf(false) }
     var recording by remember { mutableStateOf(Diagnostics.capture(context) != null) }
-    var menuHostId by rememberSaveable { mutableStateOf<String?>(null) }
-    var manage by remember { mutableStateOf<ManageTarget?>(null) }
-    // The host of the sheet: kept after the sheet closes, for the confirm dialog it leaves open.
-    var manageHost by remember { mutableStateOf<String?>(null) }
-    val menuHost = menuHostId?.let { id -> hosts.firstOrNull { it.id == id } }
+    val sheets = rememberSaveable(saver = HomeSheets.Saver) { HomeSheets() }
+    // Sessions of a host that is not live, opened on this screen to see they are there: their
+    // tabs are not known, so they start folded, and the choice is not kept past the screen.
+    var openCached by rememberSaveable { mutableStateOf(emptySet<String>()) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var activeOnly by rememberSaveable { mutableStateOf(false) }
-    val collapsedHosts = folds.hosts
+    val ops = HomeOps(
+        connect = onConnect,
+        retry = onRetry,
+        cancel = onDisconnect,
+        disconnect = onDisconnect,
+        newSession = onNewSession,
+        newTab = onNewTab,
+        openSession = onOpenSession,
+        openTab = onOpenTab,
+        openPane = onOpenPane,
+        manage = onManage,
+        foldHost = onHostOpen,
+        foldSession = { hostId, sessionId, folded ->
+            val live = lives[hostId]?.state
+            if (live != null && (live.phase == Phase.Live || live.views.containsKey(sessionId))) {
+                onFoldSession(hostId, sessionId, folded)
+            } else {
+                val key = HomeFolds.sessionKey(hostId, sessionId)
+                openCached = if (folded) openCached - key else openCached + key
+            }
+        },
+        foldSessions = { hostId, ids, folded ->
+            if (lives[hostId]?.state?.phase == Phase.Live) {
+                onFoldSessions(hostId, ids, folded)
+            } else {
+                val keys = ids.map { HomeFolds.sessionKey(hostId, it) }.toSet()
+                openCached = if (folded) openCached - keys else openCached + keys
+            }
+        },
+        editHost = { editingId = it },
+        copyAddress = { host ->
+            clipboardSet(context, if (host.viaSsh) "${host.sshUser}@${host.host}:${host.port}" else "${host.host}:${host.port}")
+            toast(context, context.getString(R.string.home_address_copied))
+        },
+        tailnetDetails = { tailnetDetails = true },
+    )
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val closeSearch: () -> Unit = {
@@ -267,27 +303,6 @@ internal fun HomeScreen(
         )
     } else {
         val q = query.trim().lowercase()
-        val rows = hosts.mapNotNull { host ->
-            val link = lives[host.id]
-            val live = link != null
-            val state = link?.state ?: PocketState()
-            val hostMatch = q.isEmpty() || host.label.lowercase().contains(q) || host.host.contains(q)
-            // A host that is not connected is one line, with the number of sessions it had last time.
-            if (!live) {
-                if (activeOnly || !hostMatch) return@mapNotNull null
-                return@mapNotNull host to emptyList<HomeSession>()
-            }
-            val sessions = state.sessions.mapNotNull { session ->
-                val view = if (live) state.views[session.id] else null
-                val tabs = view?.windows.orEmpty()
-                val labelMatch = hostMatch || session.label.lowercase().contains(q)
-                val shownTabs = if (labelMatch || view == null) tabs else tabs.filter { tabTitle(view, it, state).lowercase().contains(q) }
-                if (!labelMatch && shownTabs.isEmpty()) return@mapNotNull null
-                HomeSession(session, view, shownTabs, sessionChip(tabs, state))
-            }
-            if (sessions.isEmpty() && (activeOnly || !hostMatch)) return@mapNotNull null
-            host to sessions
-        }
         val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         // The eye shows every connected host's activity, as Rex's Activity does for its own. A host
         // the phone is not connected to has none to show: only a live connection hears its programs.
@@ -297,6 +312,26 @@ internal fun HomeScreen(
         } else {
             emptyList()
         }
+        val tree = TreeEnv(
+            hosts = hosts,
+            lives = lives,
+            folds = folds,
+            openCached = openCached,
+            query = q,
+            searching = searchOpen,
+            opening = opening,
+            detailHostId = connected?.id?.takeIf { detail },
+            cachedSessions = cachedSessions,
+            ops = ops,
+            sheets = sheets,
+            network = tailnetName(tailnet.backend),
+            stage = tailnetStage,
+            authUrl = tailnetStatus.authUrl,
+            onSignIn = onSignIn,
+            onDevices = { tailnetDetails = true },
+            onTailnet = onTailnet,
+        )
+        val treeRows = tree.rows()
         Column(Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().imePadding()) {
             if (searchOpen) {
                 SearchBar(query = query, focus = focus, onQuery = { query = it }, onClose = closeSearch)
@@ -343,125 +378,8 @@ internal fun HomeScreen(
                                 }
                             }
                         }
-                    } else rows.forEachIndexed { index, (host, sessions) ->
-                        val link = lives[host.id]
-                        val live = link != null
-                        val state = link?.state ?: PocketState()
-                        val hostExpanded = host.id !in collapsedHosts || searchOpen
-                        item(key = "host-${host.id}") {
-                            if (index > 0) Spacer(Modifier.height(12.dp))
-                            HostHeader(
-                                host = host,
-                                live = live,
-                                summary = if (live) {
-                                    hostSummary(state, state.sessions.size)
-                                } else {
-                                    val cached = cachedSessions(host.id).size
-                                    stringResource(R.string.host_not_connected) +
-                                        if (cached > 0) " · " + pluralStringResource(R.plurals.session_count, cached, cached) else ""
-                                },
-                                phase = if (live) state.phase else null,
-                                expanded = hostExpanded,
-                                // Folding is the row's tap in any state; connecting is its own button.
-                                onToggle = { onFoldHost(host.id, hostExpanded) },
-                                onConnect = if (live) null else { { onConnect(host) } },
-                                onMenu = { menuHostId = host.id },
-                            )
-                            if (link != null) {
-                                HostStatus(
-                                    state = state,
-                                    path = link.path,
-                                    network = tailnetName(tailnet.backend),
-                                    progress = link.progress,
-                                    stage = tailnetStage,
-                                    authUrl = tailnetStatus.authUrl,
-                                    onRetry = { onRetry(host.id) },
-                                    onProbe = { onProbePath(host.id) },
-                                    onSignIn = onSignIn,
-                                    onDevices = { tailnetDetails = true },
-                                    onTailnet = onTailnet,
-                                )
-                            }
-                        }
-                        if (hostExpanded) {
-                            sessions.forEach { row ->
-                                val sessionExpanded = HomeFolds.sessionKey(host.id, row.session.id) !in folds.sessions || searchOpen
-                                val openingThis = opening == Opening.Existing(row.session.id, host.id)
-                                item(key = "session-${host.id}-${row.session.id}") {
-                                    SessionHeader(
-                                        row = row,
-                                        live = live,
-                                        opening = openingThis,
-                                        expanded = sessionExpanded,
-                                        onToggle = {
-                                            if (row.view == null) {
-                                                onOpenSession(host, row.session.id)
-                                            } else {
-                                                onFoldSession(host.id, row.session.id, sessionExpanded)
-                                            }
-                                        },
-                                        onNewTab = { onNewTab(host, row.session.id) },
-                                        onManage = if (manageable(live, state, row)) {
-                                            {
-                                                manageHost = host.id
-                                                manage = ManageTarget.Session(row.session.id)
-                                            }
-                                        } else {
-                                            null
-                                        },
-                                        moves = if (manageable(live, state, row)) {
-                                            moveActions(state.sessions.indexOfFirst { it.id == row.session.id }, state.sessions.size) { to ->
-                                                onManage(host.id, HomeAction.MoveSession(row.session.id, to))
-                                            }
-                                        } else {
-                                            emptyList()
-                                        },
-                                    )
-                                }
-                                if (sessionExpanded) {
-                                    item(key = "tabs-${host.id}-${row.session.id}") {
-                                        if (row.tabs.isEmpty()) {
-                                            EmptyTabs(
-                                                text = when {
-                                                    openingThis -> stringResource(R.string.session_opening)
-                                                    !live -> stringResource(R.string.session_cached)
-                                                    row.view == null -> stringResource(R.string.session_open_to_load)
-                                                    else -> stringResource(R.string.no_tabs)
-                                                },
-                                                canOpen = row.view == null && !openingThis,
-                                                onOpen = { onOpenSession(host, row.session.id) },
-                                            )
-                                        } else {
-                                            TabCard(
-                                                row = row,
-                                                state = state,
-                                                opening = openingThis,
-                                                open = detail && connected?.id == host.id && state.activeSessionId == row.session.id,
-                                                onOpen = { windowId -> onOpenTab(host, row.session.id, windowId) },
-                                                onOpenPane = { windowId, blockId -> onOpenPane(host, row.session.id, windowId, blockId) },
-                                                onManage = if (manageable(live, state, row)) {
-                                                    { windowId ->
-                                                        manageHost = host.id
-                                                        manage = ManageTarget.Tab(row.session.id, windowId)
-                                                    }
-                                                } else {
-                                                    null
-                                                },
-                                                onMove = if (manageable(live, state, row)) {
-                                                    { windowId, to -> onManage(host.id, HomeAction.MoveTab(row.session.id, windowId, to)) }
-                                                } else {
-                                                    null
-                                                },
-                                            )
-                                        }
-                                        Spacer(Modifier.height(4.dp))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (!activeOnly && rows.isEmpty()) {
-                        item { NotFound() }
+                    } else {
+                        homeTree(tree, treeRows)
                     }
                     // The list is the only place a host is added from, so the way to add one is at
                     // the end of it - above it, there is nothing until a host exists.
@@ -537,24 +455,7 @@ internal fun HomeScreen(
         )
     }
 
-    HomeManageSheet(
-        manage,
-        manageHost?.let { lives[it]?.state } ?: PocketState(),
-        onDismiss = { manage = null },
-        onAction = { action -> manageHost?.let { onManage(it, action) } },
-    )
-
-    menuHost?.let { host ->
-        HostSheet(
-            host = host,
-            connected = host.id in lives,
-            onDismiss = { menuHostId = null },
-            onNewSession = { onNewSession(host) },
-            onEdit = { editingId = host.id },
-            onConnect = { onConnect(host) },
-            onDisconnect = { onDisconnect(host.id) },
-        )
-    }
+    HomeSheetsHost(sheets, hosts, lives, folds, cachedSessions, ops)
 
     if (settings) {
         SettingsSheet(

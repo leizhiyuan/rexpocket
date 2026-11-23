@@ -66,6 +66,10 @@ import me.leaver.rexpocket.core.Trouble
 import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.core.tabAttention
 import me.leaver.rexpocket.data.SavedHost
+import me.leaver.rexpocket.data.HomeFolds
+import me.leaver.rexpocket.core.Problem
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.lazy.LazyListScope
 
 // The rows of the home list: the hosts, each with its sessions under it and their tabs under those.
 // See docs/design/home.md for what each row says and does.
@@ -143,27 +147,81 @@ internal fun FoldChevron(expanded: Boolean) {
     }
 }
 
+/** Where a host's connection is, as its row tells it and its action slot answers it. */
+internal enum class HostCondition { NotConnected, Connecting, Live, Failed }
+
+internal val HostRef.condition: HostCondition
+    get() {
+        val st = live?.state ?: return HostCondition.NotConnected
+        return when {
+            st.phase == Phase.Live -> HostCondition.Live
+            st.phase == Phase.Failed || st.problem != null -> HostCondition.Failed
+            else -> HostCondition.Connecting
+        }
+    }
+
+/** The button that fixes a problem the phone can fix: sign in, the device list, join, the tailnet's settings. */
+@Composable
+internal fun problemFix(problem: Problem, authUrl: String, onSignIn: (String) -> Unit, onDevices: () -> Unit, onTailnet: () -> Unit): Pair<String, () -> Unit>? =
+    when (problem.trouble) {
+        Trouble.TailnetNeedsLogin ->
+            if (authUrl.isNotBlank()) stringResource(R.string.action_sign_in) to { onSignIn(authUrl) }
+            else stringResource(R.string.action_devices) to onDevices
+        Trouble.TailnetPeerUnknown, Trouble.TailnetPeerOffline -> stringResource(R.string.action_devices) to onDevices
+        Trouble.TailnetNotJoined -> stringResource(R.string.action_join) to onTailnet
+        Trouble.Tailnet -> stringResource(R.string.action_tailnet_settings) to onTailnet
+        else -> null
+    }
+
+/** A problem whose fix is the tailnet's, not Rex's: its row offers the fix where Retry would be. */
+internal fun Problem.needsTailnet(): Boolean = trouble == Trouble.TailnetNeedsLogin || trouble == Trouble.TailnetNotJoined
+
+/** A small text button in a row: Connect, Cancel, Retry, Open, a fix. At least 48 dp to touch. */
+@Composable
+internal fun RowButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    TextButton(onClick = onClick, enabled = enabled, modifier = modifier.heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
+        Text(label, color = if (enabled) Colors.accent else Colors.muted, fontWeight = FontWeight.SemiBold, fontSize = TextStyles.label)
+    }
+}
+
 /**
- * One host: its mark, its name with the connection's dot, and its summary - what its programs need,
- * and its sessions. Tapping it folds its sessions, in any state; connecting is its own button.
+ * One host: its mark, its name with the connection's dot, its summary - what its programs need, and
+ * its sessions - and the button its state calls for: Connect, Cancel, Retry, or the tailnet's fix.
+ * A tap folds it in any state, and never connects; a long press opens its sheet, as ⋮ does, and
+ * TalkBack offers the sheet's items as its actions. A heading, so TalkBack can jump from host to host.
  */
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 internal fun HostHeader(
     host: SavedHost,
     live: Boolean,
     summary: String,
     phase: Phase?,
     expanded: Boolean,
+    /** False where folds do not apply - the search, a filter - so the row shows no chevron and does not fold. */
+    foldable: Boolean = true,
     onToggle: () -> Unit,
-    /** Connects a host that is not connected: the row's own button, never the row's tap. */
-    onConnect: (() -> Unit)? = null,
+    /** The action slot's button: Connect, Cancel, Retry or a fix; null when the host needs none. */
+    action: Pair<String, () -> Unit>? = null,
     onMenu: () -> Unit,
+    actions: List<CustomAccessibilityAction> = emptyList(),
 ) {
     val folded = stringResource(R.string.state_folded)
+    val clickLabel = stringResource(if (expanded) R.string.home_action_collapse else R.string.home_action_expand)
     Row(
         Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(Radius.card))
-            .clickable(onClick = onToggle)
-            .semantics { if (!expanded) stateDescription = folded }
+            .combinedClickable(
+                enabled = foldable,
+                onClickLabel = clickLabel,
+                onLongClickLabel = stringResource(R.string.action_more),
+                onLongClick = onMenu,
+                onClick = onToggle,
+            )
+            .semantics {
+                heading()
+                if (foldable && !expanded) stateDescription = folded
+                if (actions.isNotEmpty()) customActions = actions
+            }
             .padding(start = KEY_MARK),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -188,16 +246,10 @@ internal fun HostHeader(
             // Wrapping rather than cut: with large text the counts take a second line.
             Text(summary, color = Colors.muted, fontSize = TextStyles.label)
             // Under the line rather than beside it, so the line keeps its width with large text.
-            if (onConnect != null) {
-                TextButton(
-                    onClick = onConnect,
-                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
-                ) {
-                    Text(stringResource(R.string.action_connect), color = Colors.accent, fontWeight = FontWeight.SemiBold, fontSize = TextStyles.label)
-                }
-            }
+            if (action != null) RowButton(action.first, action.second, Modifier.offset(x = (-12).dp))
         }
         RoundButton(R.drawable.ic_more, stringResource(R.string.action_more), onMenu, tint = Colors.muted, size = 48.dp)
+        if (foldable) FoldChevron(expanded)
     }
 }
 
@@ -216,108 +268,98 @@ internal fun ActivityHostCaption(label: String) {
 }
 
 /**
- * The line under a connected host: the step its connection is on while it connects, why it is not
- * live - with the fix next to Retry when there is one: sign in, the device list, join - and how the
- * tailnet carries it once it is.
+ * The lines under a connected host: the step its connection is on while it connects; why it is not
+ * live, with the fix as a button of its own (sign in, the device list, join) unless the row's action
+ * slot has it; and how the tailnet carries it once it is. Nothing here acts on a plain tap: Retry is
+ * the row's button, and measuring the path again is in the tailnet's sheet.
  */
 @Composable
 internal fun HostStatus(
     state: PocketState,
+    problem: Problem?,
     path: TailnetPath?,
     network: String,
     progress: ConnectProgress?,
     stage: TailnetStage,
-    authUrl: String,
-    onRetry: () -> Unit,
-    onProbe: () -> Unit,
-    onSignIn: (String) -> Unit,
-    onDevices: () -> Unit,
-    onTailnet: () -> Unit,
+    /** The fix, when the action slot does not already offer it. */
+    fix: Pair<String, () -> Unit>?,
 ) {
-    val problem = rememberSettledProblem(state.phase, state.problem.takeIf { state.phase != Phase.Live })
     if (problem == null && progress != null && state.phase != Phase.Live) {
         ConnectProgressLine(progress, stage, network, Modifier.padding(start = KEY_TEXT, end = 12.dp))
     }
     if (problem != null) {
-        val fix: Pair<String, () -> Unit>? = when (problem.trouble) {
-            Trouble.TailnetNeedsLogin ->
-                if (authUrl.isNotBlank()) stringResource(R.string.action_sign_in) to { onSignIn(authUrl) }
-                else stringResource(R.string.action_devices) to onDevices
-            Trouble.TailnetPeerUnknown, Trouble.TailnetPeerOffline -> stringResource(R.string.action_devices) to onDevices
-            Trouble.TailnetNotJoined -> stringResource(R.string.action_join) to onTailnet
-            Trouble.Tailnet -> stringResource(R.string.action_tailnet_settings) to onTailnet
-            else -> null
-        }
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(Radius.chip)).clickable(onClick = onRetry)
-                .padding(start = KEY_TEXT, end = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(problemText(problem, state.endpointLabel, network), color = Colors.danger, fontSize = TextStyles.label, modifier = Modifier.weight(1f))
-            if (fix != null) {
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    fix.first,
-                    color = Colors.accent,
-                    fontSize = TextStyles.label,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clip(RoundedCornerShape(Radius.chip)).clickable(role = Role.Button, onClick = fix.second)
-                        .padding(horizontal = 6.dp, vertical = 10.dp),
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.action_retry_now), color = Colors.accent, fontSize = TextStyles.label, fontWeight = FontWeight.Medium)
+        Row(Modifier.fillMaxWidth().padding(start = KEY_TEXT, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(problemText(problem, state.endpointLabel, network), color = Colors.danger, fontSize = TextStyles.label, modifier = Modifier.weight(1f).padding(vertical = 6.dp))
+            if (fix != null) RowButton(fix.first, fix.second)
         }
     }
     if (path != null) {
         val (text, color) = pathText(path, network)
-        Text(
-            text,
-            color = color,
-            fontSize = TextStyles.label,
-            modifier = Modifier.padding(start = KEY_TEXT - 8.dp, bottom = 4.dp).clip(RoundedCornerShape(Radius.chip))
-                .clickable(onClick = onProbe).padding(horizontal = 8.dp, vertical = 4.dp),
-        )
+        Text(text, color = color, fontSize = TextStyles.label, modifier = Modifier.padding(start = KEY_TEXT, end = 12.dp, top = 2.dp, bottom = 6.dp))
+    }
+}
+
+/**
+ * A line under a host or a session that says what is not there yet and offers the way to it:
+ * "No sessions · New session", "Tabs load when opened · Open", "Connect mac to see tabs · Connect".
+ */
+@Composable
+internal fun NoteRow(text: String, action: Pair<String, () -> Unit>? = null, start: Dp = KEY_MARK, card: Boolean = true) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = if (action != null) 56.dp else 40.dp)
+            .then(if (card) Modifier.clip(RoundedCornerShape(Radius.card)).background(Colors.surface) else Modifier)
+            .padding(start = start, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text, color = Colors.muted, fontSize = if (card) TextStyles.subhead else TextStyles.label, modifier = Modifier.weight(1f).padding(vertical = 8.dp))
+        if (action != null) RowButton(action.first, action.second)
     }
 }
 
 /**
  * A session under its host, as the reference writes it: a quiet group label, a chip of its most
- * pressing state - waiting, failed, done or running, in that state's colour and word - and its tab
- * count, the plus that makes a tab in it, and the fold.
+ * pressing state - waiting, failed, done or running, in that state's colour and word - its tab
+ * count, its ⋮ and the fold. A tap folds it, whether its tabs are loaded or not; a long press opens
+ * its sheet, and TalkBack offers the sheet's items as its actions.
  */
 @Composable
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 internal fun SessionHeader(
     row: HomeSession,
-    live: Boolean,
     opening: Boolean,
     expanded: Boolean,
+    /** False in the search, where every fold is open and the row shows no chevron. */
+    foldable: Boolean = true,
+    /** Greyed: a session from the list cached last time, while its host is not live. */
+    cached: Boolean = false,
     onToggle: () -> Unit,
-    onNewTab: () -> Unit,
-    /** Opens the session's sheet (rename, new tab, end); null where the session cannot be managed now. */
-    onManage: (() -> Unit)? = null,
-    /** Move up and Move down, for TalkBack's actions menu. */
-    moves: List<CustomAccessibilityAction> = emptyList(),
+    onManage: () -> Unit,
+    actions: List<CustomAccessibilityAction> = emptyList(),
 ) {
     val tabs = row.view?.windows?.size ?: 0
     val detail = when {
         opening -> stringResource(R.string.session_opening)
         row.view != null -> pluralStringResource(R.plurals.session_window_count, tabs, tabs)
-        !live -> stringResource(R.string.session_cached)
         else -> null
     }
     val folded = stringResource(R.string.state_folded)
     val manageLabel = stringResource(R.string.manage_actions_for, row.session.label)
+    val clickLabel = stringResource(if (expanded) R.string.home_action_collapse else R.string.home_action_expand)
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.chip))
-            .combinedClickable(onLongClickLabel = onManage?.let { manageLabel }, onLongClick = onManage, onClick = onToggle)
+            .combinedClickable(
+                enabled = foldable,
+                onClickLabel = clickLabel,
+                onLongClickLabel = manageLabel,
+                onLongClick = onManage,
+                onClick = onToggle,
+            )
             // Said as the host's header says it, so a folded session is not only a turned chevron.
             // A fold shows before the session's tabs are known too - from the cached list while the
             // host connects, as after a launch or an update - rather than reading as open until then.
             .semantics {
-                if (!expanded) stateDescription = folded
-                if (moves.isNotEmpty()) customActions = moves
+                if (foldable && !expanded) stateDescription = folded
+                if (actions.isNotEmpty()) customActions = actions
             }
             .padding(start = KEY_MARK),
         verticalAlignment = Alignment.CenterVertically,
@@ -326,7 +368,7 @@ internal fun SessionHeader(
         FlowRow(Modifier.weight(1f).padding(vertical = 8.dp), verticalArrangement = Arrangement.Center) {
             Text(
                 row.session.label,
-                color = Colors.muted,
+                color = if (cached) Colors.muted.copy(alpha = 0.7f) else Colors.muted,
                 fontSize = TextStyles.subhead,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically),
@@ -336,18 +378,8 @@ internal fun SessionHeader(
                 Text(detail, color = if (opening) Colors.accent else Colors.muted, fontSize = TextStyles.label, modifier = Modifier.align(Alignment.CenterVertically))
             }
         }
-        if (onManage != null) {
-            RoundButton(R.drawable.ic_more, manageLabel, onManage, tint = Colors.muted, size = 48.dp, enabled = !opening)
-        }
-        RoundButton(
-            R.drawable.ic_add_circle,
-            stringResource(R.string.menu_new_tab),
-            onNewTab,
-            tint = Colors.muted,
-            size = 48.dp,
-            enabled = !opening,
-        )
-        FoldChevron(expanded)
+        RoundButton(R.drawable.ic_more, manageLabel, onManage, tint = Colors.muted, size = 48.dp, enabled = !opening)
+        if (foldable) FoldChevron(expanded)
     }
 }
 
@@ -364,7 +396,10 @@ internal fun StateChip(group: ActivityGroup, modifier: Modifier = Modifier) {
     )
 }
 
-/** The tabs of one session, on one card, hairlines between rows from the title's keyline. */
+/**
+ * The tabs of one session, on one card, hairlines between rows from the title's keyline, and a
+ * "+ New tab" row at the end of the card while the host is live.
+ */
 @Composable
 internal fun TabCard(
     row: HomeSession,
@@ -375,10 +410,12 @@ internal fun TabCard(
     onOpen: (String) -> Unit,
     /** Opens one pane of a tab: the line that names a pane needing the person, in a tab showing another. */
     onOpenPane: (windowId: String, blockId: String) -> Unit,
-    /** Opens a tab's sheet (rename, close); null where the tabs cannot be managed now. */
-    onManage: ((String) -> Unit)? = null,
-    /** Moves a tab to a place in its session's order; null where the tabs cannot be managed now. */
-    onMove: ((windowId: String, to: Int) -> Unit)? = null,
+    /** Opens a tab's sheet: a long press, and its ⋮. */
+    onManage: (String) -> Unit,
+    /** Each tab's TalkBack actions: its sheet's enabled items. */
+    actionsOf: @Composable (windowId: String) -> List<CustomAccessibilityAction>,
+    /** Adds a tab; null where the session cannot take one now. */
+    onNewTab: (() -> Unit)?,
 ) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Colors.surface)) {
         row.tabs.forEachIndexed { index, window ->
@@ -398,13 +435,21 @@ internal fun TabCard(
                 open = open && window.id == state.view?.activeWindowId,
                 onOpen = { onOpen(window.id) },
                 onOpenPane = hidden?.let { h -> { onOpenPane(window.id, h.block.id) } },
-                onManage = onManage?.let { manage -> { manage(window.id) } },
-                // Places in the session's whole order: a filter and the search may show only some tabs.
-                moves = onMove?.let { move ->
-                    val all = row.view?.windows.orEmpty()
-                    moveActions(all.indexOfFirst { it.id == window.id }, all.size) { to -> move(window.id, to) }
-                }.orEmpty(),
+                onManage = { onManage(window.id) },
+                actions = actionsOf(window.id),
             )
+        }
+        if (onNewTab != null) {
+            if (row.tabs.isNotEmpty()) Box(Modifier.padding(start = KEY_TEXT).fillMaxWidth().height(1.dp).background(Colors.line))
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = !opening, role = Role.Button, onClick = onNewTab)
+                    .padding(start = KEY_MARK, end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.width(TILE), contentAlignment = Alignment.Center) { Glyph(R.drawable.ic_add, Colors.accent, size = 20.dp) }
+                Spacer(Modifier.width(KEY_TEXT - KEY_MARK - TILE))
+                Text(stringResource(R.string.menu_new_tab), color = Colors.accent, fontSize = TextStyles.label, fontWeight = FontWeight.Medium)
+            }
         }
     }
 }
@@ -433,9 +478,9 @@ internal fun firstLine(text: String?): String? = text?.lineSequence()?.firstOrNu
 /**
  * One tab: the tile of what runs in it - an agent's mark, or the terminal for a shell - dotted in
  * the colour of its state (amber waiting, red failed, blue done, green running), its name, what it
- * is doing in words, and for a waiting or failed tab the first line of what the program said. A tab
- * whose hidden pane is the one that needs the person names that pane on a line of its own, which
- * opens it.
+ * is doing in words, and for a waiting or failed tab the first line of what the program said. A tap
+ * opens it; a long press and its ⋮ open its sheet. A tab whose hidden pane is the one that needs the
+ * person names that pane on a line of its own, which opens that pane.
  */
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
@@ -451,8 +496,8 @@ internal fun TabRow(
     open: Boolean,
     onOpen: () -> Unit,
     onOpenPane: (() -> Unit)? = null,
-    onManage: (() -> Unit)? = null,
-    moves: List<CustomAccessibilityAction> = emptyList(),
+    onManage: () -> Unit,
+    actions: List<CustomAccessibilityAction> = emptyList(),
 ) {
     val selected = stringResource(R.string.state_selected)
     val manageLabel = stringResource(R.string.manage_actions_for, title)
@@ -463,15 +508,16 @@ internal fun TabRow(
                 .combinedClickable(
                     enabled = !opening,
                     role = Role.Button,
-                    onLongClickLabel = onManage?.let { manageLabel },
+                    onClickLabel = stringResource(R.string.home_action_open),
+                    onLongClickLabel = manageLabel,
                     onLongClick = onManage,
                     onClick = onOpen,
                 )
                 .semantics {
                     if (open) stateDescription = selected
-                    if (moves.isNotEmpty()) customActions = moves
+                    if (actions.isNotEmpty()) customActions = actions
                 }
-                .padding(start = KEY_MARK, end = 12.dp),
+                .padding(start = KEY_MARK, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box {
@@ -503,11 +549,7 @@ internal fun TabRow(
                     )
                 }
             }
-            if (onManage != null) {
-                RoundButton(R.drawable.ic_more, manageLabel, onManage, tint = Colors.muted, size = 48.dp, enabled = !opening)
-            } else {
-                Glyph(R.drawable.ic_chevron_right, Colors.muted, size = 24.dp)
-            }
+            RoundButton(R.drawable.ic_more, manageLabel, onManage, tint = Colors.muted, size = 48.dp, enabled = !opening)
         }
         if (hiddenPane != null && attention != null && onOpenPane != null) {
             val tint = activityTint(attention.group)
@@ -550,20 +592,6 @@ internal fun AddHostRow(onClick: () -> Unit) {
             fontSize = TextStyles.subhead,
             fontWeight = FontWeight.Medium,
         )
-    }
-}
-
-@Composable
-internal fun EmptyTabs(text: String, canOpen: Boolean, onOpen: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(Radius.card)).background(Colors.surface)
-            .clickable(enabled = canOpen, onClick = onOpen).padding(start = KEY_MARK, end = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text, color = Colors.muted, fontSize = TextStyles.subhead, modifier = Modifier.weight(1f))
-        if (canOpen) {
-            Text(stringResource(R.string.session_tap_open), color = Colors.accent, fontSize = TextStyles.subhead, fontWeight = FontWeight.Medium)
-        }
     }
 }
 
@@ -653,5 +681,210 @@ internal fun SearchBar(
         if (query.isNotEmpty()) {
             RoundButton(R.drawable.ic_close, stringResource(R.string.action_clear), { onQuery("") }, tint = Colors.muted, size = 48.dp)
         }
+    }
+}
+
+/** What the host tree needs to draw itself: the hosts, their connections, the folds, the search. */
+internal class TreeEnv(
+    val hosts: List<SavedHost>,
+    val lives: Map<String, HostLive>,
+    val folds: HomeFolds,
+    /** Sessions of hosts that are not live opened on this screen: their tabs are not known, so they start folded. */
+    val openCached: Set<String>,
+    /** The search, lower-cased and trimmed; empty when there is none. */
+    val query: String,
+    /** True while the search is open: every fold is open, and no row folds. */
+    val searching: Boolean,
+    val opening: Opening?,
+    /** The host whose pane stands beside the list, when one does: its tab carries a mark. */
+    val detailHostId: String?,
+    val cachedSessions: (String) -> List<ListedSession>,
+    val ops: HomeOps,
+    val sheets: HomeSheets,
+    val network: String,
+    val stage: TailnetStage,
+    val authUrl: String,
+    val onSignIn: (String) -> Unit,
+    val onDevices: () -> Unit,
+    val onTailnet: () -> Unit,
+) {
+    fun ref(host: SavedHost) = HostRef(host, lives[host.id])
+
+    /** Whether a session's tabs show: its fold on a live host, this screen's choice on one that is not. */
+    fun sessionOpen(ref: HostRef, sessionId: String): Boolean {
+        if (searching) return true
+        val key = HomeFolds.sessionKey(ref.host.id, sessionId)
+        return if (ref.isLive || ref.state.views.containsKey(sessionId)) key !in folds.sessions else key in openCached
+    }
+}
+
+/** Each host's rows, as the search narrows them, by host id; null for a host the search leaves nothing of. */
+@Composable
+internal fun TreeEnv.rows(): Map<String, List<HomeSession>?> = hosts.associate { it.id to rowsOf(ref(it)) }
+
+@Composable
+private fun TreeEnv.rowsOf(ref: HostRef): List<HomeSession>? {
+    val state = ref.state
+    val hostMatch = query.isEmpty() || ref.host.label.lowercase().contains(query) || ref.host.host.contains(query)
+    val sessions = ref.sessionsShown(cachedSessions(ref.host.id))
+    val rows = sessions.mapNotNull { session ->
+        val view = state.views[session.id]
+        val tabs = view?.windows.orEmpty()
+        val labelMatch = hostMatch || session.label.lowercase().contains(query)
+        val shownTabs = if (labelMatch || view == null) tabs else tabs.filter { tabTitle(view, it, state).lowercase().contains(query) }
+        if (!labelMatch && shownTabs.isEmpty()) return@mapNotNull null
+        HomeSession(session, view, shownTabs, sessionChip(tabs, state))
+    }
+    if (rows.isEmpty() && !hostMatch) return null
+    return rows
+}
+
+/**
+ * The hosts as a tree: each host's header, and while it is open its sessions, and under each open
+ * session its tabs. A host's tap folds it in every state; connecting is its button. A host that is
+ * not live shows the sessions it had last time, with one note saying so, rather than one per row.
+ */
+internal fun LazyListScope.homeTree(env: TreeEnv, rowsByHost: Map<String, List<HomeSession>?>) {
+    var shown = 0
+    for (host in env.hosts) {
+        val ref = env.ref(host)
+        val rows = rowsByHost[host.id] ?: continue
+        val first = shown == 0
+        shown++
+        val state = ref.state
+        val expanded = env.searching || env.folds.hostOpen(host.id, ref.connected)
+        item(key = "host-${host.id}") {
+            if (!first) Spacer(Modifier.height(12.dp))
+            HostItem(env, ref, rows, expanded)
+        }
+        if (!expanded) continue
+        val condition = ref.condition
+        val note = when {
+            rows.isEmpty() && condition == HostCondition.Live && env.query.isEmpty() -> "none"
+            rows.isEmpty() -> null
+            condition == HostCondition.Connecting -> "loading"
+            condition == HostCondition.NotConnected || (condition == HostCondition.Failed && state.views.isEmpty()) -> "cached"
+            else -> null
+        }
+        if (note != null) {
+            item(key = "note-${host.id}") {
+                when (note) {
+                    "none" -> NoteRow(
+                        stringResource(R.string.home_no_sessions),
+                        stringResource(R.string.session_new) to { env.ops.newSession(host) },
+                    )
+                    "loading" -> NoteRow(stringResource(R.string.home_loading), start = KEY_TEXT, card = false)
+                    else -> NoteRow(stringResource(R.string.home_cached_note), start = KEY_TEXT, card = false)
+                }
+            }
+        }
+        for (row in rows) {
+            val sessionExpanded = env.sessionOpen(ref, row.session.id)
+            val openingThis = env.opening == Opening.Existing(row.session.id, host.id)
+            item(key = "session-${host.id}-${row.session.id}") {
+                val groups = sessionActions(ref, row.session, sessionExpanded, env.ops, env.sheets)
+                SessionHeader(
+                    row = row,
+                    opening = openingThis,
+                    expanded = sessionExpanded,
+                    foldable = !env.searching,
+                    cached = !ref.isLive && row.view == null,
+                    onToggle = { env.ops.foldSession(host.id, row.session.id, sessionExpanded) },
+                    onManage = { env.sheets.sheet = ManageTarget.Session(host.id, row.session.id) },
+                    actions = groups.talkBack(),
+                )
+            }
+            if (!sessionExpanded) continue
+            item(key = "tabs-${host.id}-${row.session.id}") {
+                SessionBody(env, ref, row, openingThis)
+                Spacer(Modifier.height(4.dp))
+            }
+        }
+    }
+    if (shown == 0) item(key = "not-found") { NotFound() }
+}
+
+/** A host's header and the lines under it, with the button its state calls for in the action slot. */
+@Composable
+private fun HostItem(env: TreeEnv, ref: HostRef, rows: List<HomeSession>, expanded: Boolean) {
+    val host = ref.host
+    val state = ref.state
+    val live = ref.live
+    val problem = rememberSettledProblem(state.phase, state.problem.takeIf { live != null && state.phase != Phase.Live })
+    val fix = problem?.let { problemFix(it, env.authUrl, env.onSignIn, env.onDevices, env.onTailnet) }
+    val slotFix = fix?.takeIf { problem.needsTailnet() }
+    val action: Pair<String, () -> Unit>? = when (ref.condition) {
+        HostCondition.NotConnected -> stringResource(R.string.action_connect) to { env.ops.connect(host) }
+        HostCondition.Connecting -> stringResource(R.string.action_cancel) to { env.ops.cancel(host.id) }
+        HostCondition.Failed -> slotFix ?: (stringResource(R.string.action_retry) to { env.ops.retry(host.id) })
+        HostCondition.Live -> null
+    }
+    val sessions = ref.sessionsShown(env.cachedSessions(host.id))
+    val summary = when {
+        ref.isLive -> hostSummary(state, state.sessions.size)
+        problem != null && problem.needsTailnet() -> problemText(problem, state.endpointLabel, env.network)
+        live != null -> hostSummary(state, sessions.size)
+        else -> stringResource(R.string.host_not_connected) +
+            if (sessions.isNotEmpty()) " · " + pluralStringResource(R.plurals.session_count, sessions.size, sessions.size) else ""
+    }
+    val groups = hostActions(ref, expanded, sessions, env.folds, env.ops)
+    HostHeader(
+        host = host,
+        live = live != null,
+        summary = summary,
+        phase = live?.state?.phase,
+        expanded = expanded,
+        foldable = !env.searching,
+        onToggle = { env.ops.foldHost(host.id, !expanded) },
+        action = action,
+        onMenu = { env.sheets.sheet = ManageTarget.Host(host.id) },
+        actions = groups.talkBack(),
+    )
+    if (live != null) {
+        HostStatus(
+            state = state,
+            problem = problem?.takeIf { !it.needsTailnet() },
+            path = live.path,
+            network = env.network,
+            progress = live.progress,
+            stage = env.stage,
+            fix = fix.takeIf { slotFix == null },
+        )
+    }
+}
+
+/**
+ * What an open session shows: its tabs and "+ New tab" once Rex sent them; "Tabs load when opened"
+ * with Open on a live host that has not yet; "Connect mac to see tabs" with Connect on one that is
+ * not connected.
+ */
+@Composable
+private fun SessionBody(env: TreeEnv, ref: HostRef, row: HomeSession, opening: Boolean) {
+    val host = ref.host
+    val state = ref.state
+    val sid = row.session.id
+    when {
+        opening -> NoteRow(stringResource(R.string.session_opening))
+        row.view != null -> {
+            if (row.tabs.isEmpty() && env.searching) return
+            TabCard(
+                row = row,
+                state = state,
+                opening = opening,
+                open = env.detailHostId == host.id && state.activeSessionId == sid,
+                onOpen = { windowId -> env.ops.openTab(host, sid, windowId) },
+                onOpenPane = { windowId, blockId -> env.ops.openPane(host, sid, windowId, blockId) },
+                onManage = { windowId -> env.sheets.sheet = ManageTarget.Tab(host.id, sid, windowId) },
+                actionsOf = { windowId -> tabActions(ref, sid, windowId, env.ops, env.sheets).talkBack() },
+                onNewTab = if (manageable(ref.connected, state, row)) {
+                    { env.ops.manage(host.id, HomeAction.NewTab(sid)) }
+                } else {
+                    null
+                },
+            )
+        }
+        ref.isLive -> NoteRow(stringResource(R.string.home_tabs_load), stringResource(R.string.home_action_open) to { env.ops.openSession(host, sid) })
+        ref.connected -> NoteRow(stringResource(R.string.home_loading))
+        else -> NoteRow(stringResource(R.string.home_connect_to_see, host.label), stringResource(R.string.action_connect) to { env.ops.connect(host) })
     }
 }

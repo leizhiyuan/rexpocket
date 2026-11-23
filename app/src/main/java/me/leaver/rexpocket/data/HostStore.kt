@@ -55,7 +55,28 @@ data class TailnetSettings(
  * Which hosts and sessions the home list has folded. A session is named with its host
  * ([sessionKey]): two hosts can each have a session with the same id.
  */
-data class HomeFolds(val hosts: Set<String> = emptySet(), val sessions: Set<String> = emptySet()) {
+data class HomeFolds(
+    /** Hosts the person folded. */
+    val hosts: Set<String> = emptySet(),
+    val sessions: Set<String> = emptySet(),
+    /** Hosts the person unfolded; a host in neither set is open while connected, folded otherwise. */
+    val openHosts: Set<String> = emptySet(),
+) {
+    /** Whether [hostId]'s sessions show: the person's own choice once they made one, in every state. */
+    fun hostOpen(hostId: String, connected: Boolean): Boolean = when (hostId) {
+        in hosts -> false
+        in openHosts -> true
+        else -> connected
+    }
+
+    /** [hostId] opened or folded by the person. */
+    fun withHost(hostId: String, open: Boolean): HomeFolds =
+        copy(hosts = if (open) hosts - hostId else hosts + hostId, openHosts = if (open) openHosts + hostId else openHosts - hostId)
+
+    /** Forgets everything about [hostId]: a host that was removed. */
+    fun withoutHost(hostId: String): HomeFolds =
+        keepSessions(hostId, emptyList()).copy(hosts = hosts - hostId, openHosts = openHosts - hostId)
+
     /** Keeps the session folds of [hostId] whose session is in [alive], and every other host's. */
     fun keepSessions(hostId: String, alive: Collection<String>): HomeFolds {
         val prefix = sessionKey(hostId, "")
@@ -335,12 +356,14 @@ class HostStore(context: Context) {
     fun folds(): HomeFolds = HomeFolds(
         hosts = prefs.getStringSet(KEY_FOLDED_HOSTS, null).orEmpty().toSet(),
         sessions = prefs.getStringSet(KEY_FOLDED_SESSIONS, null).orEmpty().toSet(),
+        openHosts = prefs.getStringSet(KEY_UNFOLDED_HOSTS, null).orEmpty().toSet(),
     )
 
     fun setFolds(folds: HomeFolds) {
         prefs.edit()
             .putStringSet(KEY_FOLDED_HOSTS, folds.hosts.toSet())
             .putStringSet(KEY_FOLDED_SESSIONS, folds.sessions.toSet())
+            .putStringSet(KEY_UNFOLDED_HOSTS, folds.openHosts.toSet())
             .apply()
     }
 
@@ -411,6 +434,7 @@ class HostStore(context: Context) {
         private const val KEY_HOSTS = "hosts"
         private const val KEY_FOLDED_HOSTS = "folded_hosts"
         private const val KEY_FOLDED_SESSIONS = "folded_sessions"
+        private const val KEY_UNFOLDED_HOSTS = "unfolded_hosts"
         private const val KEY_REOPEN_LAST_TAB = "reopen_last_tab"
         private const val KEY_LAST_HOST = "last_host"
         private const val KEY_CONNECTED_HOSTS = "connected_hosts"

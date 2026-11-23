@@ -200,6 +200,28 @@ class HomeStateTest {
         compose.awaitThat { m.route.value == Route.Term && m.pocket.value.view?.focusedBlock()?.id == hidden }
     }
 
+    /**
+     * A session whose tabs Rex has not sent yet folds on a tap like any other, and opens only from
+     * its own Open button.
+     */
+    @Test
+    fun aSessionWithoutItsTabsFoldsOnATapAndOpensFromItsButton() {
+        desk.rex.hold("session.view")
+        val m = start()
+        compose.onNodeWithText(string(R.string.home_tabs_load)).assertExists()
+        header(m, other).performClick()
+        compose.waitForIdle()
+        header(m, other).assert(folded)
+        assertTrue(HomeFolds.sessionKey(desk.host.id, other) in m.folds.value.sessions)
+        compose.assertStaysHome(m, ms = 500)
+        header(m, other).performClick()
+        compose.waitForIdle()
+        header(m, other).assert(!folded)
+        compose.onNode(hasText(string(R.string.home_action_open)) and hasClickAction()).performClick()
+        desk.rex.release("session.view")
+        compose.awaitThat { m.route.value == Route.Term && m.pocket.value.activeSessionId == other }
+    }
+
     @Test
     fun theSearchIsStillThereAfterATabWasOpened() {
         val m = start()

@@ -2,6 +2,7 @@ package me.leaver.rexpocket.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
@@ -92,8 +93,8 @@ class HomeManageTest {
         // The second session's second tab; the first session's has the same title, and comes first.
         compose.onAllNodes(hasText(tabTitle) and hasClickAction())[1].performTouchInput { longClick() }
         compose.waitForIdle()
-        inSheet(string(R.string.menu_rename_tab)).assertExists()
-        inSheet(string(R.string.menu_close_tab)).performClick()
+        inSheet(string(R.string.home_rename)).assertExists()
+        inSheet(string(R.string.home_close_tab)).performClick()
         compose.waitForIdle()
         // The close waits for its confirmation: nothing has gone yet.
         assertEquals(before, view(m).windows.size)
@@ -118,7 +119,7 @@ class HomeManageTest {
 
         compose.onNode(hasContentDescription(more) and hasClickAction()).performClick()
         compose.waitForIdle()
-        inSheet(string(R.string.menu_kill_session)).performClick()
+        inSheet(string(R.string.home_end_session)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(string(R.string.confirm_kill_session, label(m))).assertExists()
         compose.onNode(hasText(string(R.string.action_end)) and hasClickAction()).performClick()
@@ -134,7 +135,7 @@ class HomeManageTest {
         val m = start()
         compose.onNode(hasContentDescription(string(R.string.manage_actions_for, label(m))) and hasClickAction()).performClick()
         compose.waitForIdle()
-        inSheet(string(R.string.menu_rename_session)).performClick()
+        inSheet(string(R.string.home_rename)).performClick()
         compose.waitForIdle()
         compose.onNode(hasSetTextAction()).performTextReplacement("renamed at home")
         compose.onNode(hasSetTextAction()).performImeAction()
@@ -143,7 +144,7 @@ class HomeManageTest {
         val tab = view(m).windows.first()
         compose.onAllNodes(hasContentDescription(string(R.string.manage_actions_for, string(R.string.tab_number, 1))) and hasClickAction())[1].performClick()
         compose.waitForIdle()
-        inSheet(string(R.string.menu_rename_tab)).performClick()
+        inSheet(string(R.string.home_rename)).performClick()
         compose.waitForIdle()
         compose.onNode(hasSetTextAction()).performTextReplacement("logs")
         compose.onNode(hasSetTextAction()).performImeAction()
@@ -156,6 +157,45 @@ class HomeManageTest {
         val action = fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == label }
         compose.runOnUiThread { action.action() }
         compose.waitForIdle()
+    }
+
+    /** The labels of the sheet's items that can act now, top to bottom. */
+    private fun enabledSheetItems(): List<String> =
+        compose.onAllNodes(hasClickAction() and hasAnyAncestorTagged()).fetchSemanticsNodes()
+            .filter { SemanticsProperties.Disabled !in it.config }
+            .sortedBy { it.boundsInRoot.top }
+            .map { it.config[SemanticsProperties.Text].first().text }
+
+    private fun talkBackOf(node: SemanticsNodeInteraction) = node.fetchSemanticsNode().config[SemanticsActions.CustomActions].map { it.label }
+
+    /**
+     * Long press, ⋮ and TalkBack offer one list: a session's and a tab's TalkBack actions are their
+     * sheet's items that can act now, in the sheet's order; a long press opens the sheet ⋮ opens.
+     */
+    @Test
+    fun aRowsTalkBackActionsAreItsSheetsItemsInOrder() {
+        val m = start()
+        val name = label(m)
+        val session = compose.onNode(hasText(name) and hasClickAction() and !hasAnyAncestorTagged())
+        val sessionActions = talkBackOf(session)
+        session.performTouchInput { longClick() }
+        compose.waitForIdle()
+        assertEquals(enabledSheetItems(), sessionActions)
+        assertEquals(
+            listOf(string(R.string.home_action_open), string(R.string.menu_new_tab), string(R.string.home_rename), string(R.string.home_action_collapse)),
+            sessionActions.take(4),
+        )
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+
+        val tab = compose.onAllNodes(hasText(string(R.string.tab_number, 2)) and hasClickAction() and !hasAnyAncestorTagged())[1]
+        val tabActions = talkBackOf(tab)
+        compose.onAllNodes(hasContentDescription(string(R.string.manage_actions_for, string(R.string.tab_number, 2))) and hasClickAction())[1].performClick()
+        compose.waitForIdle()
+        assertEquals(enabledSheetItems(), tabActions)
+        assertEquals(string(R.string.home_action_open), tabActions.first())
+        assertEquals(string(R.string.home_close_tab), tabActions.last())
+        assertNotAttached()
     }
 
     private fun top(text: String) = compose.onNode(hasText(text) and hasClickAction() and !hasAnyAncestorTagged()).fetchSemanticsNode().boundsInRoot.top

@@ -268,17 +268,21 @@ class RexViewModel @JvmOverloads constructor(
     /** The folds of the home list, kept across going to a terminal, rotation and restarts. */
     val folds = MutableStateFlow(store.folds())
 
-    fun setHostFolded(hostId: String, folded: Boolean) {
+    /** Opens or folds [hostId]: the person's choice, which wins over the default (open while connected) from now on. */
+    fun setHostOpen(hostId: String, open: Boolean) = setFolds(folds.value.withHost(hostId, open))
+
+    fun setSessionFolded(hostId: String, sessionId: String, folded: Boolean) = setSessionsFolded(hostId, listOf(sessionId), folded)
+
+    /** Folds or opens each of [sessionIds] of [hostId]: the host sheet's Collapse all and Expand all sessions. */
+    fun setSessionsFolded(hostId: String, sessionIds: List<String>, folded: Boolean) {
         val current = folds.value
-        val next = current.copy(hosts = if (folded) current.hosts + hostId else current.hosts - hostId)
-        store.setFolds(next)
-        folds.value = next
+        val keys = sessionIds.map { HomeFolds.sessionKey(hostId, it) }
+        setFolds(current.copy(sessions = if (folded) current.sessions + keys else current.sessions - keys.toSet()))
     }
 
-    fun setSessionFolded(hostId: String, sessionId: String, folded: Boolean) {
-        val current = folds.value
-        val key = HomeFolds.sessionKey(hostId, sessionId)
-        val next = current.copy(sessions = if (folded) current.sessions + key else current.sessions - key)
+    /** Every fold at once: Collapse all and Expand all, and the Undo that puts the folds back as they were. */
+    fun setFolds(next: HomeFolds) {
+        if (next == folds.value) return
         store.setFolds(next)
         folds.value = next
     }
@@ -559,10 +563,7 @@ class RexViewModel @JvmOverloads constructor(
         disconnect(id)
         store.delete(id)
         hosts.value = store.list()
-        val current = folds.value
-        val next = current.keepSessions(id, emptyList()).copy(hosts = current.hosts - id)
-        store.setFolds(next)
-        folds.value = next
+        setFolds(folds.value.withoutHost(id))
     }
 
     /**

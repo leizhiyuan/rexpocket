@@ -5,4 +5,21 @@
     <string name="home_count_done">%1$d 个完成</string>
     <string name="home_count_running">%1$d 个运行中</string>
     <string name="home_pane_line">窗格 %1$s %2$s</string>
+    <string name="home_action_collapse">收起</string>
+    <string name="home_action_expand">展开</string>
+    <string name="home_action_open">打开</string>
+    <string name="home_collapse_sessions">收起所有会话</string>
+    <string name="home_expand_sessions">展开所有会话</string>
+    <string name="home_copy_address">复制地址</string>
+    <string name="home_address_copied">地址已复制</string>
+    <string name="home_tailnet_details">Tailnet 详情</string>
+    <string name="home_needs_connect">请先连接</string>
+    <string name="home_rename">重命名…</string>
+    <string name="home_end_session">结束会话…</string>
+    <string name="home_close_tab">关闭标签页…</string>
+    <string name="home_no_sessions">没有会话</string>
+    <string name="home_loading">正在加载…</string>
+    <string name="home_cached_note">上次连接时的会话</string>
+    <string name="home_tabs_load">打开后加载标签页</string>
+    <string name="home_connect_to_see">连接 %1$s 以查看标签页</string>
 </resources>

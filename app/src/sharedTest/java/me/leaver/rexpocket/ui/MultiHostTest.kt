@@ -2,6 +2,8 @@ package me.leaver.rexpocket.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -102,21 +104,89 @@ class MultiHostTest {
         compose.onNodeWithText(line).assertExists()
         val connect = compose.onNode(hasText(string(R.string.action_connect)) and hasClickAction())
         connect.assertExists()
-        // The row's tap folds and unfolds it; it never connects.
+        // The row's tap unfolds it - its cached list, said once to be the last connection's - and
+        // folds it again; it never connects.
         val row = compose.onNode(hasText("mac") and hasClickAction())
         row.performClick()
         compose.assertStaysHome(m, ms = 1_000)
         assertFalse(mac.host.id in m.lives.value)
-        assertTrue(mac.host.id in m.folds.value.hosts)
+        assertTrue(mac.host.id in m.folds.value.openHosts)
+        compose.onNodeWithText(macSession).assertExists()
+        compose.onNodeWithText(string(R.string.home_cached_note)).assertExists()
         row.performClick()
         compose.waitForIdle()
         assertFalse(mac.host.id in m.lives.value)
-        assertFalse(mac.host.id in m.folds.value.hosts)
-        // Connect does, beside the linux host, which keeps its connection.
+        assertTrue(mac.host.id in m.folds.value.hosts)
+        compose.onAllNodesWithText(macSession).assertCountEquals(0)
+        // Connect does, beside the linux host, which keeps its connection. The person's fold wins
+        // in every state: the host stays folded until it is opened.
         connect.performClick()
         compose.awaitThat { live(m, mac) }
+        compose.onAllNodesWithText(macSession).assertCountEquals(0)
+        row.performClick()
+        compose.waitForIdle()
         compose.onNodeWithText(macSession).assertExists()
         assertEquals(linuxClient, client(m, linux))
         assertEquals(setOf(mac.host.id, linux.host.id), HostStore(compose.activity).connectedHosts().toSet())
+    }
+
+    /**
+     * A host whose connection fails says why under its name and offers Retry as its button; its
+     * tap folds it, as any host's does, and asks nothing of Rex. The other host is untouched.
+     */
+    @Test
+    fun aHostThatFailsOffersRetryAndItsTapOnlyFolds() {
+        linux.rex.refuse("session.bootstrap", "the server is busy")
+        val app = freshApp()
+        val store = mac.saveFor(app)
+        store.upsert(linux.host)
+        store.setConnectedHosts(listOf(mac.host.id, linux.host.id))
+        val m = launchedModel(compose, app)
+        model = m
+        compose.setContent { RexPocketApp(m) }
+        compose.awaitThat { live(m, mac) && m.lives.value[linux.host.id]?.state?.problem != null }
+        val retry = compose.onNode(hasText(string(R.string.action_retry)) and hasClickAction())
+        compose.awaitThat { retry.fetchSemanticsNodeOrNull() != null }
+        compose.onNode(hasText("linux") and hasClickAction()).performClick()
+        compose.waitForIdle()
+        assertTrue(linux.host.id in m.folds.value.hosts)
+        compose.assertStaysHome(m, ms = 500)
+        assertTrue(live(m, mac))
+        retry.assertExists()
+    }
+
+    private fun androidx.compose.ui.test.SemanticsNodeInteraction.fetchSemanticsNodeOrNull() =
+        runCatching { fetchSemanticsNode() }.getOrNull()
+
+    private fun inSheet(text: String) =
+        compose.onNode(hasText(text) and hasClickAction() and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(ACTION_SHEET_TAG)))
+
+    /**
+     * A host's sheet follows its connection while it is open: Disconnect, once the host is
+     * dropped, becomes Connect in its place, and New session, which needs the host, stays greyed
+     * out saying so. The same sheet, items and order, is the host row's TalkBack actions.
+     */
+    @Test
+    fun theHostSheetFollowsItsConnectionAndIsTheRowsTalkBackActions() {
+        val m = start()
+        val header = compose.onNode(hasText("mac") and hasClickAction())
+        val actions = header.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.CustomActions].map { it.label }
+        assertEquals(
+            listOf(
+                string(R.string.action_disconnect), string(R.string.session_new), string(R.string.home_action_collapse),
+                string(R.string.home_collapse_sessions), string(R.string.action_edit_host), string(R.string.home_copy_address),
+            ),
+            actions,
+        )
+        compose.onAllNodes(hasContentDescription(string(R.string.action_more)) and hasClickAction())[0].performClick()
+        compose.waitForIdle()
+        inSheet(string(R.string.action_disconnect)).assertExists()
+        inSheet(string(R.string.session_new)).assertIsEnabled()
+        compose.runOnUiThread { m.disconnect(mac.host.id) }
+        compose.awaitThat { mac.host.id !in m.lives.value }
+        inSheet(string(R.string.action_connect)).assertExists()
+        assertTrue(compose.onAllNodes(hasText(string(R.string.action_disconnect)) and hasClickAction()).fetchSemanticsNodes().isEmpty())
+        inSheet(string(R.string.session_new)).assertIsNotEnabled()
+        compose.onNodeWithText(string(R.string.home_needs_connect)).assertExists()
     }
 }
