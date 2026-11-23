@@ -33,7 +33,9 @@ object HostListFormat {
     private val FINGERPRINT = Regex("SHA256:[A-Za-z0-9+/]{43}")
 
     /** Whether [text] looks like a host list, of any version: worth opening the import for. */
-    fun mentionsFormat(text: String): Boolean = text.contains(FORMAT_MARKER)
+    fun mentionsFormat(text: String): Boolean =
+        // JSON may write the slash escaped, as Android's own JSON does.
+        text.contains(FORMAT_MARKER) || text.contains(FORMAT_MARKER.replace("/", "\\/"))
 
     fun validName(name: String): Boolean = NAME.matches(name)
 

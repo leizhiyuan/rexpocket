@@ -58,6 +58,14 @@ class HostImportTest {
     }
 
     @Test
+    fun aShareIsTakenForAHostListWhenItNamesTheFormat() {
+        assertTrue(HostListFormat.mentionsFormat(file(host())))
+        assertTrue(HostListFormat.mentionsFormat("""{"format":"rexpocket-hosts\/1"}"""))
+        assertFalse(HostListFormat.mentionsFormat("""{"some":"json"}"""))
+        assertEquals(1, parsed("""{"format":"rexpocket-hosts\/1","hosts":[{"name":"a","dnsUri":"ssh:\/\/me@a.example.com"}]}""").hosts.size)
+    }
+
+    @Test
     fun aHostWithOnlyAnAddressUsesIt() {
         val h = parsed(file(host(dnsUri = null))).hosts.single()
         assertEquals("100.92.1.2", h.address.host)
