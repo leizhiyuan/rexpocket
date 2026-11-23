@@ -25,7 +25,7 @@ glance what a fleet of agents needs. It builds on several hosts at once (multi-h
 | --- | --- | --- | --- |
 | Host | folds, in every state; never connects | host sheet | Connect, Cancel, Retry, or the tailnet's fix (Sign in, Join) |
 | Session | folds, whether its tabs are loaded or not | session sheet | Open ("Tabs load when opened"), Connect ("Connect mac to see tabs") |
-| Tab, pane line, Needs you row | opens it (queued while the host reconnects) | tab sheet | Reply, Interrupt (Needs you only) |
+| Tab, pane line, Needs you row | opens it (queued while the host reconnects) | tab sheet | Approve, Deny, Reply, Interrupt (Needs you only) |
 
 Nothing connects, retries or probes on a plain tap: the error line and the tailnet path line are
 text; the path is measured again from the tailnet sheet.
@@ -70,7 +70,16 @@ confirm first, so they have no Undo, nor does Rename.
 choice is kept. Needs you is waiting tabs, and failed and done tabs not yet seen; Running is working
 tabs. Each is a flat list in Rex's priority order under each host's header (no folds), with Reply
 (never for `auth`, as in notifications) and Interrupt on Needs you's rows, and a line for each host
-that is not connected, with Connect. The home's ⋮ beside the chips has Expand all, Collapse all
+that is not connected, with Connect.
+
+**Answering from Needs you** (notifications.md, "Approve and Deny", "Quick replies", "The prompt
+composer"): a row waiting on an agent's approval prompt - `permission` from an agent in the key
+table - has **Approve** and **Deny** before Reply (TalkBack: "Approve for build"), which send that
+agent's keys without taking the pane. The row's prompt is read again from Rex first; when it changed,
+nothing is sent, a toast says "Prompt changed, nothing was sent" and the pane opens. **Reply**'s
+dialog has the quick replies as chips that put their text in the field, and **Compose**, which takes
+the pane, with what was typed, to the prompt composer: a longer prompt in one paste, Return after it
+or not, its draft kept for the pane. Every button is at least 48 dp high. The home's ⋮ beside the chips has Expand all, Collapse all
 (with Undo), Add host, Import hosts and Tailnet; the tailnet is a chip there once connected, and the
 full card in the list while it is on its way or needs the person.
 
@@ -114,5 +123,6 @@ reach Rex without attaching; a session ended at the desk closes its sheet and sa
 connection; a failing host's Retry; + with two, one and no hosts connected; host order and Remove
 host with Undo), `ActivityViewTest` (Needs you and Running: order, counts, Mark as seen and Undo, seen on
 the phone and on a desk, Reply hidden for `auth`, Interrupt, the not-connected line, the filter
-kept), `DeskSeenTest` (core, ScriptedRex: the desk inference), `ClientViewProbeTest` (rex-real:
+kept; Approve's Return for Claude and Deny's Esc for Codex, none for Terraform, a changed prompt
+opening the pane and typing nothing, Reply's Compose on the emulator), `DeskSeenTest` (core, ScriptedRex: the desk inference), `ClientViewProbeTest` (rex-real:
 `client.inspect`'s shape).

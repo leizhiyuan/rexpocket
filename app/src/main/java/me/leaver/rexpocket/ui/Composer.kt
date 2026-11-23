@@ -307,8 +307,9 @@ private fun QuickReplyRow(reply: String, index: Int, last: Boolean, onEdit: () -
                 .testTag(quickReplyRowTag(index))
                 .padding(start = 16.dp, top = 16.dp, bottom = 16.dp, end = 8.dp),
         )
-        RoundButton(R.drawable.ic_arrow_up, up, { onMove(-1) }, size = 48.dp, tint = Colors.muted, enabled = index > 0)
-        RoundButton(R.drawable.ic_arrow_down, down, { onMove(1) }, size = 48.dp, tint = Colors.muted, enabled = !last)
+        // At an end, greyed out and in place, so the rows' buttons line up.
+        RoundButton(R.drawable.ic_arrow_up, up, { onMove(-1) }, size = 48.dp, tint = if (index > 0) Colors.muted else Colors.line, enabled = index > 0)
+        RoundButton(R.drawable.ic_arrow_down, down, { onMove(1) }, size = 48.dp, tint = if (!last) Colors.muted else Colors.line, enabled = !last)
         Spacer(Modifier.width(4.dp))
     }
 }

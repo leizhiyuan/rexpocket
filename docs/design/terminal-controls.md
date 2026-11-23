@@ -168,6 +168,7 @@ One catalogue (`BarKey`, core) of every key the bar can draw, each with a stored
 | Kind | Keys | Stored as |
 | --- | --- | --- |
 | The bar's own | Esc, C-c, Tab, Return, Ctrl, Shift, Alt, Paste, Attach, `/` | `escape`, `ctrl_c`, ... as before |
+| Answering agents (off the bar by default) | Compose prompt (the composer; in the ⋮ menu too), Quick replies (a panel of the person's quick replies, never in a group) | `compose`, `quick_replies` |
 | Group keys | one per group: `Fn`, and each group made | `fn`, `group_<id>` |
 | The right pill's | arrow stick, keyboard key, full-screen key | `arrows`, `keyboard`, `full_screen` |
 | Desk keys | Home, End, PgUp, PgDn, Ins, Del, F1-F12 | `home`, `page_up`, `f10`, ... |

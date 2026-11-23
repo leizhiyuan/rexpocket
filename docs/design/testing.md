@@ -29,7 +29,7 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 ## Where the tests run
 
 - `app/src/sharedTest` holds the screen tests (`ArrangeKeysTest`, `TerminalControlsTest`, `TermMenuTest`,
-  `TermFullScreenTest`, `CommandPaletteTest`, `ActivityViewTest`, `EmptyHomeTest`, `LargeFontTest`, `AppearanceTest`, `HomeManageTest`, `MultiHostTest`, `ShareTest`, `HostImportScreenTest`). They are
+  `TermFullScreenTest`, `CommandPaletteTest`, `ActivityViewTest`, `EmptyHomeTest`, `LargeFontTest`, `AppearanceTest`, `HomeManageTest`, `MultiHostTest`, `ShareTest`, `HostImportScreenTest`, `QuickRepliesScreenTest`, `TermAgentTest`). They are
   compiled into both the JVM unit tests and the instrumented tests:
   - on the JVM with Robolectric, in seconds on any computer:
     `./gradlew -x :app:buildGhostty -x :app:buildGhosttyHost :app:testDebugUnitTest --tests 'me.leaver.rexpocket.ui.*'`

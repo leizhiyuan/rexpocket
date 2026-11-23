@@ -168,14 +168,14 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 | Swap/Move Pane, Balance, Resize Pane, floating panes, Move Tab to New Window (docs:mac-actions) | Skip | layout editing for a screen that shows several panes; the phone shows one |
 | Go to Directory…, Insert Path… (`terminal.list_dir`, docs:lua) | Adapt, 1 day | a directory picker that types a path; useful with agents |
 | Insert Photo… (docs:ios-actions) | Adapt, 0.5 day | Send a file already uploads any file; a photo picker entry point |
-| Compose Input… (`client.composer.open`, docs:ios-actions) | Skip for now | the app types straight into the pane by design (terminal-controls.md); revisit if asked |
+| Compose Input… (`client.composer.open`, docs:ios-actions) | Adapted (this change) | the phone's own composer, not the desk's: a multi-line sheet that sends one `block.event` paste, then Return or not, with a draft per pane (notifications.md, "The prompt composer"); typing still goes straight into the pane |
 | Jump to Previous/Next Prompt, Scroll Page Up/Down (docs:ios-actions) | Adapt, 1 day | needs OSC 133 marks from the terminal library |
 | Find (`client.find.*`, docs:mac-actions) | Adapt, 2 days | search the pane's scrollback (terminal `format`, docs:lua) |
 | Copy mode (docs:mac-actions) | Skip | long-press selection is the phone's way |
 | `terminal.child_exited` exit code and error (docs:events) | Adapt, 0.5 day | say why a pane closed on the closed-pane note |
 | `terminal.desktop_notification`, `terminal.bell` (docs:events) | Done | Background alerts, one notification per pane, rate-limited and folded with the status alert (notifications.md) |
 | Alerts for `done` (docs:program-status, States) | Done | on by default on a quieter channel: Rex's "result ready, not seen yet" |
-| Answering an agent from its notification (`block.event` paste, `client.key`) | Done | Reply (paste + Enter) and Interrupt (Ctrl+C) to the named pane; no Reply for `auth` |
+| Answering an agent from its notification (`block.event` paste, `client.key`) | Done | Reply (paste + Enter) and Interrupt (Ctrl+C) to the named pane; no Reply for `auth`. Approve and Deny (this change) for the agents whose keys are known, below |
 | `terminal.progress_report` (OSC 9;4) | Adapt, 0.5 day | a terminal MAY map OSC 9;4 to the root record (docs:program-status); whether Rex does is unconfirmed. If not, a progress pie for programs that only send OSC 9;4 |
 | Rex's host list (`hosts.list`, `hosts_changed`) | Done | Import hosts › From Rex (host-import.md): label to name, endpoints to the address and other addresses, a Unix socket left out, no host key (asked on first SSH connection). `hosts_changed` is not followed: an import is a one-off. Shape held by RexShapeTest and `RealRexHostListTest` |
 | Switch Host, Add/Remove Remote Host, Forward Port (docs:ios-actions Host) | Done / Skip | the home list is the hosts; port forwarding is Rex's client feature, not the server's |
@@ -184,6 +184,17 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 | Install Rex for Agents (`client.agents.setup`) | Skip | runs on the computer, not the phone |
 | Server and Tailscale management (`server.*`) | Skip | administration of the computer; the desktop app's job |
 | Clients list, perform on another client (`client.list`, `client.perform`) | Skip | nothing a phone user asked for |
+
+### Answering an approval prompt
+
+Rex reports that a program waits for approval (`state=blocked`, `kind=permission`) and which
+program it is (`app`, inherited as `effective_app`), and gives every client `client.key` to answer
+it; it does not say which key means yes. That is each agent's, so Approve and Deny exist only for a
+short table of agents (notifications.md, "Approve and Deny"): Claude Code (Return / Esc) and Codex
+(`y` / Esc). Before the keys go, the pane's records are read again (`program_status`, which a
+bootstrapped connection may call on any session) and compared with the prompt the person saw,
+`updated_at` included, so an answer never lands on a newer prompt. `PromptAnswerTest` runs it on
+ScriptedRex and on real Rex, where a shell reports the prompt (OSC 7501) and reads the key.
 
 ## Real Rex
 
