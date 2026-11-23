@@ -3,6 +3,7 @@ package me.leaver.rexpocket.data
 import android.content.Context
 import me.leaver.rexpocket.core.Appearance
 import me.leaver.rexpocket.core.AppTheme
+import me.leaver.rexpocket.core.AlertPrefs
 import me.leaver.rexpocket.core.CtrlCKey
 import me.leaver.rexpocket.core.TerminalColors
 import me.leaver.rexpocket.core.BarKey
@@ -187,6 +188,30 @@ class HostStore(context: Context) {
         prefs.edit().putBoolean(KEY_ALERTS, on).apply()
     }
 
+    /** Which kinds of alert the Notifications page has on; see [AlertPrefs] for the defaults. */
+    fun alertPrefs(): AlertPrefs {
+        val d = AlertPrefs()
+        return AlertPrefs(
+            waiting = prefs.getBoolean(KEY_ALERT_WAITING, d.waiting),
+            failed = prefs.getBoolean(KEY_ALERT_FAILED, d.failed),
+            done = prefs.getBoolean(KEY_ALERT_DONE, d.done),
+            messages = prefs.getBoolean(KEY_ALERT_MESSAGES, d.messages),
+            bells = prefs.getBoolean(KEY_ALERT_BELLS, d.bells),
+            vibrate = prefs.getBoolean(KEY_ALERT_VIBRATE, d.vibrate),
+        )
+    }
+
+    fun setAlertPrefs(p: AlertPrefs) {
+        prefs.edit()
+            .putBoolean(KEY_ALERT_WAITING, p.waiting)
+            .putBoolean(KEY_ALERT_FAILED, p.failed)
+            .putBoolean(KEY_ALERT_DONE, p.done)
+            .putBoolean(KEY_ALERT_MESSAGES, p.messages)
+            .putBoolean(KEY_ALERT_BELLS, p.bells)
+            .putBoolean(KEY_ALERT_VIBRATE, p.vibrate)
+            .apply()
+    }
+
     /**
      * Whether the key bar stays on screen with a keyboard attached. Off by default: the bar is the
      * screen keyboard's, and a desk keyboard already has every key on it.
@@ -356,6 +381,12 @@ class HostStore(context: Context) {
         private const val KEY_LAST_HOST = "last_host"
         private const val KEY_FONT = "font_scale"
         private const val KEY_ALERTS = "background_alerts"
+        private const val KEY_ALERT_WAITING = "alerts.waiting"
+        private const val KEY_ALERT_FAILED = "alerts.failed"
+        private const val KEY_ALERT_DONE = "alerts.done"
+        private const val KEY_ALERT_MESSAGES = "alerts.messages"
+        private const val KEY_ALERT_BELLS = "alerts.bells"
+        private const val KEY_ALERT_VIBRATE = "alerts.vibrate"
         private const val KEY_KEY_BAR = "key_bar_always"
         private const val KEY_KEY_BAR_SHIFT = "keybar_shift"
         private const val KEY_KEY_BAR_ALT = "keybar_alt"

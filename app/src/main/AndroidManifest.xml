@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- A bell in the pane on screen buzzes, as the system's notification vibration allows. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -55,6 +57,10 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/diagnostic_paths" />
         </provider>
+        <!-- A notification's Reply and Interrupt; only the app's own notifications reach it. -->
+        <receiver
+            android:name=".alerts.AlertActionReceiver"
+            android:exported="false" />
         <service
             android:name=".alerts.WatchService"
             android:exported="false"

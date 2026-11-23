@@ -268,6 +268,8 @@ class ScreenshotsTest {
     @Test fun settingsPortrait() = settings("settings-portrait")
     @Test fun settingsLandscape() { landscape(); settings("settings-landscape") }
     @Test fun diagnosticsPortrait() = settings("diagnostics-portrait", R.string.diagnostics)
+    @Test fun notificationsPortrait() = settings("notifications-portrait", R.string.notifications_title)
+    @Test fun notificationsLandscape() { landscape(); settings("notifications-landscape", R.string.notifications_title) }
     @Test fun groupNamePortrait() = arrangePage("group-name-portrait", R.string.arrange_new_group, R.string.arrange_empty_group)
 
     /**

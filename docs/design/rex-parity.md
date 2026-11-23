@@ -68,7 +68,8 @@ own connection) and keeps the welcome's client id, reconnect token, `resumed`, `
 | `terminal.pwd_changed`, `terminal.process_changed`, `terminal.title_changed` | used |
 | `terminal.child_exited` (`exit_code`, `error`) | used: the closed note says the program exited, with its code, when the pane closes within 5 s of it; otherwise that it was closed on another device |
 | `terminal.clipboard_written` (`text`, `id`, `bytes`) | used: an OSC 52 copy goes on the phone's clipboard, from the pane on screen while the app is in front (`PocketSession.copies`); when `text` is left out the copy is read with `clipboard_read` |
-| `terminal.bell`, `terminal.desktop_notification` (`title`, `body`), `terminal.progress_report` (`state`, `progress`) | ignored |
+| `terminal.bell` (`{}`), `terminal.desktop_notification` (`title`, `body`; `title` is `""` for OSC 9) | **used** (verified on preview.22 / api 19): a buzz on the pane on screen, notifications while away; see [notifications.md](notifications.md) |
+| `terminal.progress_report` (`state`, `progress`) | ignored |
 
 ### A status record (docs:program-status, "Keys")
 
@@ -170,7 +171,9 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 | Find (`client.find.*`, docs:mac-actions) | Adapt, 2 days | search the pane's scrollback (terminal `format`, docs:lua) |
 | Copy mode (docs:mac-actions) | Skip | long-press selection is the phone's way |
 | `terminal.child_exited` exit code and error (docs:events) | Adapt, 0.5 day | say why a pane closed on the closed-pane note |
-| `terminal.desktop_notification`, `terminal.bell` (docs:events) | Adapt, 1 day | feed them to Background alerts, rate-limited (docs:program-status, "Security") |
+| `terminal.desktop_notification`, `terminal.bell` (docs:events) | Done | Background alerts, one notification per pane, rate-limited and folded with the status alert (notifications.md) |
+| Alerts for `done` (docs:program-status, States) | Done | on by default on a quieter channel: Rex's "result ready, not seen yet" |
+| Answering an agent from its notification (`block.event` paste, `client.key`) | Done | Reply (paste + Enter) and Interrupt (Ctrl+C) to the named pane; no Reply for `auth` |
 | `terminal.progress_report` (OSC 9;4) | Adapt, 0.5 day | a terminal MAY map OSC 9;4 to the root record (docs:program-status); whether Rex does is unconfirmed. If not, a progress pie for programs that only send OSC 9;4 |
 | Rex's host list (`hosts.list`, `hosts_changed`) | Adapt, 1 day | offer Rex's hosts as hosts to add; they are Rex servers the desktop reaches by label |
 | Switch Host, Add/Remove Remote Host, Forward Port (docs:ios-actions Host) | Done / Skip | the home list is the hosts; port forwarding is Rex's client feature, not the server's |
@@ -221,6 +224,12 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
   and the phone knows why the pane went by the time it reads the view again (`RexShapeTest`, "the
   program in a tab of one pane exits with 0"; `PaneLifecycleScenarios.theProgramInTheShownTabExits…`).
   `exit 0` gives `{exit_code: 0}` with no `error`.
+- **Bell and desktop notifications.** `printf '\a'` gives `block_event` `bell` with `{}`;
+  `printf '\e]9;body\a'` gives `desktop_notification` `{title: "", body}` and
+  `printf '\e]777;notify;title;body\a'` gives `{title, body}`, to every client that may see the pane,
+  from any session after a bootstrap. `block.event` paste and `client.key` to a pane of a session the
+  connection only bootstrapped work too; `client.key` answers `{handled: false}` (`RexShapeTest`,
+  `PaneSignalsTest`).
 - **OSC 52.** `printf '\e]52;c;%s\a' $(printf hi | base64)` in a pane: every client that may see
   the pane gets `block_event` `clipboard_written` `{text: "hi", id, bytes: 2}` (at the app's API
   revision 7 too), and `clipboard_read` (`{}` args: the newest copy) answers `{id, data, total, eof:

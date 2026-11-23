@@ -15,11 +15,18 @@ import androidx.lifecycle.viewModelScope
 import me.leaver.rexpocket.core.Appearance
 import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.Endpoint
-import me.leaver.rexpocket.core.AttentionLedger
+import me.leaver.rexpocket.core.AlertKind
+import me.leaver.rexpocket.core.AlertMove
+import me.leaver.rexpocket.core.AlertPlanner
+import me.leaver.rexpocket.core.AlertPrefs
+import me.leaver.rexpocket.core.BellMove
+import me.leaver.rexpocket.core.PaneSignal
+import me.leaver.rexpocket.core.plainText
 import me.leaver.rexpocket.core.FileUpload
 import me.leaver.rexpocket.core.UploadPhase
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.alerts.Alert
+import me.leaver.rexpocket.alerts.AlertAction
 import me.leaver.rexpocket.alerts.AlertTarget
 import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.core.CtrlCKey
@@ -359,7 +366,12 @@ class RexViewModel @JvmOverloads constructor(
     val keyBarCtrlC = MutableStateFlow(store.keyBarCtrlC())
     /** What the terminal's tap, double tap and long press do, and their times. */
     val gestures = MutableStateFlow(store.gestures())
-    private val attention = AttentionLedger()
+    /** Which kinds of alert are on: the Notifications page's switches. */
+    val alertPrefs = MutableStateFlow(store.alertPrefs())
+    private val planner = AlertPlanner()
+
+    /** This model's answer to a notification's Reply and Interrupt, while it holds the connection. */
+    private val alertActions: suspend (AlertTarget, AlertAction) -> Boolean = { target, action -> onAlertAction(target, action) }
     var host: SavedHost? = null
         private set
 
@@ -409,6 +421,7 @@ class RexViewModel @JvmOverloads constructor(
                 failed = saved.takeIf { it != SYSTEM_FONT && face == null },
             )
         }
+        Alerts.actions = alertActions
         // The watch notification's Stop turns alerts off from outside the app; the setting follows.
         viewModelScope.launch {
             Alerts.enabled.collect { on ->
@@ -459,6 +472,11 @@ class RexViewModel @JvmOverloads constructor(
         gestures.value = next
     }
 
+    fun setAlertPrefs(next: AlertPrefs) {
+        store.setAlertPrefs(next)
+        alertPrefs.value = next
+    }
+
     fun setAlerts(on: Boolean) {
         Alerts.enabled.value = on
         val open = host
@@ -467,6 +485,7 @@ class RexViewModel @JvmOverloads constructor(
 
     override fun onCleared() {
         network.stop()
+        if (Alerts.actions === alertActions) Alerts.actions = null
         Alerts.unwatch(getApplication())
         // The pane goes back to the desktop's size; viewModelScope is already cancelled here.
         disconnectQuiet()
@@ -745,32 +764,114 @@ class RexViewModel @JvmOverloads constructor(
         }
         if (BuildConfig.DEBUG) launch { logConnection(s) }
         launch { raiseAlerts(s, hostId) }
+        launch { s.signals.collect { onSignal(s, hostId, it) } }
     }
 
     /**
      * Turns the panes' status into alerts. Every change is noted, so a request already on screen is
      * not news later; only one that arrives while the app is away is raised. An alert goes once its
-     * pane stops waiting, or once the person opens that pane.
+     * pane stops waiting, or once the person opens that pane. See docs/design/notifications.md.
      */
     private suspend fun raiseAlerts(s: PocketSession, hostId: String) {
         val app = getApplication<Application>()
-        combine(s.state, route) { st, r -> st to r }.collect { (st, r) ->
-            val changes = attention.observe(st.blockStatus)
-            changes.settled.forEach { Alerts.settle(app, it) }
-            if (r == Route.Term && foreground) shownPane(st)?.let { (_, block) -> Alerts.settle(app, block) }
-            if (foreground || !Alerts.enabled.value) return@collect
-            for (block in changes.raised) alertFor(app, st, hostId, block)?.let { Alerts.raise(app, it) }
+        combine(s.state, route, alertPrefs) { st, r, p -> Triple(st, r, p) }.collect { (st, r, prefs) ->
+            // Away and watching: with alerts off, nothing keeps the connection up to tell anyway.
+            val away = !foreground && Alerts.enabled.value
+            for (move in planner.status(st.blockStatus, away, prefs)) {
+                when (move) {
+                    is AlertMove.Cancel -> Alerts.settle(app, move.block)
+                    is AlertMove.Post -> alertFor(app, st, hostId, move)?.let { Alerts.raise(app, it) }
+                }
+            }
+            if (r == Route.Term && foreground) shownPane(st)?.let { (_, block) -> seen(app, block) }
         }
     }
 
-    private fun alertFor(app: Application, st: PocketState, hostId: String, block: String): Alert? {
-        val record = st.blockStatus[block] ?: return null
+    /** The person is looking at [block]: whatever its notification said, they can see it now. */
+    private fun seen(app: Application, block: String) {
+        planner.seen(block)
+        Alerts.settle(app, block)
+    }
+
+    /** A pane's bell or desktop notification: a buzz on screen, a notification while away. */
+    private fun onSignal(s: PocketSession, hostId: String, signal: PaneSignal) {
+        val app = getApplication<Application>()
+        val st = s.state.value
+        val prefs = alertPrefs.value
+        val away = !foreground && Alerts.enabled.value
+        when (signal) {
+            is PaneSignal.Bell -> {
+                val onScreen = foreground && route.value == Route.Term && shownPane(st)?.second == signal.blockId
+                when (planner.bell(signal.blockId, onScreen, away, prefs)) {
+                    BellMove.Vibrate -> Alerts.buzz(app)
+                    BellMove.Notify -> {
+                        val text = app.getString(R.string.alerts_bell)
+                        alertFor(app, st, hostId, AlertMove.Post(signal.blockId, AlertKind.Message, loud = true, bell = true), text)?.let { Alerts.raise(app, it) }
+                    }
+                    BellMove.Nothing -> Unit
+                }
+            }
+            is PaneSignal.Note -> {
+                val move = planner.message(signal.blockId, away, prefs) as? AlertMove.Post ?: return
+                val title = plainText(signal.title, max = 80)
+                val body = plainText(signal.body) ?: title ?: return
+                val text = if (title != null && title != body) "$title: $body" else body
+                alertFor(app, st, hostId, move, text)?.let { Alerts.raise(app, it) }
+            }
+        }
+    }
+
+    /**
+     * The notification for [move]: titled by the pane and tab, which are the app's own words, so a
+     * program cannot pass itself off as another pane's (Program Status Protocol, Security). Its
+     * own words - the status's message, a notification's text - are the body, as plain text.
+     */
+    private fun alertFor(app: Application, st: PocketState, hostId: String, move: AlertMove.Post, message: String? = null): Alert? {
+        val block = move.block
+        val record = st.blockStatus[block]
         val view = st.views.values.firstOrNull { v -> v.allBlocks().any { it.id == block } } ?: return null
         val info = view.allBlocks().first { it.id == block }
         val name = paneTitle(info, record, st.programs[block])
-        val state = statusWordRes(record)?.let { app.getString(it) } ?: app.getString(R.string.alerts_failed)
-        val text = record.msg?.takeIf { it.isNotBlank() }?.let { "$state: $it" } ?: state
-        return Alert(AlertTarget(hostId, view.sessionId, block), "$name · ${view.label}", text, host?.label.orEmpty())
+        val text = message ?: run {
+            record ?: return null
+            val state = statusWordRes(record)?.let { app.getString(it) } ?: app.getString(R.string.alerts_failed)
+            plainText(record.msg)?.let { "$state: $it" } ?: state
+        }
+        val session = st.sessions.firstOrNull { it.id == view.sessionId }?.label ?: view.label
+        val busy = block in st.busy
+        return Alert(
+            target = AlertTarget(hostId, view.sessionId, block),
+            title = "$name · ${view.label}",
+            text = text,
+            host = host?.label.orEmpty(),
+            kind = move.kind,
+            loud = move.loud,
+            group = session,
+            // A credential is typed into the app, never into a notification that shows what was sent.
+            reply = when (move.kind) {
+                AlertKind.Waiting -> record?.kind != "auth"
+                AlertKind.Done, AlertKind.Message -> record?.takeIf { it.state == "blocked" }?.kind != "auth"
+                AlertKind.Failed -> false
+            },
+            interrupt = busy,
+        )
+    }
+
+    /** A notification's Reply or Interrupt, sent on the connection to the host it came from. */
+    private suspend fun onAlertAction(target: AlertTarget, action: AlertAction): Boolean {
+        val s = session ?: return false
+        if (host?.id != target.hostId) return false
+        // Android may have cut the connection while the app was away; it redials, so give it a moment.
+        withTimeoutOrNull(ACTION_CONNECT_MS) { s.state.first { it.phase == Phase.Live } } ?: return false
+        val sent = when (action) {
+            is AlertAction.Reply -> s.replyTo(target.sessionId, target.blockId, action.text)
+            AlertAction.Interrupt -> s.interrupt(target.sessionId, target.blockId)
+        }
+        if (sent) {
+            Diagnostics.event(CONN_TAG, "alert ${if (action is AlertAction.Reply) "reply" else "interrupt"} sent")
+            planner.seen(target.blockId)
+        }
+        return sent
     }
 
     /** Set once an alert has opened a pane, so the start-up resume does not replace it. */
@@ -1372,6 +1473,9 @@ private val teardown = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
 /** How long after a connection goes live the path is measured: Tailscale needs a moment to go direct. */
 private const val PATH_SETTLE_MS = 3_000L
+
+/** How long a notification's Reply or Interrupt waits for a connection that is redialing. */
+private const val ACTION_CONNECT_MS = 6_000L
 
 /** How long a sent file stays on screen as green before the pill clears itself. */
 private const val UPLOAD_DONE_MS = 1_500L

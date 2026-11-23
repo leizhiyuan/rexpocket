@@ -68,6 +68,7 @@ fun RexPocketApp(
     val tailnetStage by model.tailnetStage.collectAsState()
     val connectProgress by model.connectProgress.collectAsState()
     val alerts by model.alerts.collectAsState()
+    val alertPrefs by model.alertPrefs.collectAsState()
     val keyArrangement by model.keyArrangement.collectAsState()
     val keyBarCtrlC by model.keyBarCtrlC.collectAsState()
     val gestures by model.gestures.collectAsState()
@@ -182,6 +183,8 @@ fun RexPocketApp(
                     onTailnet = { tailnetOpen = true },
                     alerts = alerts,
                     onAlerts = model::setAlerts,
+                    alertPrefs = alertPrefs,
+                    onAlertPrefs = model::setAlertPrefs,
                     keyArrangement = keyArrangement,
                     onKeyArrangement = model::setKeyArrangement,
                     keyBarCtrlC = keyBarCtrlC,

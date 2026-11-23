@@ -140,14 +140,39 @@ class LaunchTest {
         compose.onNodeWithContentDescription(string(R.string.settings)).performClick()
         compose.waitForIdle()
         for (opens in listOf(
-            R.string.tailnet_title, R.string.controls_title, R.string.terminal_font_title, R.string.appearance_title,
+            R.string.tailnet_title, R.string.notifications_title, R.string.controls_title, R.string.terminal_font_title, R.string.appearance_title,
             R.string.reopen_last_tab, R.string.update_channel, R.string.diagnostics,
         )) {
             assertTrue("${string(opens)} opens a page or a picker", compose.rowHasChevron(string(opens)))
         }
-        for (acts in listOf(R.string.alerts_title, R.string.update_title, R.string.settings_source)) {
+        for (acts in listOf(R.string.update_title, R.string.settings_source)) {
             assertFalse("${string(acts)} acts in place", compose.rowHasChevron(string(acts)))
         }
+    }
+
+    @Test
+    fun notificationsHasASwitchForEachKindThatTheStoreKeeps() {
+        val m = launch()
+        compose.awaitLive(m, desk.ids[1])
+        compose.onNodeWithContentDescription(string(R.string.settings)).performClick()
+        compose.waitForIdle()
+        compose.onNode(hasText(string(R.string.notifications_title)) and hasClickAction()).performScrollTo().performClick()
+        compose.waitForIdle()
+        // Background alerts and Android's permission come first; Android's own pages open from it.
+        compose.onNode(hasText(string(R.string.alerts_title)) and hasClickAction()).assert(hasText(string(R.string.alerts_off)))
+        assertTrue(compose.rowHasChevron(string(R.string.notifications_android)))
+        assertFalse(compose.rowHasChevron(string(R.string.notifications_done)))
+        val done = compose.onNode(hasText(string(R.string.notifications_done)) and hasClickAction()).performScrollTo()
+        done.assert(hasText(string(R.string.alerts_on)))
+        done.performClick()
+        compose.waitForIdle()
+        compose.onNode(hasText(string(R.string.notifications_done)) and hasClickAction()).assert(hasText(string(R.string.alerts_off)))
+        // A bell off screen is opt-in.
+        compose.onNode(hasText(string(R.string.notifications_bells)) and hasClickAction()).performScrollTo().assert(hasText(string(R.string.alerts_off)))
+        assertFalse(m.alertPrefs.value.done)
+        assertFalse(HostStore(compose.activity).alertPrefs().done)
+        assertTrue(HostStore(compose.activity).alertPrefs().waiting)
+        compose.assertStaysHome(m, ms = 500)
     }
 
     @Test

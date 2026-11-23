@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import me.leaver.rexpocket.alerts.Alerts
+import me.leaver.rexpocket.core.AlertPrefs
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -187,6 +188,9 @@ internal fun HomeScreen(
     onTailnet: () -> Unit,
     alerts: Boolean,
     onAlerts: (Boolean) -> Unit,
+    /** The Notifications page's switches: which kinds of alert are on. */
+    alertPrefs: AlertPrefs = AlertPrefs(),
+    onAlertPrefs: (AlertPrefs) -> Unit = {},
     keyArrangement: KeyArrangement,
     onKeyArrangement: (KeyArrangement) -> Unit,
     keyBarCtrlC: CtrlCKey,
@@ -240,6 +244,7 @@ internal fun HomeScreen(
     var prefillAddress by rememberSaveable { mutableStateOf<String?>(null) }
     var tailnetDetails by rememberSaveable { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
+    var notifications by rememberSaveable { mutableStateOf(false) }
     var controlsPage by rememberSaveable { mutableStateOf<ControlsPage?>(null) }
     var appearanceOpen by rememberSaveable { mutableStateOf(false) }
     var diagnostics by rememberSaveable { mutableStateOf(false) }
@@ -554,7 +559,10 @@ internal fun HomeScreen(
                 onTailnet()
             },
             alerts = alerts,
-            onAlerts = toggleAlerts,
+            onNotifications = {
+                settings = false
+                notifications = true
+            },
             onControls = {
                 settings = false
                 controlsPage = ControlsPage.Controls
@@ -575,6 +583,16 @@ internal fun HomeScreen(
             onUpdate = { onUpdate() },
             channel = updateChannel,
             onChannel = onUpdateChannel,
+        )
+    }
+
+    if (notifications) {
+        NotificationsSheet(
+            onDismiss = { notifications = false },
+            alerts = alerts,
+            onAlerts = toggleAlerts,
+            prefs = alertPrefs,
+            onPrefs = onAlertPrefs,
         )
     }
 
@@ -1028,7 +1046,8 @@ private fun SettingsSheet(
     onDismiss: () -> Unit,
     onTailnet: () -> Unit,
     alerts: Boolean,
-    onAlerts: () -> Unit,
+    /** Opens Notifications: Background alerts and what they tell. */
+    onNotifications: () -> Unit,
     /** Opens the terminal's controls: its gestures and its key bar. */
     onControls: () -> Unit,
     onFontSettings: () -> Unit,
@@ -1060,11 +1079,11 @@ private fun SettingsSheet(
             )
             // Alerts are the connection kept up in the background, so they sit with the way in.
             SheetItem(
-                label = stringResource(R.string.alerts_title),
+                label = stringResource(R.string.notifications_title),
                 icon = R.drawable.ic_notifications,
                 detail = stringResource(if (alerts) R.string.alerts_on else R.string.alerts_off),
-                keepOpen = true,
-                onClick = onAlerts,
+                opens = true,
+                onClick = onNotifications,
             )
         }
         Group(stringResource(R.string.settings_group_terminal)) {

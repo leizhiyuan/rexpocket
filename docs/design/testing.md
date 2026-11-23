@@ -107,7 +107,7 @@ comment.
   (`core/src/test/resources/rex-shapes/preview.22.txt`), and in `rex-real` against the real Rex
   too. `refuse(method)` makes a method fail, for the errors that must still show; `report(block,
   state, …)` is a program reporting its status (OSC 7501), `report(block, null)` a clear, and
-  `exit(block, code)` its program ending; `uploads` and `pastes` are what reached a pane by the native upload and by `paste` events; `hold(method)` keeps its answers back until `release`, a
+  `exit(block, code)` its program ending; `bell(block)` and `notify(block, title, body)` its bell and desktop notifications; `uploads` and `pastes` are what reached a pane by the native upload and by `paste` events; `hold(method)` keeps its answers back until `release`, a
   slow network for a test to act in; `drop(client)` is a network outage; `pictures = false` sends no
   snapshot.
 - **`Desk`** is a second client that changes sessions only through the protocol - new session,
@@ -150,6 +150,8 @@ anything goes: text through Rex's `paste` event, files one after another through
 (`attachUpload`'s path, 100 MiB each), and the pane is then shown. Without a remembered pane, or
 when it is gone, the sheet opens on the picker: the open host's sessions, tabs and panes, and the
 other hosts, which connect when tapped.
+
+Notifications are tested as notifications.md, "Tests", says: `PaneSignalsTest` on both servers, `NotificationsTest` on ScriptedRex with the app's view model.
 
 `ScriptedRexLifecycleTest` runs them on every push, in the `rex-integration` workflow with the rest
 of `:core:test`. `RealRexLifecycleTest` runs the same scenarios against a real Rex: in the `rex-real`
