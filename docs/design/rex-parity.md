@@ -51,7 +51,8 @@ own connection) and keeps the welcome's client id, reconnect token, `resumed`, `
 | floating layers: `session.new_layer`, `float_block`, `close_layer`, `raise_layer`, `lower_layer`, `resize_layer`, `set_layer_state` | not used | the app shows only a window's tiled blocks (**code**: `parseView` reads every layer's blocks as one list) |
 | `session.detach_block`, `session.new_block`, `session.list_blocks`, `session.describe_block`, `session.help`, `help.all`, `block_creator.list` | not used | |
 | `client.action`, `client.keymap`, `client.reply`, `client.perform`, `client.inspect`, `client.list`, `client.set_label`, `client.set_script` | not used | custom actions and prompts, below |
-| `hosts.list`, `hosts.put`, `hosts.remove` | not used | Rex's own list of other Rex servers |
+| `hosts.list` | Used | Import hosts › From Rex: the connected Rex's host list read as hosts to import, through the same preview as a host list (host-import.md); `hosts.put` and `hosts.remove` only seed it in the tests |
+| `hosts.put`, `hosts.remove` | not used | the phone never writes Rex's list |
 | `server.*` (status, version, whoami, config_reload, stop, tailscale.*, apple.*) | not used | |
 | `target.complete`, `target.resolve` | not used | |
 
@@ -176,7 +177,7 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 | Alerts for `done` (docs:program-status, States) | Done | on by default on a quieter channel: Rex's "result ready, not seen yet" |
 | Answering an agent from its notification (`block.event` paste, `client.key`) | Done | Reply (paste + Enter) and Interrupt (Ctrl+C) to the named pane; no Reply for `auth` |
 | `terminal.progress_report` (OSC 9;4) | Adapt, 0.5 day | a terminal MAY map OSC 9;4 to the root record (docs:program-status); whether Rex does is unconfirmed. If not, a progress pie for programs that only send OSC 9;4 |
-| Rex's host list (`hosts.list`, `hosts_changed`) | Adapt, 1 day | offer Rex's hosts as hosts to add; they are Rex servers the desktop reaches by label |
+| Rex's host list (`hosts.list`, `hosts_changed`) | Done | Import hosts › From Rex (host-import.md): label to name, endpoints to the address and other addresses, a Unix socket left out, no host key (asked on first SSH connection). `hosts_changed` is not followed: an import is a one-off. Shape held by RexShapeTest and `RealRexHostListTest` |
 | Switch Host, Add/Remove Remote Host, Forward Port (docs:ios-actions Host) | Done / Skip | the home list is the hosts; port forwarding is Rex's client feature, not the server's |
 | Settings, themes, cursor, appearance (docs:ios-settings) | Done in part | font, key bar, gestures and Settings › Appearance (app theme; terminal colours: match app, always dark, always light) are the app's. "Match the desk": adapt, 1 day - the stream's `theme` message (docs:llms "The Terminal Stream") carries the desk's default colours, but `StreamDecoder` drops it today and the app paints its own over the snapshot's; it needs the message decoded into a feed, kept per pane and applied instead of the app's, which no emulator here can check (libghostty runs on CI only). `set_theme` is not for this: it changes the desk's colours too |
 | Diagnostics, Copy Debug/Version Info (docs:ios-actions) | Done | Settings › Diagnostics |
