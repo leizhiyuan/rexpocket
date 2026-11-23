@@ -36,7 +36,6 @@ import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.LoginLinkGate
 import me.leaver.rexpocket.core.Trouble
 import me.leaver.rexpocket.data.SavedHost
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.res.stringResource
@@ -125,7 +124,7 @@ fun RexPocketApp(
             loginGate.asked(tailnetStage)
         }
     }
-    RexTheme(appearance.app, appearance.terminal) {
+    RexTheme(appearance.app, appearance.terminal, appearance.text) {
         Box(
             Modifier
                 .fillMaxSize()

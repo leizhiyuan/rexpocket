@@ -6,6 +6,7 @@ import me.leaver.rexpocket.core.AppTheme
 import me.leaver.rexpocket.core.AlertPrefs
 import me.leaver.rexpocket.core.CtrlCKey
 import me.leaver.rexpocket.core.TerminalColors
+import me.leaver.rexpocket.core.TextSize
 import me.leaver.rexpocket.core.BarKey
 import me.leaver.rexpocket.core.KeyArrangement
 import me.leaver.rexpocket.core.GestureSettings
@@ -326,16 +327,21 @@ class HostStore(context: Context) {
         prefs.edit().putBoolean(KEY_REOPEN_LAST_TAB, on).apply()
     }
 
-    /** Settings › Appearance: the app's theme and the terminal's colours; the phone's and the app's until set. */
+    /**
+     * Settings › Appearance: the app's theme, the terminal's colours and the app's text size; the
+     * phone's, the app's and the phone's until set.
+     */
     fun appearance(): Appearance = Appearance(
         app = AppTheme.fromPref(prefs.getString("app_theme", null)),
         terminal = TerminalColors.fromPref(prefs.getString("terminal_colors", null)),
+        text = TextSize.fromPref(prefs.getString("text_size", null)),
     )
 
     fun setAppearance(appearance: Appearance) {
         prefs.edit()
             .putString("app_theme", appearance.app.pref)
             .putString("terminal_colors", appearance.terminal.pref)
+            .putString("text_size", appearance.text.pref)
             .apply()
     }
 

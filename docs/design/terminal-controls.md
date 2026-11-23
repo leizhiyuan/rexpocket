@@ -398,6 +398,18 @@ colours set only the pane's paper, ink, cursor and selection (`Colors.pane`, `te
 the bars around it stay the app's, and the closed-pane and empty notes, which are app text, keep
 the app's paper. Matching the desk's own terminal colours is not offered yet (rex-parity.md).
 
+**Text size** (System · 85% · 115% · 130% · 150%; System by default, stored as `text_size`) scales
+the app's text on top of Android's font size: `RexTheme` provides a `LocalDensity` whose font scale
+is the phone's times the step (`TextSize.fontScale`, no further than 2.0 unless the phone already
+is), made from a configuration with that scale so Android 14's non-linear scaling still applies. It
+changes live, with no new activity. A dialog, a bottom sheet and a popup are windows of their own
+whose density is the phone's again, so `ActionSheet`, the package's `AlertDialog` (Material's, with
+each slot scaled) and the key bar's popups apply it once more (`AppTextScale`, which is idempotent);
+HomeScreen.kt still imports Material's `AlertDialog`, so its host and tailnet dialogs follow only
+the phone's size until that import goes. The terminal does not follow: its view draws in its own sp
+size (Terminal font, a pinch, the palette's bigger and smaller), which already follows Android's
+font size, and the row says so under its label. Diagnostics reports the step as `text size`.
+
 Terminal controls is a sheet with two groups:
 
 - **Gestures**: Tap, Double tap, Long press, Wait for double tap, Double-tap time, Long-press

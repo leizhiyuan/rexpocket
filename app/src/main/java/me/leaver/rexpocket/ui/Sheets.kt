@@ -139,7 +139,7 @@ internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, onBack: (
         dragHandle = {
             Box(Modifier.padding(top = 10.dp, bottom = 4.dp).size(width = 36.dp, height = 5.dp).clip(CircleShape).background(Colors.line))
         },
-    ) {
+    ) { AppTextScale {
         Column(
             Modifier.fillMaxWidth().testTag(ACTION_SHEET_TAG).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
                 .padding(bottom = 12.dp),
@@ -178,7 +178,7 @@ internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, onBack: (
             }
             rows.content()
         }
-    }
+    } }
 }
 
 /**

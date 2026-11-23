@@ -8,15 +8,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.AppTheme
 import me.leaver.rexpocket.core.Appearance
 import me.leaver.rexpocket.core.TerminalColors
+import me.leaver.rexpocket.core.TextSize
 import me.leaver.rexpocket.data.HostStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -96,13 +100,51 @@ class AppearanceTest {
         assertFalse(Colors.paneDark)
         assertEquals(0xFFFFFFFF.toInt(), terminalTheme().background)
     }
+
+    /** How tall the words [text] are drawn: in the sheet, or in the open picker with [inPicker]. */
+    private fun heightOf(text: String, inPicker: Boolean = false): Int {
+        val matcher = if (inPicker) hasText(text) and hasAnyAncestor(hasTestTag(PICKER_TAG)) else hasText(text)
+        return compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().first().size.height
+    }
+
+    private fun pickerHeightOf(text: String): Int {
+        compose.onNode(hasText(string(R.string.appearance_text_size)) and hasClickAction()).performScrollTo().performClick()
+        compose.waitForIdle()
+        return heightOf(text, inPicker = true).also {
+            compose.onNode(hasText(string(R.string.action_cancel)) and hasClickAction()).performClick()
+            compose.waitForIdle()
+        }
+    }
+
+    @Test
+    fun theTextSizeShowsAtOnceInTheSheetAndItsPickerAndIsKept() {
+        assertRowSays(R.string.appearance_text_size, R.string.appearance_system, R.drawable.ic_text_fields)
+        // Under its label, the row says the terminal is not part of it.
+        compose.onNode(hasText(string(R.string.appearance_text_size_hint))).assertExists()
+        val title = heightOf(string(R.string.appearance_title))
+        val option = pickerHeightOf(string(R.string.text_size_85))
+
+        compose.pick(string(R.string.appearance_text_size), string(R.string.text_size_150))
+        assertRowSays(R.string.appearance_text_size, R.string.text_size_150, R.drawable.ic_text_fields)
+        // The sheet and the dialog are windows of their own; both draw the new size at once.
+        assertTrue("sheet title $title -> ${heightOf(string(R.string.appearance_title))}", heightOf(string(R.string.appearance_title)) > title * 1.25)
+        assertTrue("picker option $option", pickerHeightOf(string(R.string.text_size_85)) > option * 1.25)
+
+        val kept = Appearance(text = TextSize.Largest)
+        assertEquals(kept, model.appearance.value)
+        assertEquals(kept, HostStore(compose.activity).appearance())
+        assertEquals("the terminal keeps its own size", 1f, model.fontScale.value)
+
+        compose.pick(string(R.string.appearance_text_size), string(R.string.appearance_system))
+        assertEquals(title, heightOf(string(R.string.appearance_title)))
+    }
 }
 
 /** Appearance as HomeScreen opens it, in the theme RexApp gives the app from the same value. */
 @Composable
 internal fun AppearanceOnModel(model: RexViewModel, open: Boolean) {
     val appearance by model.appearance.collectAsState()
-    RexTheme(appearance.app, appearance.terminal) {
+    RexTheme(appearance.app, appearance.terminal, appearance.text) {
         if (open) AppearanceSheet(appearance, model::setAppearance, onDismiss = {})
     }
 }

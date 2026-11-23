@@ -282,6 +282,17 @@
     <string name="appearance_always_dark_hint">Light text on a dark pane, even in a light app</string>
     <string name="appearance_always_light">Always light</string>
     <string name="appearance_always_light_hint">Dark text on a light pane, even in a dark app</string>
+    <string name="appearance_text_size">Text size</string>
+    <string name="appearance_text_size_hint">The terminal keeps its own size</string>
+    <string name="text_size_system_hint">Android\'s font size, as the phone is set</string>
+    <string name="text_size_85" formatted="false">85%</string>
+    <string name="text_size_85_hint">Smaller than Android\'s font size</string>
+    <string name="text_size_115" formatted="false">115%</string>
+    <string name="text_size_115_hint">A little larger than Android\'s font size</string>
+    <string name="text_size_130" formatted="false">130%</string>
+    <string name="text_size_130_hint">Larger than Android\'s font size</string>
+    <string name="text_size_150" formatted="false">150%</string>
+    <string name="text_size_150_hint">Half as large again as Android\'s font size</string>
     <string name="terminal_a11y_label">Terminal</string>
     <string name="controls_group_gestures">Gestures</string>
     <string name="controls_group_keys">Key bar</string>

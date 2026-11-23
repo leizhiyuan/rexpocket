@@ -250,11 +250,14 @@ class ScreenshotsTest {
     @Test fun tapPickerPortrait() = picker("picker-tap-portrait")
     @Test fun tapPickerLandscape() { landscape(); picker("picker-tap-landscape") }
 
-    /** Settings › Appearance with a light app and an always-dark terminal; with [row], that row's picker. */
-    private fun appearance(name: String, row: Int? = null) {
+    /**
+     * Settings › Appearance with a light app and an always-dark terminal; with [row], that row's
+     * picker; with [text], the app's text at that size.
+     */
+    private fun appearance(name: String, row: Int? = null, text: me.leaver.rexpocket.core.TextSize = me.leaver.rexpocket.core.TextSize.System) {
         val model = RexViewModel(freshApp())
         compose.runOnUiThread {
-            model.setAppearance(me.leaver.rexpocket.core.Appearance(me.leaver.rexpocket.core.AppTheme.Light, me.leaver.rexpocket.core.TerminalColors.Dark))
+            model.setAppearance(me.leaver.rexpocket.core.Appearance(me.leaver.rexpocket.core.AppTheme.Light, me.leaver.rexpocket.core.TerminalColors.Dark, text))
         }
         compose.setContent { AppearanceOnModel(model, open = true) }
         compose.waitForIdle()
@@ -446,6 +449,12 @@ class ScreenshotsTest {
     @Test fun largeFont13TailnetSignIn() { large(1.3f); tailnet("large-1.3-tailnet-needs-login", TailnetSamples.needsLogin) }
     @Test fun largeFont15TailnetSignIn() { large(1.5f); tailnet("large-1.5-tailnet-needs-login", TailnetSamples.needsLogin) }
     @Test fun largeFont15TailnetConnected() { large(1.5f); tailnet("large-1.5-tailnet-connected", TailnetSamples.connected()) }
+    // Text size at its largest on top of a phone at 1.3: the app's text at 1.95.
+    @Test fun textSize150On13Appearance() { large(1.3f); appearance("large-1.3-text-150-appearance", text = me.leaver.rexpocket.core.TextSize.Largest) }
+    @Test fun textSize150On13Picker() {
+        large(1.3f)
+        appearance("large-1.3-text-150-picker", R.string.appearance_text_size, me.leaver.rexpocket.core.TextSize.Largest)
+    }
     @Test fun largeFont15TailnetNotJoined() { large(1.5f); tailnet("large-1.5-tailnet-not-joined", TailnetSamples.starting, joined = false) }
 }
 

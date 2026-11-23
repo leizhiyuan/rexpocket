@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import me.leaver.rexpocket.core.AppTheme
 import me.leaver.rexpocket.core.TerminalColors
+import me.leaver.rexpocket.core.TextSize
 import me.leaver.rexpocket.core.UpdateChannel
 import org.junit.Test
 
@@ -25,10 +26,11 @@ class ChoiceTest {
         val all = TapAction.entries.map(::choice) + DoubleTapAction.entries.map(::choice) +
             LongPressAction.entries.map(::choice) + CtrlCKey.entries.map(::choice) +
             ON_OFF.map(::waitChoice) + ON_OFF.map(::keyBarChoice) + ON_OFF.map(::reopenChoice) +
-            UpdateChannel.entries.map(::channelChoice) + AppTheme.entries.map(::choice) + TerminalColors.entries.map(::choice)
+            UpdateChannel.entries.map(::channelChoice) + AppTheme.entries.map(::choice) + TerminalColors.entries.map(::choice) +
+            TextSize.entries.map(::choice)
         for (c in all) assertNotEquals("description of $c", 0, c.description)
         // Within one setting, no two choices read alike in its picker.
-        for (setting in listOf(AppTheme.entries.map(::choice), TerminalColors.entries.map(::choice), TapAction.entries.map(::choice))) {
+        for (setting in listOf(AppTheme.entries.map(::choice), TerminalColors.entries.map(::choice), TextSize.entries.map(::choice), TapAction.entries.map(::choice))) {
             assertEquals(setting.size, setting.map { it.description }.distinct().size)
         }
     }

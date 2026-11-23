@@ -1180,6 +1180,7 @@ class RexViewModel @JvmOverloads constructor(
             add(ReportedFact("alerts", if (alerts.value) "on" else "off"))
             add(ReportedFact("foreground", if (foreground) "yes" else "no"))
             add(ReportedFact("font", "${(fontScale.value * 100).toInt()}%"))
+            add(ReportedFact("text size", appearance.value.text.pref))
             upload.value?.let { file ->
                 add(ReportedFact("upload", "${file.phase} ${file.sent}/${file.total}${file.error?.let { " · $it" }.orEmpty()}"))
             }

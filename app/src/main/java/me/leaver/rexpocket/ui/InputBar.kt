@@ -546,7 +546,8 @@ private fun GroupKey(group: KeyGroup, modifier: Modifier, open: Boolean, actions
             // At least two rows, so a panel over a bar with little above it still has keys to scroll.
             val room = with(density) { (top - 2 * edge).toDp() }.coerceAtLeast(MORE_PANEL_MIN)
             Popup(popupPositionProvider = above, properties = PopupProperties(focusable = false)) {
-                GroupPanel(group, if (top > 0) room else Dp.Infinity, actions)
+                // A popup is a window of its own: its keys read at the bar's text size again.
+                AppTextScale { GroupPanel(group, if (top > 0) room else Dp.Infinity, actions) }
             }
         }
     }
@@ -932,7 +933,7 @@ private fun CtrlKey(latch: Latch, modifier: Modifier, plate: Color, onTap: () ->
                 popupPositionProvider = placement,
                 onDismissRequest = { dismiss() },
                 properties = PopupProperties(focusable = false, dismissOnClickOutside = true),
-            ) {
+            ) { AppTextScale {
                 Column(
                     Modifier.width(CHORD_GRID_WIDTH).floating(RoundedCornerShape(Radius.card))
                         .padding(CHORD_PAD)
@@ -957,7 +958,7 @@ private fun CtrlKey(latch: Latch, modifier: Modifier, plate: Color, onTap: () ->
                         }
                     }
                 }
-            }
+            } }
         }
     }
 }

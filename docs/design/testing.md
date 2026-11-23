@@ -67,7 +67,12 @@ tailnet's card, the first run and the host dialog on a 360 dp phone with the fon
 larger, and fails on any text that is ellipsized or runs past the lines it may take (each Text's own
 layout says so). The host dialog runs on the emulator only: a text field in a dialog never lets
 Compose idle on Robolectric, so it has no picture either. `ScreenshotsTest` takes the same screens
-as `large-1.3-*` and `large-1.5-*` (Robolectric's `setFontScale` on a `w360dp` screen). A sheet row
+as `large-1.3-*` and `large-1.5-*` (Robolectric's `setFontScale` on a `w360dp` screen). The
+`…Largest13` cases put Settings › Appearance › Text size at 150% on a phone at 1.3 (the app's text at
+1.95): Terminal controls, Arrange keys, Appearance and its Text size picker, Settings, Home and the
+first run; `large-1.3-text-150-*` are their pictures. `AppearanceTest` checks a pick redraws the sheet
+and its picker larger at once (each is a window of its own, which a `LocalDensity` set outside does
+not reach: before `AppTextScale`, the sheets in these tests were drawn at the phone's size). A sheet row
 whose detail no longer fits beside its label puts the detail under it (`SheetItem`).
 
 A new screen or settings page gets: a shared screen test following the rules above, and a

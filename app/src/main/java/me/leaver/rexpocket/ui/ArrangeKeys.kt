@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
@@ -457,7 +456,7 @@ private fun ArrangeRow(
         Column(Modifier.weight(1f).padding(start = 4.dp, top = 6.dp, bottom = 6.dp)) {
             Text(name, color = Colors.ink, fontSize = TextStyles.body, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (supporting != null) {
-                Text(supporting, color = Colors.muted, fontSize = TextStyles.label, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(supporting, color = Colors.muted, fontSize = TextStyles.label, maxLines = 4, overflow = TextOverflow.Ellipsis)
             }
         }
         StepButton(R.drawable.ic_arrow_up, stringResource(R.string.arrange_move_up, name), enabled = !first) { onMove(-1) }

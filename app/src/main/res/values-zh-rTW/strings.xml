@@ -278,6 +278,17 @@
     <string name="appearance_always_dark_hint">深色背景淺色文字，應用程式淺色時也一樣</string>
     <string name="appearance_always_light">一律淺色</string>
     <string name="appearance_always_light_hint">淺色背景深色文字，應用程式深色時也一樣</string>
+    <string name="appearance_text_size">文字大小</string>
+    <string name="appearance_text_size_hint">終端機保留自己的字級</string>
+    <string name="text_size_system_hint">使用手機設定的字型大小</string>
+    <string name="text_size_85" formatted="false">85%</string>
+    <string name="text_size_85_hint">比系統字型小一些</string>
+    <string name="text_size_115" formatted="false">115%</string>
+    <string name="text_size_115_hint">比系統字型大一些</string>
+    <string name="text_size_130" formatted="false">130%</string>
+    <string name="text_size_130_hint">比系統字型更大</string>
+    <string name="text_size_150" formatted="false">150%</string>
+    <string name="text_size_150_hint">系統字型的 1.5 倍</string>
     <string name="terminal_a11y_label">終端機</string>
     <string name="controls_group_gestures">手勢</string>
     <string name="controls_group_keys">按鍵列</string>

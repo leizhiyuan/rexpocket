@@ -28,5 +28,20 @@ class AppearanceTest {
         assertEquals(AppTheme.System, AppTheme.fromPref("sepia"))
         assertEquals(TerminalColors.MatchApp, TerminalColors.fromPref(null))
         assertEquals(TerminalColors.MatchApp, TerminalColors.fromPref("desk"))
+        for (size in TextSize.entries) assertEquals(size, TextSize.fromPref(size.pref))
+        assertEquals(TextSize.System, TextSize.fromPref(null))
+        assertEquals(TextSize.System, TextSize.fromPref("200"))
+    }
+
+    @Test
+    fun theTextSizeIsAStepOnTopOfThePhones() {
+        assertEquals(1.3f, TextSize.System.fontScale(1.3f), 0f)
+        assertEquals(0.85f, TextSize.Smaller.fontScale(1f), 1e-6f)
+        assertEquals(1.5f, TextSize.Largest.fontScale(1f), 1e-6f)
+        assertEquals(1.495f, TextSize.Large.fontScale(1.15f), 1e-6f)
+        // No further than Android goes; a phone already past it is left as it is.
+        assertEquals(2f, TextSize.Largest.fontScale(1.5f), 0f)
+        assertEquals(2.2f, TextSize.Largest.fontScale(2.2f), 0f)
+        assertEquals(1.87f, TextSize.Smaller.fontScale(2.2f), 1e-6f)
     }
 }

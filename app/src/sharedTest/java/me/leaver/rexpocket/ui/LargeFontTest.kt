@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.Appearance
+import me.leaver.rexpocket.core.TextSize
 import me.leaver.rexpocket.net.TailnetStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeFalse
@@ -38,6 +40,9 @@ import org.junit.runner.RunWith
  * says so. Runs on the JVM (Robolectric) and on the emulator; the host dialog only on the emulator,
  * as a text field in a dialog never lets Compose idle on Robolectric. ScreenshotsTest takes the
  * pictures (large-*).
+ *
+ * The `…Largest13` cases add Settings › Appearance › Text size at its largest step on top of a
+ * phone at 1.3: the app's text at 1.95, near the 2.0 the setting stops at.
  */
 @RunWith(AndroidJUnit4::class)
 class LargeFontTest {
@@ -75,8 +80,14 @@ class LargeFontTest {
     private fun assertNothingCutOff(except: (String) -> Boolean = { false }) =
         assertEquals("cut off", emptyList<String>(), cutOff().filterNot(except))
 
-    private fun controls(scale: Float, page: ControlsPage) {
+    /** The app's text size on [model], as Settings › Appearance sets it. */
+    private fun textSize(model: RexViewModel, text: TextSize) {
+        if (text != TextSize.System) compose.runOnUiThread { model.setAppearance(Appearance(text = text)) }
+    }
+
+    private fun controls(scale: Float, page: ControlsPage, text: TextSize = TextSize.System) {
         val model = RexViewModel(freshApp())
+        textSize(model, text)
         show(scale) { ControlsOnModel(model, page, onPage = {}, bar = false) }
         assertNothingCutOff()
     }
@@ -85,6 +96,8 @@ class LargeFontTest {
     @Test fun controls15() = controls(1.5f, ControlsPage.Controls)
     @Test fun arrangeKeys13() = controls(1.3f, ControlsPage.ArrangeKeys)
     @Test fun arrangeKeys15() = controls(1.5f, ControlsPage.ArrangeKeys)
+    @Test fun controlsLargest13() = controls(1.3f, ControlsPage.Controls, TextSize.Largest)
+    @Test fun arrangeKeysLargest13() = controls(1.3f, ControlsPage.ArrangeKeys, TextSize.Largest)
 
     /** A choice row's picker, open over Terminal controls: every option's words and what it does. */
     private fun picker(scale: Float, row: Int) {
@@ -99,8 +112,9 @@ class LargeFontTest {
     @Test fun tapPicker15() = picker(1.5f, R.string.gesture_tap)
     @Test fun ctrlCPicker15() = picker(1.5f, R.string.keybar_ctrl_c)
 
-    private fun appearance(scale: Float, pickerOf: Int? = null) {
+    private fun appearance(scale: Float, pickerOf: Int? = null, text: TextSize = TextSize.System) {
         val model = RexViewModel(freshApp())
+        textSize(model, text)
         show(scale) { AppearanceOnModel(model, open = true) }
         if (pickerOf != null) {
             compose.onNode(hasText(compose.activity.getString(pickerOf)) and hasClickAction()).performClick()
@@ -111,11 +125,20 @@ class LargeFontTest {
 
     @Test fun appearance15() = appearance(1.5f)
     @Test fun terminalColoursPicker15() = appearance(1.5f, R.string.appearance_terminal)
+    @Test fun appearanceLargest13() = appearance(1.3f, text = TextSize.Largest)
+    @Test fun textSizePickerLargest13() = appearance(1.3f, R.string.appearance_text_size, TextSize.Largest)
 
-    private fun home(scale: Float, status: TailnetStatus, joined: Boolean = true, hosts: List<me.leaver.rexpocket.data.SavedHost>? = null) {
+    private fun home(
+        scale: Float,
+        status: TailnetStatus,
+        joined: Boolean = true,
+        hosts: List<me.leaver.rexpocket.data.SavedHost>? = null,
+        text: TextSize = TextSize.System,
+    ) {
         val node = FakeTailnetNode()
         node.state.value = status
         val model = tailnetModel(compose, node, hosts ?: listOf(TailnetSamples.macHost, TailnetSamples.nasHost), joined = joined)
+        textSize(model, text)
         try {
             show(scale) { RexPocketApp(model, openUrl = {}) }
             compose.awaitThat { model.tailnetStage.value != me.leaver.rexpocket.core.TailnetStage.Off || !joined }
@@ -131,12 +154,15 @@ class LargeFontTest {
     @Test fun homeNotJoined15() = home(1.5f, TailnetSamples.starting, joined = false)
     @Test fun firstRun15() = home(1.5f, TailnetSamples.starting, joined = false, hosts = emptyList())
     @Test fun firstRunSignIn15() = home(1.5f, TailnetSamples.needsLogin, hosts = emptyList())
+    @Test fun homeConnectedLargest13() = home(1.3f, TailnetSamples.connected(), text = TextSize.Largest)
+    @Test fun firstRunLargest13() = home(1.3f, TailnetSamples.starting, joined = false, hosts = emptyList(), text = TextSize.Largest)
 
-    private fun settings(scale: Float) {
+    private fun settings(scale: Float, text: TextSize = TextSize.System) {
         RexOnDesk(sessions = 1).use { desk ->
             val app = freshApp()
             desk.saveFor(app, lastSession = desk.ids[0])
             val model = launchedModel(compose, app)
+            textSize(model, text)
             try {
                 show(scale) { RexPocketApp(model) }
                 compose.awaitLive(model, desk.ids[0])
@@ -151,6 +177,7 @@ class LargeFontTest {
 
     @Test fun settings13() = settings(1.3f)
     @Test fun settings15() = settings(1.5f)
+    @Test fun settingsLargest13() = settings(1.3f, TextSize.Largest)
 
     private fun hostDialog(scale: Float, address: String) {
         assumeFalse("a text field in a dialog never idles on Robolectric", onRobolectric)

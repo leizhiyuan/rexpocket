@@ -57,7 +57,8 @@ internal fun ControlsOnModel(
     val gestures by model.gestures.collectAsState()
     val keyBar by model.keyBar.collectAsState()
     val ctrlC by model.keyBarCtrlC.collectAsState()
-    RexTheme {
+    val appearance by model.appearance.collectAsState()
+    RexTheme(textSize = appearance.text) {
         if (bar) {
             Box(Modifier.wrapContentWidth(unbounded = true).requiredWidth(891.dp)) {
                 KeyBar(
