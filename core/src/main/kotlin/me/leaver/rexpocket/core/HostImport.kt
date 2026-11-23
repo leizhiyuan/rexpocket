@@ -52,31 +52,42 @@ object HostListFormat {
         } catch (e: JSONException) {
             null
         } ?: return fail(ImportProblem.Kind.NotJson)
+        return read(root, HostListRules())
+    }
+
+    /**
+     * Reads a host list already parsed as JSON: a file's root, or the list a settings backup
+     * embeds (settings-backup.md), which [rules] widen. Everything is checked before anything is
+     * returned; one bad entry fails the list.
+     */
+    internal fun read(root: JSONObject, rules: HostListRules): HostImportParse {
         val format = root.opt("format")
         if (format == null || format == JSONObject.NULL) return fail(ImportProblem.Kind.MissingFormat)
         if (format != FORMAT) return fail(ImportProblem.Kind.WrongFormat, detail = format.toString().take(80))
         val list = root.opt("hosts") as? JSONArray ?: return fail(ImportProblem.Kind.NoHosts)
-        if (list.length() == 0) return fail(ImportProblem.Kind.NoHosts)
-        if (list.length() > MAX_HOSTS) return fail(ImportProblem.Kind.TooManyHosts, detail = list.length().toString())
+        if (list.length() == 0 && !rules.mayBeEmpty) return fail(ImportProblem.Kind.NoHosts)
+        if (list.length() > rules.maxHosts) return fail(ImportProblem.Kind.TooManyHosts, detail = list.length().toString())
 
         val hosts = ArrayList<ImportedHost>(list.length())
         for (i in 0 until list.length()) {
             val entry = i + 1
             val o = list.opt(i) as? JSONObject ?: return fail(ImportProblem.Kind.NotAnEntry, entry)
             val name = o.opt("name") as? String
-            if (name == null || !validName(name)) return fail(ImportProblem.Kind.BadName, entry, detail = name?.take(80))
+            if (name == null || !rules.validName(name)) return fail(ImportProblem.Kind.BadName, entry, detail = name?.take(80))
             fun problem(kind: ImportProblem.Kind, field: String? = null) = fail(kind, entry, name, field)
             if (hosts.any { it.name.equals(name, ignoreCase = true) }) return problem(ImportProblem.Kind.DuplicateName)
             for (field in listOf("uri", "dnsUri")) if (!o.isStringOrNull(field)) return problem(ImportProblem.Kind.BadUri, field)
             val uriText = o.stringOrNull("uri")
             val dnsText = o.stringOrNull("dnsUri")
             if (uriText == null && dnsText == null) return problem(ImportProblem.Kind.NoAddress)
-            val uri = uriText?.let { raw -> readSshUri(raw).let { it.address ?: return problem(it.problem!!, "uri") } }
-            val dns = dnsText?.let { raw -> readSshUri(raw).let { it.address ?: return problem(it.problem!!, "dnsUri") } }
+            val uri = uriText?.let { raw -> readUri(raw, rules).let { it.address ?: return problem(it.problem!!, "uri") } }
+            val dns = dnsText?.let { raw -> readUri(raw, rules).let { it.address ?: return problem(it.problem!!, "dnsUri") } }
 
             if (!o.isStringOrNull("hostKeyFingerprint")) return problem(ImportProblem.Kind.BadFingerprint)
             val fingerprint = o.stringOrNull("hostKeyFingerprint")
             if (fingerprint != null && !validFingerprint(fingerprint)) return problem(ImportProblem.Kind.BadFingerprint)
+            // A host key belongs to an SSH address: a Rex port has none to pin.
+            if (fingerprint != null && !(dns ?: uri!!).ssh) return problem(ImportProblem.Kind.BadFingerprint)
 
             if (!o.isStringOrNull("keyComment")) return problem(ImportProblem.Kind.BadKeyComment)
             val comment = o.stringOrNull("keyComment")
@@ -92,26 +103,69 @@ object HostListFormat {
         return HostImportParse.Parsed(hosts)
     }
 
+    private fun readUri(raw: String, rules: HostListRules): UriRead {
+        val scheme = raw.trim().substringBefore("://", missingDelimiterValue = "").lowercase()
+        return if (rules.rexPorts && (scheme == "ws" || scheme == "wss")) readRexUri(raw) else readSshUri(raw)
+    }
+
+    /**
+     * `ws://host[:port]` or `wss://host[:port]`, Rex's own port, which only a settings backup may
+     * hold: no account, password, path, query or fragment.
+     */
+    internal fun readRexUri(raw: String): UriRead {
+        fun bad(kind: ImportProblem.Kind) = UriRead(null, kind)
+        val text = raw.trim()
+        val rest = text.substringAfter("://")
+        if (rest.contains('?')) return bad(ImportProblem.Kind.UriHasQuery)
+        if (rest.contains('#') || rest.trimEnd('/').contains('/')) return bad(ImportProblem.Kind.UriHasPath)
+        if (rest.contains('@')) return bad(ImportProblem.Kind.UriHasPassword)
+        val hostPort = rest.trimEnd('/')
+        val portText = if (hostPort.startsWith('[')) {
+            hostPort.substringAfter(']', "").takeIf { it.startsWith(':') }?.substring(1)
+        } else {
+            hostPort.substringAfterLast(':', "").takeIf { hostPort.contains(':') }
+        }
+        if (portText != null && (portText.toIntOrNull() ?: 0) !in 1..65535) return bad(ImportProblem.Kind.BadPort)
+        val parsed = HostAddressParser.parse(text) ?: return bad(ImportProblem.Kind.BadUri)
+        if (parsed.viaSsh || parsed.host.isBlank()) return bad(ImportProblem.Kind.BadUri)
+        return UriRead(ImportAddress(null, parsed.host, parsed.port, parsed.plaintext), null)
+    }
+
     /**
      * Writes [hosts] as a `rexpocket-hosts/1` file, which [parse] reads back: public data only, no
      * password or key ever. Only SSH hosts whose name the format allows go in; the others are
      * returned in [HostListExport.left].
      */
     fun write(hosts: List<ExportedHost>): HostListExport {
-        val (fit, left) = hosts.partition { h -> validName(h.name) && h.address.ssh }
+        val (root, export) = writeList(hosts, HostListRules())
+        return export.copy(text = root.toString(2))
+    }
+
+    /**
+     * The host list as JSON, and what went in and what was left out: [write]'s, or the wider list
+     * a settings backup embeds ([rules]: Rex ports and Rex's names too, more hosts). A second host
+     * of the same name is left out: the name is what an import matches by.
+     */
+    internal fun writeList(hosts: List<ExportedHost>, rules: HostListRules): Pair<JSONObject, HostListExport> {
+        val seen = HashSet<String>()
+        val (fit, left) = hosts.partition { h ->
+            rules.validName(h.name) && (h.address.ssh || rules.rexPorts) && seen.add(h.name.lowercase())
+        }
         val list = JSONArray()
-        fit.take(MAX_HOSTS).forEach { h ->
+        val written = fit.take(rules.maxHosts)
+        written.forEach { h ->
+            val other = h.fallbacks.firstOrNull { (it.ssh || rules.rexPorts) && !it.sameAs(h.address) }
             list.put(
                 JSONObject()
                     .put("name", h.name)
-                    .put("uri", h.fallbacks.firstOrNull { it.ssh }?.toString() ?: JSONObject.NULL)
+                    .put("uri", other?.toString() ?: JSONObject.NULL)
                     .put("dnsUri", h.address.toString())
-                    .put("hostKeyFingerprint", h.fingerprint?.takeIf { validFingerprint(it) } ?: JSONObject.NULL)
+                    .put("hostKeyFingerprint", h.fingerprint?.takeIf { h.address.ssh && validFingerprint(it) } ?: JSONObject.NULL)
                     .put("keyComment", h.keyComment?.takeIf { c -> c.isNotBlank() && c.length <= MAX_KEY_COMMENT && c.none { it.isISOControl() } } ?: JSONObject.NULL),
             )
         }
-        val text = JSONObject().put("format", FORMAT).put("hosts", list).toString(2)
-        return HostListExport(text, fit.take(MAX_HOSTS).map { it.name }, left.map { it.name } + fit.drop(MAX_HOSTS).map { it.name })
+        val root = JSONObject().put("format", FORMAT).put("hosts", list)
+        return root to HostListExport("", written.map { it.name }, left.map { it.name } + fit.drop(rules.maxHosts).map { it.name })
     }
 
     /** Exactly what [SshFingerprint] shows: no padding, and the base64 decodes to 32 bytes and back. */
@@ -158,6 +212,27 @@ object HostListFormat {
 }
 
 /**
+ * What a host list may hold. A `rexpocket-hosts/1` file holds SSH hosts named as a file name would
+ * be; the list a settings backup embeds keeps every host the phone has, so it also takes Rex's own
+ * port (`ws://`, `wss://`), Rex's rule for a name, no hosts at all, and more of them. See
+ * settings-backup.md.
+ */
+internal data class HostListRules(
+    val maxHosts: Int = HostListFormat.MAX_HOSTS,
+    val rexPorts: Boolean = false,
+    val rexNames: Boolean = false,
+    val mayBeEmpty: Boolean = false,
+) {
+    fun validName(name: String): Boolean =
+        if (rexNames) RexHostList.validLabel(name) else HostListFormat.validName(name)
+
+    companion object {
+        /** The list a settings backup embeds. */
+        val BACKUP = HostListRules(maxHosts = 200, rexPorts = true, rexNames = true, mayBeEmpty = true)
+    }
+}
+
+/**
  * The host list of a Rex the phone is connected to, from `hosts.list`: other Rex servers the desktop
  * reaches by label. Each endpoint is read as the app reads an address it is given; one the phone
  * cannot use (a Unix socket or named pipe, an `ssh://` with no account) is left out, and a host with
@@ -175,7 +250,7 @@ object RexHostList {
             val entry = i + 1
             val o = list.optJSONObject(i) ?: return fail(ImportProblem.Kind.NotAnEntry, entry)
             val label = o.optString("label")
-            if (label.isBlank() || label != label.trim() || label.length > MAX_LABEL || label.any { it.isISOControl() }) {
+            if (!validLabel(label)) {
                 return fail(ImportProblem.Kind.BadName, entry, detail = label.take(80))
             }
             if (hosts.any { it.name.equals(label, ignoreCase = true) }) return fail(ImportProblem.Kind.DuplicateName, entry, label)
@@ -190,6 +265,10 @@ object RexHostList {
         }
         return HostImportParse.Parsed(hosts, skipped)
     }
+
+    /** Rex's rule for a host's label: 1-64 characters, no surrounding spaces, no control characters. */
+    fun validLabel(label: String): Boolean =
+        label.isNotBlank() && label == label.trim() && label.length <= MAX_LABEL && label.none { it.isISOControl() }
 
     /** An endpoint as the phone can reach it, or null: a socket path works only on its own machine. */
     fun usable(endpoint: String): ImportAddress? {

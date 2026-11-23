@@ -155,6 +155,15 @@ class SshTunnel(
         }
     }
 
+    /**
+     * Connects the SSH session now, with no channel: the key exchange, the host key and the sign-in,
+     * which the host dialog's Test connection tells apart. Throws [SshHostKeyException],
+     * [SshAuthException] or [SshException]; blocking, at most [CONNECT_TIMEOUT_MS].
+     */
+    fun open() {
+        synchronized(lock) { connectLocked() }
+    }
+
     /** Connects when there is no live session. Callers hold [lock]. */
     private fun connectLocked(): Session {
         session?.takeIf { it.isConnected }?.let { return it }
