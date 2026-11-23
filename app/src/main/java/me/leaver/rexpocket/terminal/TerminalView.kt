@@ -94,6 +94,9 @@ internal class TerminalView(context: Context) : View(context) {
     /** A horizontal swipe; true when it went towards the next pane. */
     var onSwipe: ((forward: Boolean) -> Unit)? = null
 
+    /** Reported when the lowest visible row with content, cell height, or scroll-at-bottom state changes. */
+    var onContentBoundsChanged: ((contentBottomRow: Int, cellHeightPx: Float, atBottom: Boolean) -> Unit)? = null
+
     private val regular = Paint(Paint.ANTI_ALIAS_FLAG).apply { isSubpixelText = true }
     private val bold = Paint(regular)
     private val italic = Paint(regular)
@@ -111,6 +114,9 @@ internal class TerminalView(context: Context) : View(context) {
     private var cellWidth = 1f
     private var cellHeight = 1f
     private var baseline = 0f
+    private var lastReportedBottomRow = Int.MIN_VALUE
+    private var lastReportedCellHeight = -1f
+    private var lastReportedAtBottom = false
 
     /** What the pane drew last, for the moment a session is being replaced and has nothing yet. */
     private var lastFrame: TerminalFrame? = null
@@ -250,6 +256,17 @@ internal class TerminalView(context: Context) : View(context) {
         active.resize(columns, rows, cellWidth.roundToInt(), cellHeight.roundToInt())
     }
 
+    private fun reportContentBounds(frame: TerminalFrame) {
+        val callback = onContentBoundsChanged ?: return
+        val bottomRow = frame.contentBottomRow()
+        val atBottom = frame.atBottom
+        if (bottomRow == lastReportedBottomRow && cellHeight == lastReportedCellHeight && atBottom == lastReportedAtBottom) return
+        lastReportedBottomRow = bottomRow
+        lastReportedCellHeight = cellHeight
+        lastReportedAtBottom = atBottom
+        callback(bottomRow, cellHeight, atBottom)
+    }
+
     private fun currentFrame(): TerminalFrame? {
         val frame = session?.frame()
         if (frame != null) lastFrame = frame
@@ -269,6 +286,7 @@ internal class TerminalView(context: Context) : View(context) {
         val frame = selection?.frame ?: currentFrame()
         canvas.drawColor(frame?.background ?: theme.background)
         if (frame == null) return
+        reportContentBounds(frame)
         val columns = min(frame.columns, ceil(width / cellWidth).toInt())
         val rows = min(frame.rows, ceil(height / cellHeight).toInt())
         val images = if (frame.images.isEmpty()) emptyList() else frame.images.sortedWith(compareBy({ it.layer }, { it.z }))

@@ -241,16 +241,26 @@ internal fun TermScreen(
     // One paper for the whole screen, the terminal's: the top bar and the dock float on it, as they
     // do in the reference, instead of sitting on bands of a second grey.
     //
-    // The keyboard takes no room from the terminal. The pane keeps the grid it has and slides up by
-    // what the keyboard covers - the bottom of the terminal, the rows being typed into, stays where
-    // it was - while the dock and the rest of the bottom chrome rise over it. A program is therefore
-    // never resized by the screen keyboard opening, so it never redraws or reflows for it.
+    // The keyboard takes no room from the terminal. The pane keeps the grid it has and slides up
+    // only as far as needed to keep its lowest row of content above the keyboard, while the dock
+    // and the rest of the bottom chrome rise over it. A program is therefore never resized by the
+    // screen keyboard opening, so it never redraws or reflows for it.
     val hardwareKeys = rememberHardwareKeyboard()
     val dock = keyBarShown(hardwareKeys, keyBarWithKeyboard)
     var bottomPx by remember { mutableIntStateOf(0) }
     var panePx by remember { mutableIntStateOf(0) }
+    val shown = focused?.id
+    var contentBottomRow by remember(shown) { mutableStateOf<Int?>(null) }
+    var cellHeightPx by remember(shown) { mutableStateOf(0f) }
+    var atBottom by remember(shown) { mutableStateOf(true) }
     val density = LocalDensity.current
-    val slide = imeShift(imeHeight(), panePx)
+    val slide = imeShift(
+        imePx = imeHeight(),
+        paneHeightPx = panePx,
+        contentBottomRow = contentBottomRow,
+        cellHeightPx = cellHeightPx,
+        atBottom = atBottom,
+    )
 
     Box(Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.fillMaxSize().padding(bottom = with(density) { bottomPx.toDp() })) {
@@ -269,7 +279,6 @@ internal fun TermScreen(
             // The pane sits on its own paper: white in the day, the page at night, edge to edge, the
             // way a terminal fills the screen.
             Box(Modifier.weight(1f).fillMaxWidth().background(Colors.terminal).clipToBounds()) {
-                val shown = focused?.id
                 key(shown) {
                     TerminalPane(
                         blockId = shown.orEmpty(),
@@ -292,6 +301,11 @@ internal fun TermScreen(
                                 val next = (index + if (forward) 1 else -1).coerceIn(0, panes.lastIndex)
                                 if (next != index) onAct { focusBlock(panes[next].id) }
                             }
+                        },
+                        onContentBounds = { bottomRow, cellHeight, bottom ->
+                            contentBottomRow = bottomRow
+                            cellHeightPx = cellHeight
+                            atBottom = bottom
                         },
                         onError = { onAct { note(it.toProblem()) } },
                         modifier = Modifier.fillMaxSize()

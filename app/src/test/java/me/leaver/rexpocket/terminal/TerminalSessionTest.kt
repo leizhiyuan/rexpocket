@@ -300,6 +300,24 @@ class TerminalSessionTest {
         session.feedOutput("more".toByteArray())
     }
 
+    @Test
+    fun contentBottomRowTracksCursorAndLowestNonBlankRow() {
+        // Fresh shell with prompt on row 0: lowest content is row 0.
+        assertEquals(0, terminal(20, 10, "$ ").frameOf().contentBottomRow())
+
+        // Cursor moved down to row 3 on a blank line: cursor row wins.
+        assertEquals(3, terminal(20, 10, "hi\r\n\r\n\r\n").frameOf().contentBottomRow())
+
+        // Full-screen style: cursor hidden and text drawn near the bottom.
+        assertEquals(8, terminal(20, 10, "\u001b[?25l\u001b[9;1Hstatus").frameOf().contentBottomRow())
+
+        // Cursor above text on a lower row: lower non-blank row wins.
+        assertEquals(6, terminal(20, 10, "\u001b[7;1Hbottom\u001b[2;1H").frameOf().contentBottomRow())
+
+        // Completely empty viewport with hidden cursor: -1.
+        assertEquals(-1, terminal(20, 10, "\u001b[?25l").frameOf().contentBottomRow())
+    }
+
     private companion object {
         const val SNAPSHOT_BYTES = 1260
     }

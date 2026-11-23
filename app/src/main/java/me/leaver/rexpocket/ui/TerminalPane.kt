@@ -72,6 +72,8 @@ internal fun TerminalPane(
     hardwareKeyboard: Boolean = false,
     /** A horizontal swipe across the pane: forward means towards the next pane. */
     onSwipe: ((forward: Boolean) -> Unit)? = null,
+    /** Reported when the lowest visible row with content, cell height, or scroll-at-bottom state changes. */
+    onContentBounds: (contentBottomRow: Int, cellHeightPx: Float, atBottom: Boolean) -> Unit = { _, _, _ -> },
     onError: (Exception) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -84,6 +86,7 @@ internal fun TerminalPane(
     val currentLink = rememberUpdatedState(onLink)
     val currentResize = rememberUpdatedState(onResize)
     val currentSwipe = rememberUpdatedState(onSwipe)
+    val currentContentBounds = rememberUpdatedState(onContentBounds)
     val currentKeyboard = rememberUpdatedState(onKeyboard)
     val currentFont = rememberUpdatedState(onFont)
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
@@ -140,6 +143,9 @@ internal fun TerminalPane(
             // A horizontal swipe moves between the panes of a split, which is what the dots under
             // the card promise. Vertical drags stay the pane's own: history, or the program's wheel.
             view.onSwipe = { forward -> currentSwipe.value?.invoke(forward) }
+            view.onContentBoundsChanged = { bottomRow, cellHeightPx, atBottom ->
+                currentContentBounds.value(bottomRow, cellHeightPx, atBottom)
+            }
         }
     }
     // With a keyboard on the desk the pane holds the focus itself, so its keys reach the program

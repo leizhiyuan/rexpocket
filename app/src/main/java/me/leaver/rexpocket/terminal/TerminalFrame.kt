@@ -49,6 +49,20 @@ internal class TerminalFrame(
 
     fun isBlank(index: Int): Boolean = textLength[index] == 0 || (textLength[index] == 1 && text[textStart[index]] == ' '.code)
 
+    /**
+     * The lowest visible row that has content: the maximum of [cursorY] (when in view) and the
+     * last row with a non-blank cell, or -1 if the viewport is completely empty with no cursor.
+     */
+    fun contentBottomRow(): Int {
+        val cursor = if (cursorY in 0 until rows) cursorY else -1
+        for (row in (rows - 1) downTo (cursor + 1)) {
+            for (column in 0 until columns) {
+                if (!isBlank(index(column, row))) return row
+            }
+        }
+        return cursor
+    }
+
     /** The text of a cell as UTF-16, empty for a cell nothing was written to. */
     fun cellText(index: Int): String = String(text, textStart[index], textLength[index])
 
