@@ -103,14 +103,18 @@ class FleetTest {
         val prefs = MutableStateFlow(AlertPrefs())
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
+            val heard = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
             scope.launch(start = CoroutineStart.UNDISPATCHED) {
                 fleet.alertMoves(prefs) { true }.collect { alerts ->
+                    heard += alerts.hostId
                     for (move in alerts.moves) when (move) {
                         is AlertMove.Post -> posted += alerts.hostId to move.block
                         is AlertMove.Cancel -> cancelled += alerts.hostId to move.block
                     }
                 }
             }
+            // The first state each planner sees is what is already there; news is what comes after it.
+            until("both planners saw their host") { a.id in heard && b.id in heard }
             a.rex.report(a.block, "blocked", kind = "question", app = "claude", msg = "A?")
             b.rex.report(b.block, "blocked", kind = "permission", app = "codex", msg = "B?")
             until("both hosts' alerts") { (a.id to a.block) in posted && (b.id to b.block) in posted }
