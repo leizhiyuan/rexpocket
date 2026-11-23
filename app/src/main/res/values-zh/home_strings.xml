@@ -40,4 +40,16 @@
     <string name="home_reply_title">回复 %1$s</string>
     <string name="home_reply_send">发送</string>
     <string name="home_connect_and_create">连接并创建</string>
+    <string name="home_remove_host">移除主机…</string>
+    <string name="home_confirm_remove">移除 %1$s？</string>
+    <string name="home_remove">移除</string>
+    <string name="home_removed_host">已移除 %1$s</string>
+    <string name="home_disconnected">已断开 %1$s</string>
+    <string name="action_reconnect">重新连接</string>
+    <string name="home_ended_elsewhere">%1$s 已在 %2$s 上结束</string>
+    <string name="home_failed_rename">无法重命名：%1$s</string>
+    <string name="home_failed_new_tab">无法新建标签页：%1$s</string>
+    <string name="home_failed_end">无法结束会话：%1$s</string>
+    <string name="home_failed_close">无法关闭标签页：%1$s</string>
+    <string name="home_failed_move">无法移动：%1$s</string>
 </resources>

@@ -198,6 +198,26 @@ class HomeManageTest {
         assertNotAttached()
     }
 
+    /**
+     * A session ended at the desk while its sheet is open: the sheet goes, the home says where the
+     * session went, and its saved fold goes with it.
+     */
+    @Test
+    fun aSessionEndedAtTheDeskClosesItsSheetAndSaysSo() {
+        val m = start()
+        val name = label(m)
+        compose.onNode(hasText(name) and hasClickAction() and !hasAnyAncestorTagged()).performClick()
+        compose.awaitThat { me.leaver.rexpocket.data.HomeFolds.sessionKey(desk.host.id, other) in m.folds.value.sessions }
+        compose.onNode(hasContentDescription(string(R.string.manage_actions_for, name)) and hasClickAction()).performClick()
+        compose.waitForIdle()
+        inSheet(string(R.string.home_end_session)).assertExists()
+        desk.end(other)
+        compose.awaitThat { m.pocket.value.sessions.none { it.id == other } }
+        compose.awaitThat { compose.onAllNodes(hasText(string(R.string.home_ended_elsewhere, name, "desk"))).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(compose.onAllNodes(hasText(string(R.string.home_end_session)) and hasClickAction()).fetchSemanticsNodes().isEmpty())
+        compose.awaitThat { me.leaver.rexpocket.data.HomeFolds.sessionKey(desk.host.id, other) !in m.folds.value.sessions }
+    }
+
     private fun top(text: String) = compose.onNode(hasText(text) and hasClickAction() and !hasAnyAncestorTagged()).fetchSemanticsNode().boundsInRoot.top
 
     /**

@@ -52,6 +52,18 @@ device, closes. End session and Close tab confirm; Remove host confirms and offe
   Expand, Mark all as seen; Move up, Move down ("2 of 7", Rex's full order); End session….
 - Tab: Open, Rename…; Mark as seen; Move up, Move down; Close tab….
 
+**Hosts** are in the phone's own order (Move up and Move down in the host sheet; Rex has no order
+of hosts), never moved by their connection, so positions stay put; their headers stick to the top
+while their sessions scroll, and are TalkBack headings, their ⋮ named "Actions for mac". Remove
+host… confirms, disconnects and removes the host with its cached list, folds and seen marks; Undo
+puts it back in its place, not connected. (It is no longer in the host dialog.)
+
+**Snackbars**: "Disconnected mac · Reconnect", "Collapsed all · Undo", "Marked as seen · Undo",
+"Removed mac · Undo", "Couldn't rename: … · Retry" (and the same for a new tab, an end, a close, a
+move that Rex refused), and "api-work was ended on mac" when a session whose sheet or dialog was
+open, or that was on the terminal, was ended elsewhere (its saved fold goes too). End and Close
+confirm first, so they have no Undo, nor does Rename.
+
 ## Filters, search and the bottom bar
 
 **All, Needs you, Running** are chips at the top, with counts across every connected host; the
@@ -59,7 +71,17 @@ choice is kept. Needs you is waiting tabs, and failed and done tabs not yet seen
 tabs. Each is a flat list in Rex's priority order under each host's header (no folds), with Reply
 (never for `auth`, as in notifications) and Interrupt on Needs you's rows, and a line for each host
 that is not connected, with Connect. The home's ⋮ beside the chips has Expand all, Collapse all
-(with Undo), Add host, Import hosts and Tailnet.
+(with Undo), Add host, Import hosts and Tailnet; the tailnet is a chip there once connected, and the
+full card in the list while it is on its way or needs the person.
+
+The **bottom bar** holds ⚙, the search field (above the keyboard while it is up) and +. + makes a
+session on the one connected host, or asks which host, offering one that is not connected as
+"Connect & create". The search keeps the tree, every fold open and no chevrons, each row with its
+usual tap and ⋮; Back clears it. A + New tab row under a session's tabs makes a tab and opens it;
+the session sheet's New tab makes one without leaving the home.
+
+**Not built from the spec:** the "Moved to place 2 of 7" snackbar for a row moved out of view (the
+sheet's caption says the place, in Rex's full order, which a move always uses).
 
 ## Seen
 
@@ -85,10 +107,12 @@ is live.
 ## Tests
 
 `HomeStateTest` (status words, summaries, hidden-pane line; folds kept; a session without its tabs
-folds and opens from its button), `HomeManageTest` (sheets and TalkBack offer the same items, in
-order; moves, renames, ends, closes reach Rex without attaching), `MultiHostTest` (host taps fold,
-never connect; the three-state fold; the host sheet following its connection; a failing host's
-Retry), `ActivityViewTest` (Needs you and Running: order, counts, Mark as seen and Undo, seen on
+folds and opens from its button; Collapse all's Undo restores the folds exactly),
+`HomeManageTest` (sheets and TalkBack offer the same items, in order; moves, renames, ends, closes
+reach Rex without attaching; a session ended at the desk closes its sheet and says so),
+`MultiHostTest` (host taps fold, never connect; the three-state fold; the host sheet following its
+connection; a failing host's Retry; + with two, one and no hosts connected; host order and Remove
+host with Undo), `ActivityViewTest` (Needs you and Running: order, counts, Mark as seen and Undo, seen on
 the phone and on a desk, Reply hidden for `auth`, Interrupt, the not-connected line, the filter
 kept), `DeskSeenTest` (core, ScriptedRex: the desk inference), `ClientViewProbeTest` (rex-real:
 `client.inspect`'s shape).

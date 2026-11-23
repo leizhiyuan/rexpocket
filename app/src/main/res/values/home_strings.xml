@@ -41,4 +41,16 @@
     <string name="home_reply_title">Reply to %1$s</string>
     <string name="home_reply_send">Send</string>
     <string name="home_connect_and_create">Connect &amp; create</string>
+    <string name="home_remove_host">Remove host…</string>
+    <string name="home_confirm_remove">Remove %1$s?</string>
+    <string name="home_remove">Remove</string>
+    <string name="home_removed_host">Removed %1$s</string>
+    <string name="home_disconnected">Disconnected %1$s</string>
+    <string name="action_reconnect">Reconnect</string>
+    <string name="home_ended_elsewhere">%1$s was ended on %2$s</string>
+    <string name="home_failed_rename">Couldn\'t rename: %1$s</string>
+    <string name="home_failed_new_tab">Couldn\'t make a tab: %1$s</string>
+    <string name="home_failed_end">Couldn\'t end the session: %1$s</string>
+    <string name="home_failed_close">Couldn\'t close the tab: %1$s</string>
+    <string name="home_failed_move">Couldn\'t move it: %1$s</string>
 </resources>

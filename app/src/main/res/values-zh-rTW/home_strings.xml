@@ -40,4 +40,16 @@
     <string name="home_reply_title">回覆 %1$s</string>
     <string name="home_reply_send">傳送</string>
     <string name="home_connect_and_create">連線並建立</string>
+    <string name="home_remove_host">移除主機…</string>
+    <string name="home_confirm_remove">移除 %1$s？</string>
+    <string name="home_remove">移除</string>
+    <string name="home_removed_host">已移除 %1$s</string>
+    <string name="home_disconnected">已中斷 %1$s</string>
+    <string name="action_reconnect">重新連線</string>
+    <string name="home_ended_elsewhere">%1$s 已在 %2$s 上結束</string>
+    <string name="home_failed_rename">無法重新命名：%1$s</string>
+    <string name="home_failed_new_tab">無法新增分頁：%1$s</string>
+    <string name="home_failed_end">無法結束工作階段：%1$s</string>
+    <string name="home_failed_close">無法關閉分頁：%1$s</string>
+    <string name="home_failed_move">無法移動：%1$s</string>
 </resources>

@@ -42,6 +42,9 @@ internal sealed interface HomeDialog {
 
     /** End a session or close a tab. */
     data class Confirm(override val target: ManageTarget, val name: String) : HomeDialog
+
+    /** Remove a saved host; Undo brings it back, not connected. */
+    data class RemoveHost(override val target: ManageTarget.Host, val name: String) : HomeDialog
 }
 
 /**
@@ -90,6 +93,10 @@ internal class HomeOps(
     val seen: (hostId: String, blockId: String, ProgramRecord) -> Boolean = { _, _, _ -> false },
     /** Marks panes seen, with an Undo. */
     val markSeen: (hostId: String, blockIds: List<String>) -> Unit = { _, _ -> },
+    /** Moves a host to place [to] in the phone's own order of its hosts. */
+    val moveHost: (hostId: String, to: Int) -> Unit = { _, _ -> },
+    /** Removes a host, once confirmed, with an Undo. */
+    val removeHost: (hostId: String) -> Unit = {},
 )
 
 /** The done and failed panes of [windows] whose report was not seen yet. */
@@ -107,6 +114,9 @@ internal fun HomeOps.unseen(hostId: String, state: PocketState, windows: List<Wi
 internal class HomeSheets {
     var sheet by mutableStateOf<ManageTarget?>(null)
     var dialog by mutableStateOf<HomeDialog?>(null)
+
+    /** Sessions this phone ended, by host and session, so their going is not told as someone else's doing. */
+    val endedHere: MutableSet<String> = HashSet()
 
     companion object {
         /** The open sheet survives a rotation and a trip to the terminal, as the other sheets do. */
@@ -178,11 +188,15 @@ internal fun hostActions(
     sessions: List<ListedSession>,
     folds: HomeFolds,
     ops: HomeOps,
+    /** The host's place in the phone's list, and the list's length, for Move up and Move down. */
+    place: Int,
+    count: Int,
+    sheets: HomeSheets,
 ): List<ActionGroup> {
     val id = ref.host.id
     val why = needsLive(ref)
     val folded = sessions.count { HomeFolds.sessionKey(id, it.id) in folds.sessions }
-    return listOf(
+    return listOfNotNull(
         ActionGroup(connectionItems(ref, ops)),
         ActionGroup(
             listOfNotNull(
@@ -200,11 +214,20 @@ internal fun hostActions(
                 }.takeIf { sessions.isNotEmpty() },
             ),
         ),
+        // The phone's own order: hosts are not Rex's, so this order is kept here only.
+        moveGroup(place, count, null) { to -> ops.moveHost(id, to) },
         ActionGroup(
             listOfNotNull(
                 RowAction(stringResource(R.string.action_edit_host), R.drawable.ic_edit) { ops.editHost(id) },
                 RowAction(stringResource(R.string.home_copy_address), R.drawable.ic_copy) { ops.copyAddress(ref.host) },
                 RowAction(stringResource(R.string.home_tailnet_details), R.drawable.ic_tailnet) { ops.tailnetDetails() }.takeIf { ref.host.viaTailscale },
+            ),
+        ),
+        ActionGroup(
+            listOf(
+                RowAction(stringResource(R.string.home_remove_host), R.drawable.ic_delete, danger = true) {
+                    sheets.dialog = HomeDialog.RemoveHost(ManageTarget.Host(id), ref.host.label)
+                },
             ),
         ),
     )
@@ -364,7 +387,17 @@ internal fun HomeSheetsHost(
     folds: HomeFolds,
     cachedSessions: (String) -> List<ListedSession>,
     ops: HomeOps,
+    /** A session whose sheet or dialog was open was ended elsewhere: its name, and its host's. */
+    onEndedElsewhere: (session: String, host: String) -> Unit = { _, _ -> },
 ) {
+    // The last name each open session was seen by, for saying which one went.
+    val labels = androidx.compose.runtime.remember { HashMap<String, String>() }
+    fun endedElsewhere(hostId: String, sessionId: String) {
+        val key = HomeFolds.sessionKey(hostId, sessionId)
+        if (sheets.endedHere.remove(key)) return
+        val host = hosts.firstOrNull { it.id == hostId }?.label ?: return
+        onEndedElsewhere(labels[key] ?: return, host)
+    }
     fun refOf(id: String) = hosts.firstOrNull { it.id == id }?.let { HostRef(it, lives[it.id]) }
     when (val target = sheets.sheet) {
         is ManageTarget.Host -> {
@@ -373,7 +406,8 @@ internal fun HomeSheetsHost(
                 LaunchedEffect(target) { sheets.sheet = null }
             } else {
                 val sessions = ref.sessionsShown(cachedSessions(ref.host.id))
-                val groups = hostActions(ref, folds.hostOpen(ref.host.id, ref.connected), sessions, folds, ops)
+                val place = hosts.indexOfFirst { it.id == ref.host.id }
+                val groups = hostActions(ref, folds.hostOpen(ref.host.id, ref.connected), sessions, folds, ops, place, hosts.size, sheets)
                 RowActionsSheet(ref.host.label, groups) { sheets.sheet = null }
             }
         }
@@ -381,8 +415,12 @@ internal fun HomeSheetsHost(
             val ref = refOf(target.hostId)
             val session = ref?.sessionsShown(cachedSessions(target.hostId))?.firstOrNull { it.id == target.sessionId }
             if (ref == null || session == null) {
-                LaunchedEffect(target) { sheets.sheet = null }
+                LaunchedEffect(target) {
+                    sheets.sheet = null
+                    endedElsewhere(target.hostId, target.sessionId)
+                }
             } else {
+                labels[HomeFolds.sessionKey(target.hostId, session.id)] = ref.state.views[session.id]?.label ?: session.label
                 val expanded = HomeFolds.sessionKey(ref.host.id, session.id) !in folds.sessions
                 val title = ref.state.views[session.id]?.label ?: session.label
                 RowActionsSheet(title, sessionActions(ref, session, expanded, ops, sheets)) { sheets.sheet = null }
@@ -410,8 +448,14 @@ internal fun HomeSheetsHost(
         is ManageTarget.Tab -> ref.state.phase == Phase.Live && ref.state.views[t.sessionId]?.windows?.none { it.id == t.windowId } != false
     }
     if (gone) {
-        LaunchedEffect(open) { sheets.dialog = null }
+        LaunchedEffect(open) {
+            sheets.dialog = null
+            (open.target as? ManageTarget.Session)?.let { endedElsewhere(it.hostId, it.sessionId) }
+        }
         return
+    }
+    (open.target as? ManageTarget.Session)?.let { t ->
+        ref!!.state.views[t.sessionId]?.label?.let { labels[HomeFolds.sessionKey(t.hostId, t.sessionId)] = it }
     }
     val live = ref!!.isLive
     when (open) {
@@ -427,6 +471,22 @@ internal fun HomeSheetsHost(
                 is ManageTarget.Host -> Unit
             }
         }
+        is HomeDialog.RemoveHost -> AlertDialog(
+            onDismissRequest = { sheets.dialog = null },
+            containerColor = Colors.surface,
+            title = { Text(stringResource(R.string.home_confirm_remove, open.name), color = Colors.ink) },
+            text = { Text(stringResource(R.string.confirm_delete_host_body), color = Colors.muted) },
+            confirmButton = {
+                TextButton(onClick = {
+                    sheets.dialog = null
+                    sheets.sheet = null
+                    ops.removeHost(open.target.hostId)
+                }) { Text(stringResource(R.string.home_remove), color = Colors.danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { sheets.dialog = null }) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
+            },
+        )
         is HomeDialog.Confirm -> {
             val tab = open.target is ManageTarget.Tab
             AlertDialog(
@@ -446,7 +506,10 @@ internal fun HomeSheetsHost(
                     TextButton(enabled = live, onClick = {
                         sheets.dialog = null
                         when (val t = open.target) {
-                            is ManageTarget.Session -> ops.manage(t.hostId, HomeAction.EndSession(t.sessionId))
+                            is ManageTarget.Session -> {
+                                sheets.endedHere += HomeFolds.sessionKey(t.hostId, t.sessionId)
+                                ops.manage(t.hostId, HomeAction.EndSession(t.sessionId))
+                            }
                             is ManageTarget.Tab -> ops.manage(t.hostId, HomeAction.CloseTab(t.sessionId, t.windowId))
                             is ManageTarget.Host -> Unit
                         }
@@ -478,4 +541,13 @@ internal fun ReplyDialog(title: String, onDismiss: () -> Unit, onSend: (String) 
         confirmButton = { TextButton(onClick = { send() }) { Text(stringResource(R.string.home_reply_send), color = Colors.accent) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Colors.muted) } },
     )
+}
+
+/** How a failed sheet action is said: "Couldn't rename: …". */
+internal fun failedText(action: HomeAction): Int = when (action) {
+    is HomeAction.RenameSession, is HomeAction.RenameTab -> R.string.home_failed_rename
+    is HomeAction.NewTab -> R.string.home_failed_new_tab
+    is HomeAction.EndSession -> R.string.home_failed_end
+    is HomeAction.CloseTab -> R.string.home_failed_close
+    is HomeAction.MoveSession, is HomeAction.MoveTab -> R.string.home_failed_move
 }

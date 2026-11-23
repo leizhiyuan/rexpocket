@@ -688,6 +688,7 @@ class RexViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             var lastSession: Pair<String, String>? = null
             var lastPane: Triple<String, String, String>? = null
+            var shownLabel: String? = null
             combine(focusedLink.flatMapLatest { l -> l?.pocket?.map { l to it } ?: flowOf(null) }, route) { pair, r -> pair to r }
                 .collect { (pair, r) ->
                     val (link, st) = pair ?: run {
@@ -710,8 +711,14 @@ class RexViewModel @JvmOverloads constructor(
                             lastPane = Triple(link.id, shown.first, shown.second)
                             store.setLastPane(link.id, shown.first, shown.second, st.sessions.map { it.id })
                         }
-                        // A session that is no longer on Rex leaves nothing to show: back to the list.
-                        if (st.phase == Phase.Live && st.activeSessionId == null) route.value = Route.Home
+                        st.activeSessionId?.let { sid -> st.sessions.firstOrNull { it.id == sid }?.label?.let { shownLabel = it } }
+                        // A session that is no longer on Rex leaves nothing to show: back to the list,
+                        // which says where it went.
+                        if (st.phase == Phase.Live && st.activeSessionId == null) {
+                            route.value = Route.Home
+                            shownLabel?.let { _homeNotices.tryEmit(HomeNotice.Ended(it, link.target.label)) }
+                            shownLabel = null
+                        }
                     }
                 }
         }
@@ -1227,8 +1234,22 @@ class RexViewModel @JvmOverloads constructor(
     /** The home's session and tab sheets: on [hostId] (the focused host by default), without attaching the session. */
     fun manage(action: HomeAction, hostId: String? = null) {
         userActed()
-        val s = connections[hostId ?: focusId.value]?.session ?: return
-        act(s) {
+        val id = hostId ?: focusId.value ?: return
+        val s = connections[id]?.session ?: return
+        viewModelScope.launch {
+            try {
+                manageOn(s, action)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Said on the home, with a Retry: the terminal's banner is not where the person is.
+                _homeNotices.tryEmit(HomeNotice.Failed(id, action, e.toProblem().detail ?: e.message.orEmpty()))
+            }
+        }
+    }
+
+    private suspend fun manageOn(s: PocketSession, action: HomeAction) {
+        s.apply {
             when (action) {
                 is HomeAction.RenameSession -> renameSession(action.label, action.sessionId)
                 is HomeAction.NewTab -> newWindowIn(action.sessionId)
@@ -1239,6 +1260,45 @@ class RexViewModel @JvmOverloads constructor(
                 is HomeAction.MoveTab -> moveWindow(action.sessionId, action.windowId, action.to)
             }
         }
+    }
+
+    private val _homeNotices = kotlinx.coroutines.flow.MutableSharedFlow<HomeNotice>(extraBufferCapacity = 8)
+
+    /** What the home says in a snackbar that it did not ask for: an action that failed, a session ended elsewhere. */
+    val homeNotices: kotlinx.coroutines.flow.SharedFlow<HomeNotice> = _homeNotices
+
+    /** Moves [hostId] to place [to] in the phone's own order of its hosts: hosts are the phone's, not Rex's. */
+    fun moveHost(hostId: String, to: Int) {
+        val list = store.list().toMutableList()
+        val from = list.indexOfFirst { it.id == hostId }
+        if (from < 0) return
+        val host = list.removeAt(from)
+        list.add(to.coerceIn(0, list.size), host)
+        store.saveAll(list)
+        hosts.value = store.list()
+    }
+
+    /**
+     * Removes [hostId]: disconnected first, then forgotten with its cached list, folds and seen
+     * marks. Gives back what [restoreHost] needs to bring it back, not connected.
+     */
+    fun removeHost(hostId: String): RemovedHost? {
+        val list = store.list()
+        val index = list.indexOfFirst { it.id == hostId }
+        if (index < 0) return null
+        val removed = RemovedHost(list[index], index, store.cachedSessions(hostId), folds.value)
+        deleteHost(hostId)
+        return removed
+    }
+
+    /** Remove host's Undo: the host back in its place, with its cached list and folds; it stays disconnected. */
+    fun restoreHost(removed: RemovedHost) {
+        val list = store.list().filter { it.id != removed.host.id }.toMutableList()
+        list.add(removed.index.coerceIn(0, list.size), removed.host)
+        store.saveAll(list)
+        if (removed.cached.isNotEmpty()) store.setCachedSessions(removed.host.id, removed.cached)
+        hosts.value = store.list()
+        setFolds(removed.folds)
     }
 
     private val _share = MutableStateFlow<ShareOffer?>(null)
@@ -1327,6 +1387,18 @@ private const val UPLOAD_DONE_MS = 1_500L
 data class TailnetFailure(val detail: String?)
 
 private fun Problem.describe(): String = trouble.toString() + (detail?.let { ": $it" } ?: "")
+
+/** A removed host, for Remove host's Undo: where it stood, its cached list and the folds before. */
+data class RemovedHost(val host: SavedHost, val index: Int, val cached: List<ListedSession>, val folds: HomeFolds)
+
+/** What the home tells in a snackbar of its own accord. */
+sealed interface HomeNotice {
+    /** A session open on the phone, or in a sheet, was ended on another device. */
+    data class Ended(val session: String, val host: String) : HomeNotice
+
+    /** A sheet's action that Rex refused or that did not get through; Retry sends it again. */
+    data class Failed(val hostId: String, val action: HomeAction, val detail: String) : HomeNotice
+}
 
 /** Connection diagnostics: `adb logcat -s RexPocketConn`. */
 internal const val CONN_TAG = "RexPocketConn"

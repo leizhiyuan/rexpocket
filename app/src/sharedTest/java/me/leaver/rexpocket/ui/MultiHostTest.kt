@@ -90,7 +90,7 @@ class MultiHostTest {
         val linuxClient = client(m, linux)
         val macSession = label(m, mac)
         // The mac's ⋮ sheet (the first host on the list): Disconnect.
-        compose.onAllNodes(hasContentDescription(string(R.string.action_more)) and hasClickAction())[0].performClick()
+        compose.onNode(hasContentDescription(compose.activity.getString(R.string.manage_actions_for, "mac")) and hasClickAction()).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(string(R.string.action_disconnect)).performClick()
         compose.awaitThat { mac.host.id !in m.lives.value }
@@ -183,6 +183,40 @@ class MultiHostTest {
         assertEquals(2, compose.onAllNodes(hasText(string(R.string.home_connect_and_create))).fetchSemanticsNodes().size)
     }
 
+    private fun hostTop(label: String) = compose.onNode(hasText(label) and hasClickAction()).fetchSemanticsNode().boundsInRoot.top
+
+    /**
+     * Hosts in the phone's own order: Move down in a host's sheet moves it on screen and in the
+     * store. Remove host confirms, disconnects and removes it; Undo puts it back in its place,
+     * not connected, while the other host keeps its connection throughout.
+     */
+    @Test
+    fun aHostMovesInThePhonesOrderAndIsRemovedWithUndo() {
+        val m = start()
+        val linuxClient = client(m, linux)
+        assertTrue(hostTop("mac") < hostTop("linux"))
+        compose.onNode(hasContentDescription(compose.activity.getString(R.string.manage_actions_for, "mac")) and hasClickAction()).performClick()
+        compose.waitForIdle()
+        inSheet(string(R.string.action_move_down)).performClick()
+        compose.awaitThat { HostStore(compose.activity).list().map { it.id } == listOf(linux.host.id, mac.host.id) }
+        compose.waitForIdle()
+        assertTrue("the moved host is not below the other on screen", hostTop("linux") < hostTop("mac"))
+        inSheet(string(R.string.action_move_up)).assertIsEnabled()
+        inSheet(string(R.string.action_move_down)).assertIsNotEnabled()
+
+        inSheet(string(R.string.home_remove_host)).performClick()
+        compose.waitForIdle()
+        compose.onNode(hasText(string(R.string.home_remove)) and hasClickAction()).performClick()
+        compose.awaitThat { mac.host.id !in m.lives.value && m.hosts.value.none { it.id == mac.host.id } }
+        assertEquals(linuxClient, client(m, linux))
+        compose.onNode(hasText(string(R.string.action_undo)) and hasClickAction()).performClick()
+        compose.awaitThat { m.hosts.value.map { it.id } == listOf(linux.host.id, mac.host.id) }
+        compose.assertStaysHome(m, ms = 500)
+        assertFalse("Undo connected the host again", mac.host.id in m.lives.value)
+        assertEquals(listOf(linux.host.id), HostStore(compose.activity).connectedHosts())
+        compose.onNodeWithText("mac").assertExists()
+    }
+
     private fun androidx.compose.ui.test.SemanticsNodeInteraction.fetchSemanticsNodeOrNull() =
         runCatching { fetchSemanticsNode() }.getOrNull()
 
@@ -202,11 +236,12 @@ class MultiHostTest {
         assertEquals(
             listOf(
                 string(R.string.action_disconnect), string(R.string.session_new), string(R.string.home_action_collapse),
-                string(R.string.home_collapse_sessions), string(R.string.action_edit_host), string(R.string.home_copy_address),
+                string(R.string.home_collapse_sessions), string(R.string.action_move_down), string(R.string.action_edit_host),
+                string(R.string.home_copy_address), string(R.string.home_remove_host),
             ),
             actions,
         )
-        compose.onAllNodes(hasContentDescription(string(R.string.action_more)) and hasClickAction())[0].performClick()
+        compose.onNode(hasContentDescription(compose.activity.getString(R.string.manage_actions_for, "mac")) and hasClickAction()).performClick()
         compose.waitForIdle()
         inSheet(string(R.string.action_disconnect)).assertExists()
         inSheet(string(R.string.session_new)).assertIsEnabled()

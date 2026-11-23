@@ -111,6 +111,8 @@ import me.leaver.rexpocket.data.HomeFolds
 import me.leaver.rexpocket.data.HomeMarks
 import me.leaver.rexpocket.core.seenStamp
 import androidx.compose.material3.SnackbarDuration
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -163,6 +165,13 @@ internal fun HomeScreen(
     /** A Needs you row's Reply and Interrupt, on the pane's host. */
     onReply: (hostId: String, sessionId: String, blockId: String, text: String) -> Unit = { _, _, _, _ -> },
     onInterrupt: (hostId: String, sessionId: String, blockId: String) -> Unit = { _, _, _ -> },
+    /** Moves a host in the phone's own order. */
+    onMoveHost: (hostId: String, to: Int) -> Unit = { _, _ -> },
+    /** Removes a host; gives back what Undo needs. */
+    onRemoveHost: (hostId: String) -> RemovedHost? = { null },
+    onRestoreHost: (RemovedHost) -> Unit = {},
+    /** What the home says of its own accord: an action that failed, a session ended elsewhere. */
+    notices: Flow<HomeNotice> = emptyFlow(),
     onConnect: (SavedHost) -> Unit,
     onOpenSession: (SavedHost, String) -> Unit,
     onOpenTab: (SavedHost, String, String) -> Unit,
@@ -267,7 +276,12 @@ internal fun HomeScreen(
         connect = onConnect,
         retry = onRetry,
         cancel = onDisconnect,
-        disconnect = onDisconnect,
+        disconnect = { hostId ->
+            onDisconnect(hostId)
+            hosts.firstOrNull { it.id == hostId }?.let { host ->
+                snack(context.getString(R.string.home_disconnected, host.label), context.getString(R.string.action_reconnect)) { onConnect(host) }
+            }
+        },
         newSession = onNewSession,
         newTab = onNewTab,
         openSession = onOpenSession,
@@ -299,6 +313,12 @@ internal fun HomeScreen(
         },
         tailnetDetails = { tailnetDetails = true },
         seen = { hostId, block, record -> seenMarks[HomeMarks.key(hostId, block)] == seenStamp(record) },
+        moveHost = onMoveHost,
+        removeHost = { hostId ->
+            onRemoveHost(hostId)?.let { removed ->
+                snack(context.getString(R.string.home_removed_host, removed.host.label), context.getString(R.string.action_undo)) { onRestoreHost(removed) }
+            }
+        },
         markSeen = { hostId, blocks ->
             val before = onMarkSeen(hostId, blocks)
             snack(context.getString(R.string.home_marked_seen), context.getString(R.string.action_undo)) { onRestoreSeen(before) }
@@ -543,7 +563,8 @@ internal fun HomeScreen(
             prefillLabel = prefillLabel,
             prefillAddress = prefillAddress,
             onDismiss = done,
-            onDelete = editing?.let { host -> { onDelete(host.id); done() } },
+            // Remove host is in the host's sheet, with a confirm and an Undo.
+            onDelete = null,
             onSave = {
                 onSave(it)
                 done()
@@ -581,7 +602,20 @@ internal fun HomeScreen(
         )
     }
 
-    HomeSheetsHost(sheets, hosts, lives, folds, cachedSessions, ops)
+    HomeSheetsHost(sheets, hosts, lives, folds, cachedSessions, ops) { session, host ->
+        snack(context.getString(R.string.home_ended_elsewhere, session, host))
+    }
+    LaunchedEffect(notices) {
+        notices.collect { notice ->
+            when (notice) {
+                is HomeNotice.Ended -> snack(context.getString(R.string.home_ended_elsewhere, notice.session, notice.host))
+                is HomeNotice.Failed -> snack(
+                    context.getString(failedText(notice.action), notice.detail.ifBlank { context.getString(R.string.status_failed) }),
+                    context.getString(R.string.action_retry),
+                ) { onManage(notice.hostId, notice.action) }
+            }
+        }
+    }
 
     if (settings) {
         SettingsSheet(

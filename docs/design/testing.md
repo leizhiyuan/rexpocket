@@ -42,7 +42,7 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 
 `ScreenshotsTest` (JVM, Roborazzi) captures the terminal screen with the key bar, Terminal controls
 (as it comes, and with every choice changed, so its icons show the change) and Arrange keys,
-Settings and Diagnostics (on ScriptedRex), the terminal's ⋮ menu, the command palette, the home screen's Activity view (on
+Settings and Diagnostics (on ScriptedRex), the terminal's ⋮ menu, the command palette, the home screen's Needs you filter (on
 ScriptedRex, its programs reporting statuses) and full screen right after entering it, in portrait and
 landscape on a Pixel 6-sized screen, the tailnet's states on the home screen and its details sheet
 (`tailnet-*`, on a stand-in node: see tailnet-status.md), the first run with no hosts (`empty-home-*`), the share sheet and its pane picker (`share-*`) the home's tab sheet (`home-tab-sheet-*`) and Import hosts' preview and keys (`host-import-*`, host-import.md), (the JVM tests' default too, in `robolectric.properties`), and Arrange keys before and
@@ -140,7 +140,8 @@ actions, the rows' new places on screen) with no `session.attach` of that sessio
 `HomeStateTest` holds a fold to its session through a move at the desk, a rename and connecting
 again, folded on screen while the list is still the cached one; `OrderTest` (core, on both servers)
 moves sessions and tabs from the phone and the desk; its rename
-dialog runs on the emulator only. `ShareTest` is a share from another app: the app started by it,
+dialog runs on the emulator only. What the home's rows, sheets, filters and seen marks are held to
+is in home.md, "Tests". `ShareTest` is a share from another app: the app started by it,
 connecting while the sheet is up, the sheet naming the last pane, nothing sent until Paste or Send,
 then the text in ScriptedRex's `pastes` (no Enter typed) or the file in its `uploads`; the picker
 when no pane is remembered, and a file over 100 MiB that cannot be sent. `ShareIntentTest` (JVM)

@@ -223,6 +223,24 @@ class HomeStateTest {
         compose.awaitThat { m.route.value == Route.Term && m.pocket.value.activeSessionId == other }
     }
 
+    /** Collapse all from the home's ⋮, and its Undo, which puts back exactly the folds there were. */
+    @Test
+    fun collapseAllIsUndoneToTheFoldsBefore() {
+        val m = start()
+        compose.awaitThat { other in m.pocket.value.views }
+        fold(m, shown)
+        val before = m.folds.value
+        compose.onNodeWithContentDescription(string(R.string.home_menu)).performClick()
+        compose.waitForIdle()
+        compose.onNode(hasText(string(R.string.home_collapse_all)) and hasClickAction()).performClick()
+        compose.awaitThat { desk.host.id in m.folds.value.hosts }
+        compose.awaitThat { compose.onAllNodes(hasText(label(m, other))).fetchSemanticsNodes().isEmpty() }
+        compose.onNode(hasText(string(R.string.action_undo)) and hasClickAction()).performClick()
+        compose.awaitThat { m.folds.value == before }
+        header(m, shown).assert(folded)
+        header(m, other).assert(!folded)
+    }
+
     @Test
     fun theSearchIsStillThereAfterATabWasOpened() {
         val m = start()

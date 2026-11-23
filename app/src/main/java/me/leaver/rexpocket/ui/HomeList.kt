@@ -255,7 +255,7 @@ internal fun HostHeader(
             // Under the line rather than beside it, so the line keeps its width with large text.
             if (action != null) RowButton(action.first, action.second, Modifier.offset(x = (-12).dp))
         }
-        RoundButton(R.drawable.ic_more, stringResource(R.string.action_more), onMenu, tint = Colors.muted, size = 48.dp)
+        RoundButton(R.drawable.ic_more, stringResource(R.string.manage_actions_for, host.label), onMenu, tint = Colors.muted, size = 48.dp)
         if (foldable) FoldChevron(expanded)
     }
 }
@@ -763,6 +763,7 @@ private fun TreeEnv.rowsOf(ref: HostRef): List<HomeSession>? {
  * session its tabs. A host's tap folds it in every state; connecting is its button. A host that is
  * not live shows the sessions it had last time, with one note saying so, rather than one per row.
  */
+@OptIn(ExperimentalFoundationApi::class)
 internal fun LazyListScope.homeTree(env: TreeEnv, rowsByHost: Map<String, List<HomeSession>?>) {
     var shown = 0
     for (host in env.hosts) {
@@ -772,9 +773,11 @@ internal fun LazyListScope.homeTree(env: TreeEnv, rowsByHost: Map<String, List<H
         shown++
         val state = ref.state
         val expanded = env.searching || env.folds.hostOpen(host.id, ref.connected)
-        item(key = "host-${host.id}") {
-            if (!first) Spacer(Modifier.height(12.dp))
-            HostItem(env, ref, rows, expanded)
+        if (!first) item(key = "gap-${host.id}") { Spacer(Modifier.height(12.dp)) }
+        // A host's header stays at the top while its sessions scroll under it: with many hosts, which
+        // one a row belongs to is always in sight.
+        stickyHeader(key = "host-${host.id}") {
+            Column(Modifier.fillMaxWidth().background(Colors.bg)) { HostItem(env, ref, rows, expanded) }
         }
         if (!expanded) continue
         val condition = ref.condition
@@ -846,7 +849,7 @@ internal fun HostItem(env: TreeEnv, ref: HostRef, rows: List<HomeSession>, expan
         else -> stringResource(R.string.host_not_connected) +
             if (sessions.isNotEmpty()) " · " + pluralStringResource(R.plurals.session_count, sessions.size, sessions.size) else ""
     }
-    val groups = hostActions(ref, expanded, sessions, env.folds, env.ops)
+    val groups = hostActions(ref, expanded, sessions, env.folds, env.ops, env.hosts.indexOfFirst { it.id == host.id }, env.hosts.size, env.sheets)
     HostHeader(
         host = host,
         live = live != null,
