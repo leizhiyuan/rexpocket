@@ -76,6 +76,8 @@ internal class TerminalAccessibility(private val view: TerminalView) : ExploreBy
 
     override fun onPopulateNodeForHost(node: AccessibilityNodeInfoCompat) {
         super.onPopulateNodeForHost(node)
+        // The provider builds the host's node itself, without the view's own description.
+        node.contentDescription = view.contentDescription
         node.isClickable = true
         node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK)
     }
