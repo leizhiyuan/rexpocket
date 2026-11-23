@@ -81,7 +81,7 @@ netbird-paths.txt. The script then keeps its worktree and says where it is. To f
   self-hosted Netbird.
 - `docs/design/tailnet-backends.md`: the Netbird design note.
 
-### Shared files, with Netbird hunks (netbird.patch, 35 files)
+### Shared files, with Netbird hunks (netbird.patch, 36 files)
 
 | Area | Files | What PR B adds |
 | --- | --- | --- |
@@ -90,7 +90,7 @@ netbird-paths.txt. The script then keeps its worktree and says where it is. To f
 | Tailnet details | `core/…/TailnetState.kt`, `TailnetPath.kt`, `ui/TailnetUi.kt` | `PeerLink.Relay`, a peer's `latencyMs`, `TailnetPath.Relay` and the ping's `relayServer` |
 | Names | `core/…/HostAddress.kt` | `.netbird.cloud` is on the tailnet |
 | Comments | `TailnetStage.kt`, `TailnetBox.kt`, `Common.kt` | the words "Netbird" where a comment names it |
-| Strings | `values/strings.xml`, `values-zh/strings.xml`, `values*/tailnet_strings.xml` | `netbird_*`, `tailnet_path_relay`, `tailnet_link_relay` (zh-rTW has only the last; it falls back to zh) |
+| Strings | `values*/strings.xml`, `values*/tailnet_strings.xml` | `netbird_*`, `tailnet_path_relay`, `tailnet_link_relay`, in English, zh and zh-rTW |
 | Tests | the core tailnet tests, `HostAddressTest`, `TailnetHarness`, `ScreenshotsTest`, `TailnetNodeInstrumentedTest` | the Netbird cases, the Netbird sample and screenshot, the instrumented Netbird load and start checks |
 | Build | `app/build.gradle.kts`, `tools/build-tailnet.sh`, `.gitignore` | `-Prexpocket.netbird=true`, `REXPOCKET_NETBIRD=1` and `tailnet-netbird.aar` |
 | CI | `android-apk.yml`, `device-test.yml` | the Netbird APK; device tests on the Netbird build |
