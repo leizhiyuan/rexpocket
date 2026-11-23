@@ -41,6 +41,9 @@ import me.leaver.rexpocket.core.AlertPrefs
 import me.leaver.rexpocket.core.HostBackground
 import me.leaver.rexpocket.core.AlertMove
 import me.leaver.rexpocket.core.BellMove
+import me.leaver.rexpocket.core.CheckFailure
+import me.leaver.rexpocket.core.CheckRoute
+import me.leaver.rexpocket.core.CheckRouteException
 import me.leaver.rexpocket.core.ConnectProgress
 import me.leaver.rexpocket.core.ConnectStep
 import me.leaver.rexpocket.core.Endpoint
@@ -396,6 +399,31 @@ class Connections private constructor(private val app: Application, val nodes: T
             link.path.value = path
             Diagnostics.event(CONN_TAG, "tailnet path to ${link.target.host}: $path")
         }
+    }
+
+    /**
+     * The tailnet route for the host dialog's Test connection: the joined node, started as a
+     * connection starts it, and the way the node says a connection goes through it. It changes no
+     * setting and keeps nothing; the node stays up, as it would for the host's own connection.
+     */
+    suspend fun checkRoute(host: String): CheckRoute {
+        val settings = store.tailnet()
+        if (!settings.enabled) throw CheckRouteException(CheckFailure.TailnetNotJoined, null)
+        val node = nodeFor(settings.backend)
+        val port = try {
+            withContext(Dispatchers.IO) { node.start(configFor(settings)) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw CheckRouteException(CheckFailure.TailnetDown, e.message)
+        }
+        val settled = withTimeoutOrNull(NODE_READY_MS) {
+            node.status.first { it.backendState in setOf("Running", "NeedsLogin", "NeedsMachineAuth", "Stopped") }
+        }?.backendState ?: node.status.value.backendState
+        if (settled != "Running") throw CheckRouteException(CheckFailure.TailnetDown, settled.ifBlank { null })
+        // A name the netmap does not list yet fails in the node's DNS; a connection waits as long.
+        node.awaitPeer(host, if (node.status.value.peersKnown) PEER_LISTED_MS else PEER_READY_MS)
+        return node.checkRoute(port)
     }
 
     private fun drop(hostId: String) {

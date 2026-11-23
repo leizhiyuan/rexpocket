@@ -47,7 +47,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -221,6 +223,10 @@ internal fun HomeScreen(
     onAppearance: (Appearance) -> Unit = {},
     /** Opens Import hosts: a host list, or a connected Rex's hosts. */
     onImportHosts: () -> Unit = {},
+    /** Settings › Backup: export and import every setting. */
+    onBackup: () -> Unit = {},
+    /** The host dialog's Test connection; null leaves it out. */
+    hostTester: HostTester? = null,
 ) {
     val context = LocalContext.current
     // Android 13 asks for notifications at run time; alerts come on once the person allows them.
@@ -573,6 +579,7 @@ internal fun HomeScreen(
                 done()
                 onTailnet()
             },
+            tester = hostTester,
         )
     }
 
@@ -645,6 +652,10 @@ internal fun HomeScreen(
             onImportHosts = {
                 settings = false
                 onImportHosts()
+            },
+            onBackup = {
+                settings = false
+                onBackup()
             },
             reopenLastTab = reopenLastTab,
             onReopenLastTab = onReopenLastTab,
@@ -724,6 +735,8 @@ private fun SettingsSheet(
     onChannel: (UpdateChannel) -> Unit,
     /** Import hosts, and export them. */
     onImportHosts: () -> Unit = {},
+    /** Settings › Backup: every setting to one file, and back. */
+    onBackup: () -> Unit = {},
 ) {
     val context = LocalContext.current
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.settings)) {
@@ -763,6 +776,10 @@ private fun SettingsSheet(
                 label = stringResource(R.string.reopen_last_tab), options = ON_OFF, current = reopenLastTab,
                 choice = ::reopenChoice, icon = R.drawable.ic_history, onPick = onReopenLastTab,
             )
+        }
+        // Everything above, and the hosts, to one file for another phone, and back.
+        Group(stringResource(R.string.settings_group_backup)) {
+            SheetItem(stringResource(R.string.backup_title), icon = R.drawable.ic_backup, opens = true, onClick = onBackup)
         }
         Group(stringResource(R.string.settings_group_version)) {
             // The channel first: it is what the row under it looks on. Its picker says what each
@@ -1084,6 +1101,8 @@ internal fun HostDialog(
     onDelete: (() -> Unit)?,
     onSave: (SavedHost) -> Unit,
     onJoinTailnet: () -> Unit,
+    /** Test connection; null leaves the button out. */
+    tester: HostTester? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1116,7 +1135,10 @@ internal fun HostDialog(
     val user = parsed?.sshUser?.takeIf { it.isNotBlank() } ?: sshUser.trim()
     val sameSshHost = initial != null && initial.viaSsh && parsed != null &&
         initial.host == parsed.host && initial.port == parsed.port && initial.sshUser == user
-    val pinned = if (sameSshHost) initial.sshHostKey else ""
+    // A host key the person trusted in Test connection, for this account, machine and port only:
+    // Save keeps it as the pinned key. Nothing is written before Save.
+    var trusted by remember(parsed?.host, parsed?.port, user) { mutableStateOf<String?>(null) }
+    val pinned = trusted ?: if (sameSshHost) initial.sshHostKey else ""
     val credentialReady = if (useKey) privateKey.isNotBlank() else password.isNotBlank()
     val identityReady = !ssh || (user.isNotBlank() && credentialReady)
     val canSave = parsed != null && identityReady
@@ -1297,6 +1319,26 @@ internal fun HostDialog(
                 }
                 if (parsed?.plaintext == true && !ssh) {
                     Text(stringResource(R.string.field_plaintext_warning), color = Colors.amber, fontSize = TextStyles.label)
+                }
+                if (tester != null) {
+                    val report by tester.report.collectAsState()
+                    DisposableEffect(tester) { onDispose { tester.clear() } }
+                    // A report is for what was typed when it ran: an edit since makes it stale.
+                    val target = parsed?.let { savedHost(viaTailscale = it.viaTailscale)?.checkTarget() }
+                    LaunchedEffect(target) { if (tester.tested != null && tester.tested != target) tester.clear() }
+                    HostCheckPanel(
+                        report = report,
+                        running = report?.finished == false,
+                        enabled = canSave && target != null,
+                        pinned = (if (sameSshHost) initial?.sshHostKey else null)?.ifBlank { null },
+                        trusted = trusted,
+                        onRun = { target?.let(tester::start) },
+                        onCancel = tester::cancel,
+                        onTrust = { key ->
+                            trusted = key
+                            target?.let { tester.start(it.copy(hostKey = key)) }
+                        },
+                    )
                 }
             }
         },

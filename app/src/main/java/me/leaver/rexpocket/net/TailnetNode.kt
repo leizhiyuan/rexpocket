@@ -101,6 +101,14 @@ interface TailnetNode {
 
     /** Stops the node off the caller's thread; closing it can talk to the control plane. */
     fun stopAsync()
+
+    /**
+     * How the host dialog's Test connection goes through this node, once [start] gave [port]: the
+     * same way a connection does, through the SOCKS proxy on that port. A node with no proxy says
+     * its own way.
+     */
+    fun checkRoute(port: Int): me.leaver.rexpocket.core.CheckRoute =
+        me.leaver.rexpocket.core.CheckRoute(socksPort = port, http = { me.leaver.rexpocket.core.RexClient.defaultHttp(port) })
 }
 
 /**

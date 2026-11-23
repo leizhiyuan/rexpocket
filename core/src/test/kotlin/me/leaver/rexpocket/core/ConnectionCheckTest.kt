@@ -30,7 +30,7 @@ import kotlin.concurrent.thread
 /**
  * The host dialog's Test connection, step by step, against a scripted Rex, things that are not Rex,
  * and a real SSH server (Apache MINA) whose exec channel reaches the scripted Rex as
- * `rex __internal dial-stdio` does. See docs/design/ssh-hosts.md, "Test connection".
+ * `rex __internal dial-stdio` does. See docs/design/connection-test.md.
  */
 class ConnectionCheckTest {
     private val closers = mutableListOf<AutoCloseable>()

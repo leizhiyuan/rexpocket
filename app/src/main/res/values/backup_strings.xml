@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Settings › Backup: every setting and host to one file, and back. See docs/design/settings-backup.md. -->
+    <string name="settings_group_backup">Backup</string>
+    <string name="backup_title">Export and import settings</string>
+    <string name="backup_body">One file with your appearance, notifications, background and Home choices and your hosts, for another phone or after a reset. A tailnet\'s sign-in never goes in; SSH keys and passwords only if you ask.</string>
+    <string name="backup_working">Working…</string>
+    <string name="backup_refused">Nothing was imported.</string>
+    <string name="backup_export_failed">The file could not be written.</string>
+    <string name="backup_written">Written: %1$d hosts, no SSH keys or passwords.</string>
+    <string name="backup_written_keys">Written: %1$d hosts, with the keys and passwords of %2$d sealed by your passphrase.</string>
+    <string name="backup_group_export">Export</string>
+    <string name="backup_include_keys">Include SSH keys</string>
+    <string name="backup_include_keys_body">Private keys, their passphrases and SSH passwords, encrypted with a passphrase you choose</string>
+    <string name="backup_save_file">Save to a file</string>
+    <string name="backup_share">Share</string>
+    <string name="backup_group_import">Import</string>
+    <string name="backup_preview_title">Import settings</string>
+    <string name="backup_settings_count">%1$d settings change</string>
+    <string name="backup_never_removes">Hosts that are not in the file stay as they are; nothing is removed.</string>
+    <string name="backup_group_settings">Settings</string>
+    <string name="backup_group_keys">SSH keys</string>
+    <string name="backup_unlock">Unlock SSH keys</string>
+    <string name="backup_unlock_body">The file\'s SSH keys and passwords are sealed. Enter the passphrase they were exported with, or import without them: new hosts then get a fresh key of their own.</string>
+    <string name="backup_unlock_action">Unlock</string>
+    <string name="backup_unlocking">Unlocking…</string>
+    <string name="backup_locked">Sealed: sign-ins for %1$d hosts</string>
+    <string name="backup_wrong_passphrase">That passphrase does not open them.</string>
+    <string name="backup_unlocked">Unlocked: %1$d hosts sign in with the backup\'s key or password</string>
+    <string name="backup_host_signs_in">Signs in with the key or password from the backup</string>
+    <string name="backup_apply">Import</string>
+    <string name="backup_imported">Settings imported</string>
+    <string name="backup_background_not_on">Background alerts stay off: allow notifications, then turn them on in Background and notifications.</string>
+    <string name="backup_passphrase_title">Seal the SSH keys</string>
+    <string name="backup_passphrase_body">At least %1$d characters. It is not stored anywhere: without it the keys in the file cannot be opened.</string>
+    <string name="backup_passphrase">Passphrase</string>
+    <string name="backup_passphrase_again">Passphrase again</string>
+    <string name="backup_passphrase_short">At least %1$d characters</string>
+    <string name="backup_passphrase_mismatch">The two do not match</string>
+    <string name="backup_seal">Seal and export</string>
+    <string name="import_change_short">%1$s → %2$s</string>
+    <string name="backup_setting_font_scale">Terminal text size</string>
+    <string name="backup_setting_filter">Home filter</string>
+    <string name="backup_setting_order">Host order</string>
+    <string name="backup_setting_folds">Folded hosts</string>
+    <string name="backup_setting_folds_value">Folded or opened as in the file: %1$s</string>
+    <string name="backup_setting_host_background">Background for %1$s</string>
+    <string name="backup_filter_needs_you">Needs you</string>
+    <string name="backup_filter_running">Running</string>
+    <string name="backup_problem_too_large">The file is larger than %1$d KiB.</string>
+    <string name="backup_problem_value">%1$s is not a value this app knows.</string>
+    <string name="backup_problem_unknown_host">%1$s names %2$s, which is not one of the file\'s hosts.</string>
+    <string name="backup_problem_secrets">The sealed keys are not readable (%1$s).</string>
+</resources>

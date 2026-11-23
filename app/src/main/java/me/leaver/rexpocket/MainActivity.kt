@@ -37,16 +37,19 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * A host list opened with the app or shared to it goes to Import hosts, which shows what it
-     * would change before anything does; any other share waits on its sheet for a tap.
+     * A settings backup opened with the app or shared to it goes to Settings › Backup, a host list to
+     * Import hosts; each shows what it would change before anything does. Any other share waits on
+     * its sheet for a tap.
      */
     private fun received(intent: Intent) {
-        hostListToOpen(this, intent)?.let {
-            model.hostImport.readUri(it)
+        // A settings backup names its own format; anything else opened is a host list, as before.
+        hostListToOpen(this, intent)?.let { uri ->
+            model.settingsBackup.readUri(uri) { model.hostImport.readUri(uri) }
             return
         }
         val share = readShare(this, intent) ?: return
-        if (!model.hostImport.offerShare(share, intent.type, model::offerShare)) model.offerShare(share)
+        val toHosts = { if (!model.hostImport.offerShare(share, intent.type, model::offerShare)) model.offerShare(share) }
+        if (!model.settingsBackup.offerShare(share, intent.type, toHosts)) toHosts()
     }
 
     // Leaving the app is the usual trigger for a tunnel that has to find its way back, so the

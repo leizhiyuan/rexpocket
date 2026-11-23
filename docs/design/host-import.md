@@ -27,6 +27,11 @@ confirm → apply → the new keys**.
 
 There is no import from a URL or any other network source.
 
+A **settings backup** (`rexpocket-settings/1`, settings-backup.md) carries the phone's hosts as a
+host list of this format, inside it. Its hosts go through the same plan, preview and trust rules
+below; the backup only widens what the list may hold (Rex's own port, Rex's names, up to 200 hosts),
+and a file that names the settings format is taken by Settings › Backup before it comes here.
+
 ## The format: `rexpocket-hosts/1`
 
 ```json
@@ -64,8 +69,10 @@ with a password is refused.
 **Export hosts** (on the same sheet: save to a file, or share) writes this format from the phone's
 SSH hosts: the name, the address as `dnsUri`, the first other SSH address as `uri`, the pinned host
 key and the comment of the host's key when it is one the phone made. A host reached on a Rex port,
-or whose name the format does not allow, is left out and named. Never a password, a key or a
-passphrase.
+whose name the format does not allow, or that has the name of a host already written (ignoring
+case: the list would not read back), is left out and named. Never a password, a key or a
+passphrase. To move every host, with its settings and optionally its sign-in, use Settings › Backup
+(settings-backup.md).
 
 ## What counts as the same host
 
@@ -107,11 +114,13 @@ into the address when the main one does not resolve. Dialling them in turn is le
 
 ## Code
 
-- `core/…/HostImport.kt`: `HostListFormat` (read, check, write), `RexHostList`, `ImportPlan` (match,
-  classify, confirm), `applyTo`. `SshKeys.kt`: the keys and `PublicKeyList`.
+- `core/…/HostImport.kt`: `HostListFormat` (read, check, write; `read` and `writeList` take the
+  `HostListRules` a settings backup widens), `RexHostList`, `ImportPlan` (match, classify, confirm),
+  `applyTo`. `SshKeys.kt`: the keys and `PublicKeyList`.
   `PocketSession.hostList()` reads `hosts.list`.
 - `app/…/ui/HostImport.kt`: `HostImporter` (the sources, the plan, the write, Export) and the sheet;
-  `MainActivity` routes "Open with" and shares to it.
+  `MainActivity` routes "Open with" and shares to it, after Settings › Backup has declined them.
+  The keys page also shows the keys a settings backup's import made (`showKeys`).
 
 ## Tests
 

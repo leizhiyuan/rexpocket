@@ -6,6 +6,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
+import okhttp3.OkHttpClient
 import java.io.EOFException
 import java.net.ConnectException
 import java.net.InetAddress
@@ -16,6 +17,7 @@ import java.net.Proxy
 import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import javax.net.SocketFactory
 import javax.net.ssl.SSLException
 
 /**
@@ -23,7 +25,7 @@ import javax.net.ssl.SSLException
  * the name, the port, the host key, the sign-in, Rex and its API - with each step's answer in
  * words the dialog can show. It saves nothing and changes nothing: the host key it sees is only
  * reported ([CheckReport.seenHostKey]), and a key the person trusts for the test is passed back in
- * as [CheckTarget.hostKey] for the next run. See docs/design/ssh-hosts.md, "Test connection".
+ * as [CheckTarget.hostKey] for the next run. See docs/design/connection-test.md.
  */
 data class CheckTarget(
     val host: String,
@@ -42,8 +44,20 @@ data class CheckTarget(
         "CheckTarget(${if (viaSsh) "$sshUser@" else ""}$host:$port tailnet=$viaTailnet ssh=$viaSsh pinned=${hostKey != null})"
 }
 
-/** How the check reaches the host: the phone's own network, or the tailnet node's (its SOCKS port or its dialer). */
-data class CheckRoute(val socksPort: Int = 0, val dialer: StreamDialer? = null)
+/**
+ * How the check reaches the host: the phone's own network, or the tailnet node's, as the node says
+ * a connection goes through it - its SOCKS port, or its own sockets for a node with no proxy. The
+ * same route a real connection to the host takes.
+ */
+class CheckRoute(
+    val socksPort: Int = 0,
+    /** The node's own sockets, when it has no SOCKS port: each is connected to an unresolved address. */
+    val sockets: SocketFactory? = null,
+    /** The SSH settings of a connection on this route. */
+    val ssh: (SshSettings) -> SshSettings = { it },
+    /** The HTTP client of a Rex-port connection on this route. */
+    val http: () -> OkHttpClient = { RexClient.defaultHttp(socksPort) },
+)
 
 /** A route that could not be made: the tailnet is not joined, or its node would not start. */
 class CheckRouteException(val failure: CheckFailure, message: String?) : Exception(message)
@@ -182,7 +196,7 @@ class ConnectionCheck(
                         val c = if (target.viaSsh) {
                             RexClient.forSsh(tunnel!!, apiRevision)
                         } else {
-                            RexClient(RexClient.defaultHttp(via.socksPort, via.dialer), connectTimeoutMs = timeouts.rexMs, apiRevision = apiRevision)
+                            RexClient(via.http(), connectTimeoutMs = timeouts.rexMs, apiRevision = apiRevision)
                         }
                         client = c
                         rexStep(c, tunnel)
@@ -215,14 +229,15 @@ class ConnectionCheck(
         }
     }
 
-    private fun sshSettings(via: CheckRoute) = SshSettings(
-        host = target.host,
-        port = target.port,
-        user = target.sshUser.orEmpty(),
-        credentials = target.credentials,
-        hostKey = target.hostKey?.takeIf { it.isNotBlank() },
-        socksPort = via.socksPort,
-        dialer = via.dialer,
+    private fun sshSettings(via: CheckRoute) = via.ssh(
+        SshSettings(
+            host = target.host,
+            port = target.port,
+            user = target.sshUser.orEmpty(),
+            credentials = target.credentials,
+            hostKey = target.hostKey?.takeIf { it.isNotBlank() },
+            socksPort = via.socksPort,
+        ),
     )
 
     /** A TCP connection to the port, then closed: the machine is there and something listens. */
@@ -231,7 +246,7 @@ class ConnectionCheck(
         val r = blocking(timeouts.connectMs, abort = { runCatching { socket?.close() } }) {
             val timeout = timeouts.connectMs.toInt()
             when {
-                via.dialer != null -> DialedSocket(via.dialer).also { socket = it }.connect(InetSocketAddress.createUnresolved(target.host, target.port), timeout)
+                via.sockets != null -> via.sockets.createSocket().also { socket = it }.connect(InetSocketAddress.createUnresolved(target.host, target.port), timeout)
                 via.socksPort > 0 -> Socket(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", via.socksPort))).also { socket = it }
                     .connect(InetSocketAddress.createUnresolved(target.host, target.port), timeout)
                 else -> {

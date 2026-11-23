@@ -123,6 +123,8 @@ jobs:
               me.leaver.rexpocket.ui.HomeManageTest \
               me.leaver.rexpocket.ui.MultiHostTest \
               me.leaver.rexpocket.ui.HostImportScreenTest \
+              me.leaver.rexpocket.ui.SettingsBackupScreenTest \
+              me.leaver.rexpocket.ui.HostCheckScreenTest \
               me.leaver.rexpocket.ui.ShareTest \
               me.leaver.rexpocket.alerts.BackgroundServiceTest; do
             adb logcat -c || true
@@ -263,6 +265,8 @@ jobs:
             --tests 'me.leaver.rexpocket.ui.HomeManageTest' \
             --tests 'me.leaver.rexpocket.ui.MultiHostTest' \
             --tests 'me.leaver.rexpocket.ui.HostImportScreenTest' \
+            --tests 'me.leaver.rexpocket.ui.SettingsBackupScreenTest' \
+            --tests 'me.leaver.rexpocket.ui.HostCheckScreenTest' \
             --tests 'me.leaver.rexpocket.ui.ShareTest' \
             --tests 'me.leaver.rexpocket.ui.ShareIntentTest' \
             --tests 'me.leaver.rexpocket.ui.TailnetStatusTest' \

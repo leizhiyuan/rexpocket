@@ -121,6 +121,11 @@ class HostImporter(
         _step.value = HostImportStep.Source()
     }
 
+    /** The new keys' page, for hosts another import made: a settings backup's. */
+    fun showKeys(keys: HostImportStep.Keys) {
+        _step.value = keys
+    }
+
     /** A list as text: pasted, or shared from another app. */
     fun readText(text: String) {
         plan(HostListFormat.parse(text), ImportFrom.File)
@@ -279,7 +284,7 @@ class HostImporter(
     }
 }
 
-private fun SavedHost.importAddress(): ImportAddress =
+internal fun SavedHost.importAddress(): ImportAddress =
     if (viaSsh) ImportAddress(sshUser, host, port, plaintext = true) else ImportAddress(null, host, port, plaintext)
 
 internal fun SavedHost.known(): KnownHost = KnownHost(
@@ -460,7 +465,7 @@ internal fun HostImportSheet(step: HostImportStep, connected: List<SavedHost>, i
 
 /** One host of the plan: its name and status, what changes, its host key, and the key it gets. */
 @Composable
-private fun PlannedRow(host: PlannedHost, confirmed: Boolean, held: Boolean, onConfirm: (Boolean) -> Unit) {
+internal fun PlannedRow(host: PlannedHost, confirmed: Boolean, held: Boolean, credentialsFromBackup: Boolean = false, onConfirm: (Boolean) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(host.imported.name, color = Colors.ink, fontSize = TextStyles.body, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
@@ -507,7 +512,11 @@ private fun PlannedRow(host: PlannedHost, confirmed: Boolean, held: Boolean, onC
                 if (held) Text(stringResource(R.string.import_key_held), color = Colors.muted, fontSize = TextStyles.label)
             }
         }
-        if (host.needsKey) Text(stringResource(R.string.import_new_key, host.imported.commentForKey), color = Colors.muted, fontSize = TextStyles.label)
+        if (credentialsFromBackup) {
+            Text(stringResource(R.string.backup_host_signs_in), color = Colors.muted, fontSize = TextStyles.label)
+        } else if (host.needsKey) {
+            Text(stringResource(R.string.import_new_key, host.imported.commentForKey), color = Colors.muted, fontSize = TextStyles.label)
+        }
     }
 }
 

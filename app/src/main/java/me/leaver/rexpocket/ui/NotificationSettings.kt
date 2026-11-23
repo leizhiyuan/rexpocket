@@ -24,7 +24,7 @@ import me.leaver.rexpocket.core.with
 import me.leaver.rexpocket.data.SavedHost
 
 /** The Notifications page's switches, each with its label. */
-private val EVENTS = listOf(
+internal val EVENTS = listOf(
     AlertEvent.Waiting to R.string.notifications_waiting,
     AlertEvent.Failed to R.string.notifications_failed,
     AlertEvent.Done to R.string.notifications_done,
@@ -184,7 +184,7 @@ internal fun NotificationsSheet(
 
 /** A host's row on the page: whether it stays connected, and whether it is silent. */
 @Composable
-private fun hostSummary(choices: HostBackground): String {
+internal fun hostSummary(choices: HostBackground): String {
     val stays = stringResource(
         when {
             choices.always -> R.string.bg_always

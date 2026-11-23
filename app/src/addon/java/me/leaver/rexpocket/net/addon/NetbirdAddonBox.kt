@@ -5,6 +5,9 @@ import android.app.Application
 import android.content.Context
 import android.os.Bundle
 import me.leaver.rexpocket.alerts.Alerts
+import me.leaver.rexpocket.core.CheckRoute
+import me.leaver.rexpocket.core.DialedSocketFactory
+import me.leaver.rexpocket.core.RexClient
 import me.leaver.rexpocket.core.StreamDialer
 import me.leaver.rexpocket.core.TailnetBackend
 import me.leaver.rexpocket.net.NetbirdBox
@@ -42,6 +45,13 @@ internal class NetbirdAddonBox(
     override val stateDirectory: File get() = File(context.cacheDir, "netbird-addon")
 
     override val dialer: StreamDialer = StreamDialer { host, port, timeout -> FdStream(client.dial(host, port, timeout)) }
+
+    // No proxy: the Test connection dials through the add-on, as a connection does.
+    override fun checkRoute(port: Int): CheckRoute = CheckRoute(
+        sockets = DialedSocketFactory(dialer),
+        ssh = { it.copy(dialer = dialer) },
+        http = { RexClient.defaultHttp(0, dialer) },
+    )
 
     init {
         (context.applicationContext as? Application)?.registerActivityLifecycleCallbacks(ForegroundWatch())

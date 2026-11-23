@@ -162,6 +162,35 @@ class RexViewModel @JvmOverloads constructor(
         onChanged = { hosts.value = store.list() },
         rexHosts = { id -> connections[id]?.session?.hostList() },
     )
+
+    /**
+     * Settings › Backup: every setting and host to one file, and back; see SettingsBackup.kt. Its
+     * hosts go through Import hosts' plan, and its new keys to Import hosts' keys page.
+     */
+    val settingsBackup = SettingsBackupper(
+        app,
+        store,
+        viewModelScope,
+        read = {
+            PhoneSettings(
+                appearance = appearance.value,
+                fontScale = fontScale.value,
+                alertPrefs = alertPrefs.value,
+                backgroundMode = Alerts.enabled.value,
+                filter = homeFilter.value,
+                reopenLastTab = reopenLastTab.value,
+                folds = folds.value,
+                background = background.value,
+            )
+        },
+        write = { writeSettings(it) },
+        onHostsChanged = { hosts.value = store.list() },
+        showKeys = { hostImport.showKeys(it) },
+        backgroundMode = { Alerts.enabled.value },
+    )
+
+    /** The host dialog's Test connection: a tailnet host goes through the joined node, as its connection would. */
+    val hostTester = HostTester(viewModelScope) { host -> connections.checkRoute(host) }
     val tailnet: MutableStateFlow<TailnetSettings> = connections.tailnet.also { it.value = store.tailnet() }
 
     /** The backends this build can run; see [TailnetNodes.of]. */
@@ -524,6 +553,25 @@ class RexViewModel @JvmOverloads constructor(
     /** [hostId]'s background choices; an always-connected host connects at once. */
     fun setHostBackground(hostId: String, next: HostBackground) {
         connections.setBackground(hostId, next)
+    }
+
+    /**
+     * A settings backup's preferences, each as its own switch would set it. Background mode goes on
+     * only where notifications are allowed (it cannot alert otherwise): false when it stayed off.
+     */
+    private fun writeSettings(w: SettingsWrite): Boolean {
+        w.appearance?.let(::setAppearance)
+        w.fontScale?.let(::setFont)
+        w.alertPrefs?.let(::setAlertPrefs)
+        w.filter?.let(::setHomeFilter)
+        w.reopenLastTab?.let(::setReopenLastTab)
+        w.folds?.let(::setFolds)
+        w.background.forEach { (id, b) -> setHostBackground(id, b) }
+        val on = w.backgroundMode ?: return true
+        if (on == Alerts.enabled.value) return true
+        if (on && !Alerts.allowed(getApplication())) return false
+        setAlerts(on)
+        return true
     }
 
     /** Background alerts on or off; [Connections] starts the watch for every connected host. */
