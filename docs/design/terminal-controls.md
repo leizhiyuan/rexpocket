@@ -22,6 +22,12 @@ Full screen can be entered from: the ⋮ menu, the full-screen key in the small 
 (double tap by default; long press if chosen). It is left by the corner button, the same gesture,
 or Back.
 
+The grid takes the rows full screen gives, and while the phone holds the pane Rex is asked for
+them. Whether they fill is the terminal's rule, as in Ghostty on a desk: a taller screen pulls rows
+back from the scrollback only when the cursor is on the bottom row. A shell at its prompt fills;
+an agent with a status line under its cursor gets the new rows empty under that line until it
+draws more (`FullScreenGridTest`). While the desk holds the pane the program keeps the desk's size.
+
 ## 2. Gestures on the pane
 
 ### 2.1 Options and defaults
