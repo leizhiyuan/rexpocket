@@ -932,6 +932,27 @@ index e9d03dd316f152fbb7fa00434c6672303e6c10cf..2b4c4eb5449dff4b212fdddcf70f1f00
          is TailnetPath.Unreachable -> stringResource(R.string.tailnet_path_unreachable, network, path.reason) to Colors.danger
      }
  }
+diff --git a/app/src/main/java/me/leaver/rexpocket/update/Updater.kt b/app/src/main/java/me/leaver/rexpocket/update/Updater.kt
+index bcfdcf89afc264b8ebe9c94dee38492d4d1b4159..2dcf4dc48d1bd518e475f8d3e7e8dbf54bca5b92 100644
+--- a/app/src/main/java/me/leaver/rexpocket/update/Updater.kt
++++ b/app/src/main/java/me/leaver/rexpocket/update/Updater.kt
+@@ -21,6 +21,7 @@ import me.leaver.rexpocket.core.UpdateChannel
+ import me.leaver.rexpocket.core.defaultChannel
+ import me.leaver.rexpocket.core.newestFor
+ import me.leaver.rexpocket.diagnostics.Diagnostics
++import me.leaver.rexpocket.net.addon.isUpdateAsset
+ import okhttp3.OkHttpClient
+ import okhttp3.Request
+ import java.io.File
+@@ -155,7 +156,7 @@ class Updater(context: Context) {
+         val release = try {
+             val feed = get(FEED)
+             if (!feed.isSuccessful) throw HttpStatusException(feed.code, "releases")
+-            AppRelease.parseFeed(feed.body?.string().orEmpty()).newestFor(running, _channel.value)
++            AppRelease.parseFeed(feed.body?.string().orEmpty(), ::isUpdateAsset).newestFor(running, _channel.value)
+         } catch (e: IOException) {
+             // Offline or GitHub is down: nothing to say while it is only the app starting up.
+             Diagnostics.event(TAG, "check failed: ${e.javaClass.simpleName}: ${e.message}")
 diff --git a/app/src/main/res/values-zh-rTW/strings.xml b/app/src/main/res/values-zh-rTW/strings.xml
 index f91ea933393ee7735083b3cf016f7615b72c3abf..75b02d25c50c412798ce27527645a430b55c9f44 100644
 --- a/app/src/main/res/values-zh-rTW/strings.xml
