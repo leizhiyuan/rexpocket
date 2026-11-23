@@ -67,6 +67,21 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   included. A build that has never chosen follows what it came from.
 - **Light and dark,** following the phone, in English and Simplified Chinese.
 
+## Which APK to install
+
+Each run of the [android-apk workflow](.github/workflows/android-apk.yml) leaves three APKs in its
+`rexpocket-debug-apks` artifact, all signed with the same key:
+
+| APK | What it is | Install it |
+| --- | --- | --- |
+| `rexpocket.apk` | The app, with Tailscale built in | The usual choice |
+| `rexpocket-netbird-addon.apk` | The Netbird add-on: a separate app, with no icon, that runs Netbird for `rexpocket.apk` | Beside `rexpocket.apk`, for Netbird |
+| `rexpocket-netbird.apk` | The app with Netbird built in, about 30 MB larger; it does not use the add-on | Instead of `rexpocket.apk` |
+
+`rexpocket.apk` and `rexpocket-netbird.apk` are the same app, so either one installs over the other
+and keeps its hosts. The add-on is an app of its own: take it from the same run or release as
+`rexpocket.apk`, since RexPocket only talks to an add-on signed with its own key.
+
 ## Set up the computer
 
 Rex has to be reachable from the phone: over the local network, over a tailnet, or through SSH.
@@ -108,7 +123,8 @@ own SSH daemon. How the transport works is described in
      confirm its host key
 
    The line under the field shows how the app will connect.
-2. **For a tailnet host, join the tailnet.** Settings › Tailnet, pick Tailscale or Netbird, give the
+2. **For a tailnet host, join the tailnet.** Settings › Tailnet, pick Tailscale or Netbird (in
+   `rexpocket.apk`, Netbird (add-on), which needs the add-on installed), give the
    phone a node name and save. Tailscale opens its sign-in page once. Netbird asks for a setup key
    from its dashboard the first time, and a self-hosted Netbird also needs its management server's
    address; after that the node starts with the app.
@@ -194,7 +210,9 @@ you can read it before you send it.
   built-in tailnet node when its address is on the tailnet.
 - **Tailnet nodes.** The app runs one node at a time: the official `tailscale.com/tsnet` library, or
   Netbird's embedded client. Both run in userspace with a SOCKS5 proxy on loopback in front of them,
-  and only the app's own connections use it. The Tailscale node's UDP is bound to the phone's Wi-Fi
+  and only the app's own connections use it. The Netbird add-on runs the same Netbird node in its
+  own app, with no proxy: RexPocket binds it through a service only an app signed with its key may
+  bind, and each connection is a socket the add-on hands over. The Tailscale node's UDP is bound to the phone's Wi-Fi
   or mobile network, around a proxy VPN such as Clash when the VPN allows apps to bypass it, so a
   direct path can form. The home screen shows the path to each tailnet host - direct, peer relay,
   DERP or a Netbird relay server - with its round trip; tap it to measure again.
@@ -225,7 +243,9 @@ the revision and checksum there. `app/libs/tailnet.aar` - the Go module in `tail
 is checked in; to build it again, run [tools/build-tailnet.sh](tools/build-tailnet.sh). Netbird is a build choice: `REXPOCKET_NETBIRD=1
 tools/build-tailnet.sh` writes `app/libs/tailnet-netbird.aar`, and `./gradlew -Prexpocket.netbird=true
 :app:assembleRelease` links it in. It adds about 30 MB to the APK (29 MB to 59 MB), so the default build leaves it
-out; without it the Settings › Tailnet screen offers Tailscale only. The integration
+out and offers Netbird through the add-on instead: `REXPOCKET_NETBIRD=addon tools/build-tailnet.sh`
+writes the add-on's library, `netbirdaddon/libs/tailnet-netbird-addon.aar`, and
+`./gradlew :netbirdaddon:assembleRelease` builds the add-on, signed with the same release key. The integration
 tests in `core` run against a Rex on `127.0.0.1:7297` (set `REX_TEST_HOST` / `REX_TEST_PORT`) and
 are skipped without one. The pane lifecycle scenarios - tabs and panes closed on the desk or the
 phone, release and take over, reconnects - run on every build against `ScriptedRex`, a Rex in the

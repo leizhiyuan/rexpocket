@@ -1,6 +1,7 @@
 package me.leaver.rexpocket.net
 
 import kotlinx.coroutines.flow.StateFlow
+import me.leaver.rexpocket.core.StreamDialer
 import me.leaver.rexpocket.core.TailnetBackend
 import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.TailnetPeer
@@ -67,6 +68,12 @@ interface TailnetNode {
     /** Port of the local SOCKS5 proxy while the node runs, 0 otherwise. */
     val proxyPort: Int
 
+    /**
+     * How a node with no proxy is dialed instead: the Netbird add-on dials in its own process.
+     * Null for a node with a SOCKS5 proxy.
+     */
+    val dialer: StreamDialer? get() = null
+
     /** Whether the node can route to [host] yet: an address always, a name once the netmap lists it. */
     fun knows(host: String): Boolean
 
@@ -132,11 +139,14 @@ class TailnetNodes(entries: List<TailnetEntry>) {
     val all: List<TailnetNode> get() = registered.map { byBackend.getValue(it).node }
 
     companion object {
-        fun of(context: android.content.Context): TailnetNodes = TailnetNodes(
-            listOf(
-                TailnetEntry(TailnetBackend.Tailscale, TailscaleBox(context)),
-                TailnetEntry(TailnetBackend.Netbird, NetbirdBox(context), NetbirdBox::available),
-            ),
-        )
+        fun of(context: android.content.Context): TailnetNodes {
+            val netbird = NetbirdBox(context)
+            return TailnetNodes(
+                listOf(
+                    TailnetEntry(TailnetBackend.Tailscale, TailscaleBox(context)),
+                    TailnetEntry(TailnetBackend.Netbird, netbird, NetbirdBox::available),
+                ) + me.leaver.rexpocket.net.addon.addonEntries(context, netbird),
+            )
+        }
     }
 }

@@ -50,6 +50,20 @@
   最新发布的构建，alpha 和 beta 也算；没选过的安装跟着自己来源那条通道走。
 - **浅色与深色**跟随手机，支持英文和简体中文。
 
+## 装哪个 APK
+
+[android-apk 工作流](.github/workflows/android-apk.yml) 每次运行都会在 `rexpocket-debug-apks` 产物里留下三个
+APK，用同一个密钥签名：
+
+| APK | 是什么 | 怎么装 |
+| --- | --- | --- |
+| `rexpocket.apk` | App 本体，内置 Tailscale | 一般装这个 |
+| `rexpocket-netbird-addon.apk` | Netbird 附加组件：一个没有图标的独立 App，为 `rexpocket.apk` 运行 Netbird | 要用 Netbird 时与 `rexpocket.apk` 一起装 |
+| `rexpocket-netbird.apk` | 内置 Netbird 的 App，大约大 30 MB；不使用附加组件 | 代替 `rexpocket.apk` |
+
+`rexpocket.apk` 和 `rexpocket-netbird.apk` 是同一个 App，可以互相覆盖安装，主机都会保留。附加组件是另一个
+App：要和 `rexpocket.apk` 来自同一次运行或同一个发布版本，因为 RexPocket 只和用自己密钥签名的附加组件通信。
+
 ## 电脑端设置
 
 Rex 要能从手机访问到：局域网、tailnet，或者 SSH 都可以。
@@ -83,7 +97,7 @@ rex server start --extra-listen :7297 --allow-anonymous
      填账号和密码（或私钥）；第一次连接会让你确认主机密钥
 
    输入框下面那行会显示 App 打算怎么连。
-2. **tailnet 主机要先加入 tailnet。** 设置 › Tailnet，选 Tailscale 或 Netbird，给手机起一个节点名并保存。
+2. **tailnet 主机要先加入 tailnet。** 设置 › Tailnet，选 Tailscale 或 Netbird（`rexpocket.apk` 里是 Netbird (add-on)，需要先装附加组件），给手机起一个节点名并保存。
    Tailscale 会打开一次登录页。Netbird 第一次需要它后台生成的安装密钥；自建的 Netbird 还要填管理服务器的
    地址。之后节点随 App 启动。
 3. **打开标签页。** 在主页点一个标签页。会话旁边的加号新建标签页，主机的菜单里可以新建会话。
@@ -133,6 +147,8 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再�
   用户态，前面是回环地址上的 SOCKS5 代理，只有 App 自己的连接走它。Tailscale 节点的 UDP 绑定在手机的 Wi-Fi
   或移动网络上，在 VPN 允许 App 绕过时会绕开 Clash 这类代理 VPN，这样才能打通直连。主页会显示到每台 tailnet
   主机的路径——直连、peer relay、DERP 还是 Netbird 中继服务器——以及往返延迟，点一下可以重新测量。
+  Netbird 附加组件在它自己的 App 里运行同一个 Netbird 节点，没有代理：RexPocket 通过一个只有同一密钥签名的 App
+  才能绑定的服务连接它，每条连接都是附加组件交过来的一个 socket。
 
 ### 让 tailnet 更快
 
@@ -150,7 +166,7 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再�
 
 APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 会构建一个用发布密钥签名的版本（见下文「发布」）。只构建
 arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这个 Go 模块构建，包含 `tailscale.com` 的 tsnet 库
-（版本由其 `go.mod` 锁定）和 `tailnet/netbird` 中的 Netbird 嵌入式客户端；要重新构建，运行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。Netbird 需要单独选择打包：`REXPOCKET_NETBIRD=1 tools/build-tailnet.sh` 会生成 `app/libs/tailnet-netbird.aar`，再用 `./gradlew -Prexpocket.netbird=true :app:assembleRelease` 链接进 App。它会让 APK 增加约 30 MB（29 MB 增至 59 MB），所以默认构建不包含它；没有它时，设置 › Tailnet 只提供 Tailscale。`core` 里的集成测试连接 `127.0.0.1:7297` 上的 Rex
+（版本由其 `go.mod` 锁定）和 `tailnet/netbird` 中的 Netbird 嵌入式客户端；要重新构建，运行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。Netbird 需要单独选择打包：`REXPOCKET_NETBIRD=1 tools/build-tailnet.sh` 会生成 `app/libs/tailnet-netbird.aar`，再用 `./gradlew -Prexpocket.netbird=true :app:assembleRelease` 链接进 App。它会让 APK 增加约 30 MB（29 MB 增至 59 MB），所以默认构建不包含它，改由附加组件提供 Netbird：`REXPOCKET_NETBIRD=addon tools/build-tailnet.sh` 生成附加组件的库 `netbirdaddon/libs/tailnet-netbird-addon.aar`，`./gradlew :netbirdaddon:assembleRelease` 构建附加组件，用同一个发布密钥签名。`core` 里的集成测试连接 `127.0.0.1:7297` 上的 Rex
 （可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），没有 Rex 时会跳过。窗格生命周期场景（在电脑或手机上关闭标签页和窗格、交还与接管、重连）每次构建都会对测试 JVM 里的 `ScriptedRex` 运行，有真实 Rex 在监听时也会对它运行，见 [docs/design/testing.md](docs/design/testing.md#rex-integration)。 SSH 测试需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台机器，并用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 给出凭据才会运行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可选。
 
 ### 发布

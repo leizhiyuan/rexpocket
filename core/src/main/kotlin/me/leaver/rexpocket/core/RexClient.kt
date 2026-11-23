@@ -220,12 +220,15 @@ class RexClient(
          * [socksPort] is the loopback port of the app's own Tailscale inbound. OkHttp hands a SOCKS5
          * proxy the hostname unresolved, so a tailnet name is resolved by Tailscale itself.
          */
-        fun defaultHttp(socksPort: Int = 0): OkHttpClient = OkHttpClient.Builder()
+        fun defaultHttp(socksPort: Int = 0, dialer: StreamDialer? = null): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(0, TimeUnit.MILLISECONDS)
             .pingInterval(30, TimeUnit.SECONDS)
             .apply {
-                if (socksPort > 0) {
+                if (dialer != null) {
+                    // A node in another app (the Netbird add-on) dials for the app: the name goes to it unresolved.
+                    proxy(Proxy.NO_PROXY).socketFactory(DialedSocketFactory(dialer)).dns(UnresolvedDns)
+                } else if (socksPort > 0) {
                     proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", socksPort)))
                 }
             }

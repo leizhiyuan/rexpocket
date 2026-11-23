@@ -41,6 +41,81 @@ connection state, latency, and whether the path is direct (`RemoteIceCandidateEn
 relay server (`RelayServerAddress`). The app shows a relay server as `TailnetPath.Relay`, a new case
 next to the Tailscale ones.
 
+## The Netbird add-on
+
+Embedding Netbird costs every user 30 MB, and most use Tailscale. So the default build offers
+Netbird through a second app instead, installed only by those who want it. The CI run builds three
+APKs, all signed with the kept debug key:
+
+| APK | Gradle | App id | Netbird |
+| --- | --- | --- | --- |
+| `rexpocket.apk` | `:app:assembleDebug` | `me.leaver.rexpocket` | through the add-on: "Netbird (add-on)" |
+| `rexpocket-netbird-addon.apk` | `:netbirdaddon:assembleDebug` | `me.leaver.rexpocket.netbird` | runs the node |
+| `rexpocket-netbird.apk` | `:app:assembleDebug -Prexpocket.netbird=true` | `me.leaver.rexpocket` | embedded; no add-on |
+
+The two app builds share an id and a key, so either installs over the other.
+
+**A bound service, not a port.** The add-on's `NodeService` is exported only behind
+`me.leaver.rexpocket.netbird.permission.NODE`, a `signature` permission, and checks it again on
+every call. Both apps declare the permission (from `:netbirdaddon-api`'s manifest), so either may be
+installed first, and Android refuses an app with another key that declares it. The add-on starts
+its node with `Netbird.startPrivate`, which opens no SOCKS5 proxy: nothing listens on loopback.
+
+**The interface** is `INetbirdNode` (AIDL, in `:netbirdaddon-api`, which both apps depend on):
+`version`, `start(hostname, setupKey, managementUrl)` (the configure-and-start of the embedded
+node), `stop`, `state` and `ping` (the JSON the Go library already reports, so `TailnetStage` and the
+status screens work unchanged), `dialError`, `dial(host, port, timeout)`, a listener for state
+changes, and `keepRunning`. A failure is an `IllegalStateException` with the node's own words,
+which Binder carries.
+
+**Dialing.** `dial` returns a `ParcelFileDescriptor`: one end of a Unix socket pair, whose other end
+the add-on pipes to the Netbird connection (`Node.DialFd` in `tailnet/netbird/dialfd.go`, with half
+closes passed on). In RexPocket the descriptor is a `java.net.Socket` through a custom `SocketImpl`
+(`core/…/DialedSocket.kt`, `app/src/addon/…/FdStream.kt`), so the Rex connection and the SSH
+tunnel take it where they took a SOCKS proxy: `TailnetNode.dialer` is set, OkHttp gets
+`DialedSocketFactory` with `UnresolvedDns` (the name reaches the add-on as it is), and
+`SshSettings.dialer` does the same for JSch. The `SocketImpl` carries the descriptor, so Android's
+TLS, which works on descriptors, also works over it. Read timeouts are a `poll` before each read;
+a close shuts the socket down first, which wakes a blocked read.
+
+**Version.** `NetbirdAddon.VERSION` is checked right after binding. An add-on of another version is
+not used, and the error says which versions met and to install both from one run or release.
+
+**When the add-on dies.** The binding uses `BIND_AUTO_CREATE`, so Android binds again after the
+add-on's process ends. Meanwhile the state reads "Starting", with "The Netbird add-on stopped.
+RexPocket is starting it again." as its health line, so the status shows it; once bound, the client
+starts the node again with the same settings, without a setup key (the add-on kept its
+registration). A dead binding (the add-on updated or removed) is made again. Not installed, signed
+otherwise, or not answering in 10 s: the start fails with that reason. The Tailnet dialog says when
+the add-on is missing and links to the releases (`NETBIRD_ADDON_URL`).
+
+**In the background.** While RexPocket is on screen, its binding gives the add-on RexPocket's own
+importance, so no foreground service is needed. When the last RexPocket activity stops and
+background alerts are on (RexPocket keeps its connection open with its own `specialUse`
+foreground service), RexPocket calls `keepRunning(true)`, and the add-on becomes a foreground
+service of type `specialUse`, with a silent notification, for as long as its node runs; coming
+back to the screen calls `keepRunning(false)`. Android 12 and later let it start one then because it
+is bound by an app that may (RexPocket, just left the screen or in its own foreground service); if
+Android refuses, the add-on logs it and may be stopped in the background like any app, and the
+rebind above brings it back. When RexPocket unbinds or its process ends, the add-on stops its node.
+The add-on asks for no notification permission: without it, its notification is hidden, and the
+service still runs.
+
+**Isolation.** The add-on's client in RexPocket lives in `app/src/addon/` (with
+`src/testAddon` and `src/androidTestAddon`), compiled only into the default build;
+`app/src/embedded/` is what the embedded build has in its place (a stored add-on choice runs the
+embedded node). The shared code has one call into each: `addonEntries` in `TailnetNodes.of` and
+`TailnetBackendNote` in the Tailnet dialog. Dropping the add-on later is: those two calls, the
+`NetbirdAddon` backend, the `src/addon*` and `netbirdaddon*` directories, `DialedSocket` and the
+dialer plumbing, `DialFd`/`StartPrivate`, and the add-on's CI steps. Dropping the embedded build
+instead is `src/embedded`, the `rexpocket.netbird` property and its CI steps.
+
+**Libraries.** The add-on's library is the Netbird package alone (`REXPOCKET_NETBIRD=addon
+tools/build-tailnet.sh` writes `netbirdaddon/libs/tailnet-netbird-addon.aar`, not checked in): no
+Tailscale, 39.1 MB of native code against 51.5 MB for the embedded library. It cannot be the
+embedded one's output without carrying Tailscale it never runs, and `app/libs/tailnet.aar` is not
+touched, so the default APK's native code stays as it was.
+
 ## Code layout
 
 - `tailnet/` (Go): the Tailscale node, unchanged, and `tailnet/netbird/`: the Netbird node behind
@@ -51,6 +126,10 @@ next to the Tailscale ones.
 - `app/…/net/`: `TailnetNode` (the interface the view model uses), `TailnetBox` (the lifecycle,
   peers, probing, and network-change handling both backends share), `TailscaleBox` and `NetbirdBox`
   (open the node and say how their platform hooks work).
+- The add-on: `netbirdaddon/` (the app and its `NodeService`), `netbirdaddon-api/` (the AIDL,
+  `NetbirdAddon`'s names and version, the permission), `app/src/addon/` (`AddonClient`,
+  `NetbirdAddonBox`, `FdStream`, the dialog's note), `core/…/DialedSocket.kt`, and
+  `tailnet/netbird/dialfd.go`.
 - Settings keep their old keys: `tailscale_enabled` and `tailscale_hostname` still mean the joined
   node and its name, and a missing `tailnet_backend` reads as Tailscale, so an installed app keeps
   its join.
@@ -77,18 +156,28 @@ The 16 KB alignment check passes for both libraries and both APKs.
 
 Three GitHub Actions workflows run on every push:
 
-- **`android-apk`** builds the default and the Netbird debug APKs for arm64, with libghostty.
+- **`android-apk`** builds the three debug APKs above for arm64, with libghostty, checks that they
+  carry the kept key, that `rexpocket.apk` asks for the add-on's permission and
+  `rexpocket-netbird.apk` has nothing of the add-on, and reports their sizes.
 - **`Netbird e2e`** brings up `netbirdio/netbird-server` 0.83.2 (management, signal, relay, STUN) and
   an OpenSSH peer in Docker (`tools/ci/netbird-e2e/`). The setup key comes from the server's
   unauthenticated `/api/setup` bootstrap and its REST API, with no login. `tailnet/netbird/e2e_test.go`
   (tags `netbird e2e`) runs the app's Go node against it. The node joins and reaches Running and lists
   the peer. Ping returns a path, relayed in CI. The test reads `SSH-2.0` from the peer's port 22
-  through the SOCKS5 proxy by its name. It then restarts without the key and does it again.
+  through the SOCKS5 proxy by its name. It then restarts without the key and does it again, and
+  once more the add-on's way (`StartPrivate`, no proxy), reading the banner through `DialFd` and
+  checking that a refused port fails with a reason.
 - **`device-test`** runs every instrumented test class on x86_64 emulators, API 30 and 34, with an
   x86_64 build of both native libraries (`-Prexpocket.abi=x86_64`, test-only; release builds stay
   arm64). The x86_64 build is needed because the emulator's ARM translation stops with SIGILL on Go's
   CPU-feature probe (`mrs x0, midr_el1`), which real arm64 phones handle. The run covers app launch,
-  Netbird library load, start errors, the terminal, and the IME: 22 of 22 pass.
+  Netbird library load, start errors, the terminal, and the IME: 22 of 22 pass. Then it installs
+  the x86_64 add-on and runs the default build's `me.leaver.rexpocket.net.addon` tests:
+  `FdStreamTest` (the dialed socket on a real socket pair: both ways, half close, read timeout, a
+  close waking a read) and `NetbirdAddonDeviceTest` (the service's signature permission, which the
+  shell's uid lacks; bind, version, configure and state through the binding, with the add-on's
+  "setup key" error coming back; and, where `am crash` exists, the add-on's process ending and
+  being bound again).
 
 The end-to-end test found two bugs, both fixed with unit tests:
 
@@ -125,7 +214,12 @@ server image in CI only; nothing from it ships.
 
 - `core`: JVM tests for the Netbird name rule, the state and path parsers, the backend choice, and the
   relay case.
-- `app`: `TailnetBoxTest` (node-name cleaning) and the instrumented `TailnetNodeInstrumentedTest`.
+- `app`: `TailnetBoxTest` (node-name cleaning) and the instrumented `TailnetNodeInstrumentedTest`;
+  for the add-on, `AddonClientTest` (a fake binding and add-on: bind and start, add-on missing,
+  another version, another key, no answer, process death and the restart, a dead binding, the
+  background wish) and the device tests above.
+- `core`: `DialedSocketTest`: OkHttp through a dialer, by name and by address, a read timeout, a
+  failed dial, and the socket's own state.
 - `tailnet` (Go): the Tailscale tests, and the Netbird package with and without the `netbird` tag:
   saved-key read, start errors, the stub, the ping JSON fields, peer-name resolution, the resolver,
   and ping wake-up; plus the end-to-end test above.

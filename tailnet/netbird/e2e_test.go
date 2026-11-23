@@ -80,13 +80,63 @@ func TestE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start without a setup key: %v", err)
 	}
-	defer node.Close()
 	againIP, againSelf := checkNode(t, node, peerName, false)
 	if againSelf != self {
 		t.Fatalf("the node registered anew instead of reusing its registration: %s, then %s", self, againSelf)
 	}
 	if againIP != ip {
 		t.Fatalf("peer address changed across the restart: %s, then %s", ip, againIP)
+	}
+	node.Close()
+
+	t.Log("third start: the add-on's way, no proxy, dialed through descriptors")
+	node, err = StartPrivate(dir, "rexpocket-e2e", "", mgmt, platform)
+	if err != nil {
+		t.Fatalf("StartPrivate: %v", err)
+	}
+	defer node.Close()
+	if port := node.ProxyPort(); port != 0 {
+		t.Fatalf("StartPrivate opened a proxy on port %d", port)
+	}
+	privateIP, _ := waitForPeer(t, node, peerName, 90*time.Second)
+	checkDialFd(t, node, peerName, privateIP)
+}
+
+// checkDialFd reads the peer's SSH banner by name through [Node.DialFd], as the add-on dials for
+// RexPocket, and expects a port nothing listens on to fail with a reason.
+func checkDialFd(t *testing.T, node *Node, peerName, ip string) {
+	t.Helper()
+	var lastErr error
+	for attempt := 0; attempt < 10; attempt++ {
+		fd, err := node.DialFd(peerName, 22, 15_000)
+		if err == nil {
+			conn := fdConn(t, int(fd))
+			conn.SetDeadline(time.Now().Add(15 * time.Second))
+			line, err := bufio.NewReader(conn).ReadString('\n')
+			conn.Close()
+			if err == nil {
+				if !strings.HasPrefix(line, "SSH-2.0") {
+					t.Fatalf("banner through DialFd: %q, want SSH-2.0...", line)
+				}
+				t.Logf("banner from %s:22 through DialFd: %q", peerName, strings.TrimSpace(line))
+				break
+			}
+		}
+		lastErr = err
+		t.Logf("DialFd %s:22 (attempt %d): %v", peerName, attempt+1, err)
+		time.Sleep(3 * time.Second)
+		if attempt == 9 {
+			t.Fatalf("could not read the SSH banner of %s through DialFd: %v", peerName, lastErr)
+		}
+	}
+	if fd, err := node.DialFd(peerName, 7297, 30_000); err == nil {
+		fdConn(t, int(fd)).Close()
+		t.Fatalf("%s:7297 answered through DialFd; the test wants a port nothing listens on", peerName)
+	} else {
+		t.Logf("DialFd %s:7297: %v", peerName, err)
+	}
+	if node.DialError(ip) == "" && node.DialError(peerName) == "" {
+		t.Fatalf("a failed DialFd to %s:7297 left no reason", peerName)
 	}
 }
 

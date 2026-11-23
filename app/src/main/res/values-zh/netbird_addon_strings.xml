@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Netbird add-on, offered by the default build: see docs/design/tailnet-backends.md. -->
+<resources>
+    <string name="netbird_addon_installed">Netbird 在 RexPocket Netbird 附加组件中运行，这是与本应用并列的另一个应用。加入网络时由 RexPocket 启动它。</string>
+    <string name="netbird_addon_missing">尚未安装 Netbird 附加组件。请从与本应用相同的发布版本或 CI 运行中安装 %1$s：两者必须使用同一个密钥签名。</string>
+    <string name="netbird_addon_get">获取附加组件</string>
+    <string name="netbird_addon_not_allowed">RexPocket 无法使用 Netbird 附加组件：两者使用了不同的密钥签名。请从同一个发布版本或 CI 运行中安装两者。</string>
+    <string name="netbird_addon_no_answer">Netbird 附加组件没有响应。</string>
+    <string name="netbird_addon_version">Netbird 附加组件使用第 %1$d 版接口，而此 RexPocket 使用第 %2$d 版。请从同一个发布版本或 CI 运行中安装两者。</string>
+    <string name="netbird_addon_restarting">Netbird 附加组件已停止。RexPocket 正在重新启动它。</string>
+</resources>

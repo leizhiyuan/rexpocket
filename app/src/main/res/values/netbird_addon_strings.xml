@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Netbird add-on, offered by the default build: see docs/design/tailnet-backends.md. -->
+<resources>
+    <string name="netbird_addon_installed">Netbird runs in the RexPocket Netbird add-on, a separate app beside this one. RexPocket starts it when it joins.</string>
+    <string name="netbird_addon_missing">The Netbird add-on is not installed. Install %1$s from the same release or CI run as this app: the two must be signed with the same key.</string>
+    <string name="netbird_addon_get">Get the add-on</string>
+    <string name="netbird_addon_not_allowed">RexPocket may not use the Netbird add-on: the two were signed with different keys. Install both from the same release or CI run.</string>
+    <string name="netbird_addon_no_answer">The Netbird add-on did not answer.</string>
+    <string name="netbird_addon_version">The Netbird add-on speaks version %1$d of its interface, and this RexPocket version %2$d. Install both from the same release or CI run.</string>
+    <string name="netbird_addon_restarting">The Netbird add-on stopped. RexPocket is starting it again.</string>
+</resources>

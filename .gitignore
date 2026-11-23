@@ -20,3 +20,6 @@ app/src/main/jniLibs/
 # Release signing key: never committed, see app/build.gradle.kts
 *.keystore
 *.jks
+
+# The Netbird add-on's library, built by tools/build-tailnet.sh with REXPOCKET_NETBIRD=addon.
+netbirdaddon/libs/

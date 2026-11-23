@@ -56,6 +56,17 @@ type savedConfig struct {
 // restart - and opens the proxy. setupKey is needed the first time a node joins; after that it may
 // be empty. managementURL may be empty for Netbird Cloud.
 func Start(dir, hostname, setupKey, managementURL string, platform Platform) (*Node, error) {
+	return start(dir, hostname, setupKey, managementURL, platform, true)
+}
+
+// StartPrivate is [Start] without the proxy: nothing listens on a port, and the node is reached
+// only through [Node.DialFd]. The Netbird add-on app runs its node this way, so no other app on the
+// phone can dial through it.
+func StartPrivate(dir, hostname, setupKey, managementURL string, platform Platform) (*Node, error) {
+	return start(dir, hostname, setupKey, managementURL, platform, false)
+}
+
+func start(dir, hostname, setupKey, managementURL string, platform Platform, proxy bool) (*Node, error) {
 	if platform == nil {
 		return nil, errors.New("netbird: no platform")
 	}
@@ -87,35 +98,45 @@ func Start(dir, hostname, setupKey, managementURL string, platform Platform) (*N
 	if err != nil {
 		return nil, err
 	}
-	return startClient(client, platform)
+	return startClient(client, platform, proxy)
 }
 
-// startClient starts the embedded client, then opens the SOCKS5 proxy that dials through it.
-func startClient(client *embed.Client, platform Platform) (*Node, error) {
+// startClient starts the embedded client, then, when proxy is set, opens the SOCKS5 proxy that
+// dials through it.
+func startClient(client *embed.Client, platform Platform, proxy bool) (*Node, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 	if err := client.Start(ctx); err != nil {
 		return nil, fmt.Errorf("netbird: %w", err)
 	}
 	n := &Node{platform: platform, client: client}
-
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		n.Close()
-		return nil, err
+	if proxy {
+		if err := n.listen(); err != nil {
+			n.Close()
+			return nil, err
+		}
 	}
-	n.proxy = ln
-	server := socks5.NewServer(
-		socks5.WithDial(n.dial),
-		socks5.WithResolver(peerResolver{peers: n.peersOf, next: socks5.DNSResolver{}}),
-		socks5.WithLogger(socksLogger{platform}),
-	)
-	go server.Serve(ln)
 
 	watchCtx, cancelWatch := context.WithCancel(context.Background())
 	n.cancel = cancelWatch
 	go n.watch(watchCtx)
 	return n, nil
+}
+
+// listen opens the SOCKS5 proxy on loopback.
+func (n *Node) listen() error {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return err
+	}
+	n.proxy = ln
+	server := socks5.NewServer(
+		socks5.WithDial(n.dial),
+		socks5.WithResolver(peerResolver{peers: n.peersOf, next: socks5.DNSResolver{}}),
+		socks5.WithLogger(socksLogger{n.platform}),
+	)
+	go server.Serve(ln)
+	return nil
 }
 
 // readPrivateKey returns the WireGuard key a saved config records, or "" when there is none yet.

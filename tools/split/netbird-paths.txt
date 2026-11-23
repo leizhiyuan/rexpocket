@@ -5,3 +5,17 @@ tools/ci/netbird-e2e
 .github/workflows/netbird-e2e.yml
 app/src/main/java/me/leaver/rexpocket/net/NetbirdBox.kt
 docs/design/tailnet-backends.md
+# The Netbird add-on: its app and interface, RexPocket's client of it (compiled into the default
+# build only, with its tests), the embedded build's stand-in, the add-on's strings, and the socket
+# its dials give the connection.
+netbirdaddon
+netbirdaddon-api
+app/src/addon
+app/src/embedded
+app/src/testAddon
+app/src/androidTestAddon
+app/src/main/res/values/netbird_addon_strings.xml
+app/src/main/res/values-zh/netbird_addon_strings.xml
+app/src/main/res/values-zh-rTW/netbird_addon_strings.xml
+core/src/main/kotlin/me/leaver/rexpocket/core/DialedSocket.kt
+core/src/test/kotlin/me/leaver/rexpocket/core/DialedSocketTest.kt

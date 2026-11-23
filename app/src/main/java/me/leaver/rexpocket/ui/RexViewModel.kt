@@ -212,7 +212,7 @@ class RexViewModel @JvmOverloads constructor(
     /** The credentials and settings a backend's node starts with. */
     private fun configFor(settings: TailnetSettings, setupKey: String = ""): TailnetConfig = when (settings.backend) {
         TailnetBackend.Tailscale -> TailscaleConfig(authKey = "", hostname = settings.hostname)
-        TailnetBackend.Netbird -> NetbirdConfig(
+        TailnetBackend.Netbird, TailnetBackend.NetbirdAddon -> NetbirdConfig(
             setupKey = setupKey,
             hostname = settings.hostname,
             managementUrl = settings.managementUrl,
@@ -654,6 +654,8 @@ class RexViewModel @JvmOverloads constructor(
             } else {
                 0
             }
+            // A node in another app (the Netbird add-on) has no proxy: it dials for the connection.
+            val dialer = if (viaTailscale) node.dialer else null
             val trace = { line: String -> if (BuildConfig.DEBUG) Log.i(CONN_TAG, line) }
             // The SSH tunnel is per host and outlives a reconnect attempt: only the channels under it
             // come and go. Every Rex connection of this host goes through the same route.
@@ -670,13 +672,14 @@ class RexViewModel @JvmOverloads constructor(
                         ),
                         hostKey = target.sshHostKey.takeIf { it.isNotEmpty() },
                         socksPort = socksPort,
+                        dialer = dialer,
                     ),
                     trace,
                 ).also { sshTunnel = it }
             } else {
                 null
             }
-            val httpFactory: () -> OkHttpClient = { ssh?.http() ?: RexClient.defaultHttp(socksPort) }
+            val httpFactory: () -> OkHttpClient = { ssh?.http() ?: RexClient.defaultHttp(socksPort, dialer) }
             val s = PocketSession(
                 endpoint,
                 httpFactory = httpFactory,

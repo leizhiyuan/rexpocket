@@ -62,6 +62,13 @@ jobs:
           REXPOCKET_NETBIRD=1 sh tools/build-tailnet-x86_64.sh
           unzip -l app/libs/tailnet-netbird.aar | grep 'jni/'
 
+      # The Netbird add-on's tests run the default build of the app (the one that offers the add-on)
+      # beside the add-on itself, which needs its own library.
+      - name: Build the Netbird add-on's library for x86_64
+        run: |
+          REXPOCKET_NETBIRD=addon sh tools/build-tailnet-x86_64.sh
+          unzip -l netbirdaddon/libs/tailnet-netbird-addon.aar | grep 'jni/'
+
       - name: Build libghostty for x86_64
         run: |
           sed -e 's#aarch64-linux-android#x86_64-linux-android#g' -e 's#prefix-arm64#prefix-x86_64#' \
@@ -129,6 +136,21 @@ jobs:
             adb logcat -d > "out/$class/logcat.txt" || true
             grep -E "ndk_translation|SIGILL|SIGSEGV|Fatal signal|FATAL EXCEPTION|UnsatisfiedLinkError" "out/$class/logcat.txt" | head -20 || true
           done
+          # The Netbird add-on: installed first, then the default app's add-on tests against it.
+          ADDON_ARGS="-x :app:buildGhostty -Prexpocket.abi=x86_64"
+          adb logcat -c || true
+          if ./gradlew --no-daemon -q $ADDON_ARGS :netbirdaddon:installDebug && \
+             ./gradlew --no-daemon -q $ADDON_ARGS :app:connectedDebugAndroidTest \
+                -Pandroid.testInstrumentationRunnerArguments.package=me.leaver.rexpocket.net.addon; then
+            echo "RESULT me.leaver.rexpocket.net.addon: passed"
+          else
+            echo "RESULT me.leaver.rexpocket.net.addon: FAILED"
+            status=1
+          fi
+          mkdir -p out/addon
+          cp -r app/build/reports/androidTests "out/addon/" 2>/dev/null || true
+          cp -r app/build/outputs/androidTest-results "out/addon/" 2>/dev/null || true
+          adb logcat -d > "out/addon/logcat.txt" || true
           exit $status
           SH
 

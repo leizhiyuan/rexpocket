@@ -1,6 +1,9 @@
 name: android-apk
 
-# Builds debug APKs for testing on a phone: the default one, and the one with Netbird.
+# Builds the debug APKs for testing on a phone, all signed with the kept debug key:
+#   rexpocket.apk                 the app, Tailscale built in, and Netbird through the add-on
+#   rexpocket-netbird-addon.apk   the Netbird add-on, a separate app (me.leaver.rexpocket.netbird)
+#   rexpocket-netbird.apk         the app with Netbird embedded; it replaces rexpocket.apk
 # Download them from the run's Artifacts section.
 on:
   workflow_dispatch:
@@ -69,7 +72,15 @@ jobs:
       - name: Keep the default APK aside
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket.apk
+
+      - name: Build the Netbird add-on's library
+        run: REXPOCKET_NETBIRD=addon sh tools/build-tailnet.sh
+
+      - name: Build the Netbird add-on
+        run: |
+          ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" :netbirdaddon:assembleDebug
+          cp netbirdaddon/build/outputs/apk/debug/netbirdaddon-debug.apk out/rexpocket-netbird-addon.apk
 
       - name: Build the Netbird library
         run: REXPOCKET_NETBIRD=1 sh tools/build-tailnet.sh
@@ -78,19 +89,30 @@ jobs:
         run: ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" -Prexpocket.netbird=true :app:assembleDebug
 
       - name: Keep the Netbird APK aside
-        run: cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket-debug-netbird.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket-netbird.apk
 
-      - name: Check both APKs carry the kept key
+      - name: Check the APKs carry the kept key, and which one offers the add-on
         run: |
           WANT=$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 "SHA256:" | awk '{print $2}' | tr -d ':' | tr 'A-F' 'a-f')
-          for apk in out/*.apk; do
+          for apk in out/rexpocket.apk out/rexpocket-netbird-addon.apk out/rexpocket-netbird.apk; do
             GOT=$("$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --print-certs "$apk" | grep -m1 "SHA-256 digest" | awk '{print $NF}')
             echo "$apk $GOT"
             [ "$GOT" = "$WANT" ] || { echo "signed with another key than the kept one"; exit 1; }
           done
+          AAPT2="$ANDROID_HOME/build-tools/36.1.0/aapt2"
+          # The default app asks for the add-on's permission; the embedded one has nothing of the add-on.
+          "$AAPT2" dump xmltree --file AndroidManifest.xml out/rexpocket.apk | grep -q 'me.leaver.rexpocket.netbird.permission.NODE'
+          if "$AAPT2" dump xmltree --file AndroidManifest.xml out/rexpocket-netbird.apk | grep -q 'me.leaver.rexpocket.netbird'; then
+            echo "rexpocket-netbird.apk offers the add-on"; exit 1
+          fi
+          [ "$("$AAPT2" dump packagename out/rexpocket-netbird-addon.apk)" = me.leaver.rexpocket.netbird ]
 
       - name: Sizes
-        run: ls -l out/
+        run: |
+          for apk in out/*.apk; do
+            echo "$(basename "$apk"): $(stat -c %s "$apk") bytes"
+            unzip -l "$apk" | awk '$4 ~ /^lib\/.*\.so$/ { print "  " $4 ": " $1 " bytes" }'
+          done | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:

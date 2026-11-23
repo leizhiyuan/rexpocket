@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="addon_name">RexPocket Netbird add-on</string>
+    <string name="addon_channel">Netbird for RexPocket</string>
+    <string name="addon_running_title">Netbird is running for RexPocket</string>
+    <string name="addon_running_text">RexPocket keeps its connection open in the background through this Netbird node.</string>
+</resources>

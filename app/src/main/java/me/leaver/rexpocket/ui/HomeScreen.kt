@@ -1299,7 +1299,7 @@ internal fun TailnetDialog(
     // The node's own state and login only describe the backend that is joined, not one picked here.
     val joinedHere = initial.enabled && backend == initial.backend
     val state = tailnetState(status)
-    val netbird = backend == TailnetBackend.Netbird
+    val netbird = backend == TailnetBackend.Netbird || backend == TailnetBackend.NetbirdAddon
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Colors.surface,
@@ -1365,6 +1365,7 @@ internal fun TailnetDialog(
                     )
                     Text(stringResource(R.string.tailscale_login_hint), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
                 }
+                me.leaver.rexpocket.net.addon.TailnetBackendNote(backend)
                 if (netbird && !joinedHere) {
                     Text(stringResource(R.string.netbird_need_key), color = Colors.amber, fontSize = TextStyles.label, lineHeight = labelLeading)
                 }

@@ -175,6 +175,19 @@ val withNetbird = (findProperty("rexpocket.netbird") as String?).toBoolean()
 val tailnetLibrary = rootProject.file(if (withNetbird) "app/libs/tailnet-netbird.aar" else "app/libs/tailnet.aar")
 require(tailnetLibrary.isFile) { "${tailnetLibrary.name} is missing: build it with tools/build-tailnet.sh" }
 
+// The Netbird add-on (:netbirdaddon, a separate app) is offered by the default build only; the build
+// with Netbird embedded has no use for it. Its client lives in src/addon, with its unit and device
+// tests in src/testAddon and src/androidTestAddon; src/embedded is what the embedded build has in
+// its place. See docs/design/tailnet-backends.md.
+val withAddon = !withNetbird
+android.sourceSets {
+    getByName("main").java.srcDir(if (withAddon) "src/addon/java" else "src/embedded/java")
+    if (withAddon) {
+        getByName("test").java.srcDir("src/testAddon/java")
+        getByName("androidTest").java.srcDir("src/androidTestAddon/java")
+    }
+}
+
 dependencies {
     testImplementation("junit:junit:4.13.2")
     // Screens driven and captured on the JVM: see docs/design/testing.md.
@@ -217,4 +230,5 @@ dependencies {
     // about 30 MB to the APK, so it is a build choice: -Prexpocket.netbird=true links the library built
     // with REXPOCKET_NETBIRD=1 instead.
     implementation(files(tailnetLibrary))
+    if (withAddon) implementation(project(":netbirdaddon-api"))
 }

@@ -6,7 +6,7 @@ Tailscale, so the Netbird backend is its own, opt-in change on top:
 | | Branch | Title | On top of |
 | --- | --- | --- | --- |
 | PR A | `split/ui` | UI and Rex parity | the merge base with `origin/master` |
-| PR B | `split/netbird` | Netbird as an opt-in tailnet backend | `split/ui` |
+| PR B | `split/netbird` | Netbird as an opt-in tailnet backend, and the Netbird add-on | `split/ui` |
 
 Both branches are local and rebuilt from the tip by [tools/split/split-prs.sh](../../tools/split/split-prs.sh),
 so the split can be made again after more commits land. Nothing is pushed by the script.
@@ -80,21 +80,27 @@ netbird-paths.txt. The script then keeps its worktree and says where it is. To f
 - `tools/ci/netbird-e2e/` and `.github/workflows/netbird-e2e.yml`: the end-to-end test against a
   self-hosted Netbird.
 - `docs/design/tailnet-backends.md`: the Netbird design note.
+- The Netbird add-on: `netbirdaddon/` (the add-on app), `netbirdaddon-api/` (its AIDL, names,
+  version and permission), `app/src/addon/`, `app/src/testAddon/` and `app/src/androidTestAddon/`
+  (RexPocket's client of it and its tests, in the default build only), `app/src/embedded/` (the
+  embedded build's stand-in), `values*/netbird_addon_strings.xml`, and `core/…/DialedSocket.kt`
+  with its test (the socket an add-on dial gives the connection).
 
 ### Shared files, with Netbird hunks (netbird.patch, 36 files)
 
 | Area | Files | What PR B adds |
 | --- | --- | --- |
-| Backend choice | `core/…/TailnetBackend.kt`, `app/…/net/TailnetNode.kt` | the `Netbird` entry (no sign-in step) and its one `TailnetEntry` in `TailnetNodes.of`; `NetbirdConfig` |
-| Settings | `data/HostStore.kt`, `ui/HomeScreen.kt`, `ui/RexApp.kt`, `ui/RexViewModel.kt` | the management server setting, the setup key, the Netbird fields and hint in the Tailnet dialog, `joinTailnet`'s two Netbird arguments, the config of a Netbird node |
+| Backend choice | `core/…/TailnetBackend.kt`, `app/…/net/TailnetNode.kt` | the `Netbird` and `NetbirdAddon` entries (no sign-in step), their `TailnetEntry`s in `TailnetNodes.of` (`addonEntries`); `NetbirdConfig`; `TailnetNode.dialer` |
+| Dialing without SOCKS | `core/…/RexClient.kt`, `core/…/SshTunnel.kt`, `ui/RexViewModel.kt` | a `StreamDialer` beside the SOCKS port: `defaultHttp(socksPort, dialer)`, `SshSettings.dialer`, and the view model passing the node's |
+| Settings | `data/HostStore.kt`, `ui/HomeScreen.kt`, `ui/RexApp.kt`, `ui/RexViewModel.kt` | the management server setting, the setup key, the Netbird fields and hint in the Tailnet dialog (and `TailnetBackendNote`, the add-on's line), `joinTailnet`'s two Netbird arguments, the config of a Netbird node |
 | Tailnet details | `core/…/TailnetState.kt`, `TailnetPath.kt`, `ui/TailnetUi.kt` | `PeerLink.Relay`, a peer's `latencyMs`, `TailnetPath.Relay` and the ping's `relayServer` |
 | Names | `core/…/HostAddress.kt` | `.netbird.cloud` is on the tailnet |
 | Comments | `TailnetStage.kt`, `TailnetBox.kt`, `Common.kt` | the words "Netbird" where a comment names it |
 | Strings | `values*/strings.xml`, `values*/tailnet_strings.xml` | `netbird_*`, `tailnet_path_relay`, `tailnet_link_relay`, in English, zh and zh-rTW |
 | Tests | the core tailnet tests, `HostAddressTest`, `TailnetHarness`, `ScreenshotsTest`, `TailnetNodeInstrumentedTest` | the Netbird cases, the Netbird sample and screenshot, the instrumented Netbird load and start checks |
-| Build | `app/build.gradle.kts`, `tools/build-tailnet.sh`, `.gitignore` | `-Prexpocket.netbird=true`, `REXPOCKET_NETBIRD=1` and `tailnet-netbird.aar` |
-| CI | `android-apk.yml`, `device-test.yml` | the Netbird APK; device tests on the Netbird build |
-| Docs | the three READMEs, `docs/design/tailnet-status.md` | Netbird in the features, setup, how-it-works, build and acknowledgements; the Netbird state fields |
+| Build | `app/build.gradle.kts`, `tools/build-tailnet.sh`, `.gitignore`, `settings.gradle.kts`, `build.gradle.kts` | `-Prexpocket.netbird=true`, `REXPOCKET_NETBIRD=1` and `tailnet-netbird.aar`; `REXPOCKET_NETBIRD=addon`; the add-on's source sets and `:netbirdaddon-api` in the default build; the two add-on modules and the library plugin |
+| CI | `android-apk.yml`, `device-test.yml` | `rexpocket-netbird-addon.apk` and `rexpocket-netbird.apk` beside `rexpocket.apk`, and their checks; device tests on the Netbird build, and the add-on's |
+| Docs | the three READMEs, `docs/design/tailnet-status.md` | Netbird in the features, setup, how-it-works, build and acknowledgements, and which of the three APKs to install; the Netbird state fields |
 
 `tools/build-tailnet.sh` on split/ui is the merge base's: everything the tip changed in it is for
 Netbird (the tag, the second package, `-checklinkname=0`).
@@ -137,7 +143,8 @@ Notes. Review and merge A first; open B against A's branch (or against `master` 
 > palette and the ⋮ menu; closed tabs, the clipboard, copy output, Clear/Reset and the real-Rex
 > matching; tailnet status (the node's state, devices and each step to a host) with a rebuilt
 > `tailnet.aar`; home, first run, icons, large text and updates; the test harnesses; CI
-> (`android-apk` with the kept debug key, `device-test`, `rex-integration`, `rex-real`).
+> (`android-apk`, which builds one APK, `rexpocket.apk`, with the kept debug key; `device-test`,
+> `rex-integration`, `rex-real`).
 >
 > **Testing.** `./gradlew :core:test :app:testDebugUnitTest`, `go test ./...` in `tailnet/`,
 > `:app:assembleDebug`, and the four workflows.
@@ -146,14 +153,18 @@ Notes. Review and merge A first; open B against A's branch (or against `master` 
 
 ### PR B: Netbird as an opt-in tailnet backend
 
-> **Summary.** Adds Netbird as a second tailnet backend, built in only on request: the default APK
-> stays Tailscale only, and `-Prexpocket.netbird=true` with `REXPOCKET_NETBIRD=1
-> tools/build-tailnet.sh` builds one with Netbird (about 30 MB more).
+> **Summary.** Adds Netbird as a second tailnet backend, without making the default APK larger:
+> the default APK reaches Netbird through the Netbird add-on, a separate app RexPocket binds through
+> a signature-guarded service, and `-Prexpocket.netbird=true` with `REXPOCKET_NETBIRD=1
+> tools/build-tailnet.sh` builds one with Netbird embedded (about 30 MB more). CI builds
+> `rexpocket.apk`, `rexpocket-netbird-addon.apk` and `rexpocket-netbird.apk`.
 >
 > **Changes.** The embedded Netbird node in `tailnet/netbird` behind the `netbird` tag, with a stub
 > for the default build; `NetbirdBox` registered in `TailnetNodes.of`; the Netbird choice, management
 > server and setup key in the Tailnet dialog; its state fields (relay link, latency, relay path); the
-> end-to-end workflow against a self-hosted Netbird; device tests on the Netbird build; docs.
+> Netbird add-on (`:netbirdaddon`, `:netbirdaddon-api`, the client in `app/src/addon`, the dialed
+> socket in core, `DialFd` in Go); the end-to-end workflow against a self-hosted Netbird, the
+> add-on's dial path included; device tests on the Netbird build and with the add-on; docs.
 >
 > **Testing.** As for A, plus `go test -tags netbird ./...` and the `Netbird e2e` workflow.
 >
@@ -165,7 +176,8 @@ Notes. Review and merge A first; open B against A's branch (or against `master` 
 On split/ui:
 
 - `git grep -i netbird split/ui` finds nothing; `unzip -l app/libs/tailnet.aar | grep -i netbird`
-  neither.
+  neither. No `netbirdaddon*` module, `settings.gradle.kts` includes `:core` and `:app` only, and
+  `android-apk.yml` builds one APK, `rexpocket.apk`.
 - The tests and assemble tasks above pass, and the debug APK is the tip's default less about 19 KB
   (see Verification).
 - Settings › Tailnet shows no backend choice and joins Tailscale as before.
@@ -180,7 +192,9 @@ On split/netbird:
 
 - `git diff split/netbird <tip>` lists only `tools/split/` and this note.
 - `go test ./...` and `go test -tags netbird ./...` pass; the Netbird workflows pass.
-- With `-Prexpocket.netbird=true`, Settings › Tailnet offers Tailscale and Netbird.
+- With `-Prexpocket.netbird=true`, Settings › Tailnet offers Tailscale and Netbird; without it,
+  Tailscale and Netbird (add-on).
+- `android-apk` uploads `rexpocket.apk`, `rexpocket-netbird-addon.apk` and `rexpocket-netbird.apk`.
 
 ## Verification
 

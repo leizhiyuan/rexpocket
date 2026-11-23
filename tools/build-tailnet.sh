@@ -1,7 +1,9 @@
 #!/bin/sh
 # Builds app/libs/tailnet.aar: the official tailscale.com tsnet library, wrapped by tailnet/ for the
 # app, arm64-v8a only. With REXPOCKET_NETBIRD=1 it also includes Netbird's embedded client and goes to
-# app/libs/tailnet-netbird.aar instead; see below for why that is a separate build.
+# app/libs/tailnet-netbird.aar instead; see below for why that is a separate build. With
+# REXPOCKET_NETBIRD=addon it builds the Netbird node alone, for the Netbird add-on app, into
+# netbirdaddon/libs/tailnet-netbird-addon.aar (docs/design/tailnet-backends.md).
 #
 # The app runs its own Tailscale or Netbird node through it, so it can reach tailnet names such as
 # host.tailnet-xxxx.ts.net or host.netbird.cloud without either app and without taking the phone's
@@ -46,14 +48,23 @@ TAGS="$TAGS,ts_omit_flashappliance,ts_omit_systray,ts_omit_dbus,ts_omit_networkm
 TAGS="$TAGS,ts_omit_resolved,ts_omit_iptables,ts_omit_sdnotify,ts_omit_syslog,ts_omit_completion"
 TAGS="$TAGS,ts_omit_qrcodes,ts_omit_cli"
 
-# The Netbird build: its tag, and its own output so the default library stays as it is.
+# The Netbird build: its tag, and its own output so the default library stays as it is. The add-on
+# has no Tailscale node, so its library is the Netbird package alone, about 20 MB less native code.
 OUT="$ROOT/app/libs/tailnet.aar"
-if [ "${REXPOCKET_NETBIRD:-0}" = 1 ]; then
-    TAGS="$TAGS,netbird"
-    OUT="$ROOT/app/libs/tailnet-netbird.aar"
-fi
+PACKAGES=". ./netbird"
+case "${REXPOCKET_NETBIRD:-0}" in
+    1)
+        TAGS="$TAGS,netbird"
+        OUT="$ROOT/app/libs/tailnet-netbird.aar"
+        ;;
+    addon)
+        TAGS="$TAGS,netbird"
+        OUT="$ROOT/netbirdaddon/libs/tailnet-netbird-addon.aar"
+        PACKAGES="./netbird"
+        ;;
+esac
 
-mkdir -p "$ROOT/app/libs"
+mkdir -p "$(dirname "$OUT")"
 # One ABI: a phone that runs this app is arm64. Android 15 devices can use 16 KB pages, and a
 # library whose LOAD segments are aligned to 4 KB does not load there, so the linker is told to
 # align to 16 KB; tools/check-16kb.sh checks it.
@@ -68,7 +79,7 @@ gomobile bind \
     -trimpath \
     -ldflags "-s -w -buildid= -checklinkname=0 -extldflags=-Wl,-z,max-page-size=16384" \
     -tags "$TAGS" \
-    . ./netbird
+    $PACKAGES
 
 rm -f "${OUT%.aar}-sources.jar"
 "$ROOT/tools/check-16kb.sh" "$OUT"

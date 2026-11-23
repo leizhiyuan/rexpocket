@@ -46,6 +46,8 @@ data class SshSettings(
     val hostKey: String? = null,
     /** The app's own Tailscale SOCKS port, or 0 when the phone's own network reaches the host. */
     val socksPort: Int = 0,
+    /** Dials for the tunnel instead, when the tailnet node is in another app (the Netbird add-on). */
+    val dialer: StreamDialer? = null,
 )
 
 /** Something SSH could not do. The UI turns these into its own words. */
@@ -270,6 +272,9 @@ class SshTunnel(
     /** The machine as seen by JSch: the phone's network, or the app's Tailscale node when asked. */
     private inner class TunnelSocketFactory : com.jcraft.jsch.SocketFactory {
         override fun createSocket(host: String, port: Int): Socket {
+            settings.dialer?.let { dialer ->
+                return DialedSocket(dialer).apply { connect(InetSocketAddress.createUnresolved(host, port), CONNECT_TIMEOUT_MS) }
+            }
             val socket = if (settings.socksPort > 0) {
                 Socket(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", settings.socksPort)))
             } else {
