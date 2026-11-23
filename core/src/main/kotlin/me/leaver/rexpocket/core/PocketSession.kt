@@ -810,6 +810,12 @@ class PocketSession(
     }
 
     /**
+     * Rex's host list (`hosts.list`): the other Rex servers it knows, read as hosts the phone could
+     * import (see [RexHostList]). Nothing on the phone changes.
+     */
+    suspend fun hostList(): HostImportParse = RexHostList.read(rpc("hosts.list", JSONObject()))
+
+    /**
      * The pane on screen's output, screen and scrollback, as plain text with each line as the
      * program wrote it (`format` with `trim` and `unwrap`). Rex hands a large one over in parts
      * (`blob_read`); past [maxBytes] only the newest output is kept, from the start of a line.

@@ -4,6 +4,10 @@
 welcome {api_revision:num,api_server_revision:num,client:{id:<client>,reconnect_token:str},limits:{max_message_bytes:num},protocol:"rex.control.v1",type:str}
 ## phone bootstrap, nothing on the server
 response session.bootstrap {attach_all:{sessions:[]},client_id:<client>,selected_session:null}
+## desk puts a host, the phone lists the hosts, the desk removes it
+event hosts_changed {hash:str}
+event hosts_changed {hash:str}
+response hosts.list {hash:str,hosts:[{added_from:str,endpoints:[str],id:str,label:str,updated_at:<time>}]}
 ## desk creates a session with one tab
 event session_created {session:{label:str,session_id:<session>}}
 ## phone reads a pane of a session it has not attached

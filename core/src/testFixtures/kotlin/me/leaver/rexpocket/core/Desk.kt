@@ -137,6 +137,18 @@ class Desk(private val endpoint: Endpoint) : AutoCloseable {
     /** Rex's sessions, in its order. */
     suspend fun sessions(): List<ListedSession> = parseSessions(client.call("session.list").optJSONArray("sessions"))
 
+    /** Puts a host on Rex's host list (`hosts.put`); [removeHost] takes it off again. */
+    suspend fun putHost(id: String, label: String, vararg endpoints: String) {
+        client.call(
+            "hosts.put",
+            JSONObject().put("host", JSONObject().put("id", id).put("label", label).put("endpoints", org.json.JSONArray(endpoints.toList()))),
+        )
+    }
+
+    suspend fun removeHost(id: String) {
+        runCatching { client.call("hosts.remove", JSONObject().put("id", id)) }
+    }
+
     suspend fun destroy(sid: String) {
         runCatching { client.call("session.destroy", JSONObject().put("session_id", sid)) }
     }

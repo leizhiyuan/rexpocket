@@ -115,6 +115,43 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
     private val blobs = HashMap<Long, String>()
     private val blobIds = java.util.concurrent.atomic.AtomicLong()
 
+    /** Rex's host list (`hosts.list`, `hosts.put`, `hosts.remove`), by id, sorted by label. */
+    private val hostList = LinkedHashMap<String, JSONObject>()
+
+    /**
+     * Puts a host on the list as `hosts.put` does, for a test that wants Rex to have hosts: [label],
+     * reached at each of [endpoints] in turn. Every client hears `hosts_changed`.
+     */
+    fun putHost(label: String, vararg endpoints: String, id: String = "host:" + java.util.UUID.randomUUID()) {
+        synchronized(this) { storeHost(JSONObject().put("id", id).put("label", label).put("endpoints", JSONArray(endpoints.toList()))) }
+    }
+
+    private fun hostsHash(): String = java.security.MessageDigest.getInstance("SHA-256")
+        .digest(hostList.values.joinToString("\n").toByteArray()).joinToString("") { "%02x".format(it) }
+
+    private fun hostsChanged() = announce(
+        Outgoing(null, block = false, JSONObject().put("type", "hosts_changed").put("payload", JSONObject().put("hash", hostsHash())), everyone = true),
+    )
+
+    private fun storeHost(given: JSONObject): JSONObject {
+        val label = given.optString("label")
+        if (label.isBlank() || label != label.trim() || label.length > 64) throw Refused("bad_request", 400, "host.label is not valid")
+        val endpoints = given.optJSONArray("endpoints")
+        if (endpoints == null || endpoints.length() == 0) throw Refused("bad_request", 400, "host.endpoints needs at least one endpoint")
+        val id = given.optString("id").ifEmpty { "host:" + java.util.UUID.randomUUID() }
+        hostList.values.firstOrNull { it.optString("id") != id && it.optString("label").equals(label, ignoreCase = true) }?.let {
+            throw Refused("conflict", 409, "the label \"$label\" is already used by another host")
+        }
+        val host = JSONObject(given.toString()).put("id", id).put("updated_at", Instant.ofEpochMilli(clock()).toString())
+        host.remove("source")
+        hostList[id] = host
+        val sorted = hostList.values.sortedWith(compareBy<JSONObject>({ it.optString("label").lowercase() }, { it.optString("id") }))
+        hostList.clear()
+        sorted.forEach { hostList[it.getString("id")] = it }
+        hostsChanged()
+        return host
+    }
+
     /** A file Rex received with the native upload, for the pane named when it began. */
     class Upload(val block: String, val name: String, val bytes: ByteArray)
 
@@ -369,7 +406,7 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
     private class Refused(val code: String, val status: Int, message: String) : Exception(message)
 
     /** Who may see an event: a session's, or one about the whole server. */
-    private class Outgoing(val session: String?, val block: Boolean, val event: JSONObject)
+    private class Outgoing(val session: String?, val block: Boolean, val event: JSONObject, val everyone: Boolean = false)
 
     /** The events an answer causes, sent after it. */
     private val pending = ThreadLocal<MutableList<Outgoing>>()
@@ -401,6 +438,7 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
     }
 
     private fun mayHear(client: Client, out: Outgoing): Boolean {
+        if (out.everyone) return true
         val sid = out.session ?: return client.scope != null
         if (sid in client.attached) return true
         return when (client.scope) {
@@ -809,6 +847,16 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
                     changed(s)
                 }
                 JSONObject().put("revision", s.revision)
+            }
+            "hosts.list" -> JSONObject().put("hosts", JSONArray(hostList.values.map { JSONObject(it.toString()) })).put("hash", hostsHash())
+            "hosts.put" -> {
+                val host = storeHost(payload.optJSONObject("host") ?: throw Refused("bad_request", 400, "host is required"))
+                JSONObject().put("host", JSONObject(host.toString())).put("hash", hostsHash())
+            }
+            "hosts.remove" -> {
+                val removed = hostList.remove(payload.optString("id")) != null
+                if (removed) hostsChanged()
+                JSONObject().put("removed", removed).put("hash", hostsHash())
             }
             "client.keymap" ->JSONObject().put("bindings", JSONArray()).put("diagnostics", JSONArray()).put("actions", JSONArray())
             else -> JSONObject()

@@ -143,6 +143,23 @@ class RexShapeTest {
             step("phone hello") { phone.hello() }
             step("phone bootstrap, nothing on the server") { phone.call("session.bootstrap", JSONObject().put("event_scope", "all")) }
             desk.hello()
+            // Import hosts from Rex: the host list the phone reads, with a host the desk put there.
+            step("desk puts a host, the phone lists the hosts, the desk removes it", unordered = true) {
+                val id = "host:0199abcd-1234-7abc-8def-0123456789ab"
+                desk.call(
+                    "hosts.put",
+                    JSONObject().put(
+                        "host",
+                        JSONObject().put("id", id).put("label", "rexpocket-shapes-host")
+                            .put("endpoints", JSONArray().put("ssh://me@192.0.2.10:2222").put("192.0.2.10:7297"))
+                            .put("added_from", "rexpocket-shapes"),
+                    ),
+                )
+                Thread.sleep(quiet)
+                phone.call("hosts.list", JSONObject())
+                Thread.sleep(quiet)
+                desk.call("hosts.remove", JSONObject().put("id", id))
+            }
             lateinit var first: String
             lateinit var firstTab: String
             step("desk creates a session with one tab") {
