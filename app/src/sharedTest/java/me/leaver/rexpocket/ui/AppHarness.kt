@@ -23,7 +23,12 @@ internal typealias AppRule = AndroidComposeTestRule<ActivityScenarioRule<Compone
 /** True where libghostty is there to draw a pane: on a device, and on a computer that built it. */
 internal fun ghosttyLoads(): Boolean = runCatching { System.loadLibrary("ghostty_jni") }.isSuccess
 
-internal class RexOnDesk(sessions: Int = 2) : AutoCloseable {
+internal class RexOnDesk(
+    sessions: Int = 2,
+    /** The saved host's id and name; a second host on another Rex takes others. */
+    private val hostId: String = "desk-host",
+    private val hostLabel: String = "desk",
+) : AutoCloseable {
     /**
      * Without libghostty (the JVM tests on a computer that did not build it), panes send no picture:
      * the terminal screen still opens on its pane, it just has nothing to draw.
@@ -56,7 +61,7 @@ internal class RexOnDesk(sessions: Int = 2) : AutoCloseable {
 
     fun tabs(session: String): List<String> = runBlocking { desk.view(session).windows.map { it.id } }
 
-    val host = SavedHost(id = "desk-host", label = "desk", host = "127.0.0.1", port = rex.endpoint.port, plaintext = true)
+    val host = SavedHost(id = hostId, label = hostLabel, host = "127.0.0.1", port = rex.endpoint.port, plaintext = true)
 
     /**
      * The app as it is after an earlier run: this host saved and the one opened last, with

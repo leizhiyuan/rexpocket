@@ -121,6 +121,7 @@ jobs:
               me.leaver.rexpocket.ui.CommandPaletteTest \
               me.leaver.rexpocket.ui.TextFieldsTest \
               me.leaver.rexpocket.ui.HomeManageTest \
+              me.leaver.rexpocket.ui.MultiHostTest \
               me.leaver.rexpocket.ui.ShareTest; do
             adb logcat -c || true
             if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \
@@ -199,6 +200,7 @@ jobs:
             --tests 'me.leaver.rexpocket.ui.EmptySessionTest' \
             --tests 'me.leaver.rexpocket.ui.TextFieldsTest' \
             --tests 'me.leaver.rexpocket.ui.HomeManageTest' \
+            --tests 'me.leaver.rexpocket.ui.MultiHostTest' \
             --tests 'me.leaver.rexpocket.ui.ShareTest' \
             --tests 'me.leaver.rexpocket.ui.ShareIntentTest' \
             --tests 'me.leaver.rexpocket.ui.TailnetStatusTest' \
