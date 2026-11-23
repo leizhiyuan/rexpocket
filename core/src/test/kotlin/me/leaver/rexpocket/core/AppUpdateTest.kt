@@ -130,13 +130,13 @@ class AppUpdateTest {
 
     @Test
     fun `a release with several APKs gives the one this build wants`() {
-        val assets = listOf("rexpocket-netbird-addon.apk", "rexpocket-netbird.apk", "rexpocket.apk", "notes.txt")
+        val assets = listOf("rexpocket-other.apk", "rexpocket-other-build.apk", "rexpocket.apk", "notes.txt")
             .joinToString(",", "[", "]") {
                 """{"name":"$it","browser_download_url":"https://example.test/$it","size":42}"""
             }
         val json = """[{"tag_name":"v1.0.0","draft":false,"prerelease":false,"assets":$assets}]"""
-        assertEquals("rexpocket-netbird-addon.apk", AppRelease.parseFeed(json).single().apk?.name)
-        val plain = AppRelease.parseFeed(json) { !it.contains("netbird") }
+        assertEquals("rexpocket-other.apk", AppRelease.parseFeed(json).single().apk?.name)
+        val plain = AppRelease.parseFeed(json) { !it.contains("other") }
         assertEquals("rexpocket.apk", plain.single().apk?.name)
         assertNull(AppRelease.parseFeed(json) { false }.single().apk)
     }
