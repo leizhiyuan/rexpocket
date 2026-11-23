@@ -2,7 +2,8 @@
 
 What RexPocket tells the person while it is away from the screen, how it decides, and what the
 notifications let them do. Code: `AlertPlanner` (core, `Attention.kt`) decides, `Alerts.kt` (app)
-posts, `RexViewModel.raiseAlerts`/`onSignal` connect the two, `NotificationSettings.kt` is the page.
+posts, `Connections` (app, process-scoped) connects the two for every connected host, `NotificationSettings.kt`
+is the page. Several hosts at once: [multi-host.md](multi-host.md).
 
 ## Sources
 
@@ -37,7 +38,7 @@ Tapping any of them opens exactly that pane (`openAlert`, a one-use token per no
   channel, so a person who finds it noisy can quiet the channel or switch it off on the page.
 - **A new report is news once.** The ledger stamps state, kind and `msg` (not the title, which
   agents animate). A report already seen while on screen is not raised later.
-- **One notification per pane** (tag = block id), whatever it is about. A program that reports
+- **One notification per pane** (tag = host id and block id), whatever it is about. A program that reports
   `blocked` and also sends OSC 9 - Claude Code and others do - makes one alert: a status that
   follows a message within 10 s replaces it silently (it knows more and offers Reply); a message
   that follows a status within 10 s is dropped. Later, each is news of its own.
@@ -71,7 +72,8 @@ summary titled by the session's label and the host as subtext; the summary goes 
 ## Reply and Interrupt
 
 `AlertActionReceiver` (not exported; explicit PendingIntents, mutable only for Reply's RemoteInput)
-hands the action to the view model that holds the connection (`Alerts.actions`). It waits up to 6 s
+hands the action to `Connections`, which holds the connections (`Alerts.actions`), and it goes on the
+connection of the host the notification came from. It waits up to 6 s
 for a redialing connection, then:
 
 - **Reply**: the text is pasted into the pane (`block.event` `paste`, as the key bar's Paste: the
@@ -82,9 +84,9 @@ Both name the pane, which need not be the one on screen or even in the attached 
 bootstrapped connection may send keys to any session's panes (verified on preview.22). Rex answers
 `client.key` with `{handled: false}` when no Lua binding took the key, which is the normal case.
 On success the notification goes; otherwise it comes back, silently, saying "Not sent". No Reply for
-`auth`: a password does not belong in a notification's reply history or on a lock screen. If Android
-destroyed the activity's view model while the process lives on, there is no connection to send on,
-and the action says Not sent.
+`auth`: a password does not belong in a notification's reply history or on a lock screen. The connections
+are the process's, not the activity's, so a Reply still goes after the activity was destroyed; once
+the process is gone there is none, and the action says Not sent.
 
 ## Permission and settings
 

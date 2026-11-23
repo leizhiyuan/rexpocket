@@ -305,6 +305,33 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
   `rex1` `resize` APC carrying the owner. A control connection that drops without a close frame
   leaves the stream open.
 
+### What other clients show
+
+Asked for "a done tab seen on the Mac counts as seen on the phone" (see notifications.md, "Left
+out"): does Rex tell a client which tab or pane each other client is showing or focusing? From the
+docs (api 19) and `ClientViewProbeTest` against real preview.22 in `rex-real` (two desk clients on
+a session, the second focusing the other tab and taking its pane, the phone reading what Rex offers):
+
+- **No.** `session.list_clients`, `client.list` and `client.inspect` describe a client (id, info,
+  principal, connection state, the sessions it attached, its actions) and nothing of what it shows:
+  no window, block or focus field. No event names a client's view.
+- What there is: the session's **one active tab and focused pane**, shared by every client
+  (`active_window_changed`, the view's `active_window_id` and each window's focused block), with no
+  client named; and a pane's **owner** (`block_owner_changed` with `owner`, `previous`, `reason`
+  `take`/`request`; `com.superlogical.terminal.size`'s `owner` and the size each client asked for).
+  Rex.app takes the pane of the window it focuses (`PocketSession.ownershipLoop`), so the owner is
+  the desk that last focused a pane, not one that merely shows it.
+- `focus_history.reverse` is the caller's own history only.
+
+**Feasible as an inference, not as a fact.** The phone never moves Rex's focus, so a change of the
+active tab or focused pane to a done pane after it became done, or a desk client (`info.kind` app,
+`platform` macos) taking that pane, means a desk looked at it, near enough: `block_owner_changed`
+reason `take` to a client other than the phone is the stronger signal, the active tab the weaker
+(a CLI or script can move it too). A desk already showing the tab when it became done sends nothing
+new, but then the active tab and the pane's desk owner say so at that moment. Neither says the person
+was looking: a Mac asleep on that tab counts. Not built; a ledger rule would be "done, then the pane
+is the active one and owned by a desk client" marks it seen.
+
 ### Other differences found, and fixed
 
 | Seen on real Rex | ScriptedRex before | App before | Now |

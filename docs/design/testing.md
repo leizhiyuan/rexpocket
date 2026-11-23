@@ -29,7 +29,7 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 ## Where the tests run
 
 - `app/src/sharedTest` holds the screen tests (`ArrangeKeysTest`, `TerminalControlsTest`, `TermMenuTest`,
-  `TermFullScreenTest`, `CommandPaletteTest`, `ActivityViewTest`, `EmptyHomeTest`, `LargeFontTest`, `AppearanceTest`, `HomeManageTest`, `ShareTest`). They are
+  `TermFullScreenTest`, `CommandPaletteTest`, `ActivityViewTest`, `EmptyHomeTest`, `LargeFontTest`, `AppearanceTest`, `HomeManageTest`, `MultiHostTest`, `ShareTest`). They are
   compiled into both the JVM unit tests and the instrumented tests:
   - on the JVM with Robolectric, in seconds on any computer:
     `./gradlew -x :app:buildGhostty -x :app:buildGhosttyHost :app:testDebugUnitTest --tests 'me.leaver.rexpocket.ui.*'`
@@ -159,6 +159,9 @@ anything goes: text through Rex's `paste` event, files one after another through
 (`attachUpload`'s path, 100 MiB each), and the pane is then shown. Without a remembered pane, or
 when it is gone, the sheet opens on the picker: the open host's sessions, tabs and panes, and the
 other hosts, which connect when tapped.
+
+Several hosts at once are tested as multi-host.md, "Tests", says: `FleetTest` on two ScriptedRex,
+`MultiHostTest` on two with the app's view model.
 
 Notifications are tested as notifications.md, "Tests", says: `PaneSignalsTest` on both servers, `NotificationsTest` on ScriptedRex with the app's view model.
 
