@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.LoginLinkGate
+import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.Trouble
 import me.leaver.rexpocket.data.SavedHost
 import androidx.compose.material3.Text
@@ -81,6 +82,7 @@ fun RexPocketApp(
     val reopenLastTab by model.reopenLastTab.collectAsState()
     val appearance by model.appearance.collectAsState()
     val share by model.share.collectAsState()
+    val hostImport by model.hostImport.step.collectAsState()
     val context = LocalContext.current
     // The home screen leaves the composition while a terminal fills the window; its saved state
     // (the open sheet, search, eye, scroll) is kept here for when it comes back.
@@ -203,6 +205,7 @@ fun RexPocketApp(
                     onReopenLastTab = model::setReopenLastTab,
                     appearance = appearance,
                     onAppearance = model::setAppearance,
+                    onImportHosts = model.hostImport::open,
                 )
             } }
             val term: @Composable (Boolean) -> Unit = { embedded ->
@@ -286,6 +289,13 @@ fun RexPocketApp(
                 onPick = model::shareTo,
                 onConnect = model::shareConnect,
                 onCancel = model::cancelShare,
+            )
+        }
+        hostImport?.let { step ->
+            HostImportSheet(
+                step = step,
+                connected = hosts.filter { lives[it.id]?.state?.phase == Phase.Live },
+                importer = model.hostImport,
             )
         }
         if (fontSettingsOpen) {

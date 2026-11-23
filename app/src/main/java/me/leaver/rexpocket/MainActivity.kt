@@ -10,6 +10,7 @@ import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.ui.RexPocketApp
 import me.leaver.rexpocket.ui.RexViewModel
+import me.leaver.rexpocket.ui.hostListToOpen
 import me.leaver.rexpocket.ui.readShare
 
 class MainActivity : ComponentActivity() {
@@ -25,14 +26,27 @@ class MainActivity : ComponentActivity() {
         // A tapped alert opens its pane; a recreated activity has already acted on its intent.
         if (savedInstanceState == null) Alerts.consume(intent)?.let(model::openAlert)
         // Something shared from another app waits on its sheet for a tap; it is never sent on its own.
-        if (savedInstanceState == null) readShare(this, intent)?.let(model::offerShare)
+        if (savedInstanceState == null) received(intent)
         setContent { RexPocketApp(model) }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         Alerts.consume(intent)?.let(model::openAlert)
-        readShare(this, intent)?.let(model::offerShare)
+        received(intent)
+    }
+
+    /**
+     * A host list opened with the app or shared to it goes to Import hosts, which shows what it
+     * would change before anything does; any other share waits on its sheet for a tap.
+     */
+    private fun received(intent: Intent) {
+        hostListToOpen(this, intent)?.let {
+            model.hostImport.readUri(it)
+            return
+        }
+        val share = readShare(this, intent) ?: return
+        if (!model.hostImport.offerShare(share, intent.type, model::offerShare)) model.offerShare(share)
     }
 
     // Leaving the app is the usual trigger for a tunnel that has to find its way back, so the

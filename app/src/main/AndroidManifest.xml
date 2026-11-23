@@ -51,6 +51,13 @@
                 <data android:mimeType="image/*" />
                 <data android:mimeType="*/*" />
             </intent-filter>
+            <!-- "Open with": a rexpocket-hosts/1 file goes to Import hosts, which shows it before anything changes. -->
+            <intent-filter android:label="@string/import_open_with">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/json" />
+            </intent-filter>
         </activity>
         <!-- The diagnostics report is written to the cache and handed out one file at a time. -->
         <provider

@@ -149,6 +149,15 @@ class RexViewModel @JvmOverloads constructor(
     val updateChannel: StateFlow<UpdateChannel> = updater.channel
     private var updateJob: Job? = null
     val hosts = MutableStateFlow(store.list())
+
+    /** Import hosts, from a host list or a connected Rex's; see HostImport.kt. */
+    val hostImport = HostImporter(
+        app,
+        store,
+        viewModelScope,
+        onChanged = { hosts.value = store.list() },
+        rexHosts = { id -> connections[id]?.session?.hostList() },
+    )
     val tailnet: MutableStateFlow<TailnetSettings> = connections.tailnet.also { it.value = store.tailnet() }
 
     /** The backends this build can run; see [TailnetNodes.of]. */

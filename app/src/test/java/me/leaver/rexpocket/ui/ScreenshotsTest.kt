@@ -192,6 +192,46 @@ class ScreenshotsTest {
         }
     }
 
+    /**
+     * Import hosts: the preview of a host list shared to the app (a new host, a changed one and a
+     * pinned key that would change), or with [keys] the new hosts' public keys after the import.
+     */
+    private fun hostImport(name: String, keys: Boolean = false) {
+        val app = freshApp()
+        val store = me.leaver.rexpocket.data.HostStore(app)
+        val pinned = "SHA256:" + java.util.Base64.getEncoder().withoutPadding().encodeToString(ByteArray(32) { 1 })
+        val other = "SHA256:" + java.util.Base64.getEncoder().withoutPadding().encodeToString(ByteArray(32) { 7 })
+        store.upsert(me.leaver.rexpocket.data.SavedHost("a", "build-vm", "build-vm.example.com", 22, true, sshUser = "me", sshHostKey = pinned))
+        store.upsert(me.leaver.rexpocket.data.SavedHost("b", "agents", "100.92.1.2", 22, true, sshUser = "me", sshHostKey = pinned))
+        val model = launchedModel(compose, app)
+        compose.setContent { RexPocketApp(model) }
+        fun host(name: String, dns: String, uri: String?, fp: String?) = org.json.JSONObject().put("name", name).put("dnsUri", dns)
+            .put("uri", uri ?: org.json.JSONObject.NULL).put("hostKeyFingerprint", fp ?: org.json.JSONObject.NULL).put("keyComment", "provision:owner-phone")
+        val hosts = if (keys) {
+            listOf(host("sandbox-1", "ssh://me@sandbox-1.example.com:22", null, pinned), host("sandbox-2", "ssh://me@sandbox-2.example.com:22", null, null))
+        } else {
+            listOf(
+                host("sandbox-1", "ssh://me@sandbox-1.example.com:22", "ssh://me@100.92.1.9:22", pinned),
+                host("agents", "ssh://me@agents.example.ts.net:22", "ssh://me@100.92.1.2:22", pinned),
+                host("build-vm", "ssh://me@build-vm.example.com:22", null, other),
+            )
+        }
+        val text = org.json.JSONObject().put("format", "rexpocket-hosts/1").put("hosts", org.json.JSONArray(hosts)).toString()
+        compose.runOnUiThread { model.hostImport.readText(text) }
+        compose.waitForIdle()
+        if (keys) {
+            compose.runOnUiThread { model.hostImport.apply() }
+            compose.awaitThat { model.hostImport.step.value is HostImportStep.Keys }
+            compose.waitForIdle()
+        }
+        captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    @Test fun hostImportPortrait() = hostImport("host-import-portrait")
+    @Test fun hostImportLandscape() { landscape(); hostImport("host-import-landscape") }
+    @Test fun hostImportKeysPortrait() = hostImport("host-import-keys-portrait", keys = true)
+    @Test fun hostImportKeysLandscape() { landscape(); hostImport("host-import-keys-landscape", keys = true) }
+
     @Test fun sharePortrait() = shareOrManage("share-portrait")
     @Test fun shareLandscape() { landscape(); shareOrManage("share-landscape") }
     @Test fun sharePickerPortrait() = shareOrManage("share-picker-portrait", picker = true)

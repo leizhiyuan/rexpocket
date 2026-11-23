@@ -217,6 +217,8 @@ internal fun HomeScreen(
     /** Settings › Appearance: the app's theme and the terminal's colours. */
     appearance: Appearance = Appearance(),
     onAppearance: (Appearance) -> Unit = {},
+    /** Opens Import hosts: a host list, or a connected Rex's hosts. */
+    onImportHosts: () -> Unit = {},
 ) {
     val context = LocalContext.current
     // Android 13 asks for notifications at run time; alerts come on once the person allows them.
@@ -290,6 +292,7 @@ internal fun HomeScreen(
             onTailnetDetails = { tailnetDetails = true },
             onSignIn = onSignIn,
             onTailnetRetry = onTailnetRetry,
+            onImport = onImportHosts,
         )
     } else {
         val q = query.trim().lowercase()
@@ -493,6 +496,7 @@ internal fun HomeScreen(
                         item(key = "add-host") {
                             Spacer(Modifier.height(12.dp))
                             AddHostRow(onClick = { creating = true })
+                            ImportHostsRow(onClick = onImportHosts)
                         }
                     }
                 }
@@ -603,6 +607,10 @@ internal fun HomeScreen(
             onAppearance = {
                 settings = false
                 appearanceOpen = true
+            },
+            onImportHosts = {
+                settings = false
+                onImportHosts()
             },
             reopenLastTab = reopenLastTab,
             onReopenLastTab = onReopenLastTab,
@@ -1136,6 +1144,8 @@ private fun SettingsSheet(
     onUpdate: () -> Unit,
     channel: UpdateChannel,
     onChannel: (UpdateChannel) -> Unit,
+    /** Import hosts, and export them. */
+    onImportHosts: () -> Unit = {},
 ) {
     val context = LocalContext.current
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.settings)) {
@@ -1160,6 +1170,8 @@ private fun SettingsSheet(
                 opens = true,
                 onClick = onNotifications,
             )
+            // Many hosts at once, from a list or a connected Rex: the + under the list adds one.
+            SheetItem(stringResource(R.string.import_hosts_title), icon = R.drawable.ic_host, opens = true, onClick = onImportHosts)
         }
         Group(stringResource(R.string.settings_group_terminal)) {
             // Gestures and keys have a sheet of their own, so this one stays a list of places to go.
@@ -1242,6 +1254,7 @@ private fun EmptyHome(
     onTailnetDetails: () -> Unit,
     onSignIn: (String) -> Unit,
     onTailnetRetry: () -> Unit,
+    onImport: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val copied = stringResource(R.string.toast_command_copied)
@@ -1259,7 +1272,10 @@ private fun EmptyHome(
             title = stringResource(R.string.home_route_ssh),
             body = stringResource(R.string.home_route_ssh_body),
             tag = EMPTY_ROUTE_SSH_TAG,
-        ) { RouteButton(stringResource(R.string.action_add_ssh_host)) { onAdd(SSH_PREFILL) } }
+        ) {
+            RouteButton(stringResource(R.string.action_add_ssh_host)) { onAdd(SSH_PREFILL) }
+            RouteButton(stringResource(R.string.import_hosts_title), onImport)
+        }
         if (tailnet.enabled && tailnetStage != TailnetStage.Off) {
             // Joined: the tailnet's own card, which says where the node is and what to do next.
             TailnetStatusCard(
@@ -1681,6 +1697,15 @@ internal fun HostDialog(
                         Text(stringResource(R.string.ssh_host_key_trusted, pinned), color = Colors.muted, fontSize = TextStyles.label)
                     }
                 }
+                // An imported host's other addresses: for the person to see, and to copy into the address.
+                if (!initial?.fallbacks.isNullOrEmpty()) {
+                    Text(
+                        stringResource(R.string.host_fallbacks, initial!!.fallbacks.joinToString(", ")),
+                        color = Colors.muted,
+                        fontSize = TextStyles.label,
+                        lineHeight = labelLeading,
+                    )
+                }
                 if (parsed != null && parsed.viaTailscale && !tailnetEnabled) {
                     Text(
                         stringResource(R.string.tailscale_need_join_host),
@@ -1748,4 +1773,5 @@ internal fun asSavedHost(
     sshPrivateKey = if (parsed.viaSsh) sshPrivateKey else "",
     sshPassphrase = if (parsed.viaSsh) sshPassphrase else "",
     sshHostKey = if (parsed.viaSsh) sshHostKey else "",
+    fallbacks = initial?.fallbacks.orEmpty(),
 )

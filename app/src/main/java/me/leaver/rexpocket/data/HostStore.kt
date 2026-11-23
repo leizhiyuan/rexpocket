@@ -31,6 +31,11 @@ data class SavedHost(
     val sshPassphrase: String = "",
     /** The `SHA256:...` the person confirmed, empty until the first connection asks. */
     val sshHostKey: String = "",
+    /**
+     * Other addresses of this host, in the order to try them (`ssh://user@host:port`, `ws://` or
+     * `wss://`), as an import gave them. Shown in the host's details; the app connects by [host].
+     */
+    val fallbacks: List<String> = emptyList(),
 ) {
     val viaSsh: Boolean get() = sshUser.isNotBlank()
 }
@@ -86,6 +91,7 @@ class HostStore(context: Context) {
                         sshPrivateKey = secrets.open(o.optString("sshPrivateKey", "")),
                         sshPassphrase = secrets.open(o.optString("sshPassphrase", "")),
                         sshHostKey = o.optString("sshHostKey", ""),
+                        fallbacks = o.optJSONArray("fallbacks")?.let { a -> List(a.length()) { a.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
                     ),
                 )
             }
@@ -95,6 +101,11 @@ class HostStore(context: Context) {
     fun upsert(host: SavedHost) {
         val next = list().filter { it.id != host.id } + host
         write(next)
+    }
+
+    /** Writes [hosts] as the whole list, in their order: an import's changes in one write. */
+    fun saveAll(hosts: List<SavedHost>) {
+        write(hosts)
     }
 
     fun delete(id: String) {
@@ -389,7 +400,8 @@ class HostStore(context: Context) {
                     .put("sshPassword", secrets.seal(h.sshPassword))
                     .put("sshPrivateKey", secrets.seal(h.sshPrivateKey))
                     .put("sshPassphrase", secrets.seal(h.sshPassphrase))
-                    .put("sshHostKey", h.sshHostKey),
+                    .put("sshHostKey", h.sshHostKey)
+                    .apply { if (h.fallbacks.isNotEmpty()) put("fallbacks", JSONArray(h.fallbacks)) },
             )
         }
         prefs.edit().putString(KEY_HOSTS, arr.toString()).apply()
