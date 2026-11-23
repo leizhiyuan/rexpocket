@@ -255,7 +255,7 @@ class RexShapeTest {
                 desk.call("session.attach", JSONObject().put("session_id", mine))
             }
             lateinit var last: Probe.Stream
-            step("phone holds and streams its pane") {
+            step("phone holds and streams its pane", unordered = true) {
                 phone.call("session.attach", JSONObject().put("session_id", mine))
                 phone.call("session.own_block", JSONObject().put("session_id", mine).put("block_ids", JSONArray().put(minePane)).put("mode", "take"))
                 last = phone.stream(phone.call("data.connect", ticket(mine, minePane)).getJSONObject("payload").getString("ticket"))

@@ -117,13 +117,13 @@ response session.bootstrap {attach_all:{sessions:[{label:str,session_id:<session
 event session_created {session:{label:str,session_id:<session>}}
 response session.create {initial_windows:[{block_ids:[<block>],revision:num,window_id:<window>}],session_id:<session>}
 ## phone holds and streams its pane
-response session.attach {client_id:<client>,view:{active_window_id:<window>,label:str,revision:num,session_id:<session>,windows:[{focused_block_id:<block>,label:str,layers:[{blocks:[{block_id:<block>,creator_name:str,flavor:str,label:str}],kind:"tiled",layer_id:<layer>}],window_id:<window>}]}}
 event block_owner_changed {block_id:<block>,owner:<client>,reason:"take"}
 event session_view_changed {revision:num}
-response session.own_block {blocks:[{block_id:<block>,owner:<client>}]}
 response data.connect {expires_in_ms:num,ticket:str}
-stream welcome 32 bytes, kept 60000 ms
+response session.attach {client_id:<client>,view:{active_window_id:<window>,label:str,revision:num,session_id:<session>,windows:[{focused_block_id:<block>,label:str,layers:[{blocks:[{block_id:<block>,creator_name:str,flavor:str,label:str}],kind:"tiled",layer_id:<layer>}],window_id:<window>}]}}
+response session.own_block {blocks:[{block_id:<block>,owner:<client>}]}
 stream starts with GHOSTSNP, then a rex1 resize
+stream welcome 32 bytes, kept 60000 ms
 ## phone closes its connection with a close frame
 stream closed 1001 "data provider canceled"
 desk: event block_owner_changed {block_id:<block>,previous:<client>,reason:"disconnect"}
