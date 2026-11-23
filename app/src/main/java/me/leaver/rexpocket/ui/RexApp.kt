@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.LoginLinkGate
 import me.leaver.rexpocket.core.Trouble
 import me.leaver.rexpocket.data.SavedHost
 import androidx.compose.material3.AlertDialog
@@ -47,7 +48,11 @@ import me.leaver.rexpocket.update.UpdateState
 // float over both.
 
 @Composable
-fun RexPocketApp(model: RexViewModel = viewModel()) {
+fun RexPocketApp(
+    model: RexViewModel = viewModel(),
+    /** Opens a link in the browser; a test hands its own in, to see which links opened. */
+    openUrl: ((String) -> Unit)? = null,
+) {
     val route by model.route.collectAsState()
     val hosts by model.hosts.collectAsState()
     val pocket by model.pocket.collectAsState()
@@ -102,12 +107,20 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
         model.setForeground(true)
         onStopOrDispose { model.setForeground(false) }
     }
-    // A node that still needs a login can only say so through the link it prints, so take the
-    // user straight to it instead of leaving a URL to copy.
-    val authUrl = tailnetStatus.authUrl
-    LaunchedEffect(authUrl) {
-        if (authUrl.isBlank()) return@LaunchedEffect
-        openLink(context, authUrl)
+    val open: (String) -> Unit = openUrl ?: { url -> openLink(context, url) }
+    // The login link opens by itself only right after a Join or a Sign in that came before the
+    // link did; otherwise the Sign in card on Home shows it and waits for the tap.
+    val loginGate = remember { LoginLinkGate() }
+    LaunchedEffect(tailnetStage) {
+        loginGate.linkToOpen(tailnetStage)?.let(open)
+    }
+    val signIn: (String) -> Unit = { url ->
+        if (url.isNotBlank()) {
+            loginGate.cancel()
+            open(url)
+        } else {
+            loginGate.asked(tailnetStage)
+        }
     }
     RexTheme {
         Box(
@@ -145,7 +158,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     tailnetPath = tailnetPath,
                     tailnetStage = tailnetStage,
                     connectProgress = connectProgress,
-                    onSignIn = { url -> openLink(context, url) },
+                    onSignIn = signIn,
                     onTailnetRetry = model::restartTailnet,
                     opening = opening,
                     cachedSessions = model::cachedSessions,
@@ -262,10 +275,12 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                 error = tailnetError,
                 onDismiss = { tailnetOpen = false },
                 onJoin = { backend, name, managementUrl, setupKey ->
+                    loginGate.asked(tailnetStage)
                     model.joinTailnet(backend, name, managementUrl, setupKey)
                     tailnetOpen = false
                 },
                 onLeave = {
+                    loginGate.cancel()
                     model.leaveTailnet()
                     tailnetOpen = false
                 },

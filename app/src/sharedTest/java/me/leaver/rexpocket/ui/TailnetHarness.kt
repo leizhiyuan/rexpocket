@@ -90,7 +90,7 @@ internal object TailnetSamples {
     val peers = listOf(nas, buildBox, mac, iphone, desktop)
 
     val starting = TailnetStatus()
-    // A link no app opens: the app opens a login link by itself, and a browser would take the screen.
+    // A link no app opens: a tap on Sign in opens it, and a browser would take the screen.
     val needsLogin = TailnetStatus(backendState = "NeedsLogin", authUrl = "rexpocket-test://login.tailscale.com/a/1a2b3c4d5e")
     val connecting = TailnetStatus(backendState = "Starting")
     fun connected(peers: List<TailnetPeer> = this.peers, health: List<String> = emptyList()) =

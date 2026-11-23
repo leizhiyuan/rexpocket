@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -54,10 +55,17 @@ class TailnetStatusTest {
 
     private fun string(id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
-    private fun launch(vararg hosts: me.leaver.rexpocket.data.SavedHost = arrayOf(TailnetSamples.macHost, TailnetSamples.nasHost), open: me.leaver.rexpocket.data.SavedHost? = null): RexViewModel {
-        val m = tailnetModel(compose, node, hosts.toList(), open)
+    /** Each link the app opened in the browser, in order. */
+    private val opened = CopyOnWriteArrayList<String>()
+
+    private fun launch(
+        vararg hosts: me.leaver.rexpocket.data.SavedHost = arrayOf(TailnetSamples.macHost, TailnetSamples.nasHost),
+        open: me.leaver.rexpocket.data.SavedHost? = null,
+        joined: Boolean = true,
+    ): RexViewModel {
+        val m = tailnetModel(compose, node, hosts.toList(), open, joined = joined)
         model = m
-        compose.setContent { RexPocketApp(m) }
+        compose.setContent { RexPocketApp(m, openUrl = { opened += it }) }
         compose.waitForIdle()
         return m
     }
@@ -114,6 +122,54 @@ class TailnetStatusTest {
         compose.onNode(hasText(string(R.string.action_sign_in)) and hasClickAction()).assertIsDisplayed()
         compose.onNode(hasText(string(R.string.action_copy_link)) and hasClickAction()).assertIsDisplayed()
         compose.onNodeWithText(string(R.string.tailnet_step, 2, 3)).assertIsDisplayed()
+    }
+
+    @Test
+    fun aLoginLinkThatAppearsOnItsOwnWaitsForTheTap() {
+        node.state.value = TailnetSamples.needsLogin
+        val m = launch()
+        compose.awaitThat { m.tailnetStage.value is TailnetStage.SigningIn }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertEquals("nothing opened before the tap", emptyList<String>(), opened.toList())
+        compose.onNode(hasText(string(R.string.action_sign_in)) and hasClickAction()).performClick()
+        compose.awaitThat { opened.isNotEmpty() }
+        assertEquals(listOf(TailnetSamples.needsLogin.authUrl), opened.toList())
+    }
+
+    @Test
+    fun signInBeforeTheLinkOpensItOnceItComes() {
+        node.state.value = TailnetSamples.needsLogin.copy(authUrl = "")
+        val m = launch()
+        compose.awaitThat { m.tailnetStage.value == TailnetStage.SigningIn("") }
+        compose.onNode(hasText(string(R.string.action_sign_in)) and hasClickAction()).performClick()
+        compose.waitForIdle()
+        assertTrue(opened.isEmpty())
+        node.state.value = TailnetSamples.needsLogin
+        compose.awaitThat { opened.isNotEmpty() }
+        assertEquals(listOf(TailnetSamples.needsLogin.authUrl), opened.toList())
+        // Once per tap: the node saying it again opens nothing more.
+        node.state.value = TailnetSamples.connecting
+        node.state.value = TailnetSamples.needsLogin.copy(authUrl = TailnetSamples.needsLogin.authUrl + "x")
+        compose.awaitThat { m.tailnetStage.value is TailnetStage.SigningIn }
+        compose.waitForIdle()
+        assertEquals(1, opened.size)
+    }
+
+    @Test
+    fun joinOpensTheNewNodesLoginLink() {
+        // The tailnet dialog has text fields, which never let Compose idle on Robolectric; the
+        // order of what opens is LoginLinkGateTest's, on the JVM.
+        assumeFalse("a text field in a dialog never idles on Robolectric", onRobolectric)
+        val m = launch(joined = false)
+        compose.onAllNodes(hasText(string(R.string.action_join)) and hasClickAction()).onFirst().performClick()
+        compose.waitForIdle()
+        compose.onNode(hasText(string(R.string.tailscale_join)) and hasAnyAncestor(isDialog())).performClick()
+        compose.awaitThat { m.tailnet.value.enabled }
+        assertTrue(opened.isEmpty())
+        node.state.value = TailnetSamples.needsLogin
+        compose.awaitThat { opened.isNotEmpty() }
+        assertEquals(listOf(TailnetSamples.needsLogin.authUrl), opened.toList())
     }
 
     @Test

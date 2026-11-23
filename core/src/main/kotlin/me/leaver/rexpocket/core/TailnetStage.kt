@@ -174,3 +174,49 @@ fun explainTailnetProblem(
 
 /** [Problem.detail] of a [Trouble.TailnetNeedsLogin] that waits for an admin's approval, not a sign-in. */
 const val APPROVAL = "approval"
+
+/**
+ * When the node's login link opens in the browser by itself: only right after the person asked for
+ * a sign-in - tapped Join, or Sign in before the node had its link - and once per ask. Any other
+ * time the link only shows, on the Sign in card; a link that appeared on its own (a node whose key
+ * expired, an app that starts signed out) never takes the screen.
+ *
+ * [asked] is called on the tap with the stage the screen showed then; [linkToOpen] with each stage
+ * after it. The stage of the tap is not an answer to it - right after Join it is the old node's -
+ * so the ask waits for a stage that differs. A sign-in that turns out not to be needed (the node
+ * connects, or waits for approval) ends the ask.
+ */
+class LoginLinkGate {
+    private var askedAt: TailnetStage? = null
+    private var moved = false
+
+    /** True while an ask waits for its link. */
+    val waiting: Boolean get() = askedAt != null
+
+    fun asked(current: TailnetStage) {
+        askedAt = current
+        moved = false
+    }
+
+    fun cancel() {
+        askedAt = null
+    }
+
+    /** The link to open now for [stage], or null; a link is handed out once per ask. */
+    fun linkToOpen(stage: TailnetStage): String? {
+        val since = askedAt ?: return null
+        if (!moved && stage == since) return null
+        moved = true
+        return when {
+            stage is TailnetStage.SigningIn && stage.authUrl.isNotBlank() -> {
+                askedAt = null
+                stage.authUrl
+            }
+            stage is TailnetStage.Connected || stage == TailnetStage.NeedsApproval -> {
+                askedAt = null
+                null
+            }
+            else -> null
+        }
+    }
+}
