@@ -1,0 +1,14 @@
+# PR A, "UI and Rex parity": one commit per line, in this order. A line is a subject, a tab, and
+# the pathspecs of its files; a file goes to the first line that matches it, and the last line
+# takes whatever is left. The commits group the change by topic for review, not by history, so
+# only the last one is meant to build.
+Rex protocol reference and the parity notes	docs/design/rex-protocol docs/design/rex-parity.md
+Key bar: customization, groups and presets	:(glob)**/*KeyBar* :(glob)**/*KeyArrangement* :(glob)**/ArrangeKeys* :(glob)**/Keys.kt :(glob)**/KeyboardTest.kt
+Terminal controls and gestures, full screen and keyboard insets	:(glob)**/Gestures* :(glob)**/Controls* :(glob)**/*FullScreen* :(glob)**/TerminalView* :(glob)**/TerminalIme* :(glob)**/InputBar.kt :(glob)**/Keyboard.kt :(glob)**/TermScreen.kt :(glob)**/TerminalPane.kt :(glob)**/TerminalControls* :(glob)**/FollowInput* :(glob)**/TermChrome* :(glob)**/TermMenu* :(glob)**/TerminalStream.kt docs/design/terminal-controls.md
+Activity matched to Rex, the command palette and the ⋮ menu	:(glob)**/Activity* :(glob)**/*Palette* docs/design/command-palette.md
+Closed tabs, the clipboard, copy output and the real-Rex matching	:(glob)**/ClosedPane* :(glob)**/ClosedNote* :(glob)**/PaneHolder* :(glob)**/PaneLifecycle* :(glob)**/PaneText* :(glob)**/Clipboard* :(glob)**/RexShape* :(glob)**/RealRex* :(glob)**/PocketSession* :(glob)**/RexClient.kt :(glob)**/RexModels* :(glob)**/Reconnect* core/src/test/resources/rex-shapes app/src/androidTest/resources
+Tailnet status: the node's state, its devices and each step to a host	tailnet app/libs tools/build-tailnet.sh :(glob)**/Tailnet* :(glob)**/Tailscale* :(glob)**/HostAddress* :(glob)**/LoginLinkGate* :(glob)**/tailnet_strings.xml docs/design/tailnet-status.md
+Home, first run, icons, large text, updates and app state	app/src/main core/src/main :(glob)**/EmptyHome* :(glob)**/EmptySession* :(glob)**/HomeState* :(glob)**/LargeFont* :(glob)**/Launch* :(glob)**/UpToDate* :(glob)**/UpdateFailure* :(glob)**/UploadError* :(glob)**/Choice*
+Test harnesses: screens on the JVM, a scripted Rex, instrumented tests	app/src/sharedTest app/src/test app/src/androidTest app/src/debug core/src/test core/src/testFixtures core/build.gradle.kts app/build.gradle.kts docs/design/testing.md
+CI: the debug APK with the kept key, device tests, Rex integration and real Rex	.github tools/rex .gitignore
+READMEs and the rest	.

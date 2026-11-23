@@ -1,0 +1,5 @@
+# PR B, "Netbird", on top of PR A: the same format as ui-topics.txt.
+tailnet: an embedded Netbird node behind the netbird build tag	tailnet tools/build-tailnet.sh .gitignore app/build.gradle.kts app/libs
+app: Netbird as a tailnet backend, its settings and its status	app core
+CI and docs: the Netbird end-to-end test, device tests with Netbird	.github tools docs
+READMEs and the rest	.

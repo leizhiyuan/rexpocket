@@ -1,0 +1,1274 @@
+diff --git a/.github/workflows/android-apk.yml b/.github/workflows/android-apk.yml
+index 42dd599203412fa0957697f5597d9fa771ed5627..3aaae6c789ccd1dee7e7f162d15cea9b17efc076 100644
+--- a/.github/workflows/android-apk.yml
++++ b/.github/workflows/android-apk.yml
+@@ -1,6 +1,6 @@
+ name: android-apk
+ 
+-# Builds a debug APK for testing on a phone.
++# Builds debug APKs for testing on a phone: the default one, and the one with Netbird.
+ # Download them from the run's Artifacts section.
+ on:
+   workflow_dispatch:
+@@ -71,7 +71,16 @@ jobs:
+           mkdir -p out
+           cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket-debug.apk
+ 
+-      - name: Check the APK carries the kept key
++      - name: Build the Netbird library
++        run: REXPOCKET_NETBIRD=1 sh tools/build-tailnet.sh
++
++      - name: Build the debug APK with Netbird
++        run: ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" -Prexpocket.netbird=true :app:assembleDebug
++
++      - name: Keep the Netbird APK aside
++        run: cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket-debug-netbird.apk
++
++      - name: Check both APKs carry the kept key
+         run: |
+           WANT=$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 "SHA256:" | awk '{print $2}' | tr -d ':' | tr 'A-F' 'a-f')
+           for apk in out/*.apk; do
+diff --git a/.github/workflows/device-test.yml b/.github/workflows/device-test.yml
+index c460291a1fff18c791a3e6337b47220508c0f64f..3a5124a0f8eb0917e67c852bcd4b98354e1c7cd4 100644
+--- a/.github/workflows/device-test.yml
++++ b/.github/workflows/device-test.yml
+@@ -3,7 +3,7 @@ name: device-test
+ # Runs the instrumented tests (app/src/androidTest) on an x86_64 emulator, with KVM.
+ #
+ # The app ships arm64-v8a native code only. The x86_64 images' ARM translation (libndk_translation,
+-# API 30 to 35) runs libghostty, but not the Go tailnet library: when the library starts, it executes
++# API 30 to 35) runs libghostty, but not the Go tailnet library: when the Netbird node starts, it executes
+ # `mrs x0, midr_el1` (Go CPU-feature detection), which the translator does not implement, and the app
+ # dies with SIGILL. A real arm64 kernel traps and answers that read. So the test build here is an
+ # x86_64 one: both native libraries are built for x86_64 from the same sources and pinned versions,
+@@ -28,7 +28,7 @@ jobs:
+     env:
+       ANDROID_HOME: /usr/local/lib/android/sdk
+       # The arm64 libghostty is not built: this APK carries the x86_64 one.
+-      GRADLE_ARGS: -x :app:buildGhostty -Prexpocket.abi=x86_64
++      GRADLE_ARGS: -x :app:buildGhostty -Prexpocket.netbird=true -Prexpocket.abi=x86_64
+     steps:
+       - uses: actions/checkout@v4
+ 
+@@ -55,12 +55,12 @@ jobs:
+           "$SDKMANAGER" "platforms;android-36" "build-tools;36.1.0" "ndk;28.2.13676358"
+           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+ 
+-      - name: Build the tailnet library for x86_64
++      - name: Build the Netbird library for x86_64
+         run: |
+           sed 's#-target android/arm64#-target android/amd64#' tools/build-tailnet.sh > tools/build-tailnet-x86_64.sh
+           grep -q 'android/amd64' tools/build-tailnet-x86_64.sh
+-          sh tools/build-tailnet-x86_64.sh
+-          unzip -l app/libs/tailnet.aar | grep 'jni/'
++          REXPOCKET_NETBIRD=1 sh tools/build-tailnet-x86_64.sh
++          unzip -l app/libs/tailnet-netbird.aar | grep 'jni/'
+ 
+       - name: Build libghostty for x86_64
+         run: |
+diff --git a/.gitignore b/.gitignore
+index a3de9c49615b82385fcf4fe1eb0198fb7f629fa3..dacb68c4c156528b3af8061c82d8bede0dbf49fe 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -12,6 +12,8 @@ captures/
+ # Built by tools/build-ghostty.py
+ native/.build/
+ 
++# The tailnet library with Netbird: 50 MB or more, built by tools/build-tailnet.sh with REXPOCKET_NETBIRD=1.
++app/libs/tailnet-netbird.aar
+ app/libs/*-sources.jar
+ app/src/main/jniLibs/
+ 
+diff --git a/README.md b/README.md
+index 3adc578f6efe74af8cfb771c47729a3d8df52c4f..063216312bad2c44b8e5ebde4f1a837a5008c8ac 100644
+--- a/README.md
++++ b/README.md
+@@ -7,7 +7,7 @@
+ An Android client for [Rex](https://rex.app), the terminal multiplexer. It shows every session on
+ your own Rex servers, down to the tab, and opens any pane as a full-screen terminal you type into
+ directly. It talks to your Rex and nothing else - on the local network, over your tailnet through a
+-Tailscale node built into the app, or through the computer's own SSH daemon.
++Tailscale or Netbird node built into the app, or through the computer's own SSH daemon.
+ 
+ | Home | Terminal | Terminal at night |
+ | --- | --- | --- |
+@@ -52,8 +52,9 @@ switched without leaving the terminal it was showing, and the dock is one hand's
+   program waits for approval, an answer or a login, or fails. Tap the alert to open that pane.
+ - **Works beside the desk.** The phone holds only the pane it shows and sizes it to the phone; the
+   desktop keeps its own tab. **Release** hands a pane back to the desk until you **Take over**.
+-- **Your tailnet, without the Tailscale app.** The app runs its own Tailscale node, so a host is
+-  reachable by its MagicDNS name or `100.x` address without taking the phone's VPN slot.
++- **Your tailnet, without the Tailscale or Netbird app.** The app runs its own Tailscale or Netbird
++  node, so a host is reachable by its MagicDNS name or `100.x` address without taking the phone's VPN
++  slot.
+ - **Hosts over SSH.** Add `ssh://host` and sign in with an account and a password or a private key;
+   the app reaches Rex through the SSH daemon the machine already runs - no Rex port has to be open.
+   The host key is shown and pinned on the first connection; a changed one stops the connection
+@@ -96,13 +97,20 @@ own SSH daemon. How the transport works is described in
+    - `192.0.2.10` - plaintext on port 7297
+    - `192.0.2.10:7300` - another port
+    - `my-mac.tail1234.ts.net` or a `100.x` address - through Tailscale, on 443 with TLS
++   - `ssh://my-pc.netbird.cloud`, or `my-pc.netbird.cloud:7297` - through Netbird (a self-hosted
++     Netbird's peers are reached by their `100.x` address). Rex serves TLS on 443 only through
++     Tailscale Serve, and over Netbird it cannot tell callers apart, so Rex's own port there is a
++     plain listener started with `--allow-anonymous` (Rex's Remote Access docs, "Plain HTTP"); over
++     SSH nothing has to be opened
+    - `ssh://192.0.2.10` or `ssh://my-mac.tail1234.ts.net` - through that machine's SSH daemon;
+      type the account and a password or a private key, and the first connection asks you to
+      confirm its host key
+ 
+    The line under the field shows how the app will connect.
+-2. **For a tailnet host, join the tailnet.** Settings › Tailnet, give the phone a node name and
+-   save. Tailscale opens its sign-in page once; after that the node starts with the app.
++2. **For a tailnet host, join the tailnet.** Settings › Tailnet, pick Tailscale or Netbird, give the
++   phone a node name and save. Tailscale opens its sign-in page once. Netbird asks for a setup key
++   from its dashboard the first time, and a self-hosted Netbird also needs its management server's
++   address; after that the node starts with the app.
+ 3. **Open a tab.** Tap a tab on the home screen. The plus beside a session makes a new tab; the
+    host's menu starts a new session.
+ 4. **In the terminal:**
+@@ -182,12 +190,13 @@ you can read it before you send it.
+   `rex __internal dial-stdio`, which joins its input and output to Rex's own Unix socket on that
+   machine. The app pins the host key it saw, compares it on every connection, and a changed key
+   stops retrying until you confirm the new one. The host is dialed directly, or through the
+-  built-in Tailscale node when its address is on the tailnet.
+-- **Tailscale.** The node is the official `tailscale.com/tsnet` library running in userspace,
+-  with a SOCKS5 proxy on loopback in front of it; only the app's own connections use it. The node's UDP is bound to the phone's Wi-Fi or mobile
+-  network, around a proxy VPN such as Clash when the VPN allows apps to bypass it, so a direct
+-  path can form. The home screen shows the path to each tailnet host - direct, peer relay or
+-  DERP - with its round trip; tap it to measure again.
++  built-in tailnet node when its address is on the tailnet.
++- **Tailnet nodes.** The app runs one node at a time: the official `tailscale.com/tsnet` library, or
++  Netbird's embedded client. Both run in userspace with a SOCKS5 proxy on loopback in front of them,
++  and only the app's own connections use it. The Tailscale node's UDP is bound to the phone's Wi-Fi
++  or mobile network, around a proxy VPN such as Clash when the VPN allows apps to bypass it, so a
++  direct path can form. The home screen shows the path to each tailnet host - direct, peer relay,
++  DERP or a Netbird relay server - with its round trip; tap it to measure again.
+ 
+ ### A faster tailnet path
+ 
+@@ -211,8 +220,11 @@ Ghostty revision pinned in [native/ghostty/source.json](native/ghostty/source.js
+ [tools/build-ghostty.py](tools/build-ghostty.py), which Gradle runs; the first build downloads Zig
+ and the Ghostty source, checked against their pinned checksums. To move to a newer Ghostty, change
+ the revision and checksum there. `app/libs/tailnet.aar` - the Go module in `tailnet/`, around
+-`tailscale.com` at the version its `go.mod` pins - is checked in; to build it again, run
+-[tools/build-tailnet.sh](tools/build-tailnet.sh). The integration
++`tailscale.com` at the version its `go.mod` pins, and Netbird's embedded client in `tailnet/netbird` -
++is checked in; to build it again, run [tools/build-tailnet.sh](tools/build-tailnet.sh). Netbird is a build choice: `REXPOCKET_NETBIRD=1
++tools/build-tailnet.sh` writes `app/libs/tailnet-netbird.aar`, and `./gradlew -Prexpocket.netbird=true
++:app:assembleRelease` links it in. It adds about 30 MB to the APK (29 MB to 59 MB), so the default build leaves it
++out; without it the Settings › Tailnet screen offers Tailscale only. The integration
+ tests in `core` run against a Rex on `127.0.0.1:7297` (set `REX_TEST_HOST` / `REX_TEST_PORT`) and
+ are skipped without one. The pane lifecycle scenarios - tabs and panes closed on the desk or the
+ phone, release and take over, reconnects - run on every build against `ScriptedRex`, a Rex in the
+@@ -253,6 +265,10 @@ which erases the app's hosts and tailnet login.
+   emulator: the app builds its official libghostty-vt library, license in `app/src/main/assets/licenses/Ghostty-MIT.txt`.
+ - [Tailscale](https://github.com/tailscale/tailscale), by Tailscale Inc. and contributors, BSD-3-Clause -
+   the tsnet library the app's Tailscale node is.
++- [Netbird](https://github.com/netbirdio/netbird), by NetBird GmbH and contributors, BSD-3-Clause - the
++  embedded client the app's Netbird node is. Only its client code is in the app, not its server parts.
++- [go-socks5](https://github.com/things-go/go-socks5), by Things Go and contributors, MIT - the SOCKS5
++  server in front of the Netbird node.
+ - [JSch](https://github.com/mwiede/jsch), by JCraft, Inc. and contributors, Revised BSD - the SSH
+   client. [eddsa](https://github.com/str4d/ed25519-java), by Str4d and contributors, CC0 - the
+   Ed25519 implementation Android's own security providers do not give JSch.
+diff --git a/README.zh-CN.md b/README.zh-CN.md
+index f308a05031556edd26e7031f789e2eda3e4ce9f3..c0e849ec047525d471c68cb9354e76e2f7f468c2 100644
+--- a/README.zh-CN.md
++++ b/README.zh-CN.md
+@@ -6,7 +6,7 @@
+ 
+ 终端多路复用器 [Rex](https://rex.app) 的 Android 客户端。它把你自己的 Rex 服务器上的所有会话一直列到标签页，
+ 点开任意窗格就是一个全屏终端，直接输入。它只和你的 Rex 通信，不经过任何第三方——可以走局域网、
+-通过 App 内置的 Tailscale 节点走你的 tailnet，或者走电脑自己的 SSH 服务。
++通过 App 内置的 Tailscale 或 Netbird 节点走你的 tailnet，或者走电脑自己的 SSH 服务。
+ 
+ | 主页 | 终端 | 夜间终端 |
+ | --- | --- | --- |
+@@ -40,7 +40,7 @@
+ - **后台提醒。** 可选：App 在后台时保持连接，程序等你批准、回答、登录或出错时发通知，点通知直接打开那个窗格。
+ - **和桌面同时用。** 手机只占它正在显示的那个窗格，并按手机尺寸显示；桌面停在它自己的标签页上。
+   **交还** 把窗格还给桌面，直到你再 **接管**。
+-- **不装 Tailscale 也能上 tailnet。** App 自带一个 Tailscale 节点，用 MagicDNS
++- **不装 Tailscale 或 Netbird 也能上 tailnet。** App 自带一个 Tailscale 或 Netbird 节点，用 MagicDNS
+   名字或 `100.x` 地址就能连到主机，也不占手机唯一的 VPN 位置。
+ - **通过 SSH 添加主机。** 填 `ssh://host`，再填账号和密码（或私钥），就能通过机器本来就在跑的 SSH 服务
+   连到 Rex，不用对外开放 Rex 端口。第一次连接会显示并记住主机密钥；密钥变了会停下，等你确认。
+@@ -75,12 +75,14 @@ rex server start --extra-listen :7297 --allow-anonymous
+    - `192.0.2.10`——明文，7297 端口
+    - `192.0.2.10:7300`——换个端口
+    - `my-mac.tail1234.ts.net` 或 `100.x` 地址——走 Tailscale，443 端口，TLS
++   - `my-pc.netbird.cloud`——走 Netbird，443 端口，TLS（自建的 Netbird 用 `100.x` 地址连接）
+    - `ssh://192.0.2.10` 或 `ssh://my-mac.tail1234.ts.net`——走那台机器的 SSH 服务，
+      填账号和密码（或私钥）；第一次连接会让你确认主机密钥
+ 
+    输入框下面那行会显示 App 打算怎么连。
+-2. **tailnet 主机要先加入 tailnet。** 设置 › Tailnet，给手机起一个节点名并保存。
+-   Tailscale 会打开一次登录页，之后节点随 App 启动。
++2. **tailnet 主机要先加入 tailnet。** 设置 › Tailnet，选 Tailscale 或 Netbird，给手机起一个节点名并保存。
++   Tailscale 会打开一次登录页。Netbird 第一次需要它后台生成的安装密钥；自建的 Netbird 还要填管理服务器的
++   地址。之后节点随 App 启动。
+ 3. **打开标签页。** 在主页点一个标签页。会话旁边的加号新建标签页，主机的菜单里可以新建会话。
+ 4. **终端里：**
+    - 点窗格开始输入。拖动查看回滚，双指缩放改字号，长按选中；长按链接可以打开它。
+@@ -124,10 +126,10 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再
+   `rex __internal dial-stdio`，把标准输入输出接到那台机器上 Rex 自己的 Unix socket。App 记住第一次
+   看到的主机密钥，之后每次连接都比对；密钥变了就不再重试，等你确认新的。主机直连，地址在 tailnet 上时
+   走内置的 tailnet 节点。
+-- **tailnet 节点。** 官方的 `tailscale.com/tsnet` 库，跑在用户态，前面是回环地址上的 SOCKS5 代理，
+-  只有 App 自己的连接走它。Tailscale 节点的 UDP 绑定在手机的 Wi-Fi
++- **tailnet 节点。** 一次只运行一个：官方的 `tailscale.com/tsnet` 库，或 Netbird 的嵌入式客户端。两者都跑在
++  用户态，前面是回环地址上的 SOCKS5 代理，只有 App 自己的连接走它。Tailscale 节点的 UDP 绑定在手机的 Wi-Fi
+   或移动网络上，在 VPN 允许 App 绕过时会绕开 Clash 这类代理 VPN，这样才能打通直连。主页会显示到每台 tailnet
+-  主机的路径——直连、peer relay 还是 DERP——以及往返延迟，点一下可以重新测量。
++  主机的路径——直连、peer relay、DERP 还是 Netbird 中继服务器——以及往返延迟，点一下可以重新测量。
+ 
+ ### 让 tailnet 更快
+ 
+@@ -145,7 +147,7 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再
+ 
+ APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 会构建一个用发布密钥签名的版本（见下文「发布」）。只构建
+ arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这个 Go 模块构建，包含 `tailscale.com` 的 tsnet 库
+-（版本由其 `go.mod` 锁定）；要重新构建，运行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。`core` 里的集成测试连接 `127.0.0.1:7297` 上的 Rex
++（版本由其 `go.mod` 锁定）和 `tailnet/netbird` 中的 Netbird 嵌入式客户端；要重新构建，运行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。Netbird 需要单独选择打包：`REXPOCKET_NETBIRD=1 tools/build-tailnet.sh` 会生成 `app/libs/tailnet-netbird.aar`，再用 `./gradlew -Prexpocket.netbird=true :app:assembleRelease` 链接进 App。它会让 APK 增加约 30 MB（29 MB 增至 59 MB），所以默认构建不包含它；没有它时，设置 › Tailnet 只提供 Tailscale。`core` 里的集成测试连接 `127.0.0.1:7297` 上的 Rex
+ （可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），没有 Rex 时会跳过。窗格生命周期场景（在电脑或手机上关闭标签页和窗格、交还与接管、重连）每次构建都会对测试 JVM 里的 `ScriptedRex` 运行，有真实 Rex 在监听时也会对它运行，见 [docs/design/testing.md](docs/design/testing.md#rex-integration)。 SSH 测试需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台机器，并用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 给出凭据才会运行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可选。
+ 
+ ### 发布
+@@ -171,6 +173,9 @@ arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这
+   官方的 libghostty-vt，许可证见 `app/src/main/assets/licenses/Ghostty-MIT.txt`。
+ - [Tailscale](https://github.com/tailscale/tailscale)，Tailscale Inc. 及贡献者，BSD-3-Clause——App 内的
+   Tailscale 节点就是它的 tsnet 库。
++- [Netbird](https://github.com/netbirdio/netbird)，NetBird GmbH 及贡献者，BSD-3-Clause——App 内的 Netbird
++  节点就是它的嵌入式客户端；App 只包含其客户端部分，不含服务端部分。
++- [go-socks5](https://github.com/things-go/go-socks5)，Things Go 及贡献者，MIT——Netbird 节点前面的 SOCKS5 服务。
+ - [JSch](https://github.com/mwiede/jsch)，JCraft, Inc. 及贡献者，Revised BSD——SSH 客户端。
+   [eddsa](https://github.com/str4d/ed25519-java)，Str4d 及贡献者，CC0——Android 自带的安全提供者
+   没有给 JSch 的 Ed25519 实现。
+diff --git a/README.zh-TW.md b/README.zh-TW.md
+index 95039bdad3be6d047b4a642da931f9f7ce1f9b3d..cd11bc6e43b2f2e5e3fe33de7294f8159edaabeb 100644
+--- a/README.zh-TW.md
++++ b/README.zh-TW.md
+@@ -6,7 +6,7 @@
+ 
+ 終端機多工器 [Rex](https://rex.app) 的 Android 用戶端。它會把你自己的 Rex 伺服器上的所有工作階段一路列到
+ 分頁，點開任何窗格就是全螢幕終端機，可以直接輸入。它只跟你的 Rex 通訊，不經過任何第三方——可以走區域網路，
+-也可以透過 App 內建的 Tailscale 節點走你的 tailnet，或走電腦自己的 SSH 服務。
++也可以透過 App 內建的 Tailscale 或 Netbird 節點走你的 tailnet，或走電腦自己的 SSH 服務。
+ 
+ | 主頁 | 終端機 | 夜間終端機 |
+ | --- | --- | --- |
+@@ -42,7 +42,7 @@
+   開啟那個窗格。
+ - **和桌面同時使用。** 手機只佔它正在顯示的那個窗格，並以手機尺寸顯示；桌面停在自己的分頁上。
+   **交還** 會把窗格還給桌面，直到你再次 **接管**。
+-- **不裝 Tailscale 也能上 tailnet。** App 內建一個 Tailscale 節點，用 MagicDNS
++- **不裝 Tailscale 或 Netbird 也能上 tailnet。** App 內建一個 Tailscale 或 Netbird 節點，用 MagicDNS
+   名稱或 `100.x` 位址就能連到主機，也不必佔用手機唯一的 VPN 位置。
+ - **透過 SSH 新增主機。** 填 `ssh://host`，再填帳號和密碼（或私鑰），就能透過機器本來就在跑的 SSH 服務
+   連到 Rex，不必對外開放 Rex 連接埠。第一次連線會顯示並記住主機金鑰；金鑰變了會停下來，等你確認。
+@@ -77,12 +77,14 @@ rex server start --extra-listen :7297 --allow-anonymous
+    - `192.0.2.10`——明文，7297 連接埠
+    - `192.0.2.10:7300`——換個連接埠
+    - `my-mac.tail1234.ts.net` 或 `100.x` 位址——透過 Tailscale，443 連接埠，TLS
++   - `my-pc.netbird.cloud`——透過 Netbird，443 連接埠，TLS（自架的 Netbird 用 `100.x` 位址連線）
+    - `ssh://192.0.2.10` 或 `ssh://my-mac.tail1234.ts.net`——透過那台機器的 SSH 服務，
+      填帳號和密碼（或私鑰）；第一次連線會請你確認主機金鑰
+ 
+    輸入框下面那行會顯示 App 打算怎麼連。
+-2. **tailnet 主機要先加入 tailnet。** 設定 › Tailnet，給手機一個節點名稱並儲存。
+-   Tailscale 會開啟一次登入頁，之後節點隨 App 啟動。
++2. **tailnet 主機要先加入 tailnet。** 設定 › Tailnet，選 Tailscale 或 Netbird，給手機一個節點名稱並儲存。
++   Tailscale 會開啟一次登入頁。Netbird 第一次需要它後台產生的安裝金鑰；自架的 Netbird 還要填管理伺服器的
++   位址。之後節點隨 App 啟動。
+ 3. **開啟分頁。** 在主頁點一個分頁。工作階段旁邊的加號會新增分頁，主機的選單可以新增工作階段。
+ 4. **終端機裡：**
+    - 點窗格開始輸入。拖曳可回捲，雙指縮放可改字級，長按可選取；長按連結可以開啟它。
+@@ -128,10 +130,10 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再
+   `rex __internal dial-stdio`，把標準輸入輸出接到那台機器上 Rex 自己的 Unix socket。App 記住第一次
+   看到的主機金鑰，之後每次連線都比對；金鑰變了就不再重試，等你確認新的。主機直連，位址在 tailnet 上時
+   走內建的 tailnet 節點。
+-- **tailnet 節點。** 官方的 `tailscale.com/tsnet` 程式庫，跑在使用者空間，前面是回環位址上的 SOCKS5 代理，
+-  只有 App 自己的連線會走它。Tailscale 節點的 UDP 綁在手機的 Wi-Fi
++- **tailnet 節點。** 一次只執行一個：官方的 `tailscale.com/tsnet` 程式庫，或 Netbird 的嵌入式用戶端。兩者都跑在
++  使用者空間，前面是回環位址上的 SOCKS5 代理，只有 App 自己的連線會走它。Tailscale 節點的 UDP 綁在手機的 Wi-Fi
+   或行動網路上，在 VPN 允許 App 繞過時會繞開 Clash 這類代理 VPN，這樣才打得通直連。主頁會顯示到每台 tailnet
+-  主機的路徑——直連、peer relay 還是 DERP——以及往返延遲，點一下可以重新測量。
++  主機的路徑——直連、peer relay、DERP 還是 Netbird 中繼伺服器——以及往返延遲，點一下可以重新測量。
+ 
+ ### 讓 tailnet 更快
+ 
+@@ -149,7 +151,7 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再
+ 
+ APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 會建置一個以發布金鑰簽署的版本（見下文「發布」）。只建置
+ arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/` 這個 Go 模組建置，包含 `tailscale.com` 的 tsnet 程式庫
+-（版本由其 `go.mod` 鎖定）；要重新建置，執行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。`core` 裡的整合測試會連到 `127.0.0.1:7297` 上的 Rex
++（版本由其 `go.mod` 鎖定）和 `tailnet/netbird` 中的 Netbird 嵌入式用戶端；要重新建置，執行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。Netbird 需要另外選擇打包：`REXPOCKET_NETBIRD=1 tools/build-tailnet.sh` 會產生 `app/libs/tailnet-netbird.aar`，再用 `./gradlew -Prexpocket.netbird=true :app:assembleRelease` 連結進 App。它會讓 APK 增加約 30 MB（29 MB 增至 59 MB），所以預設建置不包含它；沒有它時，設定 › Tailnet 只提供 Tailscale。`core` 裡的整合測試會連到 `127.0.0.1:7297` 上的 Rex
+ （可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），沒有 Rex 時會略過。窗格生命週期情境（在電腦或手機上關閉分頁和窗格、交還與接管、重新連線）每次建置都會對測試 JVM 裡的 `ScriptedRex` 執行，有真實 Rex 在監聽時也會對它執行，見 [docs/design/testing.md](docs/design/testing.md#rex-integration)。 SSH 測試需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台機器，並用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 提供憑證才會執行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可選。
+ 
+ ### 發布
+@@ -175,6 +177,9 @@ arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/`
+   官方的 libghostty-vt，授權見 `app/src/main/assets/licenses/Ghostty-MIT.txt`。
+ - [Tailscale](https://github.com/tailscale/tailscale)，Tailscale Inc. 及貢獻者，BSD-3-Clause——App 內的
+   Tailscale 節點就是它的 tsnet 程式庫。
++- [Netbird](https://github.com/netbirdio/netbird)，NetBird GmbH 及貢獻者，BSD-3-Clause——App 內的 Netbird
++  節點就是它的嵌入式用戶端；App 只包含其用戶端部分，不含伺服器部分。
++- [go-socks5](https://github.com/things-go/go-socks5)，Things Go 及貢獻者，MIT——Netbird 節點前面的 SOCKS5 服務。
+ - [JSch](https://github.com/mwiede/jsch)，JCraft, Inc. 與貢獻者，Revised BSD——SSH 客戶端。
+   [eddsa](https://github.com/str4d/ed25519-java)，Str4d 與貢獻者，CC0——Android 自帶的安全提供者
+   沒有給 JSch 的 Ed25519 實作。
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index ca30a08b5ea315340be3d8a3bcd85bb2d013f958..af63377ee17bbc79749c201d6a8dae61c7ee2ff7 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -170,6 +170,11 @@ gradle.taskGraph.whenReady {
+     }
+ }
+ 
++// Which tailnet library to link: the Tailscale-only one unless Netbird is asked for.
++val withNetbird = (findProperty("rexpocket.netbird") as String?).toBoolean()
++val tailnetLibrary = rootProject.file(if (withNetbird) "app/libs/tailnet-netbird.aar" else "app/libs/tailnet.aar")
++require(tailnetLibrary.isFile) { "${tailnetLibrary.name} is missing: build it with tools/build-tailnet.sh" }
++
+ dependencies {
+     testImplementation("junit:junit:4.13.2")
+     // Screens driven and captured on the JVM: see docs/design/testing.md.
+@@ -205,6 +210,9 @@ dependencies {
+     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+-    // The official tailscale.com tsnet library behind the tailnet/ Go module, see tools/build-tailnet.sh.
+-    implementation(files("libs/tailnet.aar"))
++    // The tailnet library behind the tailnet/ Go module, see tools/build-tailnet.sh: the official
++    // tailscale.com tsnet library, and Netbird's embedded client when it is built in. Netbird adds
++    // about 30 MB to the APK, so it is a build choice: -Prexpocket.netbird=true links the library built
++    // with REXPOCKET_NETBIRD=1 instead.
++    implementation(files(tailnetLibrary))
+ }
+diff --git a/app/src/androidTest/java/me/leaver/rexpocket/net/TailnetNodeInstrumentedTest.kt b/app/src/androidTest/java/me/leaver/rexpocket/net/TailnetNodeInstrumentedTest.kt
+index e96e8095cf085fe6116628944dde55e59a185050..c27abde50778ce2c20be64b3032db0efb7419b7c 100644
+--- a/app/src/androidTest/java/me/leaver/rexpocket/net/TailnetNodeInstrumentedTest.kt
++++ b/app/src/androidTest/java/me/leaver/rexpocket/net/TailnetNodeInstrumentedTest.kt
+@@ -1,26 +1,55 @@
+ package me.leaver.rexpocket.net
+ 
+ import androidx.test.core.app.ActivityScenario
++import androidx.test.core.app.ApplicationProvider
+ import androidx.test.ext.junit.runners.AndroidJUnit4
+ import androidx.lifecycle.Lifecycle
+ import me.leaver.rexpocket.MainActivity
++import me.leaver.rexpocket.core.TailnetBackend
+ import me.leaver.rexpocket.core.parseTailnetState
+ import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Assert.fail
++import org.junit.Before
+ import org.junit.Test
+ import org.junit.runner.RunWith
++import java.io.File
+ 
+ /**
+- * Runs on a device or emulator with the native library. These checks stay offline on purpose: the
+- * node is never asked to reach its control plane.
++ * Runs on a device or emulator with the native library. Needs the netbird build of the app
++ * (-Prexpocket.netbird=true): the stub build reports Netbird as unavailable.
++ *
++ * These checks stay offline on purpose: the node is never asked to reach a management server.
+  */
+ @RunWith(AndroidJUnit4::class)
+ class TailnetNodeInstrumentedTest {
++    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
++
++    @Before fun freshNodeState() {
++        // A joined node would keep its registration; each run starts from nothing.
++        File(context.filesDir, "netbird").deleteRecursively()
++    }
++
+     @Test fun theAppLaunchesAndSettlesOnHome() {
+         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+             assertEquals(Lifecycle.State.RESUMED, scenario.state)
+         }
+     }
+ 
++    @Test fun theNetbirdLibraryLoadsOnThisDevice() {
++        assertTrue("this build has no Netbird node", NetbirdBox.available())
++        assertTrue(TailnetBackend.entries.contains(TailnetBackend.Netbird))
++    }
++
++    @Test fun aNetbirdStartWithoutAKeyFailsWithTheReason() {
++        try {
++            NetbirdBox(context).start(NetbirdConfig(setupKey = "", hostname = "ci-smoke", managementUrl = ""))
++            fail("a node that never joined must not start without a setup key")
++        } catch (e: TailnetException) {
++            assertTrue("message was: ${e.message}", e.message.orEmpty().contains("setup key"))
++        }
++    }
++
+     @Test fun aNodeStateIsReadableJsonWithNoPeers() {
+         val snapshot = parseTailnetState("""{"backendState":"Starting","peers":[]}""")
+         assertEquals("Starting", snapshot.backendState)
+diff --git a/app/src/main/java/me/leaver/rexpocket/data/HostStore.kt b/app/src/main/java/me/leaver/rexpocket/data/HostStore.kt
+index ff27ad4501c31d4b02db6d0f4bf943d5be8b52f7..8f7a7858610fa4f3c1833451e1e2978443984eaa 100644
+--- a/app/src/main/java/me/leaver/rexpocket/data/HostStore.kt
++++ b/app/src/main/java/me/leaver/rexpocket/data/HostStore.kt
+@@ -32,12 +32,13 @@ data class SavedHost(
+ 
+ /**
+  * Settings for the tailnet node the app runs itself: which backend, whether it is joined, and the
+- * name it goes by.
++ * name it goes by. [managementUrl] is the Netbird management server, blank for Netbird Cloud.
+  */
+ data class TailnetSettings(
+     val backend: TailnetBackend = TailnetBackend.Tailscale,
+     val enabled: Boolean = false,
+     val hostname: String = "",
++    val managementUrl: String = "",
+ )
+ 
+ /**
+@@ -164,6 +165,7 @@ class HostStore(context: Context) {
+         backend = TailnetBackend.fromStorage(prefs.getString(KEY_TAILNET_BACKEND, null)),
+         enabled = prefs.getBoolean(KEY_TAILSCALE_ENABLED, false),
+         hostname = prefs.getString(KEY_TAILSCALE_HOSTNAME, "").orEmpty(),
++        managementUrl = prefs.getString(KEY_NETBIRD_MANAGEMENT_URL, "").orEmpty(),
+     )
+ 
+     fun setTailnet(settings: TailnetSettings) {
+@@ -171,6 +173,7 @@ class HostStore(context: Context) {
+             .putString(KEY_TAILNET_BACKEND, settings.backend.storageKey)
+             .putBoolean(KEY_TAILSCALE_ENABLED, settings.enabled)
+             .putString(KEY_TAILSCALE_HOSTNAME, settings.hostname.trim())
++            .putString(KEY_NETBIRD_MANAGEMENT_URL, settings.managementUrl.trim())
+             .apply()
+     }
+ 
+@@ -354,6 +357,7 @@ class HostStore(context: Context) {
+         private const val KEY_TAILSCALE_ENABLED = "tailscale_enabled"
+         private const val KEY_TAILSCALE_HOSTNAME = "tailscale_hostname"
+         private const val KEY_TAILNET_BACKEND = "tailnet_backend"
++        private const val KEY_NETBIRD_MANAGEMENT_URL = "netbird_management_url"
+         fun newId(): String = UUID.randomUUID().toString()
+         private fun lastKey(id: String) = "last:$id"
+         private fun panesKey(id: String) = "panes:$id"
+diff --git a/app/src/main/java/me/leaver/rexpocket/net/TailnetBox.kt b/app/src/main/java/me/leaver/rexpocket/net/TailnetBox.kt
+index 4b36af793bed46310b2415ae798c23219d793b8f..96fbcc88a5f07150234bf3e8eead28aa5cb87baf 100644
+--- a/app/src/main/java/me/leaver/rexpocket/net/TailnetBox.kt
++++ b/app/src/main/java/me/leaver/rexpocket/net/TailnetBox.kt
+@@ -142,7 +142,7 @@ abstract class TailnetBox(protected val context: Context) : TailnetNode {
+ 
+     override fun dialError(host: String): String? {
+         val current = node ?: return null
+-        // A proxy that resolves a peer's name before it dials keeps its failure under the address.
++        // The Netbird proxy resolves a peer's name before it dials, so its failure is under the address.
+         val names = listOfNotNull(host, peerFor(host, peers)).distinct()
+         return names.firstNotNullOfOrNull { name ->
+             runCatching { current.dialError(name) }.getOrNull()?.takeIf { it.isNotBlank() }
+diff --git a/app/src/main/java/me/leaver/rexpocket/net/TailnetNode.kt b/app/src/main/java/me/leaver/rexpocket/net/TailnetNode.kt
+index 0432e8b7368c4ce57d2ab39037c355a1db430429..858b87974bad26a0d6903dcc7a19423b44422ead 100644
+--- a/app/src/main/java/me/leaver/rexpocket/net/TailnetNode.kt
++++ b/app/src/main/java/me/leaver/rexpocket/net/TailnetNode.kt
+@@ -40,12 +40,25 @@ sealed interface TailnetConfig {
+ /** The built-in Tailscale node: an auth key is optional, the login is otherwise interactive. */
+ data class TailscaleConfig(val authKey: String, override val hostname: String) : TailnetConfig
+ 
++/**
++ * The built-in Netbird node. [setupKey] is needed the first time a node joins; afterwards it may be
++ * blank, since the node's registration is kept. [managementUrl] is blank for Netbird Cloud.
++ */
++data class NetbirdConfig(
++    val setupKey: String,
++    override val hostname: String,
++    val managementUrl: String,
++) : TailnetConfig {
++    override fun sameNode(other: TailnetConfig): Boolean =
++        other is NetbirdConfig && other.hostname == hostname && other.managementUrl == managementUrl
++}
++
+ class TailnetException(message: String, cause: Throwable? = null) : Exception(message, cause)
+ 
+ /**
+  * A network node the app runs itself, and the SOCKS5 proxy on loopback that dials through it. The
+- * Rex connection of a host on the tailnet is pointed at that proxy. Each backend implements it,
+- * and only one is running at a time.
++ * Rex connection of a host on the tailnet is pointed at that proxy. Tailscale and Netbird both
++ * implement it, and only one is running at a time.
+  */
+ interface TailnetNode {
+     /** Live node state, so the home screen can say whether it still needs a login. */
+@@ -122,6 +135,7 @@ class TailnetNodes(entries: List<TailnetEntry>) {
+         fun of(context: android.content.Context): TailnetNodes = TailnetNodes(
+             listOf(
+                 TailnetEntry(TailnetBackend.Tailscale, TailscaleBox(context)),
++                TailnetEntry(TailnetBackend.Netbird, NetbirdBox(context), NetbirdBox::available),
+             ),
+         )
+     }
+diff --git a/app/src/main/java/me/leaver/rexpocket/ui/Common.kt b/app/src/main/java/me/leaver/rexpocket/ui/Common.kt
+index 033afd60f581d497d2d47d74b361ccf85432197d..2d9703785539606276e0cd0ce9a25ec688041494 100644
+--- a/app/src/main/java/me/leaver/rexpocket/ui/Common.kt
++++ b/app/src/main/java/me/leaver/rexpocket/ui/Common.kt
+@@ -195,7 +195,7 @@ internal fun rememberSettledProblem(phase: Phase, problem: Problem?): Problem? {
+ 
+ /**
+  * What went wrong, in the app's words; Rex's own message only where it says something specific.
+- * [network] is the tailnet's backend, such as Tailscale, for the problems that are about it.
++ * [network] is the tailnet's backend, Tailscale or Netbird, for the problems that are about it.
+  */
+ @Composable
+ internal fun problemText(problem: Problem, endpoint: String, network: String = "tailnet"): String = when (problem.trouble) {
+diff --git a/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt b/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt
+index 2311bc325a50919da5c8ad11b0c53251995780bb..3489afd8710f9a7e7cc8eadf55aae0c9700c21ae 100644
+--- a/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt
++++ b/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt
+@@ -1225,15 +1225,18 @@ internal fun TailnetDialog(
+     status: TailnetStatus,
+     error: TailnetFailure?,
+     onDismiss: () -> Unit,
+-    onJoin: (TailnetBackend, String) -> Unit,
++    onJoin: (TailnetBackend, String, String, String) -> Unit,
+     onLeave: () -> Unit,
+ ) {
+     val context = LocalContext.current
+     var backend by remember { mutableStateOf(initial.backend) }
+     var hostname by remember { mutableStateOf(initial.hostname) }
++    var managementUrl by remember { mutableStateOf(initial.managementUrl) }
++    var setupKey by remember { mutableStateOf("") }
+     // The node's own state and login only describe the backend that is joined, not one picked here.
+     val joinedHere = initial.enabled && backend == initial.backend
+     val state = tailnetState(status)
++    val netbird = backend == TailnetBackend.Netbird
+     AlertDialog(
+         onDismissRequest = onDismiss,
+         containerColor = Colors.surface,
+@@ -1257,6 +1260,21 @@ internal fun TailnetDialog(
+                     }
+                 }
+                 Field(stringResource(R.string.tailscale_hostname), hostname) { hostname = it }
++                if (netbird) {
++                    Field(
++                        stringResource(R.string.netbird_management_url),
++                        managementUrl,
++                        placeholder = stringResource(R.string.netbird_management_placeholder),
++                    ) { managementUrl = it }
++                    if (!joinedHere) {
++                        Field(
++                            stringResource(R.string.netbird_setup_key),
++                            setupKey,
++                            password = true,
++                            placeholder = stringResource(R.string.netbird_setup_key_placeholder),
++                        ) { setupKey = it }
++                    }
++                }
+                 if (joinedHere) {
+                     Text(
+                         listOfNotNull(
+@@ -1284,8 +1302,11 @@ internal fun TailnetDialog(
+                     )
+                     Text(stringResource(R.string.tailscale_login_hint), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
+                 }
++                if (netbird && !joinedHere) {
++                    Text(stringResource(R.string.netbird_need_key), color = Colors.amber, fontSize = TextStyles.label, lineHeight = labelLeading)
++                }
+                 Text(
+-                    stringResource(R.string.tailscale_hint),
++                    stringResource(if (netbird) R.string.netbird_hint else R.string.tailscale_hint),
+                     color = Colors.muted,
+                     fontSize = TextStyles.label,
+                     lineHeight = labelLeading,
+@@ -1293,7 +1314,7 @@ internal fun TailnetDialog(
+             }
+         },
+         confirmButton = {
+-            TextButton(onClick = { onJoin(backend, hostname) }) {
++            TextButton(onClick = { onJoin(backend, hostname, managementUrl, setupKey) }) {
+                 Text(
+                     stringResource(if (joinedHere) R.string.action_save else R.string.tailscale_join),
+                     color = Colors.accent,
+diff --git a/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt b/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt
+index 320a51c3f1ecf8ba0318dc1024c7dfa95e508eac..bdf9c698d315705e8a13b734e1bd4b6bdb79e59f 100644
+--- a/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt
++++ b/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt
+@@ -274,9 +274,9 @@ fun RexPocketApp(
+                 status = tailnetStatus,
+                 error = tailnetError,
+                 onDismiss = { tailnetOpen = false },
+-                onJoin = { backend, name ->
++                onJoin = { backend, name, managementUrl, setupKey ->
+                     loginGate.asked(tailnetStage)
+-                    model.joinTailnet(backend, name)
++                    model.joinTailnet(backend, name, managementUrl, setupKey)
+                     tailnetOpen = false
+                 },
+                 onLeave = {
+diff --git a/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt b/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt
+index 46013986acc34c5e53cab1082465a103536d7b47..0cf1ad50503cbb3fe1fd55e45ebbbbf8c7ca8456 100644
+--- a/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt
++++ b/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt
+@@ -58,6 +58,7 @@ import me.leaver.rexpocket.core.ConnectStep
+ import me.leaver.rexpocket.core.TailnetStage
+ import me.leaver.rexpocket.core.explainTailnetProblem
+ import me.leaver.rexpocket.core.tailnetStage
++import me.leaver.rexpocket.net.NetbirdConfig
+ import me.leaver.rexpocket.net.TailnetConfig
+ import me.leaver.rexpocket.net.TailnetNode
+ import me.leaver.rexpocket.net.TailnetStatus
+@@ -201,8 +202,13 @@ class RexViewModel @JvmOverloads constructor(
+     private val activeNode: TailnetNode get() = nodeFor(tailnet.value.backend)
+ 
+     /** The credentials and settings a backend's node starts with. */
+-    private fun configFor(settings: TailnetSettings): TailnetConfig = when (settings.backend) {
++    private fun configFor(settings: TailnetSettings, setupKey: String = ""): TailnetConfig = when (settings.backend) {
+         TailnetBackend.Tailscale -> TailscaleConfig(authKey = "", hostname = settings.hostname)
++        TailnetBackend.Netbird -> NetbirdConfig(
++            setupKey = setupKey,
++            hostname = settings.hostname,
++            managementUrl = settings.managementUrl,
++        )
+     }
+ 
+     /**
+@@ -462,26 +468,27 @@ class RexViewModel @JvmOverloads constructor(
+     /**
+      * Joins the tailnet of [backend] under [hostname] (blank means the device's own name). The node
+      * starts here, not on the first connect, so the app can hand out the login link while the user is
+-     * looking at the Tailnet row; a node that is already logged in just comes back up.
++     * looking at the Tailnet row; a node that is already logged in just comes back up. A Netbird node
++     * that has not joined yet needs its [setupKey]; the key is used once and never stored.
+      */
+-    fun joinTailnet(backend: TailnetBackend, hostname: String) {
++    fun joinTailnet(backend: TailnetBackend, hostname: String, managementUrl: String = "", setupKey: String = "") {
+         Diagnostics.event(CONN_TAG, "joining the ${backend.storageKey} tailnet as ${hostname.trim().ifBlank { "default" }}")
+         val previous = tailnet.value
+-        store.setTailnet(TailnetSettings(backend, enabled = true, hostname = hostname.trim()))
++        store.setTailnet(TailnetSettings(backend, enabled = true, hostname = hostname.trim(), managementUrl = managementUrl.trim()))
+         val next = store.tailnet()
+         tailnet.value = next
+         // Only one node runs: the one that was joined before gives way.
+         if (previous.enabled && previous.backend != backend) nodeFor(previous.backend).stopAsync()
+-        startTailnet(next)
++        startTailnet(next, setupKey)
+     }
+ 
+     /** Brings the selected node up for [settings]; the login it already has makes this a plain restart. */
+-    private fun startTailnet(settings: TailnetSettings) {
++    private fun startTailnet(settings: TailnetSettings, setupKey: String = "") {
+         tailnetJob?.cancel()
+         _tailnetError.value = null
+         tailnetJob = viewModelScope.launch {
+             withContext(Dispatchers.IO) {
+-                runCatching { nodeFor(settings.backend).start(configFor(settings)) }
++                runCatching { nodeFor(settings.backend).start(configFor(settings, setupKey)) }
+                     .onFailure { _tailnetError.value = TailnetFailure(it.message) }
+             }
+         }
+@@ -1077,6 +1084,7 @@ class RexViewModel @JvmOverloads constructor(
+                 if (it.sshUser.isNotBlank()) add(it.sshUser)
+             }
+             add(tailnet.value.hostname)
++            tailnet.value.managementUrl.takeIf { it.isNotBlank() }?.let { add(it) }
+         }
+         return Diagnostics.report(getApplication(), facts, secrets, limit)
+     }
+diff --git a/app/src/main/java/me/leaver/rexpocket/ui/TailnetUi.kt b/app/src/main/java/me/leaver/rexpocket/ui/TailnetUi.kt
+index e9d03dd316f152fbb7fa00434c6672303e6c10cf..2b4c4eb5449dff4b212fdddcf70f1f00ef632d7a 100644
+--- a/app/src/main/java/me/leaver/rexpocket/ui/TailnetUi.kt
++++ b/app/src/main/java/me/leaver/rexpocket/ui/TailnetUi.kt
+@@ -274,10 +274,10 @@ private fun peerLook(peer: TailnetPeer): PeerLook {
+             peer.lastSeen?.let { stringResource(R.string.tailnet_peer_last_seen, relativeTime(it)) }
+                 ?: stringResource(R.string.tailnet_peer_offline),
+         )
+-        // A node that cannot say whether a device is online tells how its own connection to it stands.
++        // Netbird cannot say whether a device is online, only how its own connection to it stands.
+         null -> PeerLook(
+             when (peer.link) {
+-                PeerLink.Direct, PeerLink.PeerRelay, PeerLink.Derp -> Colors.ok
++                PeerLink.Direct, PeerLink.Relay, PeerLink.PeerRelay, PeerLink.Derp -> Colors.ok
+                 PeerLink.Connecting -> Colors.amber
+                 else -> Colors.muted
+             },
+@@ -289,10 +289,12 @@ private fun peerLook(peer: TailnetPeer): PeerLook {
+ /** How the node's traffic reaches the device right now, when it has sent any. */
+ @Composable
+ private fun linkText(peer: TailnetPeer): String? {
++    val ms = peer.latencyMs?.let { " ${it.toInt()} ms" }.orEmpty()
+     return when (peer.link) {
+-        PeerLink.Direct -> stringResource(R.string.tailnet_link_direct)
+-        PeerLink.PeerRelay -> stringResource(R.string.tailnet_link_peer_relay)
+-        PeerLink.Derp -> stringResource(R.string.tailnet_link_derp, peer.linkDetail)
++        PeerLink.Direct -> stringResource(R.string.tailnet_link_direct) + ms
++        PeerLink.PeerRelay -> stringResource(R.string.tailnet_link_peer_relay) + ms
++        PeerLink.Derp -> stringResource(R.string.tailnet_link_derp, peer.linkDetail) + ms
++        PeerLink.Relay -> stringResource(R.string.tailnet_link_relay) + ms
+         PeerLink.Connecting -> stringResource(R.string.tailnet_link_connecting)
+         PeerLink.Idle, PeerLink.Unknown -> null
+     }
+@@ -318,6 +320,7 @@ internal fun pathText(path: TailnetPath, network: String): Pair<String, Color> {
+         is TailnetPath.PeerRelay -> stringResource(R.string.tailnet_path_peer_relay, network) + ms to Colors.amber
+         is TailnetPath.Derp ->
+             stringResource(R.string.tailnet_path_derp, network, path.regionCode.ifBlank { path.regionId.toString() }) + ms to Colors.amber
++        is TailnetPath.Relay -> stringResource(R.string.tailnet_path_relay, network) + ms to Colors.amber
+         is TailnetPath.Unreachable -> stringResource(R.string.tailnet_path_unreachable, network, path.reason) to Colors.danger
+     }
+ }
+diff --git a/app/src/main/res/values-zh-rTW/tailnet_strings.xml b/app/src/main/res/values-zh-rTW/tailnet_strings.xml
+index 76bf09b75c10acfb7560bcdc4ec011c09976872f..c7fe4a5dbbb6beed91134853b10fd2ebb8bba1e9 100644
+--- a/app/src/main/res/values-zh-rTW/tailnet_strings.xml
++++ b/app/src/main/res/values-zh-rTW/tailnet_strings.xml
+@@ -56,6 +56,7 @@
+     <string name="tailnet_link_direct">直連</string>
+     <string name="tailnet_link_peer_relay">peer relay</string>
+     <string name="tailnet_link_derp">DERP %1$s</string>
++    <string name="tailnet_link_relay">中繼</string>
+     <string name="tailnet_link_connecting">連線中</string>
+ 
+     <string name="connect_step_start_tailnet">正在啟動 %1$s…</string>
+diff --git a/app/src/main/res/values-zh/strings.xml b/app/src/main/res/values-zh/strings.xml
+index be07fbb18074695b8145984729d403acf50fadf3..24aca2ffc176427ee83f84ae361933725a24aaa2 100644
+--- a/app/src/main/res/values-zh/strings.xml
++++ b/app/src/main/res/values-zh/strings.xml
+@@ -52,7 +52,14 @@
+     <string name="tailnet_path_direct">%1$s：直连</string>
+     <string name="tailnet_path_peer_relay">%1$s：经 peer relay 中转</string>
+     <string name="tailnet_path_derp">%1$s：经 DERP %2$s 中转</string>
++    <string name="tailnet_path_relay">%1$s：经中继服务器中转</string>
+     <string name="tailnet_backend_label">网络</string>
++    <string name="netbird_management_url">管理服务器</string>
++    <string name="netbird_management_placeholder">留空即 Netbird Cloud</string>
++    <string name="netbird_setup_key">安装密钥（只在首次加入时需要）</string>
++    <string name="netbird_setup_key_placeholder">从 Netbird 后台获取</string>
++    <string name="netbird_need_key">Netbird 首次加入需要 Netbird 后台生成的安装密钥。</string>
++    <string name="netbird_hint">应用自己跑一个 Netbird 节点，所以手机不用装 Netbird、也不占手机的 VPN，就能连 host.netbird.cloud 这类名字和 100.x 地址。自建的 Netbird 节点用地址连接。</string>
+     <string name="tailnet_path_unreachable">%1$s：无路径（%2$s）</string>
+     <string name="tailscale_state_failed">启动失败</string>
+     <string name="tailnet_start_failed">tailnet 无法启动</string>
+diff --git a/app/src/main/res/values-zh/tailnet_strings.xml b/app/src/main/res/values-zh/tailnet_strings.xml
+index f67a32b7fdd4f543f92ad6251caf2fae9974c572..9d34e9655f7252530d618fb72be46f723c0e628f 100644
+--- a/app/src/main/res/values-zh/tailnet_strings.xml
++++ b/app/src/main/res/values-zh/tailnet_strings.xml
+@@ -56,6 +56,7 @@
+     <string name="tailnet_link_direct">直连</string>
+     <string name="tailnet_link_peer_relay">peer relay</string>
+     <string name="tailnet_link_derp">DERP %1$s</string>
++    <string name="tailnet_link_relay">中继</string>
+     <string name="tailnet_link_connecting">连接中</string>
+ 
+     <string name="connect_step_start_tailnet">正在启动 %1$s…</string>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 1088ba8d5a8ac4fad1c1381ece35ae2e2d9fb47b..09f3f5c453ba6c0958885700555777a396803b5b 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -52,7 +52,14 @@
+     <string name="tailnet_path_direct">%1$s: direct</string>
+     <string name="tailnet_path_peer_relay">%1$s: through a peer relay</string>
+     <string name="tailnet_path_derp">%1$s: relayed by DERP %2$s</string>
++    <string name="tailnet_path_relay">%1$s: through a relay server</string>
+     <string name="tailnet_backend_label">Network</string>
++    <string name="netbird_management_url">Management server</string>
++    <string name="netbird_management_placeholder">Blank for Netbird Cloud</string>
++    <string name="netbird_setup_key">Setup key (first join only)</string>
++    <string name="netbird_setup_key_placeholder">From the Netbird dashboard</string>
++    <string name="netbird_need_key">Netbird joins with a setup key from its dashboard, the first time only.</string>
++    <string name="netbird_hint">The app runs its own Netbird node, so this phone can reach peers such as host.netbird.cloud or 100.x addresses without the Netbird app and without taking over the phone\'s VPN slot. Self-hosted peers are reached by their address.</string>
+     <string name="tailnet_path_unreachable">%1$s: no path (%2$s)</string>
+     <string name="tailscale_state_failed">Failed to start</string>
+     <string name="tailnet_start_failed">The tailnet could not start</string>
+diff --git a/app/src/main/res/values/tailnet_strings.xml b/app/src/main/res/values/tailnet_strings.xml
+index 67f863e421e55d1c4e8cc0e614f24cfe8e932b12..8e4c094880517b70bf98681f107365279f1cd754 100644
+--- a/app/src/main/res/values/tailnet_strings.xml
++++ b/app/src/main/res/values/tailnet_strings.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <!-- The tailnet's status on the home screen, its details sheet, and the steps of a connection. -->
+ <resources>
+-    <!-- %1$s is the network, such as Tailscale. -->
++    <!-- %1$s is the network: Tailscale or Netbird. -->
+     <string name="tailnet_stage_starting">Starting %1$s…</string>
+     <string name="tailnet_stage_signing_in">Sign in to %1$s</string>
+     <string name="tailnet_stage_needs_approval">Waiting for approval</string>
+@@ -67,9 +67,10 @@
+     <string name="tailnet_link_peer_relay">peer relay</string>
+     <!-- %1$s is the DERP region, such as fra. -->
+     <string name="tailnet_link_derp">DERP %1$s</string>
++    <string name="tailnet_link_relay">relayed</string>
+     <string name="tailnet_link_connecting">connecting</string>
+ 
+-    <!-- The steps of a connection to a host. %1$s is the network, such as Tailscale. -->
++    <!-- The steps of a connection to a host. %1$s is the network, Tailscale or Netbird. -->
+     <string name="connect_step_start_tailnet">Starting %1$s…</string>
+     <string name="connect_step_sign_in">Waiting for the %1$s sign-in…</string>
+     <!-- %1$s is the host, %2$s the network. -->
+diff --git a/app/src/sharedTest/java/me/leaver/rexpocket/ui/TailnetHarness.kt b/app/src/sharedTest/java/me/leaver/rexpocket/ui/TailnetHarness.kt
+index 69cfdcb59ab5b3b7c381c5d1c05091f87798f27d..830d93d462335efc0f9b4967d5734f6bfa44aa60 100644
+--- a/app/src/sharedTest/java/me/leaver/rexpocket/ui/TailnetHarness.kt
++++ b/app/src/sharedTest/java/me/leaver/rexpocket/ui/TailnetHarness.kt
+@@ -97,6 +97,18 @@ internal object TailnetSamples {
+     fun connected(peers: List<TailnetPeer> = this.peers, health: List<String> = emptyList()) =
+         TailnetStatus(backendState = "Running", networkName = "example.com", self = self, peers = peers, health = health)
+ 
++    /** A Netbird network as its node reports it: no sign-in, no online state, its own relays. */
++    fun netbird() = TailnetStatus(
++        backendState = "Running",
++        networkName = "api.netbird.io",
++        self = TailnetSelf(dnsName = "pixel-8.netbird.cloud", hostName = "pixel-8", ips = listOf("100.90.12.4")),
++        peers = listOf(
++            TailnetPeer("mac.netbird.cloud", "mac", listOf("100.90.12.7"), link = PeerLink.Direct, linkDetail = "192.168.1.20:51820", latencyMs = 6.0),
++            TailnetPeer("nas.netbird.cloud", "nas", listOf("100.90.12.9"), link = PeerLink.Relay, linkDetail = "rels://relay.netbird.io:443", latencyMs = 48.0),
++            TailnetPeer("vm.netbird.cloud", "vm", listOf("100.90.12.11"), link = PeerLink.Idle),
++        ),
++    )
++
+     /** Saved hosts on the tailnet: one on [mac], one on the offline [nas]. */
+     val macHost = SavedHost(id = "mac-host", label = "mac", host = "mac.tail1234.ts.net", port = 7297, plaintext = true, viaTailscale = true)
+     val nasHost = SavedHost(id = "nas-host", label = "nas", host = "nas.tail1234.ts.net", port = 7297, plaintext = true, viaTailscale = true)
+@@ -122,7 +134,13 @@ internal fun tailnetModel(
+     app.getSharedPreferences("rexpocket", Context.MODE_PRIVATE).edit()
+         .putLong("update.checkedAt", System.currentTimeMillis()).commit()
+     lateinit var model: RexViewModel
+-    val nodes = TailnetNodes(listOf(TailnetEntry(backend, node)))
++    val other = FakeTailnetNode()
++    val nodes = TailnetNodes(
++        listOf(
++            TailnetEntry(TailnetBackend.Tailscale, if (backend == TailnetBackend.Tailscale) node else other),
++            TailnetEntry(TailnetBackend.Netbird, if (backend == TailnetBackend.Netbird) node else other) { backend == TailnetBackend.Netbird },
++        ),
++    )
+     compose.runOnUiThread { model = RexViewModel(app as Application, SavedStateHandle(), nodes) }
+     return model
+ }
+diff --git a/app/src/test/java/me/leaver/rexpocket/ui/ScreenshotsTest.kt b/app/src/test/java/me/leaver/rexpocket/ui/ScreenshotsTest.kt
+index 3222abaf7b1fdbbd44f026e9a02a826e45f28556..31529582d93b21ed41505c876729c20548cff6d6 100644
+--- a/app/src/test/java/me/leaver/rexpocket/ui/ScreenshotsTest.kt
++++ b/app/src/test/java/me/leaver/rexpocket/ui/ScreenshotsTest.kt
+@@ -259,6 +259,13 @@ class ScreenshotsTest {
+     @Test fun tailnetDetailsLandscape() { landscape(); tailnet("tailnet-details-landscape", TailnetSamples.connected(), details = true) }
+     @Test fun tailnetErrorPortrait() = tailnet("tailnet-error-portrait", TailnetSamples.starting, startError = "tsnet: open state: permission denied")
+     @Test fun tailnetNotJoinedPortrait() = tailnet("tailnet-not-joined-portrait", TailnetSamples.starting, joined = false)
++    @Test fun tailnetNetbirdDetailsPortrait() = tailnet(
++        "tailnet-netbird-details-portrait",
++        TailnetSamples.netbird(),
++        details = true,
++        backend = TailnetBackend.Netbird,
++        hosts = listOf(TailnetSamples.macHost.copy(host = "mac.netbird.cloud")),
++    )
+ 
+     @Test
+     fun tailnetPeerOfflinePortrait() = tailnet(
+diff --git a/core/src/main/kotlin/me/leaver/rexpocket/core/HostAddress.kt b/core/src/main/kotlin/me/leaver/rexpocket/core/HostAddress.kt
+index 967639b3f2ad11c99124d7a69d7452c8e546d117..b91757dbbf0b29d07163d5eef1c65146ca1ad20e 100644
+--- a/core/src/main/kotlin/me/leaver/rexpocket/core/HostAddress.kt
++++ b/core/src/main/kotlin/me/leaver/rexpocket/core/HostAddress.kt
+@@ -91,10 +91,15 @@ object HostAddressParser {
+         )
+     }
+ 
+-    /** A MagicDNS name, a `100.64/10` address or one of the Tailscale IPv6 addresses. */
++    /**
++     * A MagicDNS name, a Netbird Cloud name, a `100.64/10` address or one of the Tailscale IPv6
++     * addresses. Netbird's own addresses are in `100.64/10` too, so they are on the tailnet either way;
++     * a self-hosted Netbird names its peers under a domain of its own, which is reached by address.
++     */
+     fun isTailnet(host: String): Boolean {
+         val name = host.trim().trim('[', ']').lowercase()
+         if (name.endsWith(".ts.net")) return true
++        if (name.endsWith(".netbird.cloud")) return true
+         if (name.startsWith("fd7a:115c:a1e0")) return true
+         val parts = name.split('.')
+         if (parts.size != 4) return false
+diff --git a/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetBackend.kt b/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetBackend.kt
+index 4a9c155c43790696afada429b4cd8bbaea331431..cba8e93fc729f1dcf0db6d3612e2110657c23a78 100644
+--- a/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetBackend.kt
++++ b/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetBackend.kt
+@@ -1,8 +1,8 @@
+ package me.leaver.rexpocket.core
+ 
+ /**
+- * The network the app runs itself to reach a tailnet: a Tailscale node. A host marked as on the
+- * tailnet is reached through the joined node.
++ * The network the app runs itself to reach a tailnet: a Tailscale node or a Netbird node. Only one
++ * of them runs at a time, and a host marked as on the tailnet is reached through whichever is joined.
+  *
+  * Each backend says here what the screens need to know about it: the name it is shown by, and
+  * whether its node signs in interactively. A new backend is one entry here and one node registered
+@@ -15,7 +15,8 @@ enum class TailnetBackend(
+     /** Whether the node signs in through a login link; one that joins with a key skips that step. */
+     val signsIn: Boolean = true,
+ ) {
+-    Tailscale("tailscale", "Tailscale");
++    Tailscale("tailscale", "Tailscale"),
++    Netbird("netbird", "Netbird", signsIn = false);
+ 
+     companion object {
+         /** The stored name; anything unknown is Tailscale, the backend the app shipped with. */
+diff --git a/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetPath.kt b/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetPath.kt
+index 53b8467bea12ad08efb8aff38b8e9f59668be175..4dea9f46d39c487a4e57a05a68478037a9b66a16 100644
+--- a/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetPath.kt
++++ b/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetPath.kt
+@@ -27,6 +27,9 @@ sealed interface TailnetPath {
+     /** Through a DERP server: a relay over TCP and TLS, often far away, and slow from behind a proxy. */
+     data class Derp(val regionId: Int, val regionCode: String, override val latencyMs: Double) : TailnetPath
+ 
++    /** Through a relay server of the network - Netbird's TURN-style relays, which no peer runs. */
++    data class Relay(val server: String, override val latencyMs: Double) : TailnetPath
++
+     /** The ping did not come back. */
+     data class Unreachable(val reason: String) : TailnetPath {
+         override val latencyMs: Double? get() = null
+@@ -44,11 +47,13 @@ sealed interface TailnetPath {
+             derpRegionId: Int,
+             derpRegionCode: String?,
+             error: String?,
++            relayServer: String? = null,
+         ): TailnetPath = when {
+             !error.isNullOrBlank() -> Unreachable(error)
+             !endpoint.isNullOrBlank() -> Direct(endpoint, latencyMs)
+             !peerRelay.isNullOrBlank() -> PeerRelay(peerRelay, latencyMs)
+             derpRegionId > 0 -> Derp(derpRegionId, derpRegionCode.orEmpty(), latencyMs)
++            !relayServer.isNullOrBlank() -> Relay(relayServer, latencyMs)
+             else -> Unreachable("no path reported")
+         }
+     }
+diff --git a/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetStage.kt b/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetStage.kt
+index c8333a044c64dcd3b0b3b9f0a82d405f89221940..ba216bb178805c3ebbb29897523e00aa98e1b4da 100644
+--- a/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetStage.kt
++++ b/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetStage.kt
+@@ -3,8 +3,8 @@ package me.leaver.rexpocket.core
+ /**
+  * Where the phone's tailnet node is on its way from "joined" to "connected", in the steps a person
+  * sees: it starts, it may need a sign-in or an approval, it connects to the network, and then it is
+- * on it as a named device. The node's own states (Tailscale's ipn.State) map onto these in
+- * [tailnetStage].
++ * on it as a named device. The node's own states (Tailscale's ipn.State, the Netbird node's two)
++ * map onto these in [tailnetStage].
+  */
+ sealed interface TailnetStage {
+     /** The phone has not joined a tailnet. */
+diff --git a/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetState.kt b/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetState.kt
+index d6a23af07c0f07d3d4b18ca7905ce6f385ed3f32..31b8ef3d479d4dcd1932edcb34419ae1fc9c942b 100644
+--- a/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetState.kt
++++ b/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetState.kt
+@@ -20,7 +20,7 @@ data class TailnetSnapshot(
+     val self: TailnetSelf? = null,
+     /** Every peer the node lists, in the order it listed them. */
+     val peers: List<TailnetPeer> = emptyList(),
+-    /** What the node says is wrong with it, in its own words: Tailscale's health warnings. */
++    /** What the node says is wrong with it, in its own words: Tailscale's health warnings, Netbird's control plane. */
+     val health: List<String> = emptyList(),
+ )
+ 
+@@ -52,6 +52,9 @@ enum class PeerLink {
+     /** Through one of Tailscale's DERP servers. */
+     Derp,
+ 
++    /** Through one of Netbird's relay servers. */
++    Relay,
++
+     /** The connection is being set up. */
+     Connecting,
+ 
+@@ -66,6 +69,7 @@ enum class PeerLink {
+             "direct" -> Direct
+             "peerRelay" -> PeerRelay
+             "derp" -> Derp
++            "relay" -> Relay
+             "connecting" -> Connecting
+             "idle" -> Idle
+             else -> Unknown
+@@ -79,13 +83,15 @@ data class TailnetPeer(
+     val hostName: String = "",
+     val ips: List<String> = emptyList(),
+     val os: String = "",
+-    /** Whether the control plane sees the device; null where the node cannot tell. */
++    /** Whether the control plane sees the device; null where the node cannot tell (Netbird). */
+     val online: Boolean? = null,
+     /** When an offline device was last seen, in epoch milliseconds. */
+     val lastSeen: Long? = null,
+     val link: PeerLink = PeerLink.Unknown,
+     /** The endpoint, relay or region of [link]. */
+     val linkDetail: String = "",
++    /** The latency the node measured on its own; Netbird only. */
++    val latencyMs: Double? = null,
+ ) {
+     /** The name the device goes by: its host name, or the first label of its MagicDNS name. */
+     val name: String get() = hostName.ifBlank { dnsName.substringBefore('.') }
+@@ -107,7 +113,7 @@ fun List<TailnetPeer>.named(host: String): TailnetPeer? = firstOrNull { it.answe
+ /**
+  * Reads the state JSON both nodes report: `{"backendState", "authUrl", "tailnet", "self",
+  * "selfInfo", "health", "peers": [{"dnsName", "hostName", "ips": [...], "os", "online",
+- * "lastSeen", "link", "linkDetail"}]}`. A peer without an address is counted but
++ * "lastSeen", "link", "linkDetail", "latencyMs"}]}`. A peer without an address is counted but
+  * cannot be dialed, so it is left out of the address map. Every field after the first few may be
+  * missing: an older library, or a node that has no answer for it.
+  */
+@@ -130,6 +136,7 @@ fun parseTailnetState(json: String): TailnetSnapshot {
+             lastSeen = instant(peer.optString("lastSeen")),
+             link = PeerLink.from(peer.optString("link")),
+             linkDetail = peer.optString("linkDetail"),
++            latencyMs = peer.optDouble("latencyMs").takeIf { !it.isNaN() && it > 0 },
+         )
+         val first = ips.firstOrNull() ?: continue
+         dnsName.lowercase().takeIf { it.isNotEmpty() }?.let { addresses[it] = first }
+@@ -168,8 +175,8 @@ private fun instant(text: String): Long? =
+     text.takeIf { it.isNotBlank() }?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
+ 
+ /**
+- * Reads one ping result from the node's JSON: `{"latencyMs", "endpoint", "peerRelay",
+- * "derpRegionId", "derpRegionCode", "error"}`. A node that cannot tell a path leaves
++ * Reads one ping result from either node's JSON: `{"latencyMs", "endpoint", "peerRelay",
++ * "derpRegionId", "derpRegionCode", "relayServer", "error"}`. A node that cannot tell a path leaves
+  * the fields it has no answer for empty.
+  */
+ fun parseTailnetPath(json: String): TailnetPath {
+@@ -181,5 +188,6 @@ fun parseTailnetPath(json: String): TailnetPath {
+         o.optLong("derpRegionId").toInt(),
+         o.optString("derpRegionCode"),
+         o.optString("error"),
++        relayServer = o.optString("relayServer"),
+     )
+ }
+diff --git a/core/src/test/kotlin/me/leaver/rexpocket/core/HostAddressTest.kt b/core/src/test/kotlin/me/leaver/rexpocket/core/HostAddressTest.kt
+index 45164f9ad3cbc28ad4a7bcd7b45910d1d3150b46..94f7b868cd0ef0f24f1300157b2fd884b30d7e57 100644
+--- a/core/src/test/kotlin/me/leaver/rexpocket/core/HostAddressTest.kt
++++ b/core/src/test/kotlin/me/leaver/rexpocket/core/HostAddressTest.kt
+@@ -140,4 +140,13 @@ class HostAddressTest {
+         assertNull(HostAddressParser.parse("host:notaport"))
+         assertNull(HostAddressParser.parse("host:70000"))
+     }
++
++    @Test
++    fun aNetbirdCloudNameIsOnTheTailnetOverTls() {
++        val host = HostAddressParser.parse("my-mac.netbird.cloud")!!
++        assertEquals("my-mac.netbird.cloud", host.host)
++        assertEquals(HostAddressParser.TLS_PORT, host.port)
++        assertEquals(true, host.viaTailscale)
++        assertEquals(false, HostAddressParser.parse("netbird.example.com")!!.viaTailscale)
++    }
+ }
+diff --git a/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetBackendTest.kt b/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetBackendTest.kt
+index 91ceff9a67947708f6e39c7256f91a8b16c08c1b..701e8464c9a3c5e7c2620997e1d24d27c9190f31 100644
+--- a/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetBackendTest.kt
++++ b/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetBackendTest.kt
+@@ -13,7 +13,7 @@ class TailnetBackendTest {
+ 
+     @Test
+     fun anUnknownOrMissingNameIsTailscale() {
+-        // Tailscale is the backend the app shipped with, so a settings file with no backend reads as it.
++        // Tailscale is the backend the app shipped with, so a settings file from before Netbird reads as it.
+         assertEquals(TailnetBackend.Tailscale, TailnetBackend.fromStorage(null))
+         assertEquals(TailnetBackend.Tailscale, TailnetBackend.fromStorage(""))
+         assertEquals(TailnetBackend.Tailscale, TailnetBackend.fromStorage("wireguard"))
+diff --git a/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetDetailsTest.kt b/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetDetailsTest.kt
+index 3e1c164733e511a441cf8b7450c82cccf68f79fd..e5fed847d4c3a48fcfc03de8bf350fd1a1c5866d 100644
+--- a/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetDetailsTest.kt
++++ b/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetDetailsTest.kt
+@@ -48,14 +48,15 @@ class TailnetDetailsTest {
+     @Test
+     fun aNodeThatCannotTellOnlineSaysNothing() {
+         val snapshot = parseTailnetState(
+-            """{"backendState":"Running","tailnet":"example.com","self":"phone.tail1234.ts.net",
+-               "selfInfo":{"dnsName":"phone.tail1234.ts.net","hostName":"phone","ips":["100.90.1.2"]},
+-               "peers":[{"dnsName":"mac.tail1234.ts.net","hostName":"mac","ips":["100.90.1.3"],"link":"derp",
+-                         "linkDetail":"fra"}]}""",
++            """{"backendState":"Running","tailnet":"api.netbird.io","self":"phone.netbird.cloud",
++               "selfInfo":{"dnsName":"phone.netbird.cloud","hostName":"phone","ips":["100.90.1.2"]},
++               "peers":[{"dnsName":"mac.netbird.cloud","hostName":"mac","ips":["100.90.1.3"],"link":"relay",
++                         "linkDetail":"rels://relay.netbird.io:443","latencyMs":12.5}]}""",
+         )
+         val peer = snapshot.peers.single()
+         assertNull(peer.online)
+-        assertEquals(PeerLink.Derp, peer.link)
++        assertEquals(PeerLink.Relay, peer.link)
++        assertEquals(12.5, peer.latencyMs!!, 0.0)
+     }
+ 
+     @Test
+@@ -121,6 +122,7 @@ class TailnetStageTest {
+         assertNull(TailnetStage.Connected("pixel", "").step())
+         assertNull(TailnetStage.Failed("x").step())
+         assertEquals(3, tailnetSteps(TailnetBackend.Tailscale).size)
++        assertEquals(listOf(TailnetStep.Start, TailnetStep.Connect), tailnetSteps(TailnetBackend.Netbird))
+     }
+ 
+     @Test
+diff --git a/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetPathTest.kt b/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetPathTest.kt
+index fb3805e3efa456c66d1fb1664ece6491edc3b8d0..847ec320a6efa3b064e6d7926bf6cae5a18012e3 100644
+--- a/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetPathTest.kt
++++ b/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetPathTest.kt
+@@ -46,4 +46,20 @@ class TailnetPathTest {
+             TailnetPath.from(0.0, "1.2.3.4:5", null, 2, "sfo", "timeout"),
+         )
+     }
++
++    @Test
++    fun aNetbirdRelayIsNamedByItsServer() {
++        assertEquals(
++            TailnetPath.Relay("rels://relay.example.com:443", 61.5),
++            TailnetPath.from(61.5, "", "", 0, "", null, relayServer = "rels://relay.example.com:443"),
++        )
++    }
++
++    @Test
++    fun aNetbirdDirectEndpointIsADirectPath() {
++        assertEquals(
++            TailnetPath.Direct("203.0.113.7:51820", 9.0),
++            TailnetPath.from(9.0, "203.0.113.7:51820", "", 0, "", null, relayServer = ""),
++        )
++    }
+ }
+diff --git a/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetStateTest.kt b/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetStateTest.kt
+index 2e514625137992b38567187ba68b038fefc6307f..d38d855511d03e2816f0c8a044c3393198e830fe 100644
+--- a/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetStateTest.kt
++++ b/core/src/test/kotlin/me/leaver/rexpocket/core/TailnetStateTest.kt
+@@ -60,11 +60,19 @@ class TailnetPathParseTest {
+         )
+     }
+ 
++    @Test
++    fun aNetbirdPingReadsItsRelayServer() {
++        assertEquals(
++            TailnetPath.Relay("rels://relay.example.com:443", 61.5),
++            parseTailnetPath("""{"latencyMs":61.5,"endpoint":"","peerRelay":"","derpRegionId":0,"derpRegionCode":"","relayServer":"rels://relay.example.com:443","error":""}"""),
++        )
++    }
++
+     @Test
+     fun aPingWithAnErrorIsUnreachable() {
+         assertEquals(
+             TailnetPath.Unreachable("the peer is not connected yet"),
+-            parseTailnetPath("""{"latencyMs":0,"endpoint":"","peerRelay":"","derpRegionId":0,"derpRegionCode":"","error":"the peer is not connected yet"}"""),
++            parseTailnetPath("""{"latencyMs":0,"endpoint":"","peerRelay":"","derpRegionId":0,"derpRegionCode":"","relayServer":"","error":"the peer is not connected yet"}"""),
+         )
+     }
+ }
+diff --git a/docs/design/tailnet-status.md b/docs/design/tailnet-status.md
+index 281c162a178aa61a9d895683a78b2a944bf96f81..84c3f4f58c485194b0a4081cb3c4d7191cf3178a 100644
+--- a/docs/design/tailnet-status.md
++++ b/docs/design/tailnet-status.md
+@@ -2,7 +2,8 @@
+ 
+ The app runs its own tailnet node, so a host on a tailnet is reached without the Tailscale app and
+ without taking the phone's VPN slot. This note records how the node's state reaches the screen: the
+-home screen's card and details, and the steps of a connection to a host.
++home screen's card and details, and the steps of a connection to a host. The backends themselves
++are in [tailnet-backends.md](tailnet-backends.md).
+ 
+ The user's complaint was that there was "very little UI or UX stating tailnet connecting then
+ hosts". Before this change the only signs were the Settings row's word ("Running", "Starting…"), a
+@@ -36,27 +37,34 @@ from the backend state, the login URL, the device name and the start error. `Con
+ host half: the view model moves it on at each step, and keeps how long each took. Both are unit
+ tested in `TailnetDetailsTest.kt`.
+ 
++A Netbird node joins with a setup key, so its steps are Start and Connect only; it cannot tell
++whether a peer is online, so its devices show the node's own connection to them (direct, relayed,
++connecting, idle) and its latency instead.
++
+ ## What the bridge reports
+ 
+-The state JSON the node reports grew, keeping every old field and name (an older library still
++The state JSON both nodes report grew, keeping every old field and name (an older library still
+ parses):
+ 
+ - `selfInfo`: `dnsName`, `hostName`, `ips`; Tailscale adds `os`, `user` (login name), `relay`
+   (home DERP region) and `keyExpiry`.
+-- `health`: Tailscale's health warnings.
+-- per peer: `os`, `online` and `lastSeen`, `link` and `linkDetail` (`direct` with the endpoint,
+-  `peerRelay`, `derp` with the region, `connecting`, `idle`).
++- `health`: Tailscale's health warnings; for Netbird, a broken management or signal connection.
++- per peer: `os`, `online` and `lastSeen` (Tailscale; Netbird leaves them out, since the embedded
++  client's status has no control-plane presence), `link` and `linkDetail` (`direct` with the
++  endpoint, `peerRelay`, `derp` with the region, `relay` with the Netbird relay server,
++  `connecting`, `idle`), and for Netbird `latencyMs` and `lastHandshake`.
++- `tailnet` for Netbird is the management server's host, since Netbird has no network name.
+ 
+-`Node.DialError(host)` is new on the node: the reason for the last failed dial to a
++`Node.DialError(host)` is new on both nodes and the stub: the reason for the last failed dial to a
+ host through the proxy, kept two minutes (`tailnet/internal/dials`). Tailscale's SOCKS5 server
+ answers every failure with "general failure", so without it the app could not tell a refused port
+-from an offline peer. The app also asks under the peer's address, for a proxy that resolves a name
+-before dialing. `explainTailnetProblem` reads it with the device list: a refused dial is "Rex is
++from an offline peer. The Netbird proxy resolves a name before dialing, so the app also asks under
++the peer's address. `explainTailnetProblem` reads it with the device list: a refused dial is "Rex is
+ not listening on port N", an offline device is offline, a name the listed tailnet does not have is
+ unknown, a node that needs a sign-in says so.
+ 
+-Cheap and reliable was the rule: everything comes from `LocalClient.Status`, which the node
+-already read; nothing new is polled. A connection to a
++Cheap and reliable was the rule: everything comes from `LocalClient.Status` (Tailscale) or
++`Client.Status` (Netbird), which the node already read; nothing new is polled. A connection to a
+ name the node's device list does not have now waits 2 s for it instead of 10 s.
+ 
+ ## Sizes of this change
+@@ -74,8 +82,10 @@ for every string it does not have.
+   node's proxy (`TailnetHarness.kt`): each stage's card, the details and device order, a device
+   offered as a host, the steps of a connect through the proxy to ScriptedRex, and the offline,
+   unknown-name and not-listening explanations. `ScreenshotsTest` records `tailnet-*.png`: starting,
+-  needs login, connecting, connected, details, not joined, start failed,
++  needs login, connecting, connected, details (Tailscale and Netbird), not joined, start failed,
+   reaching a host, peer offline, Rex not listening.
+ - `core`: `TailnetDetailsTest.kt` for the new state fields, the stage map, connect progress and the
+   problem explanations.
+-- `tailnet` (Go): `state_test.go` (the Tailscale state JSON and link) and `internal/dials`.
++- `tailnet` (Go): `state_test.go` (the Tailscale state JSON and link), `internal/dials`, and
++  `netbird/state_test.go`; the end-to-end test also checks the self, the peer's link after a ping,
++  and that a refused dial leaves a reason in `DialError`.
+diff --git a/tools/build-tailnet.sh b/tools/build-tailnet.sh
+index dd3bc4da2b0357e40d276200ffc27af1acb94b89..6f46f79ea8aac15ee5054cc9349ec8d7d1860fc5 100755
+--- a/tools/build-tailnet.sh
++++ b/tools/build-tailnet.sh
+@@ -1,11 +1,16 @@
+ #!/bin/sh
+ # Builds app/libs/tailnet.aar: the official tailscale.com tsnet library, wrapped by tailnet/ for the
+-# app, arm64-v8a only.
++# app, arm64-v8a only. With REXPOCKET_NETBIRD=1 it also includes Netbird's embedded client and goes to
++# app/libs/tailnet-netbird.aar instead; see below for why that is a separate build.
+ #
+-# The app runs its own Tailscale node through it, so it can reach tailnet names such as
+-# host.tailnet-xxxx.ts.net without the Tailscale app and without taking the phone's VPN slot.
+-# The versions are pinned by tailnet/go.mod and tailnet/go.sum, so the same checkout builds the
+-# same library.
++# The app runs its own Tailscale or Netbird node through it, so it can reach tailnet names such as
++# host.tailnet-xxxx.ts.net or host.netbird.cloud without either app and without taking the phone's
++# VPN slot. Both nodes live in one library, because an APK can hold only one gomobile library: each
++# carries its own Go runtime and its own libgojni.so. Netbird is left out of the default library: it
++# adds about 30 MB to the APK, which is more than the app itself, so it is a build choice. Without it
++# the library still has the Netbird classes, and the app offers no Netbird node.
++# The versions are pinned by tailnet/go.mod and tailnet/go.sum, so the same checkout builds the same
++# library.
+ #
+ # Requires: Go (go.mod's toolchain is fetched when GOTOOLCHAIN allows it), JDK 17, an Android NDK
+ # and the Android SDK. gomobile is installed into GOBIN by this script.
+@@ -41,20 +46,30 @@ TAGS="$TAGS,ts_omit_flashappliance,ts_omit_systray,ts_omit_dbus,ts_omit_networkm
+ TAGS="$TAGS,ts_omit_resolved,ts_omit_iptables,ts_omit_sdnotify,ts_omit_syslog,ts_omit_completion"
+ TAGS="$TAGS,ts_omit_qrcodes,ts_omit_cli"
+ 
++# The Netbird build: its tag, and its own output so the default library stays as it is.
++OUT="$ROOT/app/libs/tailnet.aar"
++if [ "${REXPOCKET_NETBIRD:-0}" = 1 ]; then
++    TAGS="$TAGS,netbird"
++    OUT="$ROOT/app/libs/tailnet-netbird.aar"
++fi
++
+ mkdir -p "$ROOT/app/libs"
+ # One ABI: a phone that runs this app is arm64. Android 15 devices can use 16 KB pages, and a
+ # library whose LOAD segments are aligned to 4 KB does not load there, so the linker is told to
+ # align to 16 KB; tools/check-16kb.sh checks it.
++# Two Java packages in one library: the Tailscale node (the root package) and the Netbird node.
++# -checklinkname=0: Netbird reaches net's own interface list through go:linkname (github.com/wlynxg/anet),
++# which Go 1.23 and later refuse to link unless the check is off.
+ gomobile bind \
+-    -o "$ROOT/app/libs/tailnet.aar" \
++    -o "$OUT" \
+     -target android/arm64 \
+     -androidapi 26 \
+     -javapkg me.leaver.rexpocket.go \
+     -trimpath \
+-    -ldflags "-s -w -buildid= -extldflags=-Wl,-z,max-page-size=16384" \
++    -ldflags "-s -w -buildid= -checklinkname=0 -extldflags=-Wl,-z,max-page-size=16384" \
+     -tags "$TAGS" \
+-    .
++    . ./netbird
+ 
+-rm -f "$ROOT/app/libs/tailnet-sources.jar"
+-"$ROOT/tools/check-16kb.sh" "$ROOT/app/libs/tailnet.aar"
+-echo "wrote $ROOT/app/libs/tailnet.aar"
++rm -f "${OUT%.aar}-sources.jar"
++"$ROOT/tools/check-16kb.sh" "$OUT"
++echo "wrote $OUT"

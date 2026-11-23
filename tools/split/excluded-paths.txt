@@ -1,0 +1,4 @@
+# Paths on the tip that go to neither PR: the split tooling itself. split/netbird's tree is the tip's
+# less these. One path (file or directory) per line.
+tools/split
+docs/design/pr-split.md

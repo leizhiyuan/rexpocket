@@ -1,0 +1,7 @@
+# Paths that only PR B (Netbird) has: split/ui leaves them out whole (or, for a path the merge base
+# had, keeps the merge base's version). The Netbird hunks of shared files are in netbird.patch.
+tailnet/netbird
+tools/ci/netbird-e2e
+.github/workflows/netbird-e2e.yml
+app/src/main/java/me/leaver/rexpocket/net/NetbirdBox.kt
+docs/design/tailnet-backends.md
