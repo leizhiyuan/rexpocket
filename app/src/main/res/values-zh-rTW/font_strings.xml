@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="terminal_font_title">終端機字型</string>
+    <string name="terminal_font_hint">選擇終端機輸出使用的字型。如果字元間距看起來太大，可以試試 JetBrains Mono。</string>
+    <string name="terminal_font_system">系統等寬字型</string>
+    <string name="terminal_font_system_detail">使用裝置內建的字型</string>
+    <string name="terminal_font_download">首次下載 · 約 1 MB · 來自 GitHub</string>
+    <string name="terminal_font_saved">已下載 · 可離線使用</string>
+    <string name="terminal_font_loading">正在載入已儲存的字型…</string>
+    <string name="terminal_font_downloading">正在下載… %1$d%%</string>
+    <string name="terminal_font_failed">無法下載或載入字型，目前的字型沒有變更。輕觸 JetBrains Mono 即可重試。</string>
+    <string name="terminal_font_credit">JetBrains Mono · SIL 開放字型授權 1.1</string>
+</resources>
