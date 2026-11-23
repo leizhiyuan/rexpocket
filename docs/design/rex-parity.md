@@ -149,7 +149,7 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 | Rex capability (source) | Verdict | Notes |
 | --- | --- | --- |
 | Sessions: list, new, open, rename, close (docs:ios-actions Session) | Done | Next/Previous Session added to the palette |
-| Tabs: new, rename, close, go to, next/previous (docs:ios-actions Tab) | Done | Next/Previous Tab and Go to Tab in the palette |
+| Tabs: new, rename, close, go to, next/previous (docs:ios-actions Tab) | Done | Next/Previous Tab and Go to Tab in the palette; on the home, a long press or ⋮ on a session or tab renames, adds or closes without attaching ("Managing sessions from the home") |
 | Panes: split right/down, rename, close, focus next/previous (docs:ios-actions Pane) | Done | Split left/up: adapt, 0.5 day (`session.new_split` `side: before`) |
 | Paste into Pane, Insert File, Show/Hide Keyboard, font size (docs:ios-actions) | Done | Font size in the palette now |
 | Copy Block ID (`pane.copy_id`) | Build now | palette row |
@@ -238,6 +238,22 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
   and `…reset` ("Reset Terminal") have a `title`, `category` (`Pane`) and `keywords` - the ones a
   palette would list (the phone's palette has both, as `block.method` `clear` and `reset`). Custom `rex.action`s need an `init.lua`, which was not tried. Saved in
   `rex-protocol/client-keymap.json`.
+- **Managing sessions from the home.** A connection that bootstrapped (`event_scope: all`) and never
+  attached a session may call `session.set_label`, `session.set_window_label`, `session.new_window`,
+  `session.close_window` and `session.destroy` on it; each answers `{revision}` (`destroy` `{}`).
+  Without a bootstrap they are `conflict` "stream is not attached to session …", as above. Attaching
+  is not what resizes a desktop's panes (taking one with `own_block` is), but an unattached caller
+  also stays out of `session.list_clients`, and the pane its `new_window` makes has **no owner**
+  (`block_created`, no `block_owner_changed`), where an attached caller becomes the owner (`create`).
+  So the home's sheets never attach: Rename, New tab and End session for a session, Rename and Close
+  for a tab, the last two confirmed first since they end programs (no undo can bring them back;
+  a rename is undone by renaming). To an unattached caller the answer may come before the events
+  it caused. The orders: a tab closed is `window_closed`, (`active_window_changed`),
+  `session_view_changed`, then `block_closed`; a session destroyed is, per pane, `block_closed` and
+  `session_view_changed`, then `session_destroyed`, then the answer. A `session.view` the phone sends
+  for one of those `block_closed` events can therefore find the session gone (`session_not_found`),
+  which the phone takes as the end it is, not a failure (`RexShapeTest`, "phone … has not attached";
+  `RealRexAppTest.theHomeManagesASessionItNeverAttached`; `HomeManageTest` on ScriptedRex).
 - **A tab closed from another client.** `session.close_window` (or `rex window close`): the phone gets
   `window_closed`, `active_window_changed` (when it was the active tab; `{}` when no tab is left),
   `session_view_changed`, and only then `block_closed` for each of its panes; the pane's stream closes
@@ -269,6 +285,7 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
 | A session's last tab closing leaves the session, with no `windows` and no `active_window_id` in its view | (already, from the docs) | the screen showed a blank pane, typing failed with "No terminal in this window" | "No tabs in this session" with New tab, no key bar (`EmptySessionTest`) |
 | New tabs are labelled `Window <last 8 of the id>`, panes `shell`; ids are `kind:<uuid>` | `shell`, `kind:N` | - | fake as Rex |
 | `session.create`, `new_window`, `new_split`, `close_window`, `block.close` answer with ids and `revision`; `data.connect` with `expires_in_ms` | bare | - | fake as Rex |
+| `close_window`, `set_label`, `set_window_label` answer `{revision}` only; `new_window` from a caller not attached makes a pane with no owner | `close_window` with its window id, `set_label` with the label, `set_window_label` `{}`; the caller always owned | - | fake as Rex |
 | Rex's `pwd` is only what a program reported (OSC 7); a stock bash reports none | - | `statusAndDirectoryFollowEventsWithoutPolling` assumed the shell reports it | the test's shell reports its directory, as zsh's and fish's integrations do |
 | Output written before a pane's stream opens is in the snapshot | - | `ForegroundStreamTest` typed before the stream opened and waited for the output after the snapshot | the test waits for the snapshot first |
 

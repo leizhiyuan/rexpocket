@@ -110,7 +110,9 @@ jobs:
               me.leaver.rexpocket.ui.EmptyHomeTest \
               me.leaver.rexpocket.ui.LargeFontTest \
               me.leaver.rexpocket.ui.CommandPaletteTest \
-              me.leaver.rexpocket.ui.TextFieldsTest; do
+              me.leaver.rexpocket.ui.TextFieldsTest \
+              me.leaver.rexpocket.ui.HomeManageTest \
+              me.leaver.rexpocket.ui.ShareTest; do
             adb logcat -c || true
             if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \
                 -Pandroid.testInstrumentationRunnerArguments.class="$class"; then
@@ -172,6 +174,9 @@ jobs:
             --tests 'me.leaver.rexpocket.ui.TermFullScreenTest' \
             --tests 'me.leaver.rexpocket.ui.EmptySessionTest' \
             --tests 'me.leaver.rexpocket.ui.TextFieldsTest' \
+            --tests 'me.leaver.rexpocket.ui.HomeManageTest' \
+            --tests 'me.leaver.rexpocket.ui.ShareTest' \
+            --tests 'me.leaver.rexpocket.ui.ShareIntentTest' \
             --tests 'me.leaver.rexpocket.ui.TailnetStatusTest' \
             --tests 'me.leaver.rexpocket.ui.EmptyHomeTest' \
             --tests 'me.leaver.rexpocket.ui.LargeFontTest' \

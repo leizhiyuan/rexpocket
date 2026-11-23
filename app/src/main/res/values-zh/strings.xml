@@ -104,6 +104,24 @@
     <string name="menu_show_keyboard">显示键盘</string>
     <string name="menu_hide_keyboard">隐藏键盘</string>
     <string name="menu_kill_session">结束会话</string>
+    <string name="manage_actions_for">%1$s 的操作</string>
+    <string name="action_end">结束</string>
+    <string name="share_target">发送到 Rex</string>
+    <string name="share_title">发送到 Rex</string>
+    <plurals name="share_files">
+        <item quantity="other">%1$d 个文件</item>
+    </plurals>
+    <string name="share_pastes">粘贴到窗格中。在那里按回车之前不会运行任何内容。</string>
+    <string name="share_uploads">上传到电脑，并在窗格中输入它的路径。</string>
+    <string name="share_too_large">超过 Rex 的 100 MiB 限制。请选择较小的文件。</string>
+    <string name="share_pane_gone">那个窗格已经不在了。请另选一个。</string>
+    <string name="share_to">发送到 %1$s</string>
+    <string name="share_paste">粘贴</string>
+    <string name="share_send">发送</string>
+    <string name="share_choose">选择其他窗格</string>
+    <string name="share_pick">发送到哪个窗格？</string>
+    <string name="share_no_hosts">请先添加主机，然后再分享。</string>
+    <string name="share_connect">轻触以连接</string>
 
     <string name="pane_reading">正在读取画面…</string>
     <string name="pane_no_picture">画面还没有来</string>

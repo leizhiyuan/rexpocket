@@ -137,6 +137,10 @@ private data class HomeSession(
     val activity: Boolean,
 )
 
+/** A session and its tabs can be managed from the home only on the live host, once Rex sent its view. */
+private fun manageable(live: Boolean, state: PocketState, row: HomeSession): Boolean =
+    live && state.phase == Phase.Live && row.view != null
+
 /** A pane that is working or waiting is what the eye filters on; its record is the pane's summary. */
 private fun PocketState.activityOf(block: BlockInfo): ProgramRecord? =
     blockStatus[block.id]?.takeIf { block.id in busy }
@@ -173,6 +177,8 @@ internal fun HomeScreen(
     onOpenPane: (SavedHost, String, String, String) -> Unit = { host, session, window, _ -> onOpenTab(host, session, window) },
     onNewSession: (SavedHost) -> Unit,
     onNewTab: (SavedHost, String) -> Unit,
+    /** What the session and tab sheets do, on the connected host and without attaching. */
+    onManage: (HomeAction) -> Unit = {},
     onDisconnect: () -> Unit,
     onRetry: () -> Unit,
     onProbePath: () -> Unit,
@@ -239,6 +245,7 @@ internal fun HomeScreen(
     var diagnostics by rememberSaveable { mutableStateOf(false) }
     var recording by remember { mutableStateOf(Diagnostics.capture(context) != null) }
     var menuHostId by rememberSaveable { mutableStateOf<String?>(null) }
+    var manage by remember { mutableStateOf<ManageTarget?>(null) }
     val menuHost = menuHostId?.let { id -> hosts.firstOrNull { it.id == id } }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -396,6 +403,11 @@ internal fun HomeScreen(
                                             }
                                         },
                                         onNewTab = { onNewTab(host, row.session.id) },
+                                        onManage = if (manageable(live, state, row)) {
+                                            { manage = ManageTarget.Session(row.session.id) }
+                                        } else {
+                                            null
+                                        },
                                     )
                                 }
                                 if (sessionExpanded) {
@@ -418,6 +430,11 @@ internal fun HomeScreen(
                                                 opening = openingThis,
                                                 open = detail && live && state.activeSessionId == row.session.id,
                                                 onOpen = { windowId -> onOpenTab(host, row.session.id, windowId) },
+                                                onManage = if (manageable(live, state, row)) {
+                                                    { windowId -> manage = ManageTarget.Tab(row.session.id, windowId) }
+                                                } else {
+                                                    null
+                                                },
                                             )
                                         }
                                         Spacer(Modifier.height(4.dp))
@@ -501,6 +518,8 @@ internal fun HomeScreen(
             },
         )
     }
+
+    HomeManageSheet(manage, state, onDismiss = { manage = null }, onAction = onManage)
 
     menuHost?.let { host ->
         ActionSheet(onDismiss = { menuHostId = null }, title = host.label) {
@@ -717,6 +736,7 @@ private fun HostStatus(
  * plus that makes a tab in it, and the fold. A blue dot says something in it is working.
  */
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun SessionHeader(
     row: HomeSession,
     live: Boolean,
@@ -724,6 +744,8 @@ private fun SessionHeader(
     expanded: Boolean,
     onToggle: () -> Unit,
     onNewTab: () -> Unit,
+    /** Opens the session's sheet (rename, new tab, end); null where the session cannot be managed now. */
+    onManage: (() -> Unit)? = null,
 ) {
     val tabs = row.view?.windows?.size ?: 0
     val detail = when {
@@ -733,8 +755,10 @@ private fun SessionHeader(
         else -> null
     }
     val folded = stringResource(R.string.state_folded)
+    val manageLabel = stringResource(R.string.manage_actions_for, row.session.label)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.chip)).clickable(onClick = onToggle)
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.chip))
+            .combinedClickable(onLongClickLabel = onManage?.let { manageLabel }, onLongClick = onManage, onClick = onToggle)
             // Said as the host's header says it, so a folded session is not only a turned chevron.
             .semantics { if (row.view != null && !expanded) stateDescription = folded }
             .padding(start = KEY_MARK),
@@ -759,6 +783,9 @@ private fun SessionHeader(
                 Text(detail, color = if (opening) Colors.accent else Colors.muted, fontSize = TextStyles.label, maxLines = 1)
             }
         }
+        if (onManage != null) {
+            RoundButton(R.drawable.ic_more, manageLabel, onManage, tint = Colors.muted, size = 48.dp, enabled = !opening)
+        }
         RoundButton(
             R.drawable.ic_add_circle,
             stringResource(R.string.menu_new_tab),
@@ -780,6 +807,8 @@ private fun TabCard(
     /** True for the session whose tab the pane beside the list is showing. */
     open: Boolean,
     onOpen: (String) -> Unit,
+    /** Opens a tab's sheet (rename, close); null where the tabs cannot be managed now. */
+    onManage: ((String) -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Colors.surface)) {
         row.tabs.forEachIndexed { index, window ->
@@ -795,6 +824,7 @@ private fun TabCard(
                 opening = opening,
                 open = open && window.id == state.view?.activeWindowId,
                 onOpen = { onOpen(window.id) },
+                onManage = onManage?.let { manage -> { manage(window.id) } },
             )
         }
     }
@@ -812,6 +842,7 @@ private fun detailFor(window: WindowInfo, activity: ProgramRecord?): String {
  * while a pane in it works, its name, its panes, a chevron.
  */
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun TabRow(
     title: String,
     program: String?,
@@ -821,12 +852,20 @@ private fun TabRow(
     /** True for the tab the pane beside the list is showing. */
     open: Boolean,
     onOpen: () -> Unit,
+    onManage: (() -> Unit)? = null,
 ) {
     val selected = stringResource(R.string.state_selected)
+    val manageLabel = stringResource(R.string.manage_actions_for, title)
     Row(
         Modifier.fillMaxWidth().heightIn(min = 64.dp)
             .background(if (open) Colors.keyOn else Color.Transparent)
-            .clickable(enabled = !opening, role = Role.Button, onClick = onOpen)
+            .combinedClickable(
+                enabled = !opening,
+                role = Role.Button,
+                onLongClickLabel = onManage?.let { manageLabel },
+                onLongClick = onManage,
+                onClick = onOpen,
+            )
             .semantics { if (open) stateDescription = selected }
             .padding(start = KEY_MARK, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -847,7 +886,11 @@ private fun TabRow(
             )
             Text(detail, color = if (busy) Colors.accent else Colors.muted, fontSize = TextStyles.label, maxLines = 1)
         }
-        Glyph(R.drawable.ic_chevron_right, Colors.muted, size = 24.dp)
+        if (onManage != null) {
+            RoundButton(R.drawable.ic_more, manageLabel, onManage, tint = Colors.muted, size = 48.dp, enabled = !opening)
+        } else {
+            Glyph(R.drawable.ic_chevron_right, Colors.muted, size = 24.dp)
+        }
     }
 }
 

@@ -931,7 +931,7 @@ class RexViewModel @JvmOverloads constructor(
         // A phone that has joined a tailnet keeps the node up: the Tailscale row is the honest
         // answer to "am I in the tailnet", and a host on a tailnet can then be dialed at once.
         if (tailnet.value.enabled) startTailnet(tailnet.value)
-        if (openedFromAlert || route.value != Route.Home || session != null) return
+        if (openedFromAlert || openedFromShare || route.value != Route.Home || session != null) return
         val target = store.lastHost()?.let { store.find(it) } ?: return
         val resume = terminalWasOpen || reopenLastTab.value
         Diagnostics.event(CONN_TAG, "launch: ${if (resume) "back to the last tab" else "the list"} (killed on the terminal: $terminalWasOpen)")
@@ -1125,28 +1125,42 @@ class RexViewModel @JvmOverloads constructor(
      * it is deleted once the pill is dismissed.
      */
     fun attachUpload(uri: Uri) {
-        val s = session ?: return
-        if (_upload.value?.running == true) return
         // The pane on screen now is the one the file is for, even if staging or the picker outlives it.
         val sessionId = _pocket.value.activeSessionId ?: return
         val blockId = _pocket.value.view?.focusedBlock()?.id ?: return
         val name = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "file"
+        startUploads(listOf(uri to name), sessionId, blockId)
+    }
+
+    /**
+     * Sends [files] to one pane, one after another, through the pill. The first that fails stays on
+     * the pill, and the ones after it are not sent.
+     */
+    private fun startUploads(files: List<Pair<Uri, String>>, sessionId: String, blockId: String) {
+        val s = session ?: return
+        if (_upload.value?.running == true || files.isEmpty()) return
         uploadJob?.cancel()
         // A failure or an earlier sent file is done with; its staged copy goes too.
         clearUpload()
-        _upload.value = UploadStatus(name, UploadPhase.Preparing)
+        _upload.value = UploadStatus(files.first().second, UploadPhase.Preparing)
         uploadJob = viewModelScope.launch {
-            val staged = try {
-                stageUpload(getApplication(), uri)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (e !is UploadStageException) Diagnostics.event(CONN_TAG, "upload: could not read the file: ${e.javaClass.simpleName}: ${e.message}")
-                _upload.value = UploadStatus(name, UploadPhase.Failed, error = (e as? UploadStageException)?.error ?: UploadError.Unreadable)
-                return@launch
+            for ((uri, name) in files) {
+                // A sent file's pill clears itself, and with it this job's handle: Cancel still reaches it.
+                uploadJob = coroutineContext[Job]
+                _upload.value = UploadStatus(name, UploadPhase.Preparing)
+                val staged = try {
+                    stageUpload(getApplication(), uri)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (e !is UploadStageException) Diagnostics.event(CONN_TAG, "upload: could not read the file: ${e.javaClass.simpleName}: ${e.message}")
+                    _upload.value = UploadStatus(name, UploadPhase.Failed, error = (e as? UploadStageException)?.error ?: UploadError.Unreadable)
+                    return@launch
+                }
+                uploadFile = staged.file
+                runUpload(s, staged.file, staged.name, sessionId, blockId)
+                if (_upload.value != null) return@launch
             }
-            uploadFile = staged.file
-            runUpload(s, staged.file, staged.name, sessionId, blockId)
         }
     }
 
@@ -1234,6 +1248,85 @@ class RexViewModel @JvmOverloads constructor(
             }
         }
     }
+
+    /** The home's session and tab sheets: on the connected host, without attaching the session. */
+    fun manage(action: HomeAction) {
+        userActed()
+        act {
+            when (action) {
+                is HomeAction.RenameSession -> renameSession(action.label, action.sessionId)
+                is HomeAction.NewTab -> newWindowIn(action.sessionId)
+                is HomeAction.EndSession -> destroySession(action.sessionId)
+                is HomeAction.RenameTab -> renameWindow(action.label, action.windowId, action.sessionId)
+                is HomeAction.CloseTab -> closeWindow(action.windowId, action.sessionId)
+            }
+        }
+    }
+
+    private val _share = MutableStateFlow<ShareOffer?>(null)
+
+    /** What another app shared, waiting for the person to send it to a pane or cancel. */
+    val share: StateFlow<ShareOffer?> = _share
+
+    /**
+     * Holds what another app shared until it is sent with a tap: nothing goes to a pane on its own.
+     * It is offered for the pane the phone showed last, on the host it showed it on, which is
+     * connected now if it is not already; without one, the picker is open from the start.
+     */
+    fun offerShare(request: ShareRequest) {
+        userActed()
+        openedFromShare = true
+        val hostId = store.lastHost()
+        val saved = hostId?.let { store.find(it) } ?: hosts.value.singleOrNull()
+        val sessionId = saved?.let { store.lastSession(it.id) }
+        val blockId = if (saved != null && sessionId != null) store.lastPane(saved.id, sessionId) else null
+        val target = if (saved != null && sessionId != null && blockId != null) ShareTarget(saved.id, sessionId, blockId) else null
+        _share.value = ShareOffer(request, target, choosing = target == null)
+        if (saved != null && (host?.id != saved.id || session == null)) connect(saved)
+    }
+
+    /** Opens or closes the pane picker of the shared item's sheet. */
+    fun chooseShareTarget(choosing: Boolean) {
+        _share.value = _share.value?.copy(choosing = choosing)
+    }
+
+    /** The picker's choice; a pane of another host connects to that host first. */
+    fun shareTo(target: ShareTarget) {
+        val offer = _share.value ?: return
+        _share.value = offer.copy(target = target, choosing = false)
+        val saved = store.find(target.hostId) ?: return
+        if (host?.id != saved.id || session == null) connect(saved)
+    }
+
+    /** The picker's host row: connects to it, so its sessions can be listed. */
+    fun shareConnect(target: SavedHost) {
+        if (host?.id != target.id || session == null) connect(target)
+    }
+
+    fun cancelShare() {
+        _share.value = null
+    }
+
+    /**
+     * Sends what was shared to its pane, on the person's tap: files through the upload pill, text
+     * as a paste (never followed by Enter), then shows the pane.
+     */
+    fun sendShare() {
+        val offer = _share.value ?: return
+        val target = offer.target ?: return
+        if (host?.id != target.hostId || _pocket.value.phase != Phase.Live) return
+        if (offer.request.files.any { (it.size ?: 0) > FileUpload.MAX_BYTES }) return
+        _share.value = null
+        val text = offer.request.text
+        enterSession(Opening.Existing(target.sessionId)) {
+            openSession(target.sessionId, target.blockId)
+            if (!text.isNullOrEmpty()) paste(text, target.sessionId, target.blockId)
+        }
+        startUploads(offer.request.files.map { it.uri to it.name }, target.sessionId, target.blockId)
+    }
+
+    /** Set once something shared came in, so the start-up resume does not jump past its sheet. */
+    private var openedFromShare = false
 
     private fun disconnectQuiet() {
         connectJob?.cancel()

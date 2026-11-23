@@ -78,6 +78,7 @@ fun RexPocketApp(
     val folds by model.folds.collectAsState()
     val reopenLastTab by model.reopenLastTab.collectAsState()
     val appearance by model.appearance.collectAsState()
+    val share by model.share.collectAsState()
     val context = LocalContext.current
     // The home screen leaves the composition while a terminal fills the window; its saved state
     // (the open sheet, search, eye, scroll) is kept here for when it comes back.
@@ -172,6 +173,7 @@ fun RexPocketApp(
                     onOpenPane = model::openPaneOn,
                     onNewSession = model::createSessionOn,
                     onNewTab = model::newTabOn,
+                    onManage = model::manage,
                     onDisconnect = model::disconnect,
                     onRetry = model::retryNow,
                     onProbePath = model::probeTailnetPath,
@@ -265,6 +267,22 @@ fun RexPocketApp(
                     model.userActed()
                     offeredOnce = offeredOnce + offerKey
                 },
+            )
+        }
+        share?.let { offer ->
+            ShareSheet(
+                offer = offer,
+                hosts = hosts,
+                connected = model.host,
+                state = pocket,
+                progress = connectProgress,
+                stage = tailnetStage,
+                network = tailnetName(tailnet.backend),
+                onSend = model::sendShare,
+                onChoose = model::chooseShareTarget,
+                onPick = model::shareTo,
+                onConnect = model::shareConnect,
+                onCancel = model::cancelShare,
             )
         }
         if (fontSettingsOpen) {

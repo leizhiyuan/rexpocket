@@ -3,6 +3,7 @@ package me.leaver.rexpocket.ui
 import android.graphics.Typeface
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -165,6 +166,38 @@ class ScreenshotsTest {
             compose.runOnUiThread { model.disconnect() }
         }
     }
+
+    /**
+     * The share sheet over the home of a connected app: for the pane the phone showed last, or with
+     * [picker] the pane picker; with [manage] instead, the home's sheet for a tab.
+     */
+    private fun shareOrManage(name: String, picker: Boolean = false, manage: Boolean = false) {
+        RexOnDesk(sessions = 2).use { desk ->
+            val app = freshApp()
+            val store = desk.saveFor(app, lastSession = desk.ids[1])
+            val model = launchedModel(compose, app)
+            compose.setContent { RexPocketApp(model) }
+            compose.awaitLive(model, desk.ids[1])
+            val pane = model.pocket.value.views.getValue(desk.ids[1]).windows.last().blocks.first().id
+            if (!picker) store.setLastPane(desk.host.id, desk.ids[1], pane, desk.ids)
+            if (manage) {
+                compose.onAllNodes(hasContentDescription(compose.activity.getString(R.string.manage_actions_for, compose.activity.getString(R.string.tab_number, 2))))[1]
+                    .performClick()
+            } else {
+                compose.runOnUiThread { model.offerShare(ShareRequest("git log --oneline | head -20", emptyList())) }
+            }
+            compose.waitForIdle()
+            captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+            compose.runOnUiThread { model.disconnect() }
+        }
+    }
+
+    @Test fun sharePortrait() = shareOrManage("share-portrait")
+    @Test fun shareLandscape() { landscape(); shareOrManage("share-landscape") }
+    @Test fun sharePickerPortrait() = shareOrManage("share-picker-portrait", picker = true)
+    @Test fun sharePickerLandscape() { landscape(); shareOrManage("share-picker-landscape", picker = true) }
+    @Test fun tabSheetPortrait() = shareOrManage("home-tab-sheet-portrait", manage = true)
+    @Test fun tabSheetLandscape() { landscape(); shareOrManage("home-tab-sheet-landscape", manage = true) }
 
     /** Terminal controls with every choice row moved off its default, so its icons show the change. */
     private fun controlsChanged(name: String) {

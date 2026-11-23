@@ -43,7 +43,9 @@ import java.util.concurrent.atomic.AtomicLong
  *   `seq` is the last event queued for it before the request. A change's events come before the
  *   answer to the call that made it.
  * - `session.create`'s first panes have no owner; a pane made by `session.new_window` or
- *   `session.new_split` belongs to the client that made it (reason `create`). An owner change is
+ *   `session.new_split` belongs to the client that made it (reason `create`) when that client is
+ *   attached; one made by a client that only bootstrapped has no owner (`block_created`, no
+ *   `block_owner_changed`), so the home can add a tab without resizing anything. An owner change is
  *   `block_owner_changed` with `owner` (left out when none), `previous` and `reason`, then
  *   `session_view_changed`. Disowning a pane someone else holds changes nothing.
  * - A gone pane: `block not found: <id>` (`not_found`) for its methods, `block.close` and
@@ -112,6 +114,17 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
     private val copies = HashMap<String, Pair<Long, String>>()
     private val blobs = HashMap<Long, String>()
     private val blobIds = java.util.concurrent.atomic.AtomicLong()
+
+    /** A file Rex received with the native upload, for the pane named when it began. */
+    class Upload(val block: String, val name: String, val bytes: ByteArray)
+
+    /** Every finished upload, in order. */
+    val uploads = CopyOnWriteArrayList<Upload>()
+
+    /** Every `paste` block event, as pane to text, in order. */
+    val pastes = CopyOnWriteArrayList<Pair<String, String>>()
+    private val uploadTickets = ConcurrentHashMap<String, Pair<String, String>>()
+    private val uploading = ConcurrentHashMap<WebSocket, Triple<String, String, java.io.ByteArrayOutputStream>>()
 
     /**
      * False for a Rex whose panes send no picture: a stream opens and is welcomed, then stays
@@ -544,7 +557,10 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
             }
             "session.new_window" -> {
                 val s = reached(client, payload)
-                val tab = newTab(s, owner = client.id)
+                // Only an attached caller becomes the new pane's owner.
+                val attached = s.id in client.attached
+                val tab = newTab(s, owner = if (attached) client.id else null)
+                if (!attached) sessionEvent(s.id, "block_created", JSONObject().put("block_id", tab.blocks.first()))
                 sessionEvent(s.id, "window_created", JSONObject().put("window_id", tab.id).put("label", tab.label))
                 if (payload.optBoolean("focus", true) || s.activeTab == null) {
                     s.activeTab = tab.id
@@ -577,7 +593,7 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
                 val window = payload.optString("window_id")
                 val tab = s.tabs.firstOrNull { it.id == window } ?: throw Refused("not_found", 404, "window $window not found")
                 closeTab(s, tab)
-                JSONObject().put("window_id", window).put("revision", s.revision)
+                JSONObject().put("revision", s.revision)
             }
             "block.close" -> {
                 val (s, block) = pane(client, payload)
@@ -664,8 +680,18 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
                 JSONObject().put("id", id).put("data", String(bytes, offset, end - offset)).put("total", bytes.size).put("eof", end == bytes.size)
             }
             "com.superlogical.terminal.resize", "client.key", "block.event" -> {
-                pane(client, payload)
+                val (_, block) = pane(client, payload)
+                val event = payload.optJSONObject("event")
+                if (method == "block.event" && event?.optString("type") == "paste") {
+                    pastes += block to event.optJSONObject("payload")?.optString("text").orEmpty()
+                }
                 JSONObject()
+            }
+            FileUpload.UPLOAD_BEGIN -> {
+                val (_, block) = pane(client, payload)
+                val bytes = ByteArray(16).also { java.util.Random().nextBytes(it) }
+                uploadTickets[bytes.toByteString().hex()] = block to payload.optJSONObject("args")?.optString("name").orEmpty()
+                JSONObject().put("ticket", Base64.getUrlEncoder().withoutPadding().encodeToString(bytes))
             }
             "session.set_block_label" -> {
                 val s = reached(client, payload)
@@ -706,7 +732,7 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
                 s.label = payload.optString("label")
                 sessionEvent(s.id, "session_label_changed", JSONObject().put("label", s.label))
                 changed(s)
-                JSONObject().put("label", s.label)
+                JSONObject().put("revision", s.revision)
             }
             "session.set_window_label" -> {
                 val s = reached(client, payload)
@@ -715,7 +741,7 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
                 tab.label = payload.optString("label")
                 sessionEvent(s.id, "window_label_changed", JSONObject().put("window_id", window).put("label", tab.label))
                 changed(s)
-                JSONObject()
+                JSONObject().put("revision", s.revision)
             }
             "client.keymap" -> JSONObject().put("bindings", JSONArray()).put("diagnostics", JSONArray()).put("actions", JSONArray())
             else -> JSONObject()
@@ -838,7 +864,30 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+            // An upload's bytes, then an empty message: the file is complete, and Rex closes normally.
+            uploading[webSocket]?.let { (block, name, sink) ->
+                if (bytes.size == 0) {
+                    uploading.remove(webSocket)
+                    uploads += Upload(block, name, sink.toByteArray())
+                    webSocket.close(1000, "")
+                } else {
+                    sink.write(bytes.toByteArray())
+                }
+                return
+            }
             val hello = bytes.toByteArray()
+            val upload = if (hello.firstOrNull()?.toInt() == 0x01 && hello.size >= 17) {
+                uploadTickets.remove(hello.copyOfRange(1, 17).toByteString().hex())
+            } else {
+                null
+            }
+            if (upload != null) {
+                uploading[webSocket] = Triple(upload.first, upload.second, java.io.ByteArrayOutputStream())
+                val out = ByteArray(32)
+                out[0] = 0x81.toByte()
+                webSocket.send(out.toByteString())
+                return
+            }
             when (hello.firstOrNull()?.toInt()) {
                 0x01 -> {
                     val (client, sid, block) = tickets.remove(hello.copyOfRange(1, 17).toByteString().hex())

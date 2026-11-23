@@ -10,6 +10,7 @@ import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.ui.RexPocketApp
 import me.leaver.rexpocket.ui.RexViewModel
+import me.leaver.rexpocket.ui.readShare
 
 class MainActivity : ComponentActivity() {
     private val model: RexViewModel by viewModels()
@@ -23,12 +24,15 @@ class MainActivity : ComponentActivity() {
         Diagnostics.install(this)
         // A tapped alert opens its pane; a recreated activity has already acted on its intent.
         if (savedInstanceState == null) Alerts.consume(intent)?.let(model::openAlert)
+        // Something shared from another app waits on its sheet for a tap; it is never sent on its own.
+        if (savedInstanceState == null) readShare(this, intent)?.let(model::offerShare)
         setContent { RexPocketApp(model) }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         Alerts.consume(intent)?.let(model::openAlert)
+        readShare(this, intent)?.let(model::offerShare)
     }
 
     // Leaving the app is the usual trigger for a tunnel that has to find its way back, so the

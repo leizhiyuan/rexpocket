@@ -29,7 +29,7 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 ## Where the tests run
 
 - `app/src/sharedTest` holds the screen tests (`ArrangeKeysTest`, `TerminalControlsTest`, `TermMenuTest`,
-  `TermFullScreenTest`, `CommandPaletteTest`, `ActivityViewTest`, `EmptyHomeTest`, `LargeFontTest`, `AppearanceTest`). They are
+  `TermFullScreenTest`, `CommandPaletteTest`, `ActivityViewTest`, `EmptyHomeTest`, `LargeFontTest`, `AppearanceTest`, `HomeManageTest`, `ShareTest`). They are
   compiled into both the JVM unit tests and the instrumented tests:
   - on the JVM with Robolectric, in seconds on any computer:
     `./gradlew -x :app:buildGhostty -x :app:buildGhosttyHost :app:testDebugUnitTest --tests 'me.leaver.rexpocket.ui.*'`
@@ -45,7 +45,7 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 Settings and Diagnostics (on ScriptedRex), the terminal's ⋮ menu, the command palette, the home screen's Activity view (on
 ScriptedRex, its programs reporting statuses) and full screen right after entering it, in portrait and
 landscape on a Pixel 6-sized screen, the tailnet's states on the home screen and its details sheet
-(`tailnet-*`, on a stand-in node: see tailnet-status.md), the first run with no hosts (`empty-home-*`), (the JVM tests' default too, in `robolectric.properties`), and Arrange keys before and
+(`tailnet-*`, on a stand-in node: see tailnet-status.md), the first run with no hosts (`empty-home-*`), the share sheet and its pane picker (`share-*`) and the home's tab sheet (`home-tab-sheet-*`), (the JVM tests' default too, in `robolectric.properties`), and Arrange keys before and
 after a move. They land in `app/build/outputs/roborazzi/`; `device-test` uploads them as the
 **screenshots** artifact of each run, with the JVM test report. They are for review: look at them
 when a change touches a screen. Nothing is compared against stored images yet, as fonts render
@@ -107,7 +107,7 @@ comment.
   (`core/src/test/resources/rex-shapes/preview.22.txt`), and in `rex-real` against the real Rex
   too. `refuse(method)` makes a method fail, for the errors that must still show; `report(block,
   state, …)` is a program reporting its status (OSC 7501), `report(block, null)` a clear, and
-  `exit(block, code)` its program ending; `hold(method)` keeps its answers back until `release`, a
+  `exit(block, code)` its program ending; `uploads` and `pastes` are what reached a pane by the native upload and by `paste` events; `hold(method)` keeps its answers back until `release`, a
   slow network for a test to act in; `drop(client)` is a network outage; `pictures = false` sends no
   snapshot.
 - **`Desk`** is a second client that changes sessions only through the protocol - new session,
@@ -128,6 +128,28 @@ fake Rex: `LaunchTest` and `HomeStateTest` (`app/src/sharedTest`) run the whole 
 `RexPocketApp` on its real view model and store - against it, on the JVM and on the emulator. On
 the JVM without libghostty's host build the panes send no picture (`pictures = false`), so the
 terminal screen opens on its pane with nothing to draw.
+
+`HomeManageTest` drives the home's session and tab sheets (long press and ⋮) and checks Rex got the
+rename, new tab, close or end with no `session.attach` of that session and no pane taken; its rename
+dialog runs on the emulator only. `ShareTest` is a share from another app: the app started by it,
+connecting while the sheet is up, the sheet naming the last pane, nothing sent until Paste or Send,
+then the text in ScriptedRex's `pastes` (no Enter typed) or the file in its `uploads`; the picker
+when no pane is remembered, and a file over 100 MiB that cannot be sent. `ShareIntentTest` (JVM)
+reads share intents, and holds that only other apps' `content:` URIs are taken.
+
+### Sharing into the app
+
+`ShareActivity` takes `ACTION_SEND` and `ACTION_SEND_MULTIPLE` (`text/*`, `image/*`, any file) and
+hands the intent, with its read grant, to `MainActivity` in the app's own task, so one view model
+and one connection serve it. `readShare` keeps files over text (an image's caption is dropped) and
+only `content:` URIs not of this app, so a crafted share cannot send the app's own files to a pane.
+The view model holds the share (`offerShare`) for the pane in `lastPane` of the last host and
+session, connecting to that host if needed - cold start, tailnet joining and all, with the home's
+connect progress on the sheet - and the start-up resume stands aside. Paste or Send is the only way
+anything goes: text through Rex's `paste` event, files one after another through the upload pill
+(`attachUpload`'s path, 100 MiB each), and the pane is then shown. Without a remembered pane, or
+when it is gone, the sheet opens on the picker: the open host's sessions, tabs and panes, and the
+other hosts, which connect when tapped.
 
 `ScriptedRexLifecycleTest` runs them on every push, in the `rex-integration` workflow with the rest
 of `:core:test`. `RealRexLifecycleTest` runs the same scenarios against a real Rex: in the `rex-real`

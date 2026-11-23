@@ -142,6 +142,30 @@ class RexShapeTest {
                 phone.call("session.own_block", JSONObject().put("session_id", s).put("block_ids", JSONArray().put(first)).put("mode", "take"))
                 phone.call("data.connect", ticket(s, first))
             }
+            // The home's session and tab sheets: the bootstrapped phone manages a session it never
+            // attached, and the tab it makes has no owner, so nothing on the desk is resized. An
+            // unattached caller can have its answer before the events, so these compare as sets.
+            step("phone renames a session and a tab it has not attached", unordered = true) {
+                phone.call("session.set_label", JSONObject().put("session_id", s).put("label", "rexpocket-shapes-renamed"))
+                phone.call("session.set_window_label", JSONObject().put("session_id", s).put("window_id", firstTab).put("label", "renamed tab"))
+            }
+            lateinit var homeTab: String
+            step("phone makes a tab in a session it has not attached", unordered = true) {
+                homeTab = phone.call("session.new_window", JSONObject().put("session_id", s).put("focus", false).put("layout", SHELL))
+                    .getJSONObject("payload").getString("window_id")
+            }
+            step("phone closes that tab, still not attached", unordered = true) {
+                phone.call("session.close_window", JSONObject().put("session_id", s).put("window_id", homeTab))
+            }
+            step("phone ends a session it has not attached", unordered = true) {
+                val other = desk.call(
+                    "session.create",
+                    JSONObject().put("label", "rexpocket-shapes-3").put("initial_windows", JSONArray().put(JSONObject().put("layout", SHELL))),
+                ).getJSONObject("payload").getString("session_id")
+                Thread.sleep(quiet)
+                phone.take()
+                phone.call("session.destroy", JSONObject().put("session_id", other))
+            }
             step("phone attaches") { phone.call("session.attach", JSONObject().put("session_id", s)) }
             lateinit var second: String
             step("desk makes a tab") {

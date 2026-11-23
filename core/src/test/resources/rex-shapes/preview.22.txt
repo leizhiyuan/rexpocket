@@ -11,6 +11,28 @@ response com.superlogical.terminal.program_status {records:[]}
 response com.superlogical.terminal.size {cell_height_px:num,cell_width_px:num,columns:num,desired:[],owner:null,rows:num}
 response session.own_block error bad_request 400 "the caller must be a client attached to the session"
 response data.connect error conflict 409 "stream is not attached to session <session>"
+## phone renames a session and a tab it has not attached
+event session_label_changed {label:str}
+event session_view_changed {revision:num}
+event session_view_changed {revision:num}
+event window_label_changed {label:str,window_id:<window>}
+response session.set_label {revision:num}
+response session.set_window_label {revision:num}
+## phone makes a tab in a session it has not attached
+event block_created {block_id:<block>}
+event session_view_changed {revision:num}
+event window_created {label:str,window_id:<window>}
+response session.new_window {block_ids:[<block>],revision:num,window_id:<window>}
+## phone closes that tab, still not attached
+event block_closed {block_id:<block>}
+event session_view_changed {revision:num}
+event window_closed {window_id:<window>}
+response session.close_window {revision:num}
+## phone ends a session it has not attached
+event block_closed {block_id:<block>}
+event session_destroyed {session_id:<session>}
+event session_view_changed {revision:num}
+response session.destroy {}
 ## phone attaches
 response session.attach {client_id:<client>,view:{active_window_id:<window>,label:str,revision:num,session_id:<session>,windows:[{focused_block_id:<block>,label:str,layers:[{blocks:[{block_id:<block>,creator_name:str,flavor:str,label:str}],kind:"tiled",layer_id:<layer>}],window_id:<window>}]}}
 ## desk makes a tab

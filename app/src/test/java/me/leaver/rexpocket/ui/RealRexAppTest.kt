@@ -277,6 +277,40 @@ class RealRexAppTest {
         assertEquals(null, m.pocket.value.notice)
     }
 
+    /**
+     * The home's sheets on a session the phone never attached: a real Rex takes the rename, the new
+     * tab (whose pane then has no owner, so the desk's sizes stay), the close and the end from the
+     * bootstrapped connection, and the phone stays on the session it shows.
+     */
+    @Test
+    fun theHomeManagesASessionItNeverAttached() {
+        val other = runBlocking { desk.newSession(tabs = 2).first }
+        val m = launch(onTerminal = false)
+        compose.awaitLive(m, other)
+        fun view() = m.pocket.value.views.getValue(other)
+        val deskOwners = runBlocking { desk.view(other).windows.flatMap { w -> w.blocks.map { it.id to desk.ownerOf(other, it.id) } } }
+
+        compose.runOnUiThread { m.manage(HomeAction.RenameSession(other, "managed at home")) }
+        compose.awaitThat { view().label == "managed at home" }
+        val first = view().windows.first().id
+        compose.runOnUiThread { m.manage(HomeAction.RenameTab(other, first, "logs")) }
+        compose.awaitThat { view().windows.first { it.id == first }.label == "logs" }
+        compose.runOnUiThread { m.manage(HomeAction.NewTab(other)) }
+        compose.awaitThat { view().windows.size == 3 }
+        val made = view().windows.last()
+        assertEquals("the new tab's pane has no owner", null, runBlocking { desk.ownerOf(other, made.blocks.first().id) })
+        compose.runOnUiThread { m.manage(HomeAction.CloseTab(other, made.id)) }
+        compose.awaitThat { view().windows.size == 2 }
+        assertEquals("the desk's panes kept their owners", deskOwners, runBlocking { deskOwners.map { (b, _) -> b to desk.ownerOf(other, b) } })
+        assertEquals(sid, m.pocket.value.activeSessionId)
+        assertEquals(Route.Home, m.route.value)
+
+        compose.runOnUiThread { m.manage(HomeAction.EndSession(other)) }
+        compose.awaitThat { m.pocket.value.sessions.none { it.id == other } }
+        assertEquals(sid, m.pocket.value.activeSessionId)
+        assertEquals(null, m.pocket.value.notice)
+    }
+
     /** A session whose every tab was closed at the desk stays on Rex; the phone offers a new tab in it. */
     @Test
     fun aSessionLeftWithNoTabsOffersANewOne() {

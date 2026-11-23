@@ -499,6 +499,22 @@ class PocketSession(
         refreshView(sid)
     }
 
+    /**
+     * Makes a tab in [sessionId] without attaching it or showing the tab: the home's session sheet.
+     * A caller that is not attached does not become the new pane's owner (only an attached one
+     * does), so the desktop's panes keep their size, and `focus: false` keeps the desktop's tab.
+     */
+    suspend fun newWindowIn(sessionId: String) {
+        rpc(
+            "session.new_window",
+            JSONObject()
+                .put("session_id", sessionId)
+                .put("focus", false)
+                .put("layout", JSONObject().put("block", JSONObject().put("flavor", "com.superlogical.terminal.shell"))),
+        )
+        refreshView(sessionId)
+    }
+
     suspend fun split(vertical: Boolean) {
         val sid = requireSession()
         val anchor = _state.value.view?.focusedBlock()?.id
@@ -581,13 +597,18 @@ class PocketSession(
         }
     }
 
-    /** Closes a tab and every pane in it, the shown tab by default. */
-    suspend fun closeWindow(windowId: String? = null) {
-        val sid = requireSession()
-        val window = windowId ?: _state.value.view?.activeWindow()?.id
+    /**
+     * Closes a tab and every pane in it, the shown tab by default. With [sessionId] it closes a tab
+     * of any session, attached or not: the bootstrapped connection may (rex-parity.md, "Managing
+     * sessions from the home"), and nothing on the desktop is resized for it.
+     */
+    suspend fun closeWindow(windowId: String? = null, sessionId: String? = null) {
+        val sid = sessionId ?: requireSession()
+        val view = _state.value.view?.takeIf { it.sessionId == sid } ?: _state.value.views[sid]
+        val window = windowId ?: view?.activeWindow()?.id
         val body = JSONObject().put("session_id", sid)
         if (window != null) body.put("window_id", window)
-        val blocks = _state.value.view?.windows?.firstOrNull { it.id == window }?.blocks.orEmpty().map { it.id }
+        val blocks = view?.windows?.firstOrNull { it.id == window }?.blocks.orEmpty().map { it.id }
         closingHere += blocks
         try {
             rpc("session.close_window", body)
@@ -602,8 +623,12 @@ class PocketSession(
         }
     }
 
-    suspend fun destroySession() {
-        val sid = requireSession()
+    /**
+     * Ends a session: the shown one by default, or [sessionId], which need not be attached. Rex
+     * closes its panes one by one and sends `session_destroyed` last, before its answer.
+     */
+    suspend fun destroySession(sessionId: String? = null) {
+        val sid = sessionId ?: requireSession()
         // Rex's news of it can come before its answer; this phone asked for it, so it moves on.
         closingHere += sid
         try {
@@ -611,6 +636,12 @@ class PocketSession(
         } catch (e: Exception) {
             closingHere -= sid
             throw e
+        }
+        if (sid != _state.value.activeSessionId) {
+            // Not the session the phone shows: the phone stays where it is.
+            dropSession(sid)
+            closingHere -= sid
+            return
         }
         updateState {
             val rest = it.sessions.filter { s -> s.id != sid }
@@ -629,13 +660,15 @@ class PocketSession(
         if (next != null) openSession(next)
     }
 
-    suspend fun renameSession(label: String) {
-        val sid = requireSession()
+    /** Renames the shown session, or [sessionId] without attaching it. */
+    suspend fun renameSession(label: String, sessionId: String? = null) {
+        val sid = sessionId ?: requireSession()
         rpc("session.set_label", JSONObject().put("session_id", sid).put("label", label))
     }
 
-    suspend fun renameWindow(label: String, windowId: String? = null) {
-        val sid = requireSession()
+    /** Renames a tab of the shown session, or of [sessionId] without attaching it. */
+    suspend fun renameWindow(label: String, windowId: String? = null, sessionId: String? = null) {
+        val sid = sessionId ?: requireSession()
         val window = windowId ?: _state.value.view?.activeWindow()?.id ?: return
         rpc(
             "session.set_window_label",
@@ -700,9 +733,13 @@ class PocketSession(
         uploader.upload(sid, block, file, name) { trySend(it) }
     }.flowOn(Dispatchers.IO)
 
-    suspend fun paste(text: String) {
+    /**
+     * Pastes [text] into the shown pane, or into [blockId] of [sessionId]: Rex's paste event, so
+     * the program gets it as a paste (bracketed when it asks) and nothing is run by it.
+     */
+    suspend fun paste(text: String, sessionId: String? = null, blockId: String? = null) {
         if (text.isEmpty()) return
-        val (sid, block) = requireBlock()
+        val (sid, block) = if (sessionId != null && blockId != null) sessionId to blockId else requireBlock()
         onPane(sid, block) {
             input(
                 InputCall(
@@ -997,7 +1034,15 @@ class PocketSession(
         }
     }
 
-    private suspend fun onSessionEvent(sid: String, event: JSONObject) {
+    private suspend fun onSessionEvent(sid: String, event: JSONObject) = try {
+        sessionEvent(sid, event)
+    } catch (e: RexCallException) {
+        // A session ending closes its panes one by one before `session_destroyed`: reading its view
+        // for one of them may find it gone already, which is no failure of anything asked for.
+        if (e.code != "session_not_found") throw e else Unit
+    }
+
+    private suspend fun sessionEvent(sid: String, event: JSONObject) {
         val payload = event.optJSONObject("payload") ?: JSONObject()
         when (event.optString("type")) {
             "session_view_changed" -> {

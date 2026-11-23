@@ -105,6 +105,26 @@
     <string name="menu_show_keyboard">Show keyboard</string>
     <string name="menu_hide_keyboard">Hide keyboard</string>
     <string name="menu_kill_session">End session</string>
+    <!-- The home's session and tab sheets, and sharing into the app. -->
+    <string name="manage_actions_for">Actions for %1$s</string>
+    <string name="action_end">End</string>
+    <string name="share_target">Send to Rex</string>
+    <string name="share_title">Send to Rex</string>
+    <plurals name="share_files">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <string name="share_pastes">Pasted into the pane. Nothing runs until you press Enter there.</string>
+    <string name="share_uploads">Uploaded to the computer; its path is typed into the pane.</string>
+    <string name="share_too_large">Over Rex\'s 100 MiB limit. Choose a smaller file.</string>
+    <string name="share_pane_gone">That pane is gone. Choose another.</string>
+    <string name="share_to">To %1$s</string>
+    <string name="share_paste">Paste</string>
+    <string name="share_send">Send</string>
+    <string name="share_choose">Choose another pane</string>
+    <string name="share_pick">Send to which pane?</string>
+    <string name="share_no_hosts">Add a host first, then share again.</string>
+    <string name="share_connect">Tap to connect</string>
 
     <string name="pane_reading">Reading the screen…</string>
     <string name="pane_no_picture">No picture yet</string>
