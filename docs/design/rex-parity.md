@@ -318,7 +318,11 @@ a session, the second focusing the other tab and taking its pane, the phone read
 - What there is: the session's **one active tab and focused pane**, shared by every client
   (`active_window_changed`, the view's `active_window_id` and each window's focused block), with no
   client named; and a pane's **owner** (`block_owner_changed` with `owner`, `previous`, `reason`
-  `take`/`request`; `com.superlogical.terminal.size`'s `owner` and the size each client asked for).
+  `take`/`request`; each block's `owner` in `session.view`; `com.superlogical.terminal.size`'s
+  `owner` and the size each client asked for). Seen on preview.22: the second client's
+  `session.focus_window` gave the phone `active_window_changed {window_id}` and its take
+  `block_owner_changed {owner, previous, reason: take, block_id}`; the client records had no view
+  field, and `client_connected` (a session event) carries only the client's id, principal and time.
   Rex.app takes the pane of the window it focuses (`PocketSession.ownershipLoop`), so the owner is
   the desk that last focused a pane, not one that merely shows it.
 - `focus_history.reverse` is the caller's own history only.
