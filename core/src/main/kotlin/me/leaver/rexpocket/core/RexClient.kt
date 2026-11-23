@@ -212,7 +212,9 @@ class RexClient(
     }
 
     private fun failPending(err: Throwable) {
-        val left = pending.values.toList()
+        // A copy by toArray: toList sizes the list first and then iterates, and a call ending on
+        // another thread in between threw NoSuchElementException on the socket's thread.
+        val left = ArrayList(pending.values)
         pending.clear()
         left.forEach { if (!it.isCompleted) it.completeExceptionally(err) }
     }

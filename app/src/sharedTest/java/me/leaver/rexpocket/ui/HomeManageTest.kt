@@ -185,10 +185,14 @@ class HomeManageTest {
             listOf(string(R.string.home_action_open), string(R.string.menu_new_tab), string(R.string.home_rename), string(R.string.home_action_collapse)),
             sessionActions.take(4),
         )
-        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
-        compose.waitForIdle()
+        assertNotAttached()
+    }
 
-        val tab = compose.onAllNodes(hasText(string(R.string.tab_number, 2)) and hasClickAction() and !hasAnyAncestorTagged())[1]
+    /** The same for a tab: its TalkBack actions are its sheet's items that can act now, in order. */
+    @Test
+    fun aTabsTalkBackActionsAreItsSheetsItemsInOrder() {
+        start()
+        val tab =compose.onAllNodes(hasText(string(R.string.tab_number, 2)) and hasClickAction() and !hasAnyAncestorTagged())[1]
         val tabActions = talkBackOf(tab)
         compose.onAllNodes(hasContentDescription(string(R.string.manage_actions_for, string(R.string.tab_number, 2))) and hasClickAction())[1].performClick()
         compose.waitForIdle()
