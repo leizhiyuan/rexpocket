@@ -32,7 +32,7 @@ or Back.
 | Double tap | Full screen · Toggle keyboard · Nothing | Full screen |
 | Long press | Select text · Full screen · Toggle keyboard | Select text |
 | Wait for a double tap before a tap acts | on · off | off |
-| Double-tap window | 100–600 ms, or the phone's | the phone's (`ViewConfiguration`, usually 300 ms) |
+| Double-tap time | 100–600 ms, or the phone's | the phone's (`ViewConfiguration`, usually 300 ms) |
 | Long-press time | 150–1500 ms, or the phone's | the phone's (usually 400 ms; the system accessibility setting changes it) |
 
 Things every option keeps:
@@ -58,13 +58,13 @@ the time. The view feeds it and runs a timer at the deadline it reports.
 - A press that moves beyond the touch slop is a drag, swipe or pinch: no tap gesture at all. A
   second finger cancels.
 - A press held still for the long-press time is a long press; its lift is nothing.
-- A second press within the double-tap window of the first tap lifting, and within the double-tap
+- A second press within the double-tap time of the first tap lifting, and within the double-tap
   slop of it, is a double tap when it lifts (not when it lands, so a second press held still is a
   long press - the old behaviour - and one that moves is a drag).
 - When double tap is "Nothing", every tap acts at once and nothing waits.
 - Without "wait", a tap acts as it lifts and a double tap follows it; the double tap then puts the
   keyboard back where it was before the first tap, so a double tap for full screen does not leave
-  a keyboard the first tap raised. With "wait", the tap acts only once the window has passed, and
+  a keyboard the first tap raised. With "wait", the tap acts only once the double-tap time has passed, and
   the first tap of a double tap never acts. A second press that lands too far away lets a waiting
   tap out at once.
 - A second press that turns into a long press or a drag drops a tap that was waiting: the person
@@ -357,12 +357,13 @@ turns these off.
 
 ## 8. Settings screen and storage
 
-Settings › Terminal shows two rows: **Terminal controls ›** and **Font**. Terminal controls is a
-sheet with two groups:
+Settings › Terminal shows **Terminal controls ›**, **Terminal font ›** and Reopen last tab. A row
+that opens another page or dialog ends in a chevron (›); a row that steps through values does not.
+Terminal controls is a sheet with two groups:
 
-- **Gestures**: Tap, Double tap, Long press, Wait for double tap, Double-tap window, Long-press
+- **Gestures**: Tap, Double tap, Long press, Wait for double tap, Double-tap time, Long-press
   time. Choice rows step through their options on tap and stay open, as the C-c row does; the two
-  times open a slider with "Use the phone's". "Wait for a double tap" says what it does in a line
+  times open a slider with "Use the phone's", so they end in a chevron. "Wait for a double tap" says what it does in a line
   under its label ("A tap waits in case a second follows" / "A tap acts at once"), its detail
   just On or Off. Every sheet row wraps - a label to three lines, a detail to two, at most 152 dp
   wide - so nothing is cut off on a narrow phone or with large text.

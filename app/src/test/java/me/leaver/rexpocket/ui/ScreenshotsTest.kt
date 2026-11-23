@@ -337,8 +337,52 @@ class ScreenshotsTest {
     @Test fun terminalFnPanelPortrait() = terminal("terminal-fn-panel-portrait", panel = BarKey.FN_GROUP)
     @Test fun terminalHtopPortrait() = terminal("terminal-htop-portrait", htopBar, panel = "htop")
     @Test fun terminalHtopLandscape() { landscape(); terminal("terminal-htop-landscape", htopBar, panel = "htop") }
+
+    /** The first run, with no hosts: its three routes, or the tailnet's card in place of one. */
+    private fun emptyHome(name: String, tailnet: TailnetStatus? = null) {
+        if (tailnet == null) {
+            val model = launchedModel(compose, freshApp())
+            compose.setContent { RexPocketApp(model) }
+            compose.waitForIdle()
+            captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+        } else {
+            tailnet(name, tailnet, hosts = emptyList())
+        }
+    }
+
+    @Test fun emptyHomePortrait() = emptyHome("empty-home-portrait")
+    @Test fun emptyHomeLandscape() { landscape(); emptyHome("empty-home-landscape") }
+    @Test fun emptyHomeTailnetPortrait() = emptyHome("empty-home-tailnet-portrait", TailnetSamples.needsLogin)
+
+    /**
+     * A narrow phone (360 dp) with the system font made [scale] times larger: what has to wrap
+     * rather than be cut off or run into its neighbour. See docs/design/testing.md.
+     */
+    private fun large(scale: Float) {
+        RuntimeEnvironment.setQualifiers(NARROW_PHONE)
+        RuntimeEnvironment.setFontScale(scale)
+    }
+
+
+    @Test fun largeFont13EmptyHome() { large(1.3f); emptyHome("large-1.3-empty-home") }
+    @Test fun largeFont15EmptyHome() { large(1.5f); emptyHome("large-1.5-empty-home") }
+    @Test fun largeFont15EmptyHomeTailnet() { large(1.5f); emptyHome("large-1.5-empty-home-tailnet", TailnetSamples.needsLogin) }
+    @Test fun largeFont13Controls() { large(1.3f); controls(ControlsPage.Controls, "large-1.3-controls") }
+    @Test fun largeFont15Controls() { large(1.5f); controls(ControlsPage.Controls, "large-1.5-controls") }
+    @Test fun largeFont13ArrangeKeys() { large(1.3f); controls(ControlsPage.ArrangeKeys, "large-1.3-arrange-keys") }
+    @Test fun largeFont15ArrangeKeys() { large(1.5f); controls(ControlsPage.ArrangeKeys, "large-1.5-arrange-keys") }
+    @Test fun largeFont15FnGroup() { large(1.5f); arrangePage("large-1.5-fn-group", 0) }
+    @Test fun largeFont13Settings() { large(1.3f); settings("large-1.3-settings") }
+    @Test fun largeFont15Settings() { large(1.5f); settings("large-1.5-settings") }
+    @Test fun largeFont13TailnetSignIn() { large(1.3f); tailnet("large-1.3-tailnet-needs-login", TailnetSamples.needsLogin) }
+    @Test fun largeFont15TailnetSignIn() { large(1.5f); tailnet("large-1.5-tailnet-needs-login", TailnetSamples.needsLogin) }
+    @Test fun largeFont15TailnetConnected() { large(1.5f); tailnet("large-1.5-tailnet-connected", TailnetSamples.connected()) }
+    @Test fun largeFont15TailnetNotJoined() { large(1.5f); tailnet("large-1.5-tailnet-not-joined", TailnetSamples.starting, joined = false) }
 }
 
 /** A Pixel 6 or so, the phone the emulator in device-test is. */
 private const val PHONE = "w411dp-h915dp-port-xxhdpi"
 private const val PHONE_LANDSCAPE = "w915dp-h411dp-land-xxhdpi"
+
+/** A narrow phone, 360 dp wide, for the large-font pictures. */
+private const val NARROW_PHONE = "w360dp-h780dp-port-xxhdpi"

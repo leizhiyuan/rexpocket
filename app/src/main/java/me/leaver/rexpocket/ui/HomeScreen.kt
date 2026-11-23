@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -65,6 +67,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -254,7 +257,19 @@ internal fun HomeScreen(
     BackHandler(enabled = searchOpen, onBack = closeSearch)
 
     if (hosts.isEmpty()) {
-        EmptyHome(onAdd = { creating = true })
+        EmptyHome(
+            tailnet = tailnet,
+            tailnetStage = tailnetStage,
+            tailnetStatus = tailnetStatus,
+            onAdd = { address ->
+                prefillAddress = address
+                creating = true
+            },
+            onJoinTailnet = onTailnet,
+            onTailnetDetails = { tailnetDetails = true },
+            onSignIn = onSignIn,
+            onTailnetRetry = onTailnetRetry,
+        )
     } else {
         val q = query.trim().lowercase()
         val rows = hosts.mapNotNull { host ->
@@ -987,6 +1002,7 @@ private fun SettingsSheet(
                 icon = R.drawable.ic_tailnet,
                 detail = if (tailnetStage is TailnetStage.Off) stringResource(R.string.tailscale_not_joined)
                 else tailnetName(tailnet.backend) + " · " + tailnetStageText(tailnetStage, tailnet.backend),
+                opens = true,
                 onClick = onTailnet,
             )
             // Alerts are the connection kept up in the background, so they sit with the way in.
@@ -1000,8 +1016,8 @@ private fun SettingsSheet(
         }
         Group(stringResource(R.string.settings_group_terminal)) {
             // Gestures and keys have a sheet of their own, so this one stays a list of places to go.
-            SheetItem(stringResource(R.string.controls_title), icon = R.drawable.ic_touch_app, onClick = onControls)
-            SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_text_fields, onClick = onFontSettings)
+            SheetItem(stringResource(R.string.controls_title), icon = R.drawable.ic_touch_app, opens = true, onClick = onControls)
+            SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_text_fields, opens = true, onClick = onFontSettings)
             // Off, a fresh start shows this list; Android killing the app on the terminal still
             // comes back to it, since that is the person's own place rather than a pick.
             SheetItem(
@@ -1040,7 +1056,8 @@ private fun SettingsSheet(
             SheetItem(
                 label = stringResource(R.string.diagnostics),
                 detail = stringResource(if (recording) R.string.diagnostics_state_on else R.string.diagnostics_state_off),
-                icon = R.drawable.ic_build,
+                icon = R.drawable.ic_bug_report,
+                opens = true,
                 onClick = onDiagnostics,
             )
             SheetItem(stringResource(R.string.settings_source), icon = R.drawable.ic_open_in_new) { openLink(context, SOURCE_URL) }
@@ -1063,28 +1080,126 @@ private fun SettingsSheet(
     }
 }
 
+/** The tags of the first-run screen's routes, for the screen tests. */
+internal const val EMPTY_ROUTE_SSH_TAG = "empty-route-ssh"
+internal const val EMPTY_ROUTE_TAILNET_TAG = "empty-route-tailnet"
+internal const val EMPTY_ROUTE_LOCAL_TAG = "empty-route-local"
+internal const val EMPTY_COMMAND_TAG = "empty-command"
+
+/** What the local network route asks the computer to run: Rex with a plaintext port, as the README says. */
+internal const val LOCAL_START_COMMAND = "rex server start --extra-listen :7297 --allow-anonymous"
+
+/**
+ * The first run: no hosts yet. It names Rex and offers the three ways to reach it, each a short card
+ * with its one next step - SSH, which opens no port; the tailnet, whose card it becomes once the
+ * phone has joined; the local network, with the command to copy.
+ */
 @Composable
-private fun EmptyHome(onAdd: () -> Unit) {
+private fun EmptyHome(
+    tailnet: TailnetSettings,
+    tailnetStage: TailnetStage,
+    tailnetStatus: TailnetStatus,
+    onAdd: (address: String?) -> Unit,
+    onJoinTailnet: () -> Unit,
+    onTailnetDetails: () -> Unit,
+    onSignIn: (String) -> Unit,
+    onTailnetRetry: () -> Unit,
+) {
+    val context = LocalContext.current
+    val copied = stringResource(R.string.toast_command_copied)
     Column(
-        Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().navigationBarsPadding().padding(horizontal = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = PAGE, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Glyph(R.drawable.ic_host, Colors.muted, size = 48.dp)
-        Spacer(Modifier.height(16.dp))
         Text(stringResource(R.string.home_no_hosts), color = Colors.ink, fontSize = TextStyles.display, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            stringResource(R.string.home_no_hosts_body),
-            color = Colors.muted,
-            fontSize = TextStyles.label,
-            fontFamily = FontFamily.Monospace,
-            lineHeight = labelLeading,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(32.dp))
-        PrimaryButton(stringResource(R.string.action_add_host), onClick = onAdd)
+        Text(stringResource(R.string.home_no_hosts_body), color = Colors.muted, fontSize = TextStyles.subhead, lineHeight = labelLeading)
+        Spacer(Modifier.height(4.dp))
+        EmptyRoute(
+            icon = R.drawable.ic_lock,
+            title = stringResource(R.string.home_route_ssh),
+            body = stringResource(R.string.home_route_ssh_body),
+            tag = EMPTY_ROUTE_SSH_TAG,
+        ) { RouteButton(stringResource(R.string.action_add_ssh_host)) { onAdd(SSH_PREFILL) } }
+        if (tailnet.enabled && tailnetStage != TailnetStage.Off) {
+            // Joined: the tailnet's own card, which says where the node is and what to do next.
+            TailnetStatusCard(
+                backend = tailnet.backend,
+                stage = tailnetStage,
+                status = tailnetStatus,
+                hostsNeedingTailnet = 0,
+                onDetails = onTailnetDetails,
+                onSignIn = onSignIn,
+                onSettings = onJoinTailnet,
+                onRetry = onTailnetRetry,
+            )
+        } else {
+            EmptyRoute(
+                icon = R.drawable.ic_tailnet,
+                title = stringResource(R.string.home_route_tailnet),
+                body = stringResource(R.string.home_route_tailnet_body),
+                tag = EMPTY_ROUTE_TAILNET_TAG,
+            ) { RouteButton(stringResource(R.string.action_join_tailnet), onClick = onJoinTailnet) }
+        }
+        EmptyRoute(
+            icon = R.drawable.ic_host,
+            title = stringResource(R.string.home_route_local),
+            body = stringResource(R.string.home_route_local_body),
+            tag = EMPTY_ROUTE_LOCAL_TAG,
+        ) {
+            val copyLabel = stringResource(R.string.action_copy_command)
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Colors.bg)
+                    .clickable(onClickLabel = copyLabel, role = Role.Button) {
+                        clipboardSet(context, LOCAL_START_COMMAND)
+                        toast(context, copied)
+                    }
+                    .testTag(EMPTY_COMMAND_TAG)
+                    .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    LOCAL_START_COMMAND,
+                    color = Colors.ink,
+                    fontSize = TextStyles.label,
+                    fontFamily = FontFamily.Monospace,
+                    lineHeight = labelLeading,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Glyph(R.drawable.ic_copy, Colors.muted, size = 20.dp)
+            }
+            RouteButton(stringResource(R.string.action_add_host)) { onAdd(null) }
+        }
     }
+}
+
+/** What the SSH route's Add host starts from: the scheme that makes the dialog ask for an account. */
+private const val SSH_PREFILL = "ssh://"
+
+@Composable
+private fun EmptyRoute(icon: Int, title: String, body: String, tag: String, actions: @Composable () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Colors.surface)
+            .testTag(tag).padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Glyph(icon, Colors.muted, size = 20.dp)
+            Spacer(Modifier.width(12.dp))
+            Text(title, color = Colors.ink, fontSize = TextStyles.body, fontWeight = FontWeight.SemiBold)
+        }
+        Text(body, color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            actions()
+        }
+    }
+}
+
+@Composable
+private fun RouteButton(label: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick) { Text(label, color = Colors.accent, fontWeight = FontWeight.SemiBold) }
 }
 
 /** The node's backend state in the app's own words; empty while nothing is running. */
@@ -1221,6 +1336,7 @@ internal fun TailnetDialog(
  * there. `ssh://user@host` adds the account: Rex is then reached through that machine's SSH daemon,
  * with a password or a private key.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun HostDialog(
     initial: SavedHost?,
@@ -1374,7 +1490,8 @@ internal fun HostDialog(
                         // Past the password and key buttons, to the field that is shown.
                         next = if (useKey) keyField else passwordField,
                     ) { sshUser = it }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Flowing, so large text puts the second choice under the first rather than squeezing both.
+                    FlowRow {
                         TextButton(onClick = { useKey = false }) {
                             Text(
                                 stringResource(R.string.ssh_auth_password),
@@ -1392,12 +1509,12 @@ internal fun HostDialog(
                     }
                     if (useKey) {
                         Field(stringResource(R.string.ssh_private_key), privateKey, password = true, singleLine = false, minLines = 3, focusRequester = keyField) { privateKey = it }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        FlowRow(verticalArrangement = Arrangement.Center) {
                             TextButton(onClick = { pickKey.launch(arrayOf("*/*")) }) {
                                 Text(stringResource(R.string.ssh_key_file), color = Colors.accent)
                             }
                             if (privateKey.isNotBlank()) {
-                                Text(stringResource(R.string.ssh_key_loaded), color = Colors.ok, fontSize = TextStyles.label)
+                                Text(stringResource(R.string.ssh_key_loaded), color = Colors.ok, fontSize = TextStyles.label, modifier = Modifier.align(Alignment.CenterVertically))
                             }
                         }
                         Field(stringResource(R.string.ssh_passphrase), passphrase, password = true, imeAction = ImeAction.Done, onDone = { save() }) { passphrase = it }

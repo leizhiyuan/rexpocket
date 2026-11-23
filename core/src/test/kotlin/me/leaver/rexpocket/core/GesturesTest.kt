@@ -33,7 +33,7 @@ class GesturesTest {
         val g = TapGestures(base)
         assertTrue(g.down(0, 50f, 50f).isEmpty())
         assertEquals(listOf(Gesture.Tap(50f, 50f)), g.up(50, 50f, 50f))
-        // Afterwards only the double-tap window is open; closing it says nothing more.
+        // Afterwards only the double-tap time is running; closing it says nothing more.
         assertEquals(350L, g.deadline)
         assertTrue(g.timer(351).isEmpty())
         assertNull(g.deadline)

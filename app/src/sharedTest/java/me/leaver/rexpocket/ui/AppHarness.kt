@@ -117,3 +117,22 @@ internal fun AppRule.assertStaysHome(model: RexViewModel, ms: Long = 2_000) {
 }
 
 internal const val CONNECT_MS = 15_000L
+
+/**
+ * Whether the sheet row whose label is [label] ends in a chevron, the mark of a row that opens
+ * another page: the chevron's nearest clickable ancestor is the row, and that row holds the label.
+ */
+internal fun AppRule.rowHasChevron(label: String): Boolean {
+    val chevrons = onAllNodes(
+        androidx.compose.ui.test.SemanticsMatcher.expectValue(Drawable, me.leaver.rexpocket.R.drawable.ic_chevron_right),
+        useUnmergedTree = true,
+    ).fetchSemanticsNodes()
+    fun texts(node: androidx.compose.ui.semantics.SemanticsNode): List<String> =
+        node.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.Text) { null }.orEmpty().map { it.text } +
+            node.children.flatMap(::texts)
+    return chevrons.any { chevron ->
+        val row = generateSequence(chevron.parent) { it.parent }
+            .firstOrNull { androidx.compose.ui.semantics.SemanticsActions.OnClick in it.config } ?: return@any false
+        label in texts(row)
+    }
+}

@@ -2,8 +2,8 @@
 <resources>
     <string name="app_name">RexPocket</string>
 
-    <string name="home_no_hosts">还没有主机</string>
-    <string name="home_no_hosts_body">在电脑上只对信任的网络开放：\nrex server start --extra-listen :7297 --allow-anonymous\n然后把 IP 加到这里。明文连接拥有这台 Rex 的全部权限。</string>
+    <string name="home_no_hosts">连接你的 Rex</string>
+    <string name="home_no_hosts_body">Rex 是你电脑上的终端服务器。有三种方式连上它。</string>
     <string name="host_transport_plain">明文</string>
     <string name="host_transport_tls">TLS</string>
     <string name="host_transport_ssh">SSH</string>
@@ -314,7 +314,6 @@
     <string name="update_channel_switched_stable">稳定通道：只装正式版</string>
     <string name="update_channel_switched_preview">尝鲜通道：也收 alpha 和 beta</string>
     <string name="update_checking">检查中…</string>
-    <string name="update_current">已是最新</string>
     <string name="update_available">有 %1$s</string>
     <string name="update_downloading">正在下载 %1$s · %2$d%%</string>
     <string name="update_ready">%1$s 已下载</string>
@@ -395,4 +394,16 @@
     <string name="key_page_down">PgDn</string>
     <string name="key_insert">Ins</string>
     <string name="key_delete">Del</string>
+    <string name="home_route_ssh">SSH</string>
+    <string name="home_route_ssh_body">不用开放端口：应用通过电脑自己的 SSH 登录并在那里运行 Rex。</string>
+    <string name="home_route_tailnet">Tailnet</string>
+    <string name="home_route_tailnet_body">在电脑上用 rex server tailscale on 打开 Rex 的 Tailscale，再在这里加入同一个 tailnet。</string>
+    <string name="home_route_local">局域网</string>
+    <string name="home_route_local_body">让 Rex 开放一个端口，只在信任的网络上这样做：能连到它的人拥有全部权限。</string>
+    <string name="action_add_ssh_host">添加 SSH 主机</string>
+    <string name="action_join_tailnet">加入 tailnet</string>
+    <string name="action_copy_command">复制命令</string>
+    <string name="toast_command_copied">已复制命令</string>
+    <string name="update_current_checked">已是最新 · %1$s检查</string>
+    <string name="update_current_just_now">已是最新 · 刚刚检查</string>
 </resources>

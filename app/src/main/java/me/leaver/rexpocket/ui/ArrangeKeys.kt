@@ -188,7 +188,7 @@ private fun MainPage(
                     )
                 }
             }
-            SheetItem(stringResource(R.string.arrange_add_keys), icon = R.drawable.ic_add, keepOpen = true) { onPage(ArrangePage.Add(Pill.Keys)) }
+            SheetItem(stringResource(R.string.arrange_add_keys), icon = R.drawable.ic_add, keepOpen = true, opens = true) { onPage(ArrangePage.Add(Pill.Keys)) }
         }
         Group(stringResource(R.string.arrange_group_groups)) {
             for (group in arrangement.groupsInOrder()) {
@@ -198,11 +198,12 @@ private fun MainPage(
                         icon = R.drawable.ic_command,
                         supporting = groupSummary(group, onBar = arrangement.has(group.key)),
                         keepOpen = true,
+                        opens = true,
                     ) { onPage(ArrangePage.Group(group.id)) }
                 }
             }
             if (arrangement.canAddGroup) {
-                SheetItem(stringResource(R.string.arrange_new_group), icon = R.drawable.ic_add, keepOpen = true) { onPage(ArrangePage.NewGroup) }
+                SheetItem(stringResource(R.string.arrange_new_group), icon = R.drawable.ic_add, keepOpen = true, opens = true) { onPage(ArrangePage.NewGroup) }
             } else {
                 UnavailableItem(
                     stringResource(R.string.arrange_new_group),
@@ -227,7 +228,7 @@ private fun MainPage(
                 }
             }
             if (arrangement.catalogue(Pill.Rest).any { !arrangement.has(it) }) {
-                SheetItem(stringResource(R.string.arrange_add_keys), icon = R.drawable.ic_add, keepOpen = true) { onPage(ArrangePage.Add(Pill.Rest)) }
+                SheetItem(stringResource(R.string.arrange_add_keys), icon = R.drawable.ic_add, keepOpen = true, opens = true) { onPage(ArrangePage.Add(Pill.Rest)) }
             }
         }
         Group {
@@ -272,7 +273,7 @@ private fun GroupPage(
                     )
                 }
             }
-            SheetItem(stringResource(R.string.arrange_add_keys), icon = R.drawable.ic_add, keepOpen = true) {
+            SheetItem(stringResource(R.string.arrange_add_keys), icon = R.drawable.ic_add, keepOpen = true, opens = true) {
                 onPage(ArrangePage.Add(Pill.Keys, group.id))
             }
         }
@@ -284,7 +285,7 @@ private fun GroupPage(
                 detail = stringResource(if (onBar) R.string.arrange_on else R.string.arrange_off),
                 keepOpen = true,
             ) { change { if (onBar) it.remove(group.key) else it.add(group.key) } }
-            SheetItem(stringResource(R.string.arrange_rename), icon = R.drawable.ic_edit, keepOpen = true) { onPage(ArrangePage.Name(group.id)) }
+            SheetItem(stringResource(R.string.arrange_rename), icon = R.drawable.ic_edit, keepOpen = true, opens = true) { onPage(ArrangePage.Name(group.id)) }
             SheetItem(stringResource(R.string.arrange_delete), Colors.danger, icon = R.drawable.ic_delete, keepOpen = true) {
                 onDialog(ArrangeDialog.Delete(group.id))
             }
@@ -318,7 +319,7 @@ private fun NewGroupPage(
             }
         }
         Group {
-            SheetItem(stringResource(R.string.arrange_empty_group), icon = R.drawable.ic_add, keepOpen = true) { onPage(ArrangePage.Name(null)) }
+            SheetItem(stringResource(R.string.arrange_empty_group), icon = R.drawable.ic_add, keepOpen = true, opens = true) { onPage(ArrangePage.Name(null)) }
         }
     }
 }

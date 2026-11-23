@@ -14,7 +14,8 @@ import me.leaver.rexpocket.update.UpdateState
 internal fun updateDetail(state: UpdateState): String? = when (state) {
     UpdateState.Idle -> null
     UpdateState.Checking -> stringResource(R.string.update_checking)
-    UpdateState.UpToDate -> stringResource(R.string.update_current)
+    // When it last looked, so a row with nothing new still says the phone is looking.
+    is UpdateState.UpToDate -> upToDateText(state.checkedAt, System.currentTimeMillis())
     is UpdateState.Available -> stringResource(R.string.update_available, state.tag)
     is UpdateState.Downloading -> stringResource(R.string.update_downloading, state.tag, state.percent)
     is UpdateState.Ready -> stringResource(R.string.update_ready, state.tag)
@@ -69,3 +70,9 @@ internal fun UpdateOfferDialog(
         },
     )
 }
+
+/** "Up to date · checked 2 hr. ago"; a check within the last minute was just now. */
+@Composable
+internal fun upToDateText(checkedAt: Long, now: Long): String =
+    if (now - checkedAt < android.text.format.DateUtils.MINUTE_IN_MILLIS) stringResource(R.string.update_current_just_now)
+    else stringResource(R.string.update_current_checked, relativeTime(checkedAt, now))

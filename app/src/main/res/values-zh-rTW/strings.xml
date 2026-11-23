@@ -26,4 +26,15 @@
     <string name="toast_output_copied_cut">已複製窗格輸出的最新部分</string>
     <string name="toast_output_empty">窗格沒有輸出</string>
     <string name="selection_share">分享</string>
+    <string name="home_no_hosts">連線你的 Rex</string>
+    <string name="home_no_hosts_body">Rex 是你電腦上的終端機伺服器。有三種方式連上它。</string>
+    <string name="home_route_ssh_body">不用開放連接埠：應用程式透過電腦自己的 SSH 登入並在那裡執行 Rex。</string>
+    <string name="home_route_tailnet_body">在電腦上用 rex server tailscale on 開啟 Rex 的 Tailscale，再在這裡加入同一個 tailnet。</string>
+    <string name="home_route_local">區域網路</string>
+    <string name="home_route_local_body">讓 Rex 開放一個連接埠，只在信任的網路上這樣做：能連到它的人擁有全部權限。</string>
+    <string name="action_add_ssh_host">新增 SSH 主機</string>
+    <string name="action_copy_command">複製指令</string>
+    <string name="toast_command_copied">已複製指令</string>
+    <string name="update_current_checked">已是最新版本 · %1$s檢查</string>
+    <string name="update_current_just_now">已是最新版本 · 剛剛檢查</string>
 </resources>

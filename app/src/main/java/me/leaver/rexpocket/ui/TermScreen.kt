@@ -584,7 +584,8 @@ internal fun TermScreen(
                 if (showHolder) {
                     SheetItem(
                         stringResource(if (state.holder == Holder.Phone) R.string.action_release else R.string.action_take_over),
-                        icon = R.drawable.ic_swap,
+                        // A hand handing the pane back, or one reaching out for it.
+                        icon = if (state.holder == Holder.Phone) R.drawable.ic_back_hand else R.drawable.ic_front_hand,
                     ) { toggleHolder() }
                 }
                 SheetItem(stringResource(R.string.menu_split_right), icon = R.drawable.ic_split_right) { onAct { split(vertical = false) } }

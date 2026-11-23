@@ -3,6 +3,7 @@ package me.leaver.rexpocket.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,7 +37,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -262,6 +267,9 @@ private val ICON_INSET = 56.dp
  * A row that only changes what its own detail shows - a switch, a pick between two - stays open
  * ([keepOpen]): closing the sheet would take away the one place the change is visible.
  *
+ * A row that [opens] another page or dialog - Terminal controls, Arrange keys, Diagnostics - ends in
+ * a chevron, as "Terminal controls ›"; a row that steps through values or acts at once has none.
+ *
  * A row that cannot act right now - Send a file while a file is on its way - stays in its place,
  * greyed out and not [enabled], so the rows around it do not jump as the state changes.
  */
@@ -275,47 +283,71 @@ internal fun SheetScope.SheetItem(
     keepOpen: Boolean = false,
     supporting: String? = null,
     enabled: Boolean = true,
+    opens: Boolean = false,
     onClick: () -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp)
-            .clickable(enabled = enabled) { if (keepOpen) onClick() else close(onClick) }
-            .alpha(if (enabled) 1f else DISABLED_ALPHA)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (icon != null) {
-            Glyph(icon, if (color == Colors.ink) Colors.muted else color, size = 24.dp)
-            Spacer(Modifier.width(16.dp))
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // Beside the label while both fit there; under it once the detail would wrap or the label would
+        // have to break a word to make room for it, as large text on a narrow phone makes them.
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val stacked = detail != null && with(density) {
+            val trailing = (if (marked) 32.dp else 0.dp) + (if (opens) 28.dp else 0.dp)
+            val room = maxWidth - 32.dp - (if (icon != null) 40.dp else 0.dp) - trailing
+            val detailWidth = measurer.measure(detail, TextStyle(fontSize = TextStyles.label), maxLines = 1).size.width.toDp()
+            val labelRoom = room - 12.dp - detailWidth
+            val labelStyle = TextStyle(fontSize = TextStyles.body, fontWeight = if (marked) FontWeight.SemiBold else FontWeight.Normal)
+            val widestWord = label.split(' ').maxOf { word -> measurer.measure(word, labelStyle, maxLines = 1).size.width }.toDp()
+            detailWidth > minOf(DETAIL_MAX, room / 2) || widestWord > labelRoom ||
+                measurer.measure(label, labelStyle, constraints = Constraints(maxWidth = labelRoom.roundToPx().coerceAtLeast(1))).lineCount > 3
         }
-        Column(Modifier.weight(1f)) {
-            Text(
-                label,
-                color = color,
-                fontSize = TextStyles.body,
-                fontWeight = if (marked) FontWeight.SemiBold else FontWeight.Normal,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (supporting != null) {
-                Text(supporting, color = Colors.muted, fontSize = TextStyles.label, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                .clickable(enabled = enabled) { if (keepOpen) onClick() else close(onClick) }
+                .alpha(if (enabled) 1f else DISABLED_ALPHA)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                Glyph(icon, if (color == Colors.ink) Colors.muted else color, size = 24.dp)
+                Spacer(Modifier.width(16.dp))
             }
-        }
-        if (detail != null) {
-            Spacer(Modifier.width(12.dp))
-            Text(
-                detail,
-                color = Colors.muted,
-                fontSize = TextStyles.label,
-                textAlign = TextAlign.End,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = DETAIL_MAX),
-            )
-        }
-        if (marked) {
-            Spacer(Modifier.width(12.dp))
-            Glyph(R.drawable.ic_check, Colors.accent, size = 20.dp)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    label,
+                    color = color,
+                    fontSize = TextStyles.body,
+                    fontWeight = if (marked) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = if (stacked) Int.MAX_VALUE else 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (supporting != null) {
+                    Text(supporting, color = Colors.muted, fontSize = TextStyles.label, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
+                if (stacked && detail != null) {
+                    Text(detail, color = Colors.muted, fontSize = TextStyles.label)
+                }
+            }
+            if (detail != null && !stacked) {
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    detail,
+                    color = Colors.muted,
+                    fontSize = TextStyles.label,
+                    textAlign = TextAlign.End,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = DETAIL_MAX),
+                )
+            }
+            if (marked) {
+                Spacer(Modifier.width(12.dp))
+                Glyph(R.drawable.ic_check, Colors.accent, size = 20.dp)
+            }
+            if (opens) {
+                Spacer(Modifier.width(8.dp))
+                Glyph(R.drawable.ic_chevron_right, Colors.muted, size = 20.dp)
+            }
         }
     }
 }

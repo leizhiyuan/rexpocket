@@ -32,7 +32,8 @@ import java.util.concurrent.TimeUnit
 sealed interface UpdateState {
     data object Idle : UpdateState
     data object Checking : UpdateState
-    data object UpToDate : UpdateState
+    /** The last check, at [checkedAt] (epoch ms), found nothing newer on the channel. */
+    data class UpToDate(val checkedAt: Long) : UpdateState
 
     /** A newer release is published; nothing has been downloaded yet. */
     data class Available(val tag: String, val size: Long) : UpdateState
@@ -111,7 +112,9 @@ class Updater(context: Context) {
     /** The release the last check offered, kept so that downloading it needs no second look. */
     private var offered: AppRelease? = null
 
-    private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
+    // A check that found nothing newer is remembered, so a launch that skips today's check still
+    // says when the phone last looked rather than nothing.
+    private val _state = MutableStateFlow<UpdateState>(storedUpToDate() ?: UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
 
     private val _channel = MutableStateFlow(storedChannel())
@@ -159,11 +162,13 @@ class Updater(context: Context) {
             _state.value = UpdateState.Failed(e.message ?: "unreachable", updateFailure(e))
             return@withContext
         }
-        remember()
+        val now = System.currentTimeMillis()
+        remember(now)
         val apk = release?.apk
         if (release == null || apk == null) {
             Diagnostics.event(TAG, "no build newer than ${running} on ${_channel.value.name}")
-            _state.value = UpdateState.UpToDate
+            prefs.edit().putLong(KEY_UP_TO_DATE_AT, now).apply()
+            _state.value = UpdateState.UpToDate(now)
             return@withContext
         }
         Diagnostics.event(TAG, "found ${release.tag} (${apk.size} bytes) on ${_channel.value.name}")
@@ -263,8 +268,17 @@ class Updater(context: Context) {
         return UpdateChannel.entries.firstOrNull { it.name == stored } ?: defaultChannel(current)
     }
 
-    private fun remember() {
-        prefs.edit().putLong(KEY_CHECKED_AT, System.currentTimeMillis()).apply()
+    private fun remember(now: Long) {
+        prefs.edit().putLong(KEY_CHECKED_AT, now).apply()
+    }
+
+    /**
+     * The last check's "nothing newer", while it is the last check there was: one that found a build,
+     * failed to remember, or was on the other channel (switching drops the check's time) says nothing.
+     */
+    private fun storedUpToDate(): UpdateState.UpToDate? {
+        val at = prefs.getLong(KEY_UP_TO_DATE_AT, 0L)
+        return if (at > 0L && at == prefs.getLong(KEY_CHECKED_AT, 0L)) UpdateState.UpToDate(at) else null
     }
 
     private companion object {
@@ -273,6 +287,7 @@ class Updater(context: Context) {
         const val USER_AGENT = "RexPocket"
         const val FEED = "https://api.github.com/repos/leizhiyuan/rexpocket/releases?per_page=10"
         const val KEY_CHECKED_AT = "update.checkedAt"
+        const val KEY_UP_TO_DATE_AT = "update.upToDateAt"
         const val KEY_CHANNEL = "update.channel"
         const val CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
     }

@@ -2,8 +2,8 @@
 <resources>
     <string name="app_name">RexPocket</string>
 
-    <string name="home_no_hosts">No hosts yet</string>
-    <string name="home_no_hosts_body">Open it on your computer only on a network you trust:\nrex server start --extra-listen :7297 --allow-anonymous\nThen add the address here. A plaintext connection has full access to that Rex.</string>
+    <string name="home_no_hosts">Connect to your Rex</string>
+    <string name="home_no_hosts_body">Rex is the terminal server on your computer. Reach it one of three ways.</string>
     <string name="host_transport_plain">plain</string>
     <string name="host_transport_tls">TLS</string>
     <string name="host_transport_ssh">SSH</string>
@@ -317,7 +317,6 @@
     <string name="update_channel_switched_stable">Stable channel: finished releases only</string>
     <string name="update_channel_switched_preview">Preview channel: alphas and betas too</string>
     <string name="update_checking">Checking…</string>
-    <string name="update_current">Up to date</string>
     <string name="update_available">%1$s is available</string>
     <string name="update_downloading">Downloading %1$s · %2$d%%</string>
     <string name="update_ready">%1$s is downloaded</string>
@@ -400,4 +399,16 @@
     <string name="key_page_down">PgDn</string>
     <string name="key_insert">Ins</string>
     <string name="key_delete">Del</string>
+    <string name="home_route_ssh">SSH</string>
+    <string name="home_route_ssh_body">No port to open: the app signs in through the computer\'s own SSH and runs Rex there.</string>
+    <string name="home_route_tailnet">Tailnet</string>
+    <string name="home_route_tailnet_body">Turn on Rex\'s Tailscale on the computer with rex server tailscale on, then join the same tailnet here.</string>
+    <string name="home_route_local">Local network</string>
+    <string name="home_route_local_body">Start Rex with an open port, on a network you trust only: anyone who reaches it has full access.</string>
+    <string name="action_add_ssh_host">Add SSH host</string>
+    <string name="action_join_tailnet">Join tailnet</string>
+    <string name="action_copy_command">Copy command</string>
+    <string name="toast_command_copied">Command copied</string>
+    <string name="update_current_checked">Up to date · checked %1$s</string>
+    <string name="update_current_just_now">Up to date · checked just now</string>
 </resources>

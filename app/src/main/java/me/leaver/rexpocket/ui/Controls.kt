@@ -117,11 +117,11 @@ internal fun ControlsSheet(
             ) { onGestures(gestures.copy(waitForDoubleTap = !gestures.waitForDoubleTap)) }
             SheetItem(
                 label = stringResource(R.string.gesture_double_tap_time), icon = R.drawable.ic_timer,
-                detail = msLabel(gestures.doubleTapMs, systemDoubleTap), keepOpen = true,
+                detail = msLabel(gestures.doubleTapMs, systemDoubleTap), keepOpen = true, opens = true,
             ) { timing = Timing.DoubleTap }
             SheetItem(
                 label = stringResource(R.string.gesture_long_press_time), icon = R.drawable.ic_timer,
-                detail = msLabel(gestures.longPressMs, systemLongPress), keepOpen = true,
+                detail = msLabel(gestures.longPressMs, systemLongPress), keepOpen = true, opens = true,
             ) { timing = Timing.LongPress }
         }
         Group(stringResource(R.string.controls_group_keys)) {
@@ -136,6 +136,7 @@ internal fun ControlsSheet(
             SheetItem(
                 label = stringResource(R.string.arrange_title), icon = R.drawable.ic_drag_handle,
                 supporting = stringResource(R.string.arrange_hint),
+                opens = true,
                 onClick = onArrangeKeys,
             )
             // A tap steps between the two: tapped, and held unless the program is busy. Whether the

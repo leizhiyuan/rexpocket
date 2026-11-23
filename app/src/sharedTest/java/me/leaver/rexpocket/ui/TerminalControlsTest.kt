@@ -25,6 +25,8 @@ import me.leaver.rexpocket.core.LongPressAction
 import me.leaver.rexpocket.core.TapAction
 import me.leaver.rexpocket.data.HostStore
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -138,6 +140,16 @@ class TerminalControlsTest {
         reopen()
         assertRowShows(R.string.gesture_tap, R.drawable.ic_block)
         assertRowShows(R.string.keybar_ctrl_c, R.drawable.ic_touch_long)
+    }
+
+    @Test
+    fun rowsThatOpenAPageEndInAChevronAndChoicesDoNot() {
+        for (opens in listOf(R.string.gesture_double_tap_time, R.string.gesture_long_press_time, R.string.arrange_title)) {
+            assertTrue("${string(opens)} opens a page", compose.rowHasChevron(string(opens)))
+        }
+        for (steps in listOf(R.string.gesture_tap, R.string.gesture_double_tap, R.string.gesture_long_press, R.string.gesture_wait, R.string.keybar_title, R.string.keybar_ctrl_c)) {
+            assertFalse("${string(steps)} steps through values", compose.rowHasChevron(string(steps)))
+        }
     }
 
     @Test

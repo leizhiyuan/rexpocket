@@ -250,9 +250,10 @@ private fun QuietRow(
         Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { lead() }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = Colors.ink, fontSize = TextStyles.subhead, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // Wrapped, never cut: with large text on a narrow phone the line is the whole message.
+            Text(title, color = Colors.ink, fontSize = TextStyles.subhead, fontWeight = FontWeight.Medium, maxLines = 4, overflow = TextOverflow.Ellipsis)
             if (supporting.isNotBlank()) {
-                Text(supporting, color = supportingColor, fontSize = TextStyles.label, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(supporting, color = supportingColor, fontSize = TextStyles.label, lineHeight = labelLeading, maxLines = 4, overflow = TextOverflow.Ellipsis)
             }
         }
         Spacer(Modifier.width(8.dp))
