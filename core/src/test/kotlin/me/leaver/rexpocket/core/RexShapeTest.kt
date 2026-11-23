@@ -65,6 +65,9 @@ class RexShapeTest {
         fun report(probe: Probe, sid: String, block: String, body: String, state: String?, id: String = "", app: String? = null, msg: String? = null)
         fun exit(probe: Probe, sid: String, block: String, code: Int)
         fun copy(probe: Probe, sid: String, block: String, text: String)
+        fun bell(probe: Probe, sid: String, block: String)
+        /** OSC 777 with a [title], OSC 9 (a body only) without one. */
+        fun notify(probe: Probe, sid: String, block: String, title: String?, body: String)
     }
 
     private class FakePrograms(val rex: ScriptedRex) : Programs {
@@ -83,6 +86,16 @@ class RexShapeTest {
             ShellPrograms().copy(probe, sid, block, text)
             rex.copy(block, text)
         }
+
+        override fun bell(probe: Probe, sid: String, block: String) {
+            ShellPrograms().bell(probe, sid, block)
+            rex.bell(block)
+        }
+
+        override fun notify(probe: Probe, sid: String, block: String, title: String?, body: String) {
+            ShellPrograms().notify(probe, sid, block, title, body)
+            rex.notify(block, title.orEmpty(), body)
+        }
     }
 
     private class ShellPrograms : Programs {
@@ -96,6 +109,15 @@ class RexShapeTest {
 
         override fun copy(probe: Probe, sid: String, block: String, text: String) {
             probe.call("com.superlogical.terminal.write", pane(sid, block).put("args", JSONObject().put("data", "printf '\\033]52;c;%s\\a' ${b64(text)}\n")))
+        }
+
+        override fun bell(probe: Probe, sid: String, block: String) {
+            probe.call("com.superlogical.terminal.write", pane(sid, block).put("args", JSONObject().put("data", "printf '\\a'\n")))
+        }
+
+        override fun notify(probe: Probe, sid: String, block: String, title: String?, body: String) {
+            val osc = if (title == null) "9;$body" else "777;notify;$title;$body"
+            probe.call("com.superlogical.terminal.write", pane(sid, block).put("args", JSONObject().put("data", "printf '\\033]$osc\\a'\n")))
         }
     }
 
@@ -234,6 +256,18 @@ class RexShapeTest {
             step("a program copies to the clipboard with OSC 52") { programs.copy(phone, s, split, "hi") }
             step("phone reads the copy back") {
                 phone.call("com.superlogical.terminal.clipboard_read", pane(s, split).put("args", JSONObject()))
+            }
+            step("a program rings the bell") { programs.bell(phone, s, split) }
+            step("a program asks for a desktop notification with OSC 9") { programs.notify(phone, s, split, null, "build finished") }
+            step("a program asks for a desktop notification with OSC 777") { programs.notify(phone, s, split, "Agent", "needs input") }
+            // A notification's Reply and Interrupt: a paste, Enter and Ctrl+C sent to a named pane.
+            step("phone pastes a reply, presses Enter, then Ctrl+C") {
+                phone.call(
+                    "block.event",
+                    pane(s, split).put("event", JSONObject().put("type", "paste").put("payload", JSONObject().put("text", "true"))),
+                )
+                phone.call("client.key", pane(s, split).put("key", key("enter", "", "")))
+                phone.call("client.key", pane(s, split).put("key", key("key_c", "ctrl", "c")))
             }
             step("phone formats the pane as text, whole and in parts") {
                 val text = JSONObject().put("format", "text").put("trim", true).put("unwrap", true)
@@ -468,11 +502,16 @@ class RexShapeTest {
 
         fun b64(text: String): String = Base64.getEncoder().encodeToString(text.toByteArray())
 
+        /** A key press for `client.key`, as the app sends one. */
+        fun key(code: String, mods: String, text: String): JSONObject = JSONObject().put("key", code).put("mods", mods)
+            .put("consumed_mods", "").put("text", text).put("unshifted_codepoint", text.firstOrNull()?.code ?: 0)
+            .put("composing", false).put("action", "press")
+
         /** Events that say what a real shell happens to do - its title, process, size - and the other clients'. */
         private val NOISE = setOf(
             "client_joined", "client_left", "client_changed", "client_connected", "client_disconnected", "client_connection_changed",
         )
-        private val BLOCK_NOISE = setOf("title_changed", "process_changed", "pwd_changed", "size_changed", "ports_changed", "bell")
+        private val BLOCK_NOISE = setOf("title_changed", "process_changed", "pwd_changed", "size_changed", "ports_changed")
 
         /** Fields left out of the shapes: what a phone never reads, and the fake does not model. */
         private val IGNORED = setOf("host_id", "bounds", "layout", "split_ids", "server_status", "features", "carriers")

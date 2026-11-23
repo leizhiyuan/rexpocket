@@ -126,6 +126,20 @@ data class PaneText(val text: String, val cut: Boolean)
 data class PaneCopy(val blockId: String, val text: String)
 
 /**
+ * A program in a pane calling for the person outside its status: its bell (`terminal.bell`), or a
+ * desktop notification it asked for with OSC 9 or OSC 777 (`terminal.desktop_notification`; OSC 9
+ * has no title, which Rex sends as ""). Both are as the program wrote them: untrusted text.
+ */
+sealed interface PaneSignal {
+    val sessionId: String
+    val blockId: String
+
+    data class Bell(override val sessionId: String, override val blockId: String) : PaneSignal
+
+    data class Note(override val sessionId: String, override val blockId: String, val title: String, val body: String) : PaneSignal
+}
+
+/**
  * Phone-side session: bootstrap, sidebar model, and a polled VT screen.
  * Owning the focused block makes Rex use this client's size, the same way a
  * phone client takes the pane while it is on screen. Leaving disowns it.
@@ -158,6 +172,11 @@ class PocketSession(
      * program running while the phone is in a pocket, does not get to change the clipboard.
      */
     val copies: SharedFlow<PaneCopy> = _copies
+
+    private val _signals = MutableSharedFlow<PaneSignal>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** Every pane's bells and desktop notifications, from any session; what to do with them is the app's. */
+    val signals: SharedFlow<PaneSignal> = _signals
 
     private val clientRef = AtomicReference<RexClient?>(null)
     private val sizeRef = AtomicReference(TermSize(80, 24, 8, 16))
@@ -740,17 +759,7 @@ class PocketSession(
     suspend fun paste(text: String, sessionId: String? = null, blockId: String? = null) {
         if (text.isEmpty()) return
         val (sid, block) = if (sessionId != null && blockId != null) sessionId to blockId else requireBlock()
-        onPane(sid, block) {
-            input(
-                InputCall(
-                    "block.event",
-                JSONObject()
-                    .put("session_id", sid)
-                    .put("block_id", block)
-                    .put("event", JSONObject().put("type", "paste").put("payload", JSONObject().put("text", text))),
-                ),
-            ).await()
-        }
+        onPane(sid, block) { input(pasteCall(sid, block, text)).await() }
     }
 
     /**
@@ -825,28 +834,54 @@ class PocketSession(
         consumedMods: String = "",
     ) {
         val (sid, block) = requireBlock()
-        onPane(sid, block) {
-            input(
-                InputCall(
-                    "client.key",
-                JSONObject()
-                    .put("session_id", sid)
-                    .put("block_id", block)
-                    .put(
-                        "key",
-                        JSONObject()
-                            .put("key", code)
-                            .put("mods", mods)
-                            .put("consumed_mods", consumedMods)
-                            .put("text", text)
-                            .put("unshifted_codepoint", codepoint)
-                            .put("composing", false)
-                            .put("action", "press"),
-                    ),
-                ),
-            ).await()
-        }
+        onPane(sid, block) { input(keyCall(sid, block, code, mods, text, codepoint, consumedMods)).await() }
     }
+
+    /**
+     * Answers the program in [blockId] of [sessionId] - shown or not - from a notification: [text]
+     * pasted, as the key bar's Paste does, so the terminal brackets it when the program asked for
+     * that, then Enter. False when the pane is gone. The bootstrap lets this connection send keys
+     * to any session's panes (rex-parity.md, verified on preview.22).
+     */
+    suspend fun replyTo(sessionId: String, blockId: String, text: String): Boolean =
+        onPane(sessionId, blockId) {
+            if (text.isNotEmpty()) input(pasteCall(sessionId, blockId, text)).await()
+            input(keyCall(sessionId, blockId, "enter", "", "", 0, "")).await()
+            true
+        } ?: false
+
+    /** Ctrl+C to the program in [blockId] of [sessionId]: a notification's Interrupt. False when the pane is gone. */
+    suspend fun interrupt(sessionId: String, blockId: String): Boolean =
+        onPane(sessionId, blockId) {
+            input(keyCall(sessionId, blockId, "key_c", "ctrl", "c", 'c'.code, "")).await()
+            true
+        } ?: false
+
+    private fun pasteCall(sid: String, block: String, text: String) = InputCall(
+        "block.event",
+        JSONObject()
+            .put("session_id", sid)
+            .put("block_id", block)
+            .put("event", JSONObject().put("type", "paste").put("payload", JSONObject().put("text", text))),
+    )
+
+    private fun keyCall(sid: String, block: String, code: String, mods: String, text: String, codepoint: Int, consumedMods: String) = InputCall(
+        "client.key",
+        JSONObject()
+            .put("session_id", sid)
+            .put("block_id", block)
+            .put(
+                "key",
+                JSONObject()
+                    .put("key", code)
+                    .put("mods", mods)
+                    .put("consumed_mods", consumedMods)
+                    .put("text", text)
+                    .put("unshifted_codepoint", codepoint)
+                    .put("composing", false)
+                    .put("action", "press"),
+            ),
+    )
 
     private fun write(text: String): InputCall {
         val (sid, block) = requireBlock()
@@ -1060,7 +1095,7 @@ class PocketSession(
                 }
             }
             "session_destroyed" -> dropSession(sid)
-            "block_event" -> onBlockEvent(payload)
+            "block_event" -> onBlockEvent(sid, payload)
             // Which client owns a pane decides its size, so a change here redraws it as owned or not.
             "block_owner_changed", "block_closed", "window_closed", "window_created", "active_window_changed" ->
                 refreshView(sid)
@@ -1068,10 +1103,17 @@ class PocketSession(
     }
 
     /** A pane's own news: a program's status, or the directory its shell moved to. */
-    private fun onBlockEvent(event: JSONObject) {
+    private fun onBlockEvent(sid: String, event: JSONObject) {
         val block = event.optNullableString("block_id") ?: return
+        // Rex sends a bell with an empty payload; an event with none at all is the same bell.
+        if (event.optString("name") == "bell") {
+            _signals.tryEmit(PaneSignal.Bell(sid, block))
+            return
+        }
         val body = event.optJSONObject("payload") ?: return
         when (event.optString("name")) {
+            "desktop_notification" ->
+                _signals.tryEmit(PaneSignal.Note(sid, block, body.optString("title"), body.optString("body")))
             "program_status_changed" -> {
                 changeStatus(block) { applyStatusEvent(it, body) }
                 reportedDuringRead += block

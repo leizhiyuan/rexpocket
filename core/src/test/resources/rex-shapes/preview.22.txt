@@ -100,6 +100,19 @@ response com.superlogical.terminal.write {bytes_written:num}
 event block_event clipboard_written {bytes:num,id:num,text:str}
 ## phone reads the copy back
 response com.superlogical.terminal.clipboard_read {data:str,eof:true,id:num,total:num}
+## a program rings the bell
+response com.superlogical.terminal.write {bytes_written:num}
+event block_event bell {}
+## a program asks for a desktop notification with OSC 9
+response com.superlogical.terminal.write {bytes_written:num}
+event block_event desktop_notification {body:str,title:""}
+## a program asks for a desktop notification with OSC 777
+response com.superlogical.terminal.write {bytes_written:num}
+event block_event desktop_notification {body:str,title:str}
+## phone pastes a reply, presses Enter, then Ctrl+C
+response block.event {}
+response client.key {handled:false}
+response client.key {handled:false}
 ## phone formats the pane as text, whole and in parts
 response block.method {content:str}
 response block.method {content:str,id:num,total:num}

@@ -135,6 +135,12 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
     /** Every request that reached this Rex, as `method block-or-session`, in order. */
     val calls = CopyOnWriteArrayList<String>()
 
+    /**
+     * What reached each pane as input, in order: `paste <block> <text>`, `key <block> <mods>+<key>`
+     * (`+enter` with no modifiers).
+     */
+    val inputs = CopyOnWriteArrayList<String>()
+
     /** What Rex says when own or disown names a pane that is not in the session (`bad_request`). */
     fun paneRefusal(block: String) = "block $block is not in the session"
 
@@ -266,6 +272,25 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
                 if (inline) event.put("text", text)
             }
             blockEvent(session.id, block, "clipboard_written", event)
+        }
+    }
+
+    /** The program in [block] rings the bell (BEL): `bell`, with an empty payload, as Rex sends it. */
+    fun bell(block: String) {
+        synchronized(this) {
+            val session = sessions.values.firstOrNull { it.tabOf(block) != null } ?: return
+            blockEvent(session.id, block, "bell", JSONObject())
+        }
+    }
+
+    /**
+     * The program in [block] asks for a desktop notification: OSC 777 `notify` with a [title], or
+     * OSC 9 with a body only, whose title Rex sends as "".
+     */
+    fun notify(block: String, title: String, body: String) {
+        synchronized(this) {
+            val session = sessions.values.firstOrNull { it.tabOf(block) != null } ?: return
+            blockEvent(session.id, block, "desktop_notification", JSONObject().put("title", title).put("body", body))
         }
     }
 
@@ -679,13 +704,22 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
                 val end = minOf(bytes.size, offset + max)
                 JSONObject().put("id", id).put("data", String(bytes, offset, end - offset)).put("total", bytes.size).put("eof", end == bytes.size)
             }
-            "com.superlogical.terminal.resize", "client.key", "block.event" -> {
+            "com.superlogical.terminal.resize", "block.event" -> {
                 val (_, block) = pane(client, payload)
                 val event = payload.optJSONObject("event")
                 if (method == "block.event" && event?.optString("type") == "paste") {
-                    pastes += block to event.optJSONObject("payload")?.optString("text").orEmpty()
+                    val text = event.optJSONObject("payload")?.optString("text").orEmpty()
+                    pastes += block to text
+                    inputs += "paste $block $text"
                 }
                 JSONObject()
+            }
+            // No Lua binding here takes a key, so each goes to the block, as Rex says with handled false.
+            "client.key" -> {
+                val (_, block) = pane(client, payload)
+                val key = payload.optJSONObject("key")
+                inputs += "key $block ${key?.optString("mods").orEmpty()}+${key?.optString("key")}"
+                JSONObject().put("handled", false)
             }
             FileUpload.UPLOAD_BEGIN -> {
                 val (_, block) = pane(client, payload)
