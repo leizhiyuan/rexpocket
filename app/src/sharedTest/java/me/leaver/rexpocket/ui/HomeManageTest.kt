@@ -138,7 +138,6 @@ class HomeManageTest {
         compose.awaitThat { view(m).label == "renamed at home" }
 
         val tab = view(m).windows.first()
-        compose.onNode(hasContentDescription(string(R.string.manage_actions_for, string(R.string.tab_number, 1))) and hasClickAction()).assertExists()
         compose.onAllNodes(hasContentDescription(string(R.string.manage_actions_for, string(R.string.tab_number, 1))) and hasClickAction())[1].performClick()
         compose.waitForIdle()
         inSheet(string(R.string.menu_rename_tab)).performClick()
