@@ -75,7 +75,10 @@ rex server start --extra-listen :7297 --allow-anonymous
    - `192.0.2.10`——明文，7297 端口
    - `192.0.2.10:7300`——换个端口
    - `my-mac.tail1234.ts.net` 或 `100.x` 地址——走 Tailscale，443 端口，TLS
-   - `my-pc.netbird.cloud`——走 Netbird，443 端口，TLS（自建的 Netbird 用 `100.x` 地址连接）
+   - `ssh://my-pc.netbird.cloud` 或 `my-pc.netbird.cloud:7297`——走 Netbird（自建的 Netbird 用 `100.x` 地址连接）。
+     Rex 只有通过 Tailscale Serve 才在 443 端口提供 TLS；在 Netbird 上 Rex 分不清来访者，所以那里 Rex
+     自己的端口是用 `--allow-anonymous` 启动的明文监听（见 Rex 远程访问文档的“Plain HTTP”）；走 SSH
+     则什么端口都不用开
    - `ssh://192.0.2.10` 或 `ssh://my-mac.tail1234.ts.net`——走那台机器的 SSH 服务，
      填账号和密码（或私钥）；第一次连接会让你确认主机密钥
 

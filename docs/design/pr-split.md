@@ -171,7 +171,10 @@ On split/ui:
 - Settings › Tailnet shows no backend choice and joins Tailscale as before.
 - `device-test` on API 34: the three clipboard tests (`EmptyHomeTest.theCommandIsCopiedWithATap`,
   `FollowInputTest.pasteBringsThePaneToTheNewestOutput`, `LaunchTest.aProgramsCopyInThePaneOnScreenGoesOnTheClipboard`)
-  sometimes never get the focus back from the system's copied overlay and time out; a rerun passes.
+  used to time out when the system's copied overlay kept the focus, since only the app in focus may
+  read the clipboard. They now read it holding `READ_CLIPBOARD_IN_BACKGROUND`, adopted from the shell
+  (`clipboardInBackground` in TermHarness.kt), so the read, the app's Paste included, no longer
+  waits on the focus; they pass on every run.
 
 On split/netbird:
 

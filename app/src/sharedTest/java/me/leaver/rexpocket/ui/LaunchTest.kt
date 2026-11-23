@@ -99,9 +99,10 @@ class LaunchTest {
         compose.waitForIdle()
         val pane = m.pocket.value.view!!.focusedBlock()!!.id
         desk.rex.copy(pane, "copied by vim")
-        // From Android 13 the system shows its own copied overlay, which holds the focus for a few
-        // seconds, and only an app in focus may read the clipboard: the read waits it out.
-        compose.awaitThat(30_000) { compose.runOnUiThread<String?> { clipboard(compose.activity) } == "copied by vim" }
+        // Read whether or not the system's copied overlay holds the focus: see clipboardInBackground.
+        clipboardInBackground(compose.activity) {
+            compose.awaitThat { compose.runOnUiThread<String?> { clipboard(compose.activity) } == "copied by vim" }
+        }
     }
 
     @Test

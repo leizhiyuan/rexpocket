@@ -69,8 +69,10 @@ class EmptyHomeTest {
     fun theCommandIsCopiedWithATap() {
         launch()
         compose.onNodeWithTag(EMPTY_COMMAND_TAG).performScrollTo().performClick()
-        // Android 13's copied overlay takes the focus a moment; the clipboard is read once it is back.
-        compose.awaitThat(30_000) { compose.runOnUiThread<String?> { clipboard(compose.activity) } == LOCAL_START_COMMAND }
+        // Read whether or not the system's copied overlay holds the focus: see clipboardInBackground.
+        clipboardInBackground(compose.activity) {
+            compose.awaitThat { compose.runOnUiThread<String?> { clipboard(compose.activity) } == LOCAL_START_COMMAND }
+        }
     }
 
     @Test

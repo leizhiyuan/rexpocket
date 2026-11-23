@@ -1,5 +1,7 @@
 package me.leaver.rexpocket.ui
 
+import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.os.Build
 import android.view.View
@@ -26,6 +28,7 @@ import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.flow.emptyFlow
 import me.leaver.rexpocket.core.BlockInfo
 import me.leaver.rexpocket.core.Phase
@@ -108,6 +111,30 @@ internal fun liveState(tab: WindowInfo = tabOf(testPane("left")), released: Bool
 
 /** True on the JVM, where no window manager sends insets and the tests send them instead. */
 internal val onRobolectric: Boolean get() = Build.FINGERPRINT == "robolectric"
+
+private const val READ_CLIPBOARD_IN_BACKGROUND = "android.permission.READ_CLIPBOARD_IN_BACKGROUND"
+
+/**
+ * Runs [block] holding READ_CLIPBOARD_IN_BACKGROUND, adopted from the shell, so that the clipboard
+ * reads in it, the test's and the app's own (Paste), do not depend on the window focus. From
+ * Android 13 a copy brings up the system's copied overlay, which takes the focus, and only the app
+ * in focus may read the clipboard ("Denying clipboard access ... not in focus"); on the API 34
+ * emulator the focus sometimes does not come back for more than 30 s. The clipboard read is still
+ * the real one: only the focus rule is lifted. The JVM has no such rule and no shell.
+ */
+internal fun <T> clipboardInBackground(context: Context, block: () -> T): T {
+    if (onRobolectric || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return block()
+    val ui = InstrumentationRegistry.getInstrumentation().uiAutomation
+    ui.adoptShellPermissionIdentity(READ_CLIPBOARD_IN_BACKGROUND)
+    try {
+        check(context.checkSelfPermission(READ_CLIPBOARD_IN_BACKGROUND) == PackageManager.PERMISSION_GRANTED) {
+            "the shell did not lend $READ_CLIPBOARD_IN_BACKGROUND"
+        }
+        return block()
+    } finally {
+        ui.dropShellPermissionIdentity()
+    }
+}
 
 /**
  * Sends [view]'s window the insets a phone with its bars [shown] would: a status bar of [statusPx]
