@@ -173,7 +173,7 @@ index 3adc578f6efe74af8cfb771c47729a3d8df52c4f..063216312bad2c44b8e5ebde4f1a837a
    client. [eddsa](https://github.com/str4d/ed25519-java), by Str4d and contributors, CC0 - the
    Ed25519 implementation Android's own security providers do not give JSch.
 diff --git a/README.zh-CN.md b/README.zh-CN.md
-index f308a05031556edd26e7031f789e2eda3e4ce9f3..c0e849ec047525d471c68cb9354e76e2f7f468c2 100644
+index f308a05031556edd26e7031f789e2eda3e4ce9f3..3ad07ba0506ed307e968712668c745fe46ef1c9c 100644
 --- a/README.zh-CN.md
 +++ b/README.zh-CN.md
 @@ -6,7 +6,7 @@
@@ -194,11 +194,14 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..c0e849ec047525d471c68cb9354e76e2
    名字或 `100.x` 地址就能连到主机，也不占手机唯一的 VPN 位置。
  - **通过 SSH 添加主机。** 填 `ssh://host`，再填账号和密码（或私钥），就能通过机器本来就在跑的 SSH 服务
    连到 Rex，不用对外开放 Rex 端口。第一次连接会显示并记住主机密钥；密钥变了会停下，等你确认。
-@@ -75,12 +75,14 @@ rex server start --extra-listen :7297 --allow-anonymous
+@@ -75,12 +75,17 @@ rex server start --extra-listen :7297 --allow-anonymous
     - `192.0.2.10`——明文，7297 端口
     - `192.0.2.10:7300`——换个端口
     - `my-mac.tail1234.ts.net` 或 `100.x` 地址——走 Tailscale，443 端口，TLS
-+   - `my-pc.netbird.cloud`——走 Netbird，443 端口，TLS（自建的 Netbird 用 `100.x` 地址连接）
++   - `ssh://my-pc.netbird.cloud` 或 `my-pc.netbird.cloud:7297`——走 Netbird（自建的 Netbird 用 `100.x` 地址连接）。
++     Rex 只有通过 Tailscale Serve 才在 443 端口提供 TLS；在 Netbird 上 Rex 分不清来访者，所以那里 Rex
++     自己的端口是用 `--allow-anonymous` 启动的明文监听（见 Rex 远程访问文档的“Plain HTTP”）；走 SSH
++     则什么端口都不用开
     - `ssh://192.0.2.10` 或 `ssh://my-mac.tail1234.ts.net`——走那台机器的 SSH 服务，
       填账号和密码（或私钥）；第一次连接会让你确认主机密钥
  
@@ -211,7 +214,7 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..c0e849ec047525d471c68cb9354e76e2
  3. **打开标签页。** 在主页点一个标签页。会话旁边的加号新建标签页，主机的菜单里可以新建会话。
  4. **终端里：**
     - 点窗格开始输入。拖动查看回滚，双指缩放改字号，长按选中；长按链接可以打开它。
-@@ -124,10 +126,10 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再
+@@ -124,10 +129,10 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再
    `rex __internal dial-stdio`，把标准输入输出接到那台机器上 Rex 自己的 Unix socket。App 记住第一次
    看到的主机密钥，之后每次连接都比对；密钥变了就不再重试，等你确认新的。主机直连，地址在 tailnet 上时
    走内置的 tailnet 节点。
@@ -225,7 +228,7 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..c0e849ec047525d471c68cb9354e76e2
  
  ### 让 tailnet 更快
  
-@@ -145,7 +147,7 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再
+@@ -145,7 +150,7 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再
  
  APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 会构建一个用发布密钥签名的版本（见下文「发布」）。只构建
  arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这个 Go 模块构建，包含 `tailscale.com` 的 tsnet 库
@@ -234,7 +237,7 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..c0e849ec047525d471c68cb9354e76e2
  （可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），没有 Rex 时会跳过。窗格生命周期场景（在电脑或手机上关闭标签页和窗格、交还与接管、重连）每次构建都会对测试 JVM 里的 `ScriptedRex` 运行，有真实 Rex 在监听时也会对它运行，见 [docs/design/testing.md](docs/design/testing.md#rex-integration)。 SSH 测试需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台机器，并用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 给出凭据才会运行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可选。
  
  ### 发布
-@@ -171,6 +173,9 @@ arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这
+@@ -171,6 +176,9 @@ arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这
    官方的 libghostty-vt，许可证见 `app/src/main/assets/licenses/Ghostty-MIT.txt`。
  - [Tailscale](https://github.com/tailscale/tailscale)，Tailscale Inc. 及贡献者，BSD-3-Clause——App 内的
    Tailscale 节点就是它的 tsnet 库。
@@ -245,7 +248,7 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..c0e849ec047525d471c68cb9354e76e2
    [eddsa](https://github.com/str4d/ed25519-java)，Str4d 及贡献者，CC0——Android 自带的安全提供者
    没有给 JSch 的 Ed25519 实现。
 diff --git a/README.zh-TW.md b/README.zh-TW.md
-index 95039bdad3be6d047b4a642da931f9f7ce1f9b3d..cd11bc6e43b2f2e5e3fe33de7294f8159edaabeb 100644
+index 95039bdad3be6d047b4a642da931f9f7ce1f9b3d..f6e743c82646b102912ec86f441abceb96cf9b0f 100644
 --- a/README.zh-TW.md
 +++ b/README.zh-TW.md
 @@ -6,7 +6,7 @@
@@ -266,11 +269,14 @@ index 95039bdad3be6d047b4a642da931f9f7ce1f9b3d..cd11bc6e43b2f2e5e3fe33de7294f815
    名稱或 `100.x` 位址就能連到主機，也不必佔用手機唯一的 VPN 位置。
  - **透過 SSH 新增主機。** 填 `ssh://host`，再填帳號和密碼（或私鑰），就能透過機器本來就在跑的 SSH 服務
    連到 Rex，不必對外開放 Rex 連接埠。第一次連線會顯示並記住主機金鑰；金鑰變了會停下來，等你確認。
-@@ -77,12 +77,14 @@ rex server start --extra-listen :7297 --allow-anonymous
+@@ -77,12 +77,17 @@ rex server start --extra-listen :7297 --allow-anonymous
     - `192.0.2.10`——明文，7297 連接埠
     - `192.0.2.10:7300`——換個連接埠
     - `my-mac.tail1234.ts.net` 或 `100.x` 位址——透過 Tailscale，443 連接埠，TLS
-+   - `my-pc.netbird.cloud`——透過 Netbird，443 連接埠，TLS（自架的 Netbird 用 `100.x` 位址連線）
++   - `ssh://my-pc.netbird.cloud` 或 `my-pc.netbird.cloud:7297`——透過 Netbird（自架的 Netbird 用 `100.x` 位址連線）。
++     Rex 只有透過 Tailscale Serve 才在 443 連接埠提供 TLS；在 Netbird 上 Rex 分不出來訪者，所以那裡 Rex
++     自己的連接埠是用 `--allow-anonymous` 啟動的明文監聽（見 Rex 遠端存取文件的「Plain HTTP」）；走 SSH
++     則什麼連接埠都不用開
     - `ssh://192.0.2.10` 或 `ssh://my-mac.tail1234.ts.net`——透過那台機器的 SSH 服務，
       填帳號和密碼（或私鑰）；第一次連線會請你確認主機金鑰
  
@@ -283,7 +289,7 @@ index 95039bdad3be6d047b4a642da931f9f7ce1f9b3d..cd11bc6e43b2f2e5e3fe33de7294f815
  3. **開啟分頁。** 在主頁點一個分頁。工作階段旁邊的加號會新增分頁，主機的選單可以新增工作階段。
  4. **終端機裡：**
     - 點窗格開始輸入。拖曳可回捲，雙指縮放可改字級，長按可選取；長按連結可以開啟它。
-@@ -128,10 +130,10 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再
+@@ -128,10 +133,10 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再
    `rex __internal dial-stdio`，把標準輸入輸出接到那台機器上 Rex 自己的 Unix socket。App 記住第一次
    看到的主機金鑰，之後每次連線都比對；金鑰變了就不再重試，等你確認新的。主機直連，位址在 tailnet 上時
    走內建的 tailnet 節點。
@@ -297,7 +303,7 @@ index 95039bdad3be6d047b4a642da931f9f7ce1f9b3d..cd11bc6e43b2f2e5e3fe33de7294f815
  
  ### 讓 tailnet 更快
  
-@@ -149,7 +151,7 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再
+@@ -149,7 +154,7 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再
  
  APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 會建置一個以發布金鑰簽署的版本（見下文「發布」）。只建置
  arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/` 這個 Go 模組建置，包含 `tailscale.com` 的 tsnet 程式庫
@@ -306,7 +312,7 @@ index 95039bdad3be6d047b4a642da931f9f7ce1f9b3d..cd11bc6e43b2f2e5e3fe33de7294f815
  （可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），沒有 Rex 時會略過。窗格生命週期情境（在電腦或手機上關閉分頁和窗格、交還與接管、重新連線）每次建置都會對測試 JVM 裡的 `ScriptedRex` 執行，有真實 Rex 在監聽時也會對它執行，見 [docs/design/testing.md](docs/design/testing.md#rex-integration)。 SSH 測試需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台機器，並用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 提供憑證才會執行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可選。
  
  ### 發布
-@@ -175,6 +177,9 @@ arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/`
+@@ -175,6 +180,9 @@ arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/`
    官方的 libghostty-vt，授權見 `app/src/main/assets/licenses/Ghostty-MIT.txt`。
  - [Tailscale](https://github.com/tailscale/tailscale)，Tailscale Inc. 及貢獻者，BSD-3-Clause——App 內的
    Tailscale 節點就是它的 tsnet 程式庫。
