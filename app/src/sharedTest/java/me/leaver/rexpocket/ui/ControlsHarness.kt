@@ -33,6 +33,8 @@ import me.leaver.rexpocket.core.KeyModifiers
 internal fun freshApp(): Application {
     val app = ApplicationProvider.getApplicationContext<Application>()
     app.getSharedPreferences("rexpocket", Context.MODE_PRIVATE).edit().clear().commit()
+    // The home's seen marks and filter (HomeMarks), which a pane id from an earlier test would match.
+    app.getSharedPreferences("home_marks", Context.MODE_PRIVATE).edit().clear().commit()
     return app
 }
 

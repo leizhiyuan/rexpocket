@@ -162,5 +162,5 @@ Recorded in `RexShapeTest` (`rex-shapes/preview.22.txt`), run against real Rex i
 - Notifications with the app's process dead and not restarted (force stop, or a maker's killer that
   also blocks restarts): Rex has no push; Background alerts are the way, and the checklist says what
   to allow.
-- A per-session mute, and a seen state shared with the desktop (Rex shares none). A host's mute is
-  on its page.
+- A per-session mute. A host's mute is on its page. Rex shares no seen state; a done or failed
+  pane a desk app looked at is inferred seen and its notification goes (home.md, "Seen").

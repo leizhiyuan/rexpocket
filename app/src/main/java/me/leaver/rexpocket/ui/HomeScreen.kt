@@ -62,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -107,6 +108,12 @@ import me.leaver.rexpocket.core.UpdateChannel
 import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.HomeFolds
+import me.leaver.rexpocket.data.HomeMarks
+import me.leaver.rexpocket.core.seenStamp
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import me.leaver.rexpocket.data.SavedHost
 import me.leaver.rexpocket.data.TailnetSettings
 import me.leaver.rexpocket.update.UpdateState
@@ -143,6 +150,19 @@ internal fun HomeScreen(
     onHostOpen: (hostId: String, open: Boolean) -> Unit = { _, _ -> },
     onFoldSession: (hostId: String, sessionId: String, folded: Boolean) -> Unit = { _, _, _ -> },
     onFoldSessions: (hostId: String, sessionIds: List<String>, folded: Boolean) -> Unit = { _, _, _ -> },
+    /** Every fold at once: Collapse all and Expand all, and their Undo. */
+    onSetFolds: (HomeFolds) -> Unit = {},
+    /** Which list shows: every host's tree, Needs you or Running. */
+    filter: HomeFilter = HomeFilter.All,
+    onHomeFilter: (HomeFilter) -> Unit = {},
+    /** Which done and failed panes were seen, by host and pane ([HomeMarks.key]). */
+    seenMarks: Map<String, String> = emptyMap(),
+    /** Marks panes seen; gives back the marks they had, for the Undo. */
+    onMarkSeen: (hostId: String, blockIds: List<String>) -> Map<String, String?> = { _, _ -> emptyMap() },
+    onRestoreSeen: (Map<String, String?>) -> Unit = {},
+    /** A Needs you row's Reply and Interrupt, on the pane's host. */
+    onReply: (hostId: String, sessionId: String, blockId: String, text: String) -> Unit = { _, _, _, _ -> },
+    onInterrupt: (hostId: String, sessionId: String, blockId: String) -> Unit = { _, _, _ -> },
     onConnect: (SavedHost) -> Unit,
     onOpenSession: (SavedHost, String) -> Unit,
     onOpenTab: (SavedHost, String, String) -> Unit,
@@ -232,7 +252,17 @@ internal fun HomeScreen(
     var openCached by rememberSaveable { mutableStateOf(emptySet<String>()) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    var activeOnly by rememberSaveable { mutableStateOf(false) }
+    var homeMenu by rememberSaveable { mutableStateOf(false) }
+    var replyTo by remember { mutableStateOf<ReplyTarget?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    val snackScope = rememberCoroutineScope()
+    // One message at a time, the newest: an Undo belongs to what was just done.
+    fun snack(message: String, action: String? = null, onAction: () -> Unit = {}) {
+        snackScope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            if (snackbar.showSnackbar(message, action, duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) onAction()
+        }
+    }
     val ops = HomeOps(
         connect = onConnect,
         retry = onRetry,
@@ -268,23 +298,28 @@ internal fun HomeScreen(
             toast(context, context.getString(R.string.home_address_copied))
         },
         tailnetDetails = { tailnetDetails = true },
+        seen = { hostId, block, record -> seenMarks[HomeMarks.key(hostId, block)] == seenStamp(record) },
+        markSeen = { hostId, blocks ->
+            val before = onMarkSeen(hostId, blocks)
+            snack(context.getString(R.string.home_marked_seen), context.getString(R.string.action_undo)) { onRestoreSeen(before) }
+        },
     )
-    val focus = remember { FocusRequester() }
+    var picking by rememberSaveable { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val closeSearch: () -> Unit = {
         searchOpen = false
         query = ""
+        focusManager.clearFocus()
         keyboard?.hide()
     }
-
-    LaunchedEffect(searchOpen) {
-        if (searchOpen) {
-            focus.requestFocus()
-            keyboard?.show()
-        }
-    }
     // Back closes the search first, as the platform's search does.
-    BackHandler(enabled = searchOpen, onBack = closeSearch)
+    BackHandler(enabled = searchOpen || query.isNotEmpty(), onBack = closeSearch)
+    // + makes a session where it plainly goes: the one host connected. Otherwise it asks where.
+    val newSession: () -> Unit = {
+        val connectedNow = hosts.filter { it.id in lives }
+        if (connectedNow.size == 1) onNewSession(connectedNow.single()) else picking = true
+    }
 
     if (hosts.isEmpty()) {
         EmptyHome(
@@ -304,21 +339,13 @@ internal fun HomeScreen(
     } else {
         val q = query.trim().lowercase()
         val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        // The eye shows every connected host's activity, as Rex's Activity does for its own. A host
-        // the phone is not connected to has none to show: only a live connection hears its programs.
-        val liveHosts = hosts.mapNotNull { host -> lives[host.id]?.takeIf { it.state.phase == Phase.Live } }
-        val activity = if (activeOnly) {
-            liveHosts.map { it to activityShown(it.state, query) }.filter { it.second.isNotEmpty() }
-        } else {
-            emptyList()
-        }
         val tree = TreeEnv(
             hosts = hosts,
             lives = lives,
             folds = folds,
             openCached = openCached,
             query = q,
-            searching = searchOpen,
+            searching = q.isNotEmpty(),
             opening = opening,
             detailHostId = connected?.id?.takeIf { detail },
             cachedSessions = cachedSessions,
@@ -332,9 +359,37 @@ internal fun HomeScreen(
             onTailnet = onTailnet,
         )
         val treeRows = tree.rows()
+        // The filters cover every connected host; a host the phone is not connected to has nothing
+        // to list, since only a live connection hears its programs.
+        val connectedHosts = hosts.filter { it.id in lives }
+        fun seenOn(hostId: String): Seen = { block, record -> ops.seen(hostId, block, record) }
+        val needsYou = connectedHosts.sumOf { h -> filterSections(lives.getValue(h.id).state, HomeFilter.NeedsYou, seenOn(h.id)).sumOf { it.items.size } }
+        val running = connectedHosts.sumOf { h -> filterSections(lives.getValue(h.id).state, HomeFilter.Running, seenOn(h.id)).sumOf { it.items.size } }
+        val filtered = if (filter == HomeFilter.All) {
+            emptyMap()
+        } else {
+            connectedHosts.associate { h ->
+                val st = lives.getValue(h.id).state
+                h.id to searched(filterSections(st, filter, seenOn(h.id)), st, query)
+            }
+        }
         Column(Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().imePadding()) {
-            if (searchOpen) {
-                SearchBar(query = query, focus = focus, onQuery = { query = it }, onClose = closeSearch)
+            // The tailnet's card while it is on its way or needs the person; a chip once it is on.
+            val tailnetHosts = hosts.count { it.viaTailscale }
+            val tailnetShown = tailnet.enabled || tailnetHosts > 0
+            val tailnetQuiet = tailnetShown && tailnetStage is TailnetStage.Connected
+            Row(Modifier.fillMaxWidth().padding(start = PAGE, end = PAGE - 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                FilterChips(filter, needsYou, running, onHomeFilter, Modifier.weight(1f))
+                if (tailnetQuiet) {
+                    val network = tailnetName(tailnet.backend)
+                    TailnetChip(
+                        network = network,
+                        said = network + " · " + tailnetStageText(tailnetStage, tailnet.backend),
+                        healthy = tailnetStatus.health.isEmpty(),
+                        onClick = { tailnetDetails = true },
+                    )
+                }
+                RoundButton(R.drawable.ic_more, stringResource(R.string.home_menu), { homeMenu = true }, tint = Colors.muted, size = 48.dp)
             }
             Box(Modifier.weight(1f)) {
                 LazyColumn(
@@ -342,14 +397,12 @@ internal fun HomeScreen(
                     contentPadding = PaddingValues(
                         start = PAGE,
                         end = PAGE,
-                        top = if (searchOpen) 0.dp else 8.dp,
-                        // Clear of the floating controls, so the last tab can be scrolled above them.
-                        bottom = if (searchOpen) 16.dp else navBottom + 104.dp,
+                        top = 8.dp,
+                        bottom = 16.dp,
                     ),
                 ) {
-                    // The tailnet's line leads the list it carries, quiet once the phone is on it.
-                    val tailnetHosts = hosts.count { it.viaTailscale }
-                    if (!activeOnly && !searchOpen && (tailnet.enabled || tailnetHosts > 0)) {
+                    // The tailnet's card leads the list it carries while it needs a look.
+                    if (filter == HomeFilter.All && q.isEmpty() && tailnetShown && !tailnetQuiet) {
                         item(key = "tailnet") {
                             TailnetStatusCard(
                                 backend = tailnet.backend,
@@ -364,18 +417,49 @@ internal fun HomeScreen(
                             )
                         }
                     }
-                    if (activeOnly) {
-                        if (activity.isEmpty()) {
-                            item(key = "activity-empty") { ActivityEmpty(live = liveHosts.isNotEmpty(), searching = query.isNotBlank()) }
-                        } else {
-                            // With one host the groups are the host's; with more, each host's under its name.
-                            activity.forEach { (live, sections) ->
-                                if (liveHosts.size > 1) {
-                                    item(key = "activity-host-${live.target.id}") { ActivityHostCaption(live.target.label) }
-                                }
-                                activityItems(sections, live.state, keyPrefix = live.target.id) { item ->
-                                    onOpenPane(live.target, item.sessionId, item.window.id, item.block.id)
-                                }
+                    if (filter != HomeFilter.All) {
+                        var shown = 0
+                        for (host in connectedHosts) {
+                            val sections = filtered[host.id].orEmpty()
+                            if (sections.isEmpty()) continue
+                            val ref = HostRef(host, lives[host.id])
+                            val first = shown++ == 0
+                            item(key = "filter-host-${host.id}") {
+                                if (!first) Spacer(Modifier.height(12.dp))
+                                HostItem(tree, ref, treeRows[host.id].orEmpty(), expanded = true, foldable = false)
+                            }
+                            attentionItems(
+                                sections,
+                                ref.state,
+                                keyPrefix = host.id,
+                                ops = AttentionOps(
+                                    open = { item -> onOpenPane(host, item.sessionId, item.window.id, item.block.id) },
+                                    manage = { item -> sheets.sheet = ManageTarget.Tab(host.id, item.sessionId, item.window.id) },
+                                    actionsOf = { item -> tabActions(HostRef(host, lives[host.id]), item.sessionId, item.window.id, ops, sheets).talkBack() },
+                                    reply = if (filter == HomeFilter.NeedsYou) {
+                                        { item -> replyTo = ReplyTarget(host.id, item.sessionId, item.block.id, paneTitle(item.block, item.record, ref.state.programs[item.block.id])) }
+                                    } else {
+                                        null
+                                    },
+                                    interrupt = if (filter == HomeFilter.NeedsYou) {
+                                        { item -> onInterrupt(host.id, item.sessionId, item.block.id) }
+                                    } else {
+                                        null
+                                    },
+                                ),
+                            )
+                        }
+                        if (shown == 0) {
+                            item(key = "filter-empty") { ActivityEmpty(filter, live = connectedHosts.isNotEmpty(), searching = q.isNotEmpty()) }
+                        }
+                        // What the filter cannot see: the hosts that are not connected, each with its way in.
+                        for (host in hosts.filter { it.id !in lives }) {
+                            item(key = "filter-off-${host.id}") {
+                                NoteRow(
+                                    stringResource(R.string.home_not_connected_line, host.label),
+                                    stringResource(R.string.action_connect) to { onConnect(host) },
+                                    card = false,
+                                )
                             }
                         }
                     } else {
@@ -383,7 +467,7 @@ internal fun HomeScreen(
                     }
                     // The list is the only place a host is added from, so the way to add one is at
                     // the end of it - above it, there is nothing until a host exists.
-                    if (!searchOpen && !activeOnly && hosts.isNotEmpty()) {
+                    if (q.isEmpty() && filter == HomeFilter.All && hosts.isNotEmpty()) {
                         item(key = "add-host") {
                             Spacer(Modifier.height(12.dp))
                             AddHostRow(onClick = { creating = true })
@@ -391,16 +475,58 @@ internal fun HomeScreen(
                         }
                     }
                 }
-                if (!searchOpen) {
-                    FloatingControls(
-                        activeOnly = activeOnly,
-                        onSettings = { settings = true },
-                        onEye = { activeOnly = !activeOnly },
-                        onSearch = { searchOpen = true },
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    )
-                }
+                SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
             }
+            HomeBottomBar(
+                query = query,
+                onQuery = { query = it },
+                onFocus = { focused -> searchOpen = focused || query.isNotEmpty() },
+                onSettings = { settings = true },
+                onNew = newSession,
+            )
+        }
+    }
+
+    if (picking) {
+        RowActionsSheet(stringResource(R.string.session_new), newSessionPicker(hosts, lives) { onNewSession(it) }) { picking = false }
+    }
+
+    if (homeMenu) {
+        RowActionsSheet(
+            null,
+            listOf(
+                ActionGroup(
+                    listOf(
+                        RowAction(stringResource(R.string.home_expand_all), R.drawable.ic_expand) {
+                            val before = folds
+                            onSetFolds(hosts.fold(folds) { f, h -> f.withHost(h.id, true) }.copy(sessions = emptySet()))
+                            snack(context.getString(R.string.home_expanded_all), context.getString(R.string.action_undo)) { onSetFolds(before) }
+                        },
+                        RowAction(stringResource(R.string.home_collapse_all), R.drawable.ic_expand) {
+                            val before = folds
+                            onSetFolds(hosts.fold(folds) { f, h -> f.withHost(h.id, false) })
+                            snack(context.getString(R.string.home_collapsed_all), context.getString(R.string.action_undo)) { onSetFolds(before) }
+                        },
+                    ),
+                ),
+                ActionGroup(
+                    listOf(
+                        RowAction(stringResource(R.string.action_add_host), R.drawable.ic_add) { creating = true },
+                        RowAction(stringResource(R.string.import_hosts_title), R.drawable.ic_host) { onImportHosts() },
+                        RowAction(stringResource(R.string.tailnet_title), R.drawable.ic_tailnet) { onTailnet() },
+                    ),
+                ),
+            ),
+        ) { homeMenu = false }
+    }
+
+    replyTo?.let { target ->
+        ReplyDialog(
+            title = stringResource(R.string.home_reply_title, target.title),
+            onDismiss = { replyTo = null },
+        ) { text ->
+            replyTo = null
+            onReply(target.hostId, target.sessionId, target.blockId, text)
         }
     }
 

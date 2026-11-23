@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -226,7 +227,8 @@ class HomeStateTest {
     fun theSearchIsStillThereAfterATabWasOpened() {
         val m = start()
         val query = label(m, other)
-        compose.onNodeWithContentDescription(string(R.string.action_search)).performClick()
+        // The search is in the bar at the bottom, always there.
+        compose.onNodeWithTag(HOME_SEARCH_TAG).performClick()
         compose.waitForIdle()
         compose.onNode(hasSetTextAction()).performTextInput(query)
         compose.waitForIdle()

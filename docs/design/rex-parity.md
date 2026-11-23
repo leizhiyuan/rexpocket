@@ -334,8 +334,9 @@ active tab or focused pane to a done pane after it became done, or a desk client
 reason `take` to a client other than the phone is the stronger signal, the active tab the weaker
 (a CLI or script can move it too). A desk already showing the tab when it became done sends nothing
 new, but then the active tab and the pane's desk owner say so at that moment. Neither says the person
-was looking: a Mac asleep on that tab counts. Not built; a ledger rule would be "done, then the pane
-is the active one and owned by a desk client" marks it seen.
+was looking: a Mac asleep on that tab counts. Built as the home's seen marks (home.md, "Seen"): a
+take after the pane finished, or the pane active while a desk client (`client.inspect` kind `app`, a
+platform other than `other`) owns it, marks it seen on the phone.
 
 ### Other differences found, and fixed
 

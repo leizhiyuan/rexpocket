@@ -115,7 +115,8 @@ person wants them, not as long as the screen. Code: `WatchService` (the anchor),
 - A host saved twice (LAN and tailnet address of the same Rex) is two connections to one Rex, and
   its alerts come twice, once per host.
 - Seen state is not shared with the desktop: Rex has none, and does not say what other clients show
-  (rex-parity.md, "What other clients show").
+  (rex-parity.md, "What other clients show"); the home infers it from who takes and shows a pane
+  (home.md, "Seen").
 
 ## Tests
 

@@ -58,6 +58,8 @@ import me.leaver.rexpocket.data.TerminalFontState
 import me.leaver.rexpocket.data.downloadedTypeface
 import me.leaver.rexpocket.data.SavedHost
 import me.leaver.rexpocket.data.HomeFolds
+import me.leaver.rexpocket.data.HomeMarks
+import me.leaver.rexpocket.core.seenStamp
 import me.leaver.rexpocket.data.TailnetSettings
 import me.leaver.rexpocket.core.ReportedFact
 import me.leaver.rexpocket.diagnostics.Diagnostics
@@ -285,6 +287,46 @@ class RexViewModel @JvmOverloads constructor(
         if (next == folds.value) return
         store.setFolds(next)
         folds.value = next
+    }
+
+    /** Which done and failed panes were seen, by host and pane: on this phone, from the home, or at a desk. */
+    val seenMarks: StateFlow<Map<String, String>> = connections.marks.seen
+
+    /**
+     * Marks [blockIds] of [hostId] seen, for the reports they have now; returns the marks they had
+     * before, for an Undo.
+     */
+    fun markSeen(hostId: String, blockIds: Collection<String>): Map<String, String?> {
+        val st = connections[hostId]?.pocket?.value ?: return emptyMap()
+        val marks = blockIds.mapNotNull { block -> st.blockStatus[block]?.let { HomeMarks.key(hostId, block) to seenStamp(it) } }.toMap()
+        val before = marks.keys.associateWith { seenMarks.value[it] }
+        connections.marks.mark(marks)
+        // Seen is seen: a notification about it has done its job.
+        for (block in blockIds) Alerts.settle(getApplication(), hostId, block)
+        return before
+    }
+
+    /** Puts the seen marks back as [previous] had them: Mark as seen's Undo. */
+    fun restoreSeen(previous: Map<String, String?>) = connections.marks.restore(previous)
+
+    /** The home's filter: All, Needs you or Running, kept for the next start. */
+    val homeFilter = MutableStateFlow(HomeFilter.of(connections.marks.filter()))
+
+    fun setHomeFilter(filter: HomeFilter) {
+        connections.marks.setFilter(filter.name)
+        homeFilter.value = filter
+    }
+
+    /** A Needs you row's Reply: [text] and Enter to the pane, on its host's connection. */
+    fun reply(hostId: String, sessionId: String, blockId: String, text: String) {
+        userActed()
+        viewModelScope.launch { connections.fleet.reply(hostId, sessionId, blockId, text) }
+    }
+
+    /** A Needs you row's Interrupt: Ctrl+C to the pane, on its host's connection. */
+    fun interrupt(hostId: String, sessionId: String, blockId: String) {
+        userActed()
+        viewModelScope.launch { connections.fleet.interrupt(hostId, sessionId, blockId) }
     }
 
     /** Drops the folds of [hostId]'s sessions that are not in [alive], so gone sessions do not pile up. */
@@ -564,6 +606,7 @@ class RexViewModel @JvmOverloads constructor(
         store.delete(id)
         hosts.value = store.list()
         setFolds(folds.value.withoutHost(id))
+        connections.marks.forget(id)
     }
 
     /**

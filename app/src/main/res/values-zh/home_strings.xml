@@ -22,4 +22,22 @@
     <string name="home_cached_note">上次连接时的会话</string>
     <string name="home_tabs_load">打开后加载标签页</string>
     <string name="home_connect_to_see">连接 %1$s 以查看标签页</string>
+    <string name="filter_all">全部</string>
+    <string name="filter_needs_you">需要你 %1$d</string>
+    <string name="filter_running">运行中 %1$d</string>
+    <string name="filter_needs_you_none">没有需要你处理的</string>
+    <string name="filter_running_none">没有正在运行的</string>
+    <string name="home_not_connected_line">%1$s 未连接</string>
+    <string name="home_mark_seen">标记为已看</string>
+    <string name="home_mark_all_seen">全部标记为已看</string>
+    <string name="home_marked_seen">已标记为已看</string>
+    <string name="home_menu">主页操作</string>
+    <string name="home_expand_all">全部展开</string>
+    <string name="home_collapse_all">全部收起</string>
+    <string name="home_collapsed_all">已全部收起</string>
+    <string name="home_expanded_all">已全部展开</string>
+    <string name="action_undo">撤销</string>
+    <string name="home_reply_title">回复 %1$s</string>
+    <string name="home_reply_send">发送</string>
+    <string name="home_connect_and_create">连接并创建</string>
 </resources>

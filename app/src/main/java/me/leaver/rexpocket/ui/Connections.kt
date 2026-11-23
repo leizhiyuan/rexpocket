@@ -33,7 +33,10 @@ import me.leaver.rexpocket.alerts.Alert
 import me.leaver.rexpocket.alerts.AlertAction
 import me.leaver.rexpocket.alerts.AlertTarget
 import me.leaver.rexpocket.alerts.Alerts
+import me.leaver.rexpocket.core.ActivityGroup
 import me.leaver.rexpocket.core.AlertKind
+import me.leaver.rexpocket.core.seenStamp
+import me.leaver.rexpocket.data.HomeMarks
 import me.leaver.rexpocket.core.AlertPrefs
 import me.leaver.rexpocket.core.HostBackground
 import me.leaver.rexpocket.core.AlertMove
@@ -86,6 +89,9 @@ data class HostLive(
 
 class Connections private constructor(private val app: Application, val nodes: TailnetNodes) {
     private val store = HostStore(app)
+
+    /** Which done and failed panes were seen: on this phone, or at a desk (docs/design/home.md, "Seen"). */
+    val marks = HomeMarks(app)
 
     /** Everything here runs on the main thread, as the view model's coroutines do. */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -210,6 +216,20 @@ class Connections private constructor(private val app: Application, val nodes: T
                 .collect { pane -> if (pane != null) seen(pane.hostId, pane.blockId) }
         }
         scope.launch { fleet.signals.collect { onSignal(it) } }
+        // What a desk looked at is seen here too: marked, and its notification goes. A live host's
+        // marks of panes that have no report any more are dropped.
+        scope.launch {
+            lives.collect { all ->
+                for ((hostId, live) in all) {
+                    val st = live.state
+                    for ((block, stamp) in st.deskSeen) {
+                        val record = st.blockStatus[block] ?: continue
+                        if (seenStamp(record) == stamp && marks.seen.value[HomeMarks.key(hostId, block)] != stamp) seen(hostId, block)
+                    }
+                    if (st.phase == Phase.Live) marks.prune(hostId, st.blockStatus.keys)
+                }
+            }
+        }
     }
 
     fun setForeground(visible: Boolean) {
@@ -569,6 +589,8 @@ class Connections private constructor(private val app: Application, val nodes: T
     private fun seen(hostId: String, block: String) {
         fleet.member(hostId)?.planner?.seen(block)
         Alerts.settle(app, hostId, block)
+        val record = this[hostId]?.pocket?.value?.blockStatus?.get(block) ?: return
+        if (ActivityGroup.of(record.state)?.needsSeeing == true) marks.mark(mapOf(HomeMarks.key(hostId, block) to seenStamp(record)))
     }
 
     /** A pane's bell or desktop notification: a buzz on screen, a notification while away. */

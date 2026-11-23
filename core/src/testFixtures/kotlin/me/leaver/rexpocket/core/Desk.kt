@@ -9,8 +9,12 @@ import java.util.concurrent.CopyOnWriteArrayList
  * Another client of the same Rex: the desk, or a second device. It changes sessions only through
  * Rex's protocol, so a scenario that uses it means the same against [ScriptedRex] and a real Rex.
  */
-class Desk(private val endpoint: Endpoint) : AutoCloseable {
-    private val client = RexClient()
+class Desk(
+    private val endpoint: Endpoint,
+    /** What its hello says it runs on: `other` by default, `macos` for one that stands for Rex.app on a Mac. */
+    platform: String = "other",
+) : AutoCloseable {
+    private val client = RexClient(platform = platform)
     private val made = CopyOnWriteArrayList<String>()
 
     val id: String get() = client.welcome!!.clientId
@@ -71,6 +75,12 @@ class Desk(private val endpoint: Endpoint) : AutoCloseable {
     suspend fun closePane(sid: String, block: String) {
         attach(sid)
         client.call("block.close", JSONObject().put("session_id", sid).put("block_id", block))
+    }
+
+    /** The desk shows [window]: Rex's active tab moves there, as Rex.app's does when its window shows that tab. */
+    suspend fun focus(sid: String, window: String) {
+        attach(sid)
+        client.call("session.focus_window", JSONObject().put("session_id", sid).put("window_id", window))
     }
 
     /** The desk takes the pane, as Rex does when its window there is focused. */

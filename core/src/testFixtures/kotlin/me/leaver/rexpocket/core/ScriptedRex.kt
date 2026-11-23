@@ -91,6 +91,9 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
         val lost: MutableMap<String, String?> = ConcurrentHashMap()
 
         val seq = AtomicLong()
+
+        /** What it said about itself in its hello (`client`: kind, platform, name, version). */
+        @Volatile var info: JSONObject? = null
     }
 
     private class Stream(val client: String, val block: String, val token: ByteString, val nonce: Long) {
@@ -651,6 +654,26 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
                 changed(s)
                 JSONObject().put("anchor_id", anchor.ifEmpty { tab.focused ?: tab.blocks.first() }).put("block_ids", JSONArray().put(block)).put("revision", s.revision)
             }
+            // As Rex: what a client said about itself, never what it shows.
+            "client.inspect" -> {
+                val id = payload.optString("client_id")
+                val known = (clients.values + tokens.values).firstOrNull { it.id == id } ?: throw Refused("not_found", 404, "client $id not found")
+                val record = JSONObject().put("client_id", known.id).put("connected_at", "2026-01-01T00:00:00Z")
+                known.info?.let { record.put("info", JSONObject(it.toString())) }
+                JSONObject().put("client", record)
+            }
+            // A desk showing another tab: Rex's one active tab moves there, for every client.
+            "session.focus_window" -> {
+                val s = reached(client, payload)
+                val window = payload.optString("window_id")
+                if (s.tabs.none { it.id == window }) throw Refused("not_found", 404, "window $window not found")
+                if (s.activeTab != window) {
+                    s.activeTab = window
+                    sessionEvent(s.id, "active_window_changed", JSONObject().put("window_id", window))
+                    changed(s)
+                }
+                JSONObject().put("revision", s.revision)
+            }
             "session.close_window" -> {
                 val s = reached(client, payload)
                 val window = payload.optString("window_id")
@@ -908,6 +931,7 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
                     val resumed = previous != null
                     val client = previous ?: Client(next("client"))
                     client.socket = webSocket
+                    client.info = message.optJSONObject("client")
                     client.seq.set(0)
                     val token = Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(16).also { java.util.Random().nextBytes(it) })
                     tokens[token] = client

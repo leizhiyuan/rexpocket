@@ -154,10 +154,10 @@ class RealRexAppTest {
         Thread.sleep(1_500)
         assertEquals("Rex made a record of a program that failed without a report", 0, runBlocking { desk.programStatus(sid, quiet.second) }.length())
 
-        compose.onNodeWithContentDescription(string(R.string.action_show_active)).performClick()
+        compose.onNodeWithTag(filterChipTag(HomeFilter.NeedsYou)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithTag(activityGroupTag(ActivityGroup.Failed), useUnmergedTree = true).assertIsDisplayed()
-        compose.onNodeWithTag(activityGroupTag(ActivityGroup.Done), useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.state_failed)).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.state_done)).assertIsDisplayed()
         compose.onNodeWithText("failed: 3 tests").assertIsDisplayed()
         compose.onNodeWithText("all good").assertIsDisplayed()
         compose.onNodeWithTag(activityRowTag(tabs[0].first)).assertIsDisplayed()

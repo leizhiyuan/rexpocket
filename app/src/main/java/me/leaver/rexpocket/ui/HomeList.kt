@@ -33,6 +33,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.pluralStringResource
@@ -58,6 +61,7 @@ import me.leaver.rexpocket.core.ConnectProgress
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketState
+import me.leaver.rexpocket.core.ProgramRecord
 import me.leaver.rexpocket.core.SessionView
 import me.leaver.rexpocket.core.TabAttention
 import me.leaver.rexpocket.core.TailnetPath
@@ -102,23 +106,26 @@ internal data class HomeSession(
 internal fun manageable(live: Boolean, state: PocketState, row: HomeSession): Boolean =
     live && state.phase == Phase.Live && row.view != null
 
-/** The most pressing state among [tabs], as the session's chip says it. */
-internal fun sessionChip(tabs: List<WindowInfo>, state: PocketState): ActivityGroup? =
-    tabs.mapNotNull { tabAttention(it, state)?.group }.minByOrNull { it.ordinal }
+/** A pane's report was seen; a done or failed one that was is no news. */
+internal typealias Seen = (blockId: String, record: ProgramRecord) -> Boolean
 
-/** How many tabs of a live host are in each state, for its summary line. */
-internal fun hostCounts(state: PocketState): Map<ActivityGroup, Int> =
-    state.views.values.flatMap { it.windows }.mapNotNull { tabAttention(it, state)?.group }.groupingBy { it }.eachCount()
+/** The most pressing state among [tabs] that is news, as the session's chip says it. */
+internal fun sessionChip(tabs: List<WindowInfo>, state: PocketState, seen: Seen = { _, _ -> false }): ActivityGroup? =
+    tabs.mapNotNull { tabAttention(it, state, seen)?.group }.minByOrNull { it.ordinal }
+
+/** How many tabs of a live host are in each state that is news, for its summary line. */
+internal fun hostCounts(state: PocketState, seen: Seen = { _, _ -> false }): Map<ActivityGroup, Int> =
+    state.views.values.flatMap { it.windows }.mapNotNull { tabAttention(it, state, seen)?.group }.groupingBy { it }.eachCount()
 
 /**
  * The summary line of a connected host, its most pressing news first: "2 waiting · 1 failed ·
  * 4 sessions". While it is not live yet it says where its connection is instead.
  */
 @Composable
-internal fun hostSummary(state: PocketState, sessions: Int): String {
+internal fun hostSummary(state: PocketState, sessions: Int, seen: Seen = { _, _ -> false }): String {
     val parts = ArrayList<String>()
     if (state.phase == Phase.Live) {
-        val counts = hostCounts(state)
+        val counts = hostCounts(state, seen)
         for (group in ActivityGroup.entries) {
             val n = counts[group] ?: continue
             parts += stringResource(
@@ -416,6 +423,7 @@ internal fun TabCard(
     actionsOf: @Composable (windowId: String) -> List<CustomAccessibilityAction>,
     /** Adds a tab; null where the session cannot take one now. */
     onNewTab: (() -> Unit)?,
+    seen: Seen = { _, _ -> false },
 ) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Colors.surface)) {
         row.tabs.forEachIndexed { index, window ->
@@ -423,9 +431,11 @@ internal fun TabCard(
                 Box(Modifier.padding(start = KEY_TEXT).fillMaxWidth().height(1.dp).background(Colors.line))
             }
             val attention = tabAttention(window, state)
+            val old = attention != null && attention.group.needsSeeing && seen(attention.block.id, attention.record)
             // A pane other than the one the tab shows is named, so the tap that opens it is there.
-            val hidden = attention?.takeIf { it.group != ActivityGroup.Running && it.block.id != window.focusedBlock()?.id }
+            val hidden = attention?.takeIf { !old && it.group != ActivityGroup.Running && it.block.id != window.focusedBlock()?.id }
             TabRow(
+                seen = old,
                 title = row.view?.let { tabTitle(it, window, state) } ?: window.label,
                 program = tabProgram(window, state),
                 panes = window.blocks.size,
@@ -460,12 +470,14 @@ internal fun TabCard(
  * on says only how many panes it has.
  */
 @Composable
-internal fun tabDetail(panes: Int, attention: TabAttention?): AnnotatedString {
+internal fun tabDetail(panes: Int, attention: TabAttention?, seen: Boolean = false): AnnotatedString {
     val count = pluralStringResource(R.plurals.pane_count, panes, panes)
     val word = attention?.let { statusWord(it.record) }
     return buildAnnotatedString {
         if (word != null) {
-            withStyle(SpanStyle(color = activityTint(attention.group), fontWeight = FontWeight.Medium)) { append(word) }
+            // A done or failed report that was seen keeps its word, quietly.
+            val color = if (seen) Colors.muted else activityTint(attention.group)
+            withStyle(SpanStyle(color = color, fontWeight = if (seen) FontWeight.Normal else FontWeight.Medium)) { append(word) }
             append(" · ")
         }
         append(count)
@@ -485,6 +497,8 @@ internal fun firstLine(text: String?): String? = text?.lineSequence()?.firstOrNu
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 internal fun TabRow(
+    /** True for a done or failed tab whose report was seen: no dot, its word quiet. */
+    seen: Boolean = false,
     title: String,
     program: String?,
     panes: Int,
@@ -501,7 +515,7 @@ internal fun TabRow(
 ) {
     val selected = stringResource(R.string.state_selected)
     val manageLabel = stringResource(R.string.manage_actions_for, title)
-    val message = attention?.takeIf { it.group == ActivityGroup.Waiting || it.group == ActivityGroup.Failed }?.record?.msg?.let(::firstLine)
+    val message = attention?.takeIf { !seen && (it.group == ActivityGroup.Waiting || it.group == ActivityGroup.Failed) }?.record?.msg?.let(::firstLine)
     Column(Modifier.fillMaxWidth().background(if (open) Colors.keyOn else Color.Transparent)) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 64.dp)
@@ -522,7 +536,7 @@ internal fun TabRow(
         ) {
             Box {
                 ProgramTile(program, size = TILE)
-                if (attention != null) {
+                if (attention != null && !seen) {
                     Dot(activityTint(attention.group), 8.dp, Modifier.align(Alignment.TopEnd).offset(4.dp, (-4).dp), ring = Colors.surface)
                 }
             }
@@ -536,7 +550,7 @@ internal fun TabRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(tabDetail(panes, attention), color = Colors.muted, fontSize = TextStyles.label)
+                Text(tabDetail(panes, attention, seen), color = Colors.muted, fontSize = TextStyles.label)
                 if (message != null) {
                     Text(
                         message,
@@ -606,82 +620,87 @@ internal fun NotFound() {
     )
 }
 
+/** Test tag of the home's search field, in its bar at the bottom. */
+internal const val HOME_SEARCH_TAG = "home-search"
+
 /**
- * The controls of the reference, floating over the list: a pill with settings and the activity
- * filter at the bottom left, search on its own at the bottom right. Both are 56 dp, the height of
- * the platform's floating action button, and stand on the page margin.
+ * The bar along the bottom, in reach of a thumb and just above the keyboard while it is up:
+ * settings, the search field, and + for a new session.
  */
 @Composable
-internal fun FloatingControls(
-    activeOnly: Boolean,
+internal fun HomeBottomBar(
+    query: String,
+    onQuery: (String) -> Unit,
+    onFocus: (Boolean) -> Unit,
     onSettings: () -> Unit,
-    onEye: () -> Unit,
-    onSearch: () -> Unit,
+    onNew: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val on = stringResource(R.string.filter_on)
-    val off = stringResource(R.string.filter_off)
-    Box(modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = PAGE, vertical = 16.dp)) {
+    Row(
+        modifier.fillMaxWidth().background(Colors.bg).navigationBarsPadding().padding(horizontal = PAGE - 4.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RoundButton(R.drawable.ic_settings, stringResource(R.string.settings), onSettings, size = 48.dp, iconSize = 24.dp)
         Row(
-            Modifier.align(Alignment.BottomStart).floating(RoundedCornerShape(50)).padding(4.dp),
+            Modifier.weight(1f).padding(horizontal = 4.dp).heightIn(min = 48.dp).clip(RoundedCornerShape(50)).background(Colors.surface)
+                .padding(start = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            RoundButton(R.drawable.ic_settings, stringResource(R.string.settings), onSettings, size = 48.dp, iconSize = 24.dp)
-            Box {
-                RoundButton(
-                    if (activeOnly) R.drawable.ic_eye_filled else R.drawable.ic_eye,
-                    stringResource(R.string.action_show_active),
-                    onEye,
-                    modifier = Modifier.semantics { stateDescription = if (activeOnly) on else off },
-                    tint = if (activeOnly) Colors.accent else Colors.ink,
-                    plate = if (activeOnly) Colors.keyOn else null,
-                    size = 48.dp,
-                    iconSize = 24.dp,
+            Glyph(R.drawable.ic_search, Colors.muted, size = 20.dp)
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.weight(1f).padding(vertical = 12.dp), contentAlignment = Alignment.CenterStart) {
+                if (query.isEmpty()) {
+                    // One word, so it fits beside the buttons at any text size.
+                    Text(stringResource(R.string.action_search), color = Colors.muted, fontSize = TextStyles.body, maxLines = 1)
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQuery,
+                    singleLine = true,
+                    textStyle = TextStyle(color = Colors.ink, fontSize = TextStyles.body),
+                    cursorBrush = SolidColor(Colors.accent),
+                    modifier = Modifier.fillMaxWidth().testTag(HOME_SEARCH_TAG).onFocusChanged { onFocus(it.isFocused) },
                 )
             }
+            if (query.isNotEmpty()) {
+                RoundButton(R.drawable.ic_close, stringResource(R.string.action_clear), { onQuery("") }, tint = Colors.muted, size = 40.dp)
+            }
         }
-        RoundButton(
-            R.drawable.ic_search,
-            stringResource(R.string.action_search),
-            onSearch,
-            modifier = Modifier.align(Alignment.BottomEnd).floating(),
-            size = 56.dp,
-            iconSize = 24.dp,
-        )
+        RoundButton(R.drawable.ic_add, stringResource(R.string.session_new), onNew, tint = Colors.accent, plate = Colors.keyOn, size = 48.dp, iconSize = 24.dp)
     }
 }
 
-/** The platform's search bar: a 56 dp pill, back on the left, clear on the right. */
+/**
+ * The tailnet, quiet: a chip beside the filters while the phone is on it, which opens its details.
+ * Anything on its way or that needs the person - starting, signing in, a failure, not joined - is
+ * the full card in the list instead.
+ */
 @Composable
-internal fun SearchBar(
-    query: String,
-    focus: FocusRequester,
-    onQuery: (String) -> Unit,
-    onClose: () -> Unit,
-) {
+internal fun TailnetChip(network: String, said: String, healthy: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = PAGE, vertical = 8.dp).height(56.dp)
-            .clip(RoundedCornerShape(50)).background(Colors.surface).padding(horizontal = 4.dp),
+        Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(50)).clickable(role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) { contentDescription = said }
+            .testTag(TAILNET_CARD_TAG).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RoundButton(R.drawable.ic_back, stringResource(R.string.action_back), onClose, size = 48.dp)
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (query.isEmpty()) {
-                Text(stringResource(R.string.search_hint), color = Colors.muted, fontSize = TextStyles.body, maxLines = 1)
-            }
-            BasicTextField(
-                value = query,
-                onValueChange = onQuery,
-                singleLine = true,
-                textStyle = TextStyle(color = Colors.ink, fontSize = TextStyles.body),
-                cursorBrush = SolidColor(Colors.accent),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus),
-            )
-        }
-        if (query.isNotEmpty()) {
-            RoundButton(R.drawable.ic_close, stringResource(R.string.action_clear), { onQuery("") }, tint = Colors.muted, size = 48.dp)
+        Row(
+            Modifier.clip(RoundedCornerShape(50)).background(Colors.surface).padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Dot(if (healthy) Colors.ok else Colors.amber, 8.dp)
+            Spacer(Modifier.width(6.dp))
+            Text(network, color = Colors.ink, fontSize = TextStyles.label, fontWeight = FontWeight.Medium, maxLines = 1)
         }
     }
+}
+
+/** The hosts a new session can go on, for the picker + opens when it is not plain which one. */
+@Composable
+internal fun newSessionPicker(hosts: List<SavedHost>, lives: Map<String, HostLive>, onPick: (SavedHost) -> Unit): List<ActionGroup> {
+    val connectFirst = stringResource(R.string.home_connect_and_create)
+    return listOf(
+        ActionGroup(hosts.map { host -> RowAction(host.label, R.drawable.ic_host, detail = connectFirst.takeIf { host.id !in lives }) { onPick(host) } }),
+    )
 }
 
 /** What the host tree needs to draw itself: the hosts, their connections, the folds, the search. */
@@ -733,7 +752,7 @@ private fun TreeEnv.rowsOf(ref: HostRef): List<HomeSession>? {
         val labelMatch = hostMatch || session.label.lowercase().contains(query)
         val shownTabs = if (labelMatch || view == null) tabs else tabs.filter { tabTitle(view, it, state).lowercase().contains(query) }
         if (!labelMatch && shownTabs.isEmpty()) return@mapNotNull null
-        HomeSession(session, view, shownTabs, sessionChip(tabs, state))
+        HomeSession(session, view, shownTabs, sessionChip(tabs, state) { block, record -> ops.seen(ref.host.id, block, record) })
     }
     if (rows.isEmpty() && !hostMatch) return null
     return rows
@@ -806,7 +825,7 @@ internal fun LazyListScope.homeTree(env: TreeEnv, rowsByHost: Map<String, List<H
 
 /** A host's header and the lines under it, with the button its state calls for in the action slot. */
 @Composable
-private fun HostItem(env: TreeEnv, ref: HostRef, rows: List<HomeSession>, expanded: Boolean) {
+internal fun HostItem(env: TreeEnv, ref: HostRef, rows: List<HomeSession>, expanded: Boolean, foldable: Boolean = !env.searching) {
     val host = ref.host
     val state = ref.state
     val live = ref.live
@@ -821,7 +840,7 @@ private fun HostItem(env: TreeEnv, ref: HostRef, rows: List<HomeSession>, expand
     }
     val sessions = ref.sessionsShown(env.cachedSessions(host.id))
     val summary = when {
-        ref.isLive -> hostSummary(state, state.sessions.size)
+        ref.isLive -> hostSummary(state, state.sessions.size) { block, record -> env.ops.seen(host.id, block, record) }
         problem != null && problem.needsTailnet() -> problemText(problem, state.endpointLabel, env.network)
         live != null -> hostSummary(state, sessions.size)
         else -> stringResource(R.string.host_not_connected) +
@@ -834,7 +853,7 @@ private fun HostItem(env: TreeEnv, ref: HostRef, rows: List<HomeSession>, expand
         summary = summary,
         phase = live?.state?.phase,
         expanded = expanded,
-        foldable = !env.searching,
+        foldable = foldable,
         onToggle = { env.ops.foldHost(host.id, !expanded) },
         action = action,
         onMenu = { env.sheets.sheet = ManageTarget.Host(host.id) },
@@ -877,10 +896,11 @@ private fun SessionBody(env: TreeEnv, ref: HostRef, row: HomeSession, opening: B
                 onManage = { windowId -> env.sheets.sheet = ManageTarget.Tab(host.id, sid, windowId) },
                 actionsOf = { windowId -> tabActions(ref, sid, windowId, env.ops, env.sheets).talkBack() },
                 onNewTab = if (manageable(ref.connected, state, row)) {
-                    { env.ops.manage(host.id, HomeAction.NewTab(sid)) }
+                    { env.ops.newTab(host, sid) }
                 } else {
                     null
                 },
+                seen = { block, record -> env.ops.seen(host.id, block, record) },
             )
         }
         ref.isLive -> NoteRow(stringResource(R.string.home_tabs_load), stringResource(R.string.home_action_open) to { env.ops.openSession(host, sid) })

@@ -155,6 +155,34 @@ class MultiHostTest {
         retry.assertExists()
     }
 
+    /**
+     * The bottom bar's +: with two hosts connected it asks which, and makes the session there; with
+     * one it makes it there at once; a host that is not connected is offered as Connect & create.
+     */
+    @Test
+    fun thePlusMakesASessionWhereItPlainlyGoesOrAsks() {
+        val m = start()
+        val plus = compose.onNode(hasContentDescription(string(R.string.session_new)) and hasClickAction())
+        plus.performClick()
+        compose.waitForIdle()
+        inSheet("linux").performClick()
+        compose.awaitThat { m.route.value == Route.Term && m.host?.id == linux.host.id && m.pocket.value.sessions.size == 2 }
+        assertEquals(1, m.lives.value.getValue(mac.host.id).state.sessions.size)
+
+        compose.runOnUiThread { m.showHome() }
+        compose.runOnUiThread { m.disconnect(linux.host.id) }
+        compose.awaitThat { m.route.value == Route.Home && linux.host.id !in m.lives.value }
+        plus.performClick()
+        compose.awaitThat { m.route.value == Route.Term && m.host?.id == mac.host.id && m.pocket.value.sessions.size == 2 }
+
+        compose.runOnUiThread { m.showHome() }
+        compose.runOnUiThread { m.disconnect(mac.host.id) }
+        compose.awaitThat { m.lives.value.isEmpty() }
+        plus.performClick()
+        compose.waitForIdle()
+        assertEquals(2, compose.onAllNodes(hasText(string(R.string.home_connect_and_create))).fetchSemanticsNodes().size)
+    }
+
     private fun androidx.compose.ui.test.SemanticsNodeInteraction.fetchSemanticsNodeOrNull() =
         runCatching { fetchSemanticsNode() }.getOrNull()
 

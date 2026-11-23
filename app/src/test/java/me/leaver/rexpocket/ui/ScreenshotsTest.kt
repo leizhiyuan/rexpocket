@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -160,7 +161,7 @@ class ScreenshotsTest {
             desk.rex.report(second[0].blocks[0].id, "done", msg = "Upgraded 12 packages", app = "brew")
             desk.rex.report(second[1].blocks[0].id, "working", app = "claude")
             compose.awaitThat { model.pocket.value.blockStatus.size == 4 }
-            compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_show_active)).performClick()
+            compose.onNodeWithTag(filterChipTag(HomeFilter.NeedsYou)).performClick()
             compose.waitForIdle()
             captureScreenRoboImage("build/outputs/roborazzi/$name.png")
             compose.runOnUiThread { model.disconnect() }
@@ -181,8 +182,8 @@ class ScreenshotsTest {
             val pane = model.pocket.value.views.getValue(desk.ids[1]).windows.last().blocks.first().id
             if (!picker) store.setLastPane(desk.host.id, desk.ids[1], pane, desk.ids)
             if (manage) {
-                compose.onAllNodes(hasContentDescription(compose.activity.getString(R.string.manage_actions_for, compose.activity.getString(R.string.tab_number, 2))))[1]
-                    .performClick()
+                compose.onAllNodes(hasContentDescription(compose.activity.getString(R.string.manage_actions_for, compose.activity.getString(R.string.tab_number, 2))))
+                    .onLast().performClick()
             } else {
                 compose.runOnUiThread { model.offerShare(ShareRequest("git log --oneline | head -20", emptyList())) }
             }

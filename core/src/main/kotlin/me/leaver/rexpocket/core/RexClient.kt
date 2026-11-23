@@ -29,6 +29,8 @@ class RexClient(
     private val apiRevision: Int = 7,
     /** Why the transport itself failed, when OkHttp reduced it to "exhausted all routes". */
     private val transportFailure: () -> Throwable? = { null },
+    /** What the hello says the client runs on: the phone says `other`; a test's desk may say `macos`. */
+    private val platform: String = "other",
 ) {
     private val ids = AtomicLong(0)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JSONObject>>()
@@ -144,7 +146,7 @@ class RexClient(
                     "client",
                     JSONObject()
                         .put("kind", "app")
-                        .put("platform", "other")
+                        .put("platform", platform)
                         .put("name", "RexPocket")
                         .put("version", "0.1.0"),
                 )

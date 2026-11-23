@@ -66,6 +66,10 @@ class ClientViewProbeTest {
                 val keys = keysOf(entry)
                 assertTrue("a client field names a view: $keys", keys.none { it.contains("window") || it.contains("block") || it.contains("focus") })
             }
+            // What a client says it is, which the desk inference reads (PocketSession.noteDeskLooks).
+            val info = inspected.optJSONObject("client")?.optJSONObject("info")
+            assertEquals("app", info?.optString("kind"))
+            assertEquals("other", info?.optString("platform"))
             // What there is: the pane's owner, by client id, and the session's one active tab.
             assertEquals(otherId, size.optString("owner"))
             assertEquals(secondTab, view.optString("active_window_id").ifEmpty { view.optJSONObject("view")?.optString("active_window_id") })

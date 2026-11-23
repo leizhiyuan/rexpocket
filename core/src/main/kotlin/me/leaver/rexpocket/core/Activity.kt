@@ -97,6 +97,12 @@ fun activitySections(
     }
 }
 
+/**
+ * What a seen mark is for: a pane's report as the alerts tell it apart (its state, kind and
+ * message, not its title, which programs animate), so a new report of the pane is news again.
+ */
+fun seenStamp(record: ProgramRecord): String = listOf(record.state, record.kind.orEmpty(), record.msg.orEmpty()).joinToString("\u0000")
+
 /** How long ago [since] was, as Rex's sidebar writes it: `9m`, `3h`, `2d`; null under a minute. */
 fun activityAge(since: Long, now: Long): String? {
     val seconds = ((now - since) / 1000).coerceAtLeast(0)

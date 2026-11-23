@@ -1,6 +1,7 @@
 package me.leaver.rexpocket.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.isDialog
@@ -177,9 +178,13 @@ class TailnetStatusTest {
         node.state.value = TailnetSamples.connected()
         launch()
         compose.awaitThat { model!!.tailnetStage.value is TailnetStage.Connected }
-        compose.onNodeWithText("Tailscale · " + string(R.string.tailnet_stage_connected_on, "pixel-8", "example.com")).assertIsDisplayed()
-        compose.onNodeWithText(string(R.string.tailnet_devices_online, 3, 5)).assertIsDisplayed()
+        // A chip beside the filters, which says it all to TalkBack and opens the details.
+        val said = "Tailscale · " + string(R.string.tailnet_stage_connected_on, "pixel-8", "example.com")
+        compose.onNodeWithTag(TAILNET_CARD_TAG).assertIsDisplayed().assert(androidx.compose.ui.test.hasContentDescription(said))
         assertTrue(compose.onAllNodes(hasText(string(R.string.action_sign_in))).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithTag(TAILNET_CARD_TAG).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("me@example.com").performScrollTo().assertIsDisplayed()
     }
 
     @Test

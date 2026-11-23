@@ -23,4 +23,22 @@
     <string name="home_cached_note">Sessions from the last connection</string>
     <string name="home_tabs_load">Tabs load when opened</string>
     <string name="home_connect_to_see">Connect %1$s to see tabs</string>
+    <string name="filter_all">All</string>
+    <string name="filter_needs_you">Needs you %1$d</string>
+    <string name="filter_running">Running %1$d</string>
+    <string name="filter_needs_you_none">Nothing needs you</string>
+    <string name="filter_running_none">Nothing is running</string>
+    <string name="home_not_connected_line">%1$s not connected</string>
+    <string name="home_mark_seen">Mark as seen</string>
+    <string name="home_mark_all_seen">Mark all as seen</string>
+    <string name="home_marked_seen">Marked as seen</string>
+    <string name="home_menu">Home actions</string>
+    <string name="home_expand_all">Expand all</string>
+    <string name="home_collapse_all">Collapse all</string>
+    <string name="home_collapsed_all">Collapsed all</string>
+    <string name="home_expanded_all">Expanded all</string>
+    <string name="action_undo">Undo</string>
+    <string name="home_reply_title">Reply to %1$s</string>
+    <string name="home_reply_send">Send</string>
+    <string name="home_connect_and_create">Connect &amp; create</string>
 </resources>

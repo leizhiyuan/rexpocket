@@ -80,6 +80,8 @@ fun RexPocketApp(
     val update by model.update.collectAsState()
     val updateChannel by model.updateChannel.collectAsState()
     val folds by model.folds.collectAsState()
+    val homeFilter by model.homeFilter.collectAsState()
+    val seenMarks by model.seenMarks.collectAsState()
     val reopenLastTab by model.reopenLastTab.collectAsState()
     val appearance by model.appearance.collectAsState()
     val share by model.share.collectAsState()
@@ -171,6 +173,14 @@ fun RexPocketApp(
                     folds = folds,
                     onHostOpen = model::setHostOpen,
                     onFoldSessions = model::setSessionsFolded,
+                    onSetFolds = model::setFolds,
+                    filter = homeFilter,
+                    onHomeFilter = model::setHomeFilter,
+                    seenMarks = seenMarks,
+                    onMarkSeen = { hostId, blocks -> model.markSeen(hostId, blocks) },
+                    onRestoreSeen = model::restoreSeen,
+                    onReply = model::reply,
+                    onInterrupt = model::interrupt,
                     onFoldSession = model::setSessionFolded,
                     onConnect = { model.connect(it) },
                     onOpenSession = model::openSessionOn,

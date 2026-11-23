@@ -88,6 +88,12 @@ data class PocketState(
      * exiting. The screen says so in its place until the person moves on; see [ClosedPane].
      */
     val closed: ClosedPane? = null,
+    /**
+     * Done and failed panes a desk looked at, by pane, with the [seenStamp] of the report it saw: an
+     * inference from what Rex tells, as Rex keeps no seen state of its own. See [PocketSession]'s
+     * `noteDeskLooks` and docs/design/home.md, "Seen".
+     */
+    val deskSeen: Map<String, String> = emptyMap(),
 ) {
     /**
      * Who the screen says holds the shown pane. A pane is taken on sight, so it is the phone's from
@@ -1145,7 +1151,15 @@ class PocketSession(
             "session_destroyed" -> dropSession(sid)
             "block_event" -> onBlockEvent(sid, payload)
             // Which client owns a pane decides its size, so a change here redraws it as owned or not.
-            "block_owner_changed", "block_closed", "window_closed", "window_created", "active_window_changed" ->
+            "block_owner_changed" -> {
+                if (payload.optString("reason") == "take") {
+                    val block = payload.optNullableString("block_id")
+                    val owner = payload.optNullableString("owner")
+                    if (block != null && owner != null) tookOnDesk(block, owner)
+                }
+                refreshView(sid)
+            }
+            "block_closed", "window_closed", "window_created", "active_window_changed" ->
                 refreshView(sid)
         }
     }
@@ -1298,7 +1312,88 @@ class PocketSession(
                 pwd = st.view?.focusedBlock()?.id?.let { pwds[it] },
                 programs = programs,
                 titles = HashMap(titleOf),
+                deskSeen = st.deskSeen.filterKeys { it in summary },
             )
+        }
+        noteDeskLooks()
+    }
+
+    /** Rex's own view of each session, before the phone's place is put on it: where Rex's focus is. */
+    private val rexViews = java.util.concurrent.ConcurrentHashMap<String, SessionView>()
+
+    /** Whether each other client is a desk app, by client id, as `client.inspect` said. */
+    private val desks = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    private val asking: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** Done or failed panes another client took, with the report they had then, until that client is known. */
+    private val takes = java.util.concurrent.ConcurrentHashMap<String, Pair<String, String>>()
+
+    /**
+     * Another client took [block]: when it is a desk and the pane's report was done or failed by
+     * then, the desk looked at that report. Rex.app takes the pane of the tab it shows.
+     */
+    private fun tookOnDesk(block: String, owner: String) {
+        if (owner == _state.value.clientId) return
+        val record = _state.value.blockStatus[block] ?: return
+        if (ActivityGroup.of(record.state)?.needsSeeing != true) return
+        takes[block] = owner to seenStamp(record)
+        noteDeskLooks()
+    }
+
+    /**
+     * Which done and failed panes a desk has looked at, inferred from what Rex says, since it keeps
+     * no seen state: a pane a desk client took after it finished, and the pane that is the session's
+     * active one while a desk client owns it. A desk client is one that says it is an app on a
+     * computer (`client.inspect`: kind `app`, a platform other than `other`); the phone, another
+     * phone and Rex's CLI are not. A desk asleep on that tab counts as having seen it.
+     */
+    private fun noteDeskLooks() {
+        val st = _state.value
+        val me = st.clientId ?: return
+        val looked = HashMap<String, String>()
+        fun desk(owner: String): Boolean? = if (owner == me) false else desks[owner] ?: run { askAbout(owner); null }
+        for (view in rexViews.values) {
+            val window = view.windows.firstOrNull { it.id == view.activeWindowId } ?: continue
+            val block = window.focusedBlock() ?: continue
+            val owner = block.owner ?: continue
+            val record = st.blockStatus[block.id] ?: continue
+            if (ActivityGroup.of(record.state)?.needsSeeing != true) continue
+            if (desk(owner) == true) looked[block.id] = seenStamp(record)
+        }
+        for ((block, take) in takes.entries.toList()) {
+            when (desk(take.first)) {
+                true -> {
+                    looked[block] = take.second
+                    takes.remove(block)
+                }
+                false -> takes.remove(block)
+                null -> Unit
+            }
+        }
+        if (looked.isEmpty()) return
+        updateState { s ->
+            val merged = s.deskSeen + looked.filterKeys { it in s.blockStatus }
+            if (merged == s.deskSeen) s else s.copy(deskSeen = merged)
+        }
+    }
+
+    /** Asks Rex what [client] is, once; a client Rex no longer knows is no desk. */
+    private fun askAbout(client: String) {
+        if (!asking.add(client)) return
+        val scope = runnerScope ?: return
+        scope.launch {
+            val desk = try {
+                val info = rpc("client.inspect", JSONObject().put("client_id", client)).optJSONObject("client")?.optJSONObject("info")
+                val platform = info?.optNullableString("platform")
+                info?.optNullableString("kind") == "app" && platform != null && platform != "other"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+            desks[client] = desk
+            asking.remove(client)
+            noteDeskLooks()
         }
     }
 
@@ -1311,6 +1406,7 @@ class PocketSession(
      */
     private fun dropSession(id: String) {
         val ours = id in closingHere
+        rexViews.remove(id)
         places.remove(id)
         forgetGonePanes(SessionView(Long.MAX_VALUE, id, "", null, emptyList()))
         updateState {
@@ -1359,6 +1455,7 @@ class PocketSession(
 
     private fun applyView(fromRex: SessionView) {
         if (fromRex.sessionId.isEmpty()) return
+        rexViews.merge(fromRex.sessionId, fromRex) { old, new -> if (new.revision >= old.revision) new else old }
         if (fromRex.allBlocks().any { it.id !in statusRead }) statusWake.trySend(Unit)
         // A pane the phone was on that has closed gives the place back to Rex's choice.
         val place = places[fromRex.sessionId]
@@ -1381,6 +1478,7 @@ class PocketSession(
             )
         }
         forgetClosedHere(view)
+        noteDeskLooks()
     }
 
     /** The panes this phone closed that [view] no longer has: their close has been seen through. */

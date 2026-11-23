@@ -12,7 +12,10 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.ActivityGroup
 import me.leaver.rexpocket.core.ListedSession
+import me.leaver.rexpocket.core.ProgramRecord
+import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.data.HomeFolds
@@ -83,7 +86,18 @@ internal class HomeOps(
     val editHost: (hostId: String) -> Unit,
     val copyAddress: (SavedHost) -> Unit,
     val tailnetDetails: () -> Unit,
+    /** Whether a done or failed report of a pane was seen: on this phone, from here, or at a desk. */
+    val seen: (hostId: String, blockId: String, ProgramRecord) -> Boolean = { _, _, _ -> false },
+    /** Marks panes seen, with an Undo. */
+    val markSeen: (hostId: String, blockIds: List<String>) -> Unit = { _, _ -> },
 )
+
+/** The done and failed panes of [windows] whose report was not seen yet. */
+internal fun HomeOps.unseen(hostId: String, state: PocketState, windows: List<WindowInfo>): List<String> =
+    windows.flatMap { it.blocks }.mapNotNull { block ->
+        val record = state.blockStatus[block.id] ?: return@mapNotNull null
+        block.id.takeIf { ActivityGroup.of(record.state)?.needsSeeing == true && !seen(hostId, block.id, record) }
+    }
 
 /**
  * The home's open sheet and dialog. Hoisted out of the sheets so a row's TalkBack action can open the
@@ -254,11 +268,14 @@ internal fun sessionActions(
             ),
         ),
         ActionGroup(
-            listOf(
+            listOfNotNull(
                 if (expanded) {
                     RowAction(stringResource(R.string.home_action_collapse), R.drawable.ic_expand) { ops.foldSession(id, session.id, true) }
                 } else {
                     RowAction(stringResource(R.string.home_action_expand), R.drawable.ic_expand) { ops.foldSession(id, session.id, false) }
+                },
+                ops.unseen(id, ref.state, ref.state.views[session.id]?.windows.orEmpty()).takeIf { it.isNotEmpty() }?.let { panes ->
+                    RowAction(stringResource(R.string.home_mark_all_seen), R.drawable.ic_check) { ops.markSeen(id, panes) }
                 },
             ),
         ),
@@ -297,6 +314,9 @@ internal fun tabActions(
                 },
             ),
         ),
+        ops.unseen(id, ref.state, listOf(window)).takeIf { it.isNotEmpty() }?.let { panes ->
+            ActionGroup(listOf(RowAction(stringResource(R.string.home_mark_seen), R.drawable.ic_check) { ops.markSeen(id, panes) }))
+        },
         moveGroup(view.windows.indexOf(window), view.windows.size, why) { to -> ops.manage(id, HomeAction.MoveTab(sessionId, windowId, to)) },
         ActionGroup(
             listOf(
@@ -310,7 +330,7 @@ internal fun tabActions(
 
 /** The items of [groups] as a sheet, titled [title]. */
 @Composable
-internal fun RowActionsSheet(title: String, groups: List<ActionGroup>, onDismiss: () -> Unit) {
+internal fun RowActionsSheet(title: String?, groups: List<ActionGroup>, onDismiss: () -> Unit) {
     ActionSheet(onDismiss = onDismiss, title = title) {
         for (group in groups) {
             if (group.actions.isEmpty()) continue
@@ -438,4 +458,24 @@ internal fun HomeSheetsHost(
             )
         }
     }
+}
+
+/** The pane a Needs you row's Reply answers, and the name the dialog calls it by. */
+internal data class ReplyTarget(val hostId: String, val sessionId: String, val blockId: String, val title: String)
+
+/** A reply to a waiting program: what is typed, then Enter, as the notification's Reply sends it. */
+@Composable
+internal fun ReplyDialog(title: String, onDismiss: () -> Unit, onSend: (String) -> Unit) {
+    var text by androidx.compose.runtime.remember { mutableStateOf("") }
+    fun send() {
+        if (text.isNotBlank()) onSend(text) else onDismiss()
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Colors.surface,
+        title = { Text(title, color = Colors.ink) },
+        text = { Field(stringResource(R.string.alerts_reply), text, autoFocus = true, imeAction = androidx.compose.ui.text.input.ImeAction.Done, onDone = { send() }) { text = it } },
+        confirmButton = { TextButton(onClick = { send() }) { Text(stringResource(R.string.home_reply_send), color = Colors.accent) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Colors.muted) } },
+    )
 }
