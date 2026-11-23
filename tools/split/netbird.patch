@@ -29,7 +29,7 @@ index 42dd599203412fa0957697f5597d9fa771ed5627..3aaae6c789ccd1dee7e7f162d15cea9b
            WANT=$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 "SHA256:" | awk '{print $2}' | tr -d ':' | tr 'A-F' 'a-f')
            for apk in out/*.apk; do
 diff --git a/.github/workflows/device-test.yml b/.github/workflows/device-test.yml
-index c460291a1fff18c791a3e6337b47220508c0f64f..3a5124a0f8eb0917e67c852bcd4b98354e1c7cd4 100644
+index 5ee85ff19dd8983ac8b3b4fb87ef031f9afc8a60..445a88f4b254d73cd65bf9bec621859d3a8ec27c 100644
 --- a/.github/workflows/device-test.yml
 +++ b/.github/workflows/device-test.yml
 @@ -3,7 +3,7 @@ name: device-test
@@ -323,7 +323,7 @@ index 95039bdad3be6d047b4a642da931f9f7ce1f9b3d..f6e743c82646b102912ec86f441abceb
    [eddsa](https://github.com/str4d/ed25519-java)，Str4d 與貢獻者，CC0——Android 自帶的安全提供者
    沒有給 JSch 的 Ed25519 實作。
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
-index ca30a08b5ea315340be3d8a3bcd85bb2d013f958..af63377ee17bbc79749c201d6a8dae61c7ee2ff7 100644
+index 41907d95df89504f76393b3883c882d21fa830c1..db00121b9ac8873133a6448a83d9593d44438b9c 100644
 --- a/app/build.gradle.kts
 +++ b/app/build.gradle.kts
 @@ -170,6 +170,11 @@ gradle.taskGraph.whenReady {
@@ -338,7 +338,7 @@ index ca30a08b5ea315340be3d8a3bcd85bb2d013f958..af63377ee17bbc79749c201d6a8dae61
  dependencies {
      testImplementation("junit:junit:4.13.2")
      // Screens driven and captured on the JVM: see docs/design/testing.md.
-@@ -205,6 +210,9 @@ dependencies {
+@@ -207,6 +212,9 @@ dependencies {
      implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
      implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
      implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -413,10 +413,10 @@ index e96e8095cf085fe6116628944dde55e59a185050..c27abde50778ce2c20be64b3032db0ef
          val snapshot = parseTailnetState("""{"backendState":"Starting","peers":[]}""")
          assertEquals("Starting", snapshot.backendState)
 diff --git a/app/src/main/java/me/leaver/rexpocket/data/HostStore.kt b/app/src/main/java/me/leaver/rexpocket/data/HostStore.kt
-index ff27ad4501c31d4b02db6d0f4bf943d5be8b52f7..8f7a7858610fa4f3c1833451e1e2978443984eaa 100644
+index 71a0b401243761c80f6b4a1e2cb3ff25a64cf9d2..d08cd783b8f3b31157949f25ff1fc986309bce62 100644
 --- a/app/src/main/java/me/leaver/rexpocket/data/HostStore.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/data/HostStore.kt
-@@ -32,12 +32,13 @@ data class SavedHost(
+@@ -35,12 +35,13 @@ data class SavedHost(
  
  /**
   * Settings for the tailnet node the app runs itself: which backend, whether it is joined, and the
@@ -431,7 +431,7 @@ index ff27ad4501c31d4b02db6d0f4bf943d5be8b52f7..8f7a7858610fa4f3c1833451e1e29784
  )
  
  /**
-@@ -164,6 +165,7 @@ class HostStore(context: Context) {
+@@ -167,6 +168,7 @@ class HostStore(context: Context) {
          backend = TailnetBackend.fromStorage(prefs.getString(KEY_TAILNET_BACKEND, null)),
          enabled = prefs.getBoolean(KEY_TAILSCALE_ENABLED, false),
          hostname = prefs.getString(KEY_TAILSCALE_HOSTNAME, "").orEmpty(),
@@ -439,7 +439,7 @@ index ff27ad4501c31d4b02db6d0f4bf943d5be8b52f7..8f7a7858610fa4f3c1833451e1e29784
      )
  
      fun setTailnet(settings: TailnetSettings) {
-@@ -171,6 +173,7 @@ class HostStore(context: Context) {
+@@ -174,6 +176,7 @@ class HostStore(context: Context) {
              .putString(KEY_TAILNET_BACKEND, settings.backend.storageKey)
              .putBoolean(KEY_TAILSCALE_ENABLED, settings.enabled)
              .putString(KEY_TAILSCALE_HOSTNAME, settings.hostname.trim())
@@ -447,7 +447,7 @@ index ff27ad4501c31d4b02db6d0f4bf943d5be8b52f7..8f7a7858610fa4f3c1833451e1e29784
              .apply()
      }
  
-@@ -354,6 +357,7 @@ class HostStore(context: Context) {
+@@ -370,6 +373,7 @@ class HostStore(context: Context) {
          private const val KEY_TAILSCALE_ENABLED = "tailscale_enabled"
          private const val KEY_TAILSCALE_HOSTNAME = "tailscale_hostname"
          private const val KEY_TAILNET_BACKEND = "tailnet_backend"
@@ -522,10 +522,10 @@ index 033afd60f581d497d2d47d74b361ccf85432197d..2d9703785539606276e0cd0ce9a25ec6
  @Composable
  internal fun problemText(problem: Problem, endpoint: String, network: String = "tailnet"): String = when (problem.trouble) {
 diff --git a/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt b/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt
-index 2311bc325a50919da5c8ad11b0c53251995780bb..3489afd8710f9a7e7cc8eadf55aae0c9700c21ae 100644
+index 2ab11d7a81ced825fe6e537eefb088d612b517a4..5154bbff81478aa084c24a1e081ac6c4bd5839ed 100644
 --- a/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt
-@@ -1225,15 +1225,18 @@ internal fun TailnetDialog(
+@@ -1226,15 +1226,18 @@ internal fun TailnetDialog(
      status: TailnetStatus,
      error: TailnetFailure?,
      onDismiss: () -> Unit,
@@ -545,7 +545,7 @@ index 2311bc325a50919da5c8ad11b0c53251995780bb..3489afd8710f9a7e7cc8eadf55aae0c9
      AlertDialog(
          onDismissRequest = onDismiss,
          containerColor = Colors.surface,
-@@ -1257,6 +1260,21 @@ internal fun TailnetDialog(
+@@ -1258,6 +1261,21 @@ internal fun TailnetDialog(
                      }
                  }
                  Field(stringResource(R.string.tailscale_hostname), hostname) { hostname = it }
@@ -567,7 +567,7 @@ index 2311bc325a50919da5c8ad11b0c53251995780bb..3489afd8710f9a7e7cc8eadf55aae0c9
                  if (joinedHere) {
                      Text(
                          listOfNotNull(
-@@ -1284,8 +1302,11 @@ internal fun TailnetDialog(
+@@ -1285,8 +1303,11 @@ internal fun TailnetDialog(
                      )
                      Text(stringResource(R.string.tailscale_login_hint), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
                  }
@@ -580,7 +580,7 @@ index 2311bc325a50919da5c8ad11b0c53251995780bb..3489afd8710f9a7e7cc8eadf55aae0c9
                      color = Colors.muted,
                      fontSize = TextStyles.label,
                      lineHeight = labelLeading,
-@@ -1293,7 +1314,7 @@ internal fun TailnetDialog(
+@@ -1294,7 +1315,7 @@ internal fun TailnetDialog(
              }
          },
          confirmButton = {
@@ -590,10 +590,10 @@ index 2311bc325a50919da5c8ad11b0c53251995780bb..3489afd8710f9a7e7cc8eadf55aae0c9
                      stringResource(if (joinedHere) R.string.action_save else R.string.tailscale_join),
                      color = Colors.accent,
 diff --git a/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt b/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt
-index 320a51c3f1ecf8ba0318dc1024c7dfa95e508eac..bdf9c698d315705e8a13b734e1bd4b6bdb79e59f 100644
+index 4b78797d2e6d7971e84bdb80d98203b6628d3a2b..b4faadf2ddf9d8084aba013a3693a20f91366412 100644
 --- a/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt
-@@ -274,9 +274,9 @@ fun RexPocketApp(
+@@ -277,9 +277,9 @@ fun RexPocketApp(
                  status = tailnetStatus,
                  error = tailnetError,
                  onDismiss = { tailnetOpen = false },
@@ -606,10 +606,10 @@ index 320a51c3f1ecf8ba0318dc1024c7dfa95e508eac..bdf9c698d315705e8a13b734e1bd4b6b
                  },
                  onLeave = {
 diff --git a/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt b/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt
-index 46013986acc34c5e53cab1082465a103536d7b47..0cf1ad50503cbb3fe1fd55e45ebbbbf8c7ca8456 100644
+index ceab447651cd08ff54388e1279db98724d422fb1..c5d92bfd45ef7c91e8cc5e08397e9404d350dc2d 100644
 --- a/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt
-@@ -58,6 +58,7 @@ import me.leaver.rexpocket.core.ConnectStep
+@@ -59,6 +59,7 @@ import me.leaver.rexpocket.core.ConnectStep
  import me.leaver.rexpocket.core.TailnetStage
  import me.leaver.rexpocket.core.explainTailnetProblem
  import me.leaver.rexpocket.core.tailnetStage
@@ -617,7 +617,7 @@ index 46013986acc34c5e53cab1082465a103536d7b47..0cf1ad50503cbb3fe1fd55e45ebbbbf8
  import me.leaver.rexpocket.net.TailnetConfig
  import me.leaver.rexpocket.net.TailnetNode
  import me.leaver.rexpocket.net.TailnetStatus
-@@ -201,8 +202,13 @@ class RexViewModel @JvmOverloads constructor(
+@@ -202,8 +203,13 @@ class RexViewModel @JvmOverloads constructor(
      private val activeNode: TailnetNode get() = nodeFor(tailnet.value.backend)
  
      /** The credentials and settings a backend's node starts with. */
@@ -632,7 +632,7 @@ index 46013986acc34c5e53cab1082465a103536d7b47..0cf1ad50503cbb3fe1fd55e45ebbbbf8
      }
  
      /**
-@@ -462,26 +468,27 @@ class RexViewModel @JvmOverloads constructor(
+@@ -471,26 +477,27 @@ class RexViewModel @JvmOverloads constructor(
      /**
       * Joins the tailnet of [backend] under [hostname] (blank means the device's own name). The node
       * starts here, not on the first connect, so the app can hand out the login link while the user is
@@ -666,7 +666,7 @@ index 46013986acc34c5e53cab1082465a103536d7b47..0cf1ad50503cbb3fe1fd55e45ebbbbf8
                      .onFailure { _tailnetError.value = TailnetFailure(it.message) }
              }
          }
-@@ -1077,6 +1084,7 @@ class RexViewModel @JvmOverloads constructor(
+@@ -1086,6 +1093,7 @@ class RexViewModel @JvmOverloads constructor(
                  if (it.sshUser.isNotBlank()) add(it.sshUser)
              }
              add(tailnet.value.hostname)
@@ -728,7 +728,7 @@ index 76bf09b75c10acfb7560bcdc4ec011c09976872f..c7fe4a5dbbb6beed91134853b10fd2eb
  
      <string name="connect_step_start_tailnet">正在啟動 %1$s…</string>
 diff --git a/app/src/main/res/values-zh/strings.xml b/app/src/main/res/values-zh/strings.xml
-index be07fbb18074695b8145984729d403acf50fadf3..24aca2ffc176427ee83f84ae361933725a24aaa2 100644
+index cf73c8799c4a34d9f75c0f4f97736119196607f5..441914d2ba0f2d323440d1bb8f8beb94322eba7e 100644
 --- a/app/src/main/res/values-zh/strings.xml
 +++ b/app/src/main/res/values-zh/strings.xml
 @@ -52,7 +52,14 @@
@@ -759,7 +759,7 @@ index f67a32b7fdd4f543f92ad6251caf2fae9974c572..9d34e9655f7252530d618fb72be46f72
  
      <string name="connect_step_start_tailnet">正在启动 %1$s…</string>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 1088ba8d5a8ac4fad1c1381ece35ae2e2d9fb47b..09f3f5c453ba6c0958885700555777a396803b5b 100644
+index 7d1469d122ac7a0a2760858bd674fe27b0b7adc0..a936cad7d01a40bca5001282b2888533307bd228 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -52,7 +52,14 @@
@@ -841,10 +841,10 @@ index 69cfdcb59ab5b3b7c381c5d1c05091f87798f27d..830d93d462335efc0f9b4967d5734f6b
      return model
  }
 diff --git a/app/src/test/java/me/leaver/rexpocket/ui/ScreenshotsTest.kt b/app/src/test/java/me/leaver/rexpocket/ui/ScreenshotsTest.kt
-index 3222abaf7b1fdbbd44f026e9a02a826e45f28556..31529582d93b21ed41505c876729c20548cff6d6 100644
+index 5b483fcab760dc3ac997174047ade2a4ec2c2415..fd34814b89fdebe21e5dd961bb71666c42cd37c5 100644
 --- a/app/src/test/java/me/leaver/rexpocket/ui/ScreenshotsTest.kt
 +++ b/app/src/test/java/me/leaver/rexpocket/ui/ScreenshotsTest.kt
-@@ -259,6 +259,13 @@ class ScreenshotsTest {
+@@ -293,6 +293,13 @@ class ScreenshotsTest {
      @Test fun tailnetDetailsLandscape() { landscape(); tailnet("tailnet-details-landscape", TailnetSamples.connected(), details = true) }
      @Test fun tailnetErrorPortrait() = tailnet("tailnet-error-portrait", TailnetSamples.starting, startError = "tsnet: open state: permission denied")
      @Test fun tailnetNotJoinedPortrait() = tailnet("tailnet-not-joined-portrait", TailnetSamples.starting, joined = false)
