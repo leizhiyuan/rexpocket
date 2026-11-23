@@ -189,6 +189,8 @@ class RealRexAppTest {
 
         palette(string(R.string.menu_new_tab))
         compose.awaitThat { deskView().windows.size == 3 }
+        // Rex can tell of the tab before the phone has moved onto it.
+        compose.awaitThat { shown(m) != split }
         awaitHeld(m)
         val newTab = deskView().windows.first { w -> w.blocks.any { it.id == shown(m) } }.id
         assertNotEquals(tab, newTab)
