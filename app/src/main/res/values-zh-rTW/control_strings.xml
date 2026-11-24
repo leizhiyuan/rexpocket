@@ -75,4 +75,26 @@
     <string name="tile_add_manual">編輯快速設定，把 RexPocket %1$d 圖塊拖進來。</string>
     <string name="tile_slots_full">三個圖塊都在使用中。在其中一個上選擇別的項目即可空出來。</string>
     <string name="tile_slot_label">RexPocket %1$d</string>
+
+    <string name="tailnet_group_accounts">帳號</string>
+    <string name="tailnet_account_in_use">使用中</string>
+    <string name="tailnet_account_add">新增帳號</string>
+    <string name="tailnet_account_add_action">新增並切換</string>
+    <string name="tailnet_account_add_body">另一個登入或 tailnet。一次只執行一個帳號；切換時透過它連線的主機會重新連線。</string>
+    <string name="tailnet_account_sign_in_note">%1$s 會在新帳號上重新啟動，並請你登入。</string>
+    <string name="tailnet_account_key_note">%1$s 會在新帳號上重新啟動；請在 Tailnet 設定中用它的金鑰加入。</string>
+    <string name="tailnet_account_name">名稱</string>
+    <string name="tailnet_account_use">使用此帳號</string>
+    <string name="tailnet_account_switch_body">Tailnet 會在此帳號上重新啟動。</string>
+    <plurals name="tailnet_account_switch_hosts">
+        <item quantity="other">Tailnet 會在此帳號上重新啟動。%2$s 會中斷，除非它們屬於其他帳號，否則會在此帳號上重新連線。</item>
+    </plurals>
+    <string name="tailnet_account_remove">移除</string>
+    <string name="tailnet_account_remove_title">移除 %1$s？</string>
+    <string name="tailnet_account_remove_body">它在這支手機上的登入會被刪除。</string>
+    <plurals name="tailnet_account_remove_hosts">
+        <item quantity="other">%2$s 在這個帳號上，之後會跟隨使用中的帳號。</item>
+    </plurals>
+    <string name="tailnet_account_label">Tailnet 帳號</string>
+    <string name="tailnet_account_follow">使用中的帳號</string>
 </resources>

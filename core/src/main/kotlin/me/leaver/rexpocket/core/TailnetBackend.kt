@@ -14,12 +14,14 @@ enum class TailnetBackend(
     val displayName: String,
     /** Whether the node signs in through a login link; one that joins with a key skips that step. */
     val signsIn: Boolean = true,
+    /** Whether it can keep several accounts, each with its own login on the phone (TailnetProfiles). */
+    val accounts: Boolean = true,
 ) {
     Tailscale("tailscale", "Tailscale"),
     Netbird("netbird", "Netbird", signsIn = false),
 
     /** Netbird run by the Netbird add-on, a separate app, for the build without Netbird built in. */
-    NetbirdAddon("netbird-addon", "Netbird (add-on)", signsIn = false);
+    NetbirdAddon("netbird-addon", "Netbird (add-on)", signsIn = false, accounts = false);
 
     companion object {
         /** The stored name; anything unknown is Tailscale, the backend the app shipped with. */

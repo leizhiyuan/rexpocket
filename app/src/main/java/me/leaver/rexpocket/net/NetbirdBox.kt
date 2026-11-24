@@ -29,7 +29,7 @@ class NetbirdBox(context: Context) : TailnetBox(context) {
     override fun open(config: TailnetConfig, hostname: String, events: NodeEvents): RunningNode {
         val netbird = config as? NetbirdConfig ?: throw IllegalArgumentException("Netbird needs a Netbird config")
         val node = Netbird.start(
-            stateDirectory.absolutePath,
+            directoryFor(config.profile).absolutePath,
             hostname,
             netbird.setupKey,
             netbird.managementUrl,

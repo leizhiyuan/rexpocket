@@ -84,6 +84,7 @@ import me.leaver.rexpocket.core.linkState
 import me.leaver.rexpocket.core.tailnetStage
 import me.leaver.rexpocket.data.BackgroundStore
 import me.leaver.rexpocket.data.TailnetPolicyStore
+import me.leaver.rexpocket.data.TailnetProfileStore
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.SavedHost
 import me.leaver.rexpocket.data.TailnetSettings
@@ -122,6 +123,14 @@ class Connections private constructor(private val app: Application, val nodes: T
 
     /** The tailnet settings; the view model's Tailnet dialog changes them. */
     val tailnet = MutableStateFlow(store.tailnet())
+
+    private val profileStore = TailnetProfileStore(app)
+
+    /** The tailnet accounts, and which one each backend runs; see docs/design/tailnet-control.md, "Accounts". */
+    val profiles = MutableStateFlow(profileStore.read())
+
+    /** The account [backend]'s node runs. */
+    fun accountOf(backend: TailnetBackend): String = profiles.value.activeOf(backend).id
 
     /** Which kinds of alert are on: the Notifications page's switches, every host's defaults. */
     val alertPrefs = MutableStateFlow(store.alertPrefs())
@@ -203,6 +212,7 @@ class Connections private constructor(private val app: Application, val nodes: T
             joined = settings.enabled && settings.backend == backend,
             // The settings as they are at the start, which a join has just written.
             config = { key -> configFor(tailnet.value.copy(backend = backend), key) },
+            policyId = accountOf(backend),
         )
         }
     }
@@ -215,7 +225,7 @@ class Connections private constructor(private val app: Application, val nodes: T
             specs = ::specs,
             users = { _links.value.values.mapNotNull { tailnetOf(it.target) }.groupingBy { it }.eachCount() },
             away = { settledAway.value && Alerts.enabled.value },
-            changes = listOf(tailnet, _links, settledAway, Alerts.enabled),
+            changes = listOf(tailnet, _links, settledAway, Alerts.enabled, profiles),
             read = policyStore::read,
             write = policyStore::write,
         )
@@ -322,7 +332,7 @@ class Connections private constructor(private val app: Application, val nodes: T
                 val id = currentTailnet
                 val away = !foreground.value && Alerts.enabled.value
                 val state = tailnetState(id)
-                val tell = away && tailnet.value.enabled && control.policies.value.of(id).notify
+                val tell = away && tailnet.value.enabled && control.policyOf(id).notify
                 id to when {
                     tell && state == LinkState.NeedsSignIn -> true
                     tell && state == LinkState.Failed -> false
@@ -421,12 +431,22 @@ class Connections private constructor(private val app: Application, val nodes: T
         for (id in ids) saved.firstOrNull { it.id == id }?.takeIf { !tailnetSwitchedOff(it) }?.let { ensure(it) }
     }
 
-    /** Whether [host]'s tailnet was disconnected by hand: nothing connects the host on its own then. */
-    fun tailnetSwitchedOff(host: SavedHost): Boolean = tailnetOf(host)?.let { control.policies.value.isOff(it) } == true
+    /**
+     * Whether [host]'s tailnet was disconnected by hand, or the host is on an account its tailnet
+     * does not run now: nothing connects the host on its own then.
+     */
+    fun tailnetSwitchedOff(host: SavedHost): Boolean = onOtherAccount(host) || tailnetOffByHand(host)
+
+    /** Whether [host] names a tailnet account other than the one running. */
+    fun onOtherAccount(host: SavedHost): Boolean =
+        host.viaTailscale && host.tailnetProfile.isNotBlank() &&
+            profiles.value.profileOf(tailnet.value.backend, host.tailnetProfile).id != accountOf(tailnet.value.backend)
+
+    private fun tailnetOffByHand(host: SavedHost): Boolean = tailnetOf(host)?.let { control.isOff(it) } == true
 
     /** Whether [host]'s tailnet stays in the background: one let go takes its hosts with it. */
     private fun keptWithTailnet(host: SavedHost): Boolean =
-        tailnetOf(host)?.let { control.policies.value.of(it).keep != BackgroundKeep.Off } ?: true
+        tailnetOf(host)?.let { control.policyOf(it).keep != BackgroundKeep.Off } ?: true
 
     /**
      * Android started the app without a screen: the watch was restarted after its process was
@@ -466,11 +486,12 @@ class Connections private constructor(private val app: Application, val nodes: T
 
     /** The credentials and settings a backend's node starts with. */
     fun configFor(settings: TailnetSettings, setupKey: String = ""): TailnetConfig = when (settings.backend) {
-        TailnetBackend.Tailscale -> TailscaleConfig(authKey = "", hostname = settings.hostname)
+        TailnetBackend.Tailscale -> TailscaleConfig(authKey = "", hostname = settings.hostname, profile = accountOf(settings.backend))
         TailnetBackend.Netbird, TailnetBackend.NetbirdAddon -> NetbirdConfig(
             setupKey = setupKey,
             hostname = settings.hostname,
             managementUrl = settings.managementUrl,
+            profile = accountOf(settings.backend),
         )
     }
 
@@ -482,7 +503,11 @@ class Connections private constructor(private val app: Application, val nodes: T
      */
     fun connect(target: SavedHost, resume: Boolean = false, auto: Boolean = false): Link {
         // Connecting a host by hand brings its tailnet back, as a Connect of the tailnet would.
-        if (!auto) tailnetOf(target)?.let { control.switchOn(it) }
+        if (!auto) tailnetOf(target)?.let { id ->
+            // A host on another account switches its tailnet to that account first.
+            if (onOtherAccount(target)) switchAccount(profiles.value.profileOf(tailnet.value.backend, target.tailnetProfile).id)
+            control.switchOn(id)
+        }
         drop(target.id)
         val link = Link(target)
         _links.value = LinkedHashMap(_links.value).apply { put(target.id, link) }
@@ -520,6 +545,51 @@ class Connections private constructor(private val app: Application, val nodes: T
         hosts.forEach { ensure(it) }
     }
 
+    private fun setProfiles(next: me.leaver.rexpocket.core.TailnetProfiles) {
+        profileStore.write(next)
+        profiles.value = next
+    }
+
+    /**
+     * Runs account [id] on its backend's node instead of the one it runs. The hosts connected
+     * through it go, and those that follow whichever account runs, or name this one, come back on it.
+     */
+    fun switchAccount(id: String) {
+        val p = profiles.value.find(id) ?: return
+        if (accountOf(p.backend) == id) return
+        Diagnostics.event(CONN_TAG, "tailnet ${p.backend.storageKey}: switching account")
+        val tid = p.backend.storageKey
+        val dropped = if (tid == currentTailnet) hostsOn(tid) else emptyList()
+        dropped.forEach { disconnect(it.id, forget = false) }
+        setProfiles(profiles.value.activate(id))
+        control.restart(tid)
+        dropped.filter { !onOtherAccount(it) }.forEach { ensure(it) }
+    }
+
+    /** Adds an account to [backend] and runs it: its node starts empty and asks for a sign-in. */
+    fun addAccount(backend: TailnetBackend, name: String): String {
+        val id = me.leaver.rexpocket.core.TailnetProfiles.newId(backend, java.util.UUID.randomUUID().toString())
+        setProfiles(profiles.value.add(me.leaver.rexpocket.core.TailnetProfile(id, backend, name)))
+        switchAccount(id)
+        return id
+    }
+
+    fun renameAccount(id: String, name: String) = setProfiles(profiles.value.rename(id, name))
+
+    /** Removes account [id], not the one running, and its login on the phone with it. */
+    fun removeAccount(id: String) {
+        val p = profiles.value.find(id) ?: return
+        val next = profiles.value.remove(id)
+        if (next == profiles.value) return
+        nodes[p.backend].forgetProfile(id)
+        setProfiles(next)
+        // Its hosts follow whichever account runs from now on.
+        for (h in store.list().filter { it.tailnetProfile == id }) store.upsert(h.copy(tailnetProfile = ""))
+    }
+
+    /** The saved hosts that name account [id]. */
+    fun hostsNaming(id: String): List<SavedHost> = store.list().filter { it.viaTailscale && it.tailnetProfile == id }
+
     /** The hosts connected through tailnet [id] now. */
     fun hostsOn(id: String): List<SavedHost> = _links.value.values.filter { tailnetOf(it.target) == id }.map { it.target }
 
@@ -537,7 +607,7 @@ class Connections private constructor(private val app: Application, val nodes: T
             network = st.networkName,
             error = run.error,
             running = run.running,
-            off = control.policies.value.isOff(id),
+            off = control.isOff(id),
         ).linkState()
     }
 
@@ -550,7 +620,9 @@ class Connections private constructor(private val app: Application, val nodes: T
     /** [item]'s name, or null when it is gone: a host removed, a tailnet left. */
     fun nameOf(item: Connectable): String? = when (item.kind) {
         ConnectableKind.Host -> store.find(item.id)?.label?.ifBlank { null } ?: store.find(item.id)?.host
-        ConnectableKind.Tailnet -> tailnet.value.takeIf { it.enabled && it.backend.storageKey == item.id }?.backend?.displayName
+        ConnectableKind.Tailnet -> tailnet.value.takeIf { it.enabled && it.backend.storageKey == item.id }?.backend?.let { b ->
+            tailnetLabel(b.displayName, profiles.value.activeOf(b).name, profiles.value.of(b).size)
+        }
     }
 
     /** Everything a tile can be bound to: the joined tailnet, then the saved hosts. */

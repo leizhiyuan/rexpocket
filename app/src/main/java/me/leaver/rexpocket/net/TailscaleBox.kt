@@ -31,7 +31,7 @@ class TailscaleBox(context: Context) : TailnetBox(context) {
     override fun open(config: TailnetConfig, hostname: String, events: NodeEvents): RunningNode {
         val tailscale = config as? TailscaleConfig ?: throw IllegalArgumentException("Tailscale needs a Tailscale config")
         dropSingBoxLeftovers()
-        val node = Tailnet.start(stateDirectory.absolutePath, hostname, tailscale.authKey, platform(events))
+        val node = Tailnet.start(directoryFor(config.profile).absolutePath, hostname, tailscale.authKey, platform(events))
         return TailscaleRunning(node)
     }
 

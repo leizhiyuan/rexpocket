@@ -521,16 +521,20 @@ class RexViewModel @JvmOverloads constructor(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** The joined tailnet as its page, chip and sheet show it: its choices, its run, its hosts. */
-    val tailnetView: StateFlow<TailnetView> = combine(tailnet, control.runs, control.policies, connections.links) { settings, runs, policies, _ ->
+    val tailnetView: StateFlow<TailnetView> = combine(tailnet, control.runs, control.policies, connections.links, connections.profiles) { settings, runs, _, _, profiles ->
         val id = settings.backend.storageKey
         val run = runs[id] ?: TailnetRun()
+        val accounts = profiles.of(settings.backend)
+        val active = profiles.activeOf(settings.backend)
         TailnetView(
             id = id,
-            name = settings.backend.displayName,
+            name = tailnetLabel(settings.backend.displayName, active.name, accounts.size),
             backend = settings.backend,
             joined = settings.enabled,
-            policy = policies.of(id),
-            off = policies.isOff(id),
+            policy = control.policyOf(id),
+            off = control.isOff(id),
+            accounts = if (settings.backend.accounts) accounts else emptyList(),
+            account = active.id,
             running = run.running,
             lingerUntil = run.lingerUntil,
             hosts = connections.hostsOn(id),
@@ -740,6 +744,26 @@ class RexViewModel @JvmOverloads constructor(
         route.value = Route.Home
         homeRequest.value = HomeRequest.ConfirmTailnetOff
     }
+
+    /** Runs account [id] on its tailnet; the hosts on the one it ran come back on it if they follow it. */
+    fun switchTailnetAccount(id: String) = connections.switchAccount(id)
+
+    /** Adds an account to the joined tailnet and runs it: its node asks for a sign-in. */
+    fun addTailnetAccount(name: String) {
+        Diagnostics.event(CONN_TAG, "tailnet: adding an account")
+        connections.addAccount(tailnet.value.backend, name)
+    }
+
+    fun renameTailnetAccount(id: String, name: String) = connections.renameAccount(id, name)
+
+    /** Removes account [id] and its login on the phone; the hosts that named it follow the active one. */
+    fun removeTailnetAccount(id: String) {
+        connections.removeAccount(id)
+        hosts.value = store.list()
+    }
+
+    /** The saved hosts that name account [id], for its Remove's confirm. */
+    fun hostsOnAccount(id: String): List<SavedHost> = connections.hostsNaming(id)
 
     /** Changes tailnet [id]'s choices, and acts on them now. */
     fun setTailnetPolicy(id: String, policy: TailnetPolicy) {

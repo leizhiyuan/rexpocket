@@ -24,6 +24,8 @@ data class SavedHost(
     val plaintext: Boolean,
     /** Reach this host through the built-in tailnet node instead of the phone's network. */
     val viaTailscale: Boolean = false,
+    /** The tailnet account it is on (TailnetProfile.id); blank follows the account that is active. */
+    val tailnetProfile: String = "",
     /** The SSH account when Rex is reached over SSH, empty when Rex listens on a port. */
     val sshUser: String = "",
     val sshPassword: String = "",
@@ -107,6 +109,7 @@ class HostStore(context: Context) {
                         port = o.optInt("port", 7297),
                         plaintext = o.optBoolean("plaintext", true),
                         viaTailscale = o.optBoolean("viaTailscale", false),
+                        tailnetProfile = o.optString("tailnetProfile", ""),
                         sshUser = o.optString("sshUser", ""),
                         sshPassword = secrets.open(o.optString("sshPassword", "")),
                         sshPrivateKey = secrets.open(o.optString("sshPrivateKey", "")),
@@ -421,6 +424,7 @@ class HostStore(context: Context) {
                     .put("port", h.port)
                     .put("plaintext", h.plaintext)
                     .put("viaTailscale", h.viaTailscale)
+                    .apply { if (h.tailnetProfile.isNotBlank()) put("tailnetProfile", h.tailnetProfile) }
                     .put("sshUser", h.sshUser)
                     .put("sshPassword", secrets.seal(h.sshPassword))
                     .put("sshPrivateKey", secrets.seal(h.sshPrivateKey))

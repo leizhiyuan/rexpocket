@@ -86,4 +86,29 @@
     <string name="tile_add_manual">Edit Quick Settings and drag the RexPocket %1$d tile in.</string>
     <string name="tile_slots_full">All three tiles are in use. Choose another item on one of them to free it.</string>
     <string name="tile_slot_label">RexPocket %1$d</string>
+
+    <!-- Accounts: several sign-ins to one tailnet, one running at a time. -->
+    <string name="tailnet_group_accounts">Accounts</string>
+    <string name="tailnet_account_in_use">In use</string>
+    <string name="tailnet_account_add">Add an account</string>
+    <string name="tailnet_account_add_action">Add and switch</string>
+    <string name="tailnet_account_add_body">Another sign-in or tailnet. One account runs at a time; switching reconnects the hosts through it.</string>
+    <string name="tailnet_account_sign_in_note">%1$s starts again on the new account and asks you to sign in.</string>
+    <string name="tailnet_account_key_note">%1$s starts again on the new account; join it with its key in Tailnet settings.</string>
+    <string name="tailnet_account_name">Name</string>
+    <string name="tailnet_account_use">Use this account</string>
+    <string name="tailnet_account_switch_body">The tailnet starts again on this account.</string>
+    <plurals name="tailnet_account_switch_hosts">
+        <item quantity="one">The tailnet starts again on this account. %2$s disconnects, and comes back on it unless it is on another account.</item>
+        <item quantity="other">The tailnet starts again on this account. %2$s disconnect, and come back on it unless they are on another account.</item>
+    </plurals>
+    <string name="tailnet_account_remove">Remove</string>
+    <string name="tailnet_account_remove_title">Remove %1$s?</string>
+    <string name="tailnet_account_remove_body">Its sign-in on this phone is deleted.</string>
+    <plurals name="tailnet_account_remove_hosts">
+        <item quantity="one">%2$s is on it, and follows the account in use from then on.</item>
+        <item quantity="other">%2$s are on it, and follow the account in use from then on.</item>
+    </plurals>
+    <string name="tailnet_account_label">Tailnet account</string>
+    <string name="tailnet_account_follow">The one in use</string>
 </resources>

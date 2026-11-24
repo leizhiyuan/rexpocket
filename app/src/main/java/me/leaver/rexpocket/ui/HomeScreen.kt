@@ -107,6 +107,7 @@ import me.leaver.rexpocket.core.TailnetBackend
 import me.leaver.rexpocket.core.Connectable
 import me.leaver.rexpocket.core.ConnectableKind
 import me.leaver.rexpocket.core.TailnetPolicy
+import me.leaver.rexpocket.core.TailnetProfile
 import me.leaver.rexpocket.core.linkState
 import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.TailnetStage
@@ -161,6 +162,8 @@ internal fun HomeScreen(
     /** Disconnects the tailnet by hand; gives back the hosts that went with it. */
     onTailnetDisconnect: () -> List<SavedHost> = { emptyList() },
     onTailnetPolicy: (String, TailnetPolicy) -> Unit = { _, _ -> },
+    /** The tailnet's accounts on its page; null leaves the group out. */
+    tailnetAccounts: TailnetAccountOps? = null,
     /** A page or a confirm asked for from outside the home (a tile, a notification), once. */
     request: HomeRequest? = null,
     onRequestHandled: () -> Unit = {},
@@ -289,6 +292,8 @@ internal fun HomeScreen(
     var page by rememberSaveable { mutableStateOf<String?>(null) }
     var pageFromNotifications by rememberSaveable { mutableStateOf(false) }
     var confirmTailnetOff by rememberSaveable { mutableStateOf(false) }
+    // An account's dialog on the tailnet's page, which is put away under it.
+    var accountEdit by rememberSaveable { mutableStateOf<String?>(null) }
     var settings by rememberSaveable { mutableStateOf(false) }
     var notifications by rememberSaveable { mutableStateOf(false) }
     var controlsPage by rememberSaveable { mutableStateOf<ControlsPage?>(null) }
@@ -710,6 +715,7 @@ internal fun HomeScreen(
         HostDialog(
             initial = editing,
             tailnetEnabled = tailnet.enabled,
+            accounts = tailnetView.accounts,
             prefillLabel = prefillLabel,
             prefillAddress = prefillAddress,
             onDismiss = done,
@@ -894,8 +900,14 @@ internal fun HomeScreen(
             onBack = pageBack,
             onDismiss = closePage,
             tile = { TileGroup(Connectable.tailnet(tailnetView.id), tailnetView.name) },
+            accounts = tailnetAccounts?.let { ops -> TailnetAccountOps(ops.switch, ops.add, ops.rename, ops.remove, ops.hostsNaming) { accountEdit = it } },
         )
         null -> Unit
+    }
+    // An account's dialog, over the tailnet's page.
+    val accountEditing = accountEdit
+    if (accountEditing != null && tailnetAccounts != null && pageOf?.kind == ConnectableKind.Tailnet) {
+        TailnetAccountDialog(tailnetView, tailnetAccounts, accountEditing) { accountEdit = null }
     }
 
     TerminalControlsPages(
@@ -1322,10 +1334,14 @@ internal fun HostDialog(
     onJoinTailnet: () -> Unit,
     /** Test connection; null leaves the button out. */
     tester: HostTester? = null,
+    /** The joined tailnet's accounts: with more than one, a tailnet host picks its own. */
+    accounts: List<TailnetProfile> = emptyList(),
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var label by rememberSaveable { mutableStateOf(initial?.label ?: prefillLabel.orEmpty()) }
+    // Blank: whichever account runs.
+    var account by rememberSaveable { mutableStateOf(initial?.tailnetProfile.orEmpty()) }
     var confirmDelete by remember { mutableStateOf(false) }
     var address by rememberSaveable {
         mutableStateOf(
@@ -1374,7 +1390,7 @@ internal fun HostDialog(
             sshPrivateKey = if (useKey) privateKey else "",
             sshPassphrase = if (useKey) passphrase else "",
             sshHostKey = pinned,
-        )
+        ).copy(tailnetProfile = if (viaTailscale && accounts.size > 1) account else initial?.tailnetProfile.orEmpty().takeIf { viaTailscale }.orEmpty())
     }
 
     val passwordField = remember { FocusRequester() }
@@ -1524,6 +1540,19 @@ internal fun HostDialog(
                         fontSize = TextStyles.label,
                         lineHeight = labelLeading,
                     )
+                }
+                if (parsed != null && parsed.viaTailscale && accounts.size > 1) {
+                    Text(stringResource(R.string.tailnet_account_label), color = Colors.muted, fontSize = TextStyles.label)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = account.isBlank() || accounts.none { it.id == account },
+                            onClick = { account = "" },
+                            label = { Text(stringResource(R.string.tailnet_account_follow)) },
+                        )
+                        for (a in accounts) {
+                            FilterChip(selected = account == a.id, onClick = { account = a.id }, label = { Text(a.name) })
+                        }
+                    }
                 }
                 if (parsed != null && parsed.viaTailscale && !tailnetEnabled) {
                     Text(

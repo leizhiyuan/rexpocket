@@ -178,6 +178,15 @@ fun RexPocketApp(
                     onTailnetConnect = model::connectTailnet,
                     onTailnetDisconnect = model::disconnectTailnet,
                     onTailnetPolicy = model::setTailnetPolicy,
+                    tailnetAccounts = remember(model) {
+                        TailnetAccountOps(
+                            switch = model::switchTailnetAccount,
+                            add = model::addTailnetAccount,
+                            rename = model::renameTailnetAccount,
+                            remove = model::removeTailnetAccount,
+                            hostsNaming = model::hostsOnAccount,
+                        )
+                    },
                     request = homeRequest,
                     onRequestHandled = { model.homeRequest.value = null },
                     opening = opening,
