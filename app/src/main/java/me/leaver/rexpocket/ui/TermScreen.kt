@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -247,6 +248,11 @@ internal fun TermScreen(
     // only as far as needed to keep its lowest row of content above the keyboard, while the dock
     // and the rest of the bottom chrome rise over it. A program is therefore never resized by the
     // screen keyboard opening, so it never redraws or reflows for it.
+    //
+    // The keyboard is measured from the window's bottom edge, and the pane's bottom edge is the
+    // navigation bar above it - the dock lives under the pane but rises with the keyboard, so it
+    // covers the pane no matter where the pane sits. Only the part of the keyboard above the
+    // navigation bar covers the pane, and moving by more would hide rows off the top for nothing.
     val hardwareKeys = rememberHardwareKeyboard()
     val dock = keyBarShown(hardwareKeys, keyBarWithKeyboard)
     var bottomPx by remember { mutableIntStateOf(0) }
@@ -256,6 +262,7 @@ internal fun TermScreen(
     var cellHeightPx by remember(shown) { mutableFloatStateOf(0f) }
     val density = LocalDensity.current
     val imeInsets = WindowInsets.ime
+    val navigationBars = WindowInsets.navigationBars
 
     Box(Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.fillMaxSize().padding(bottom = with(density) { bottomPx.toDp() })) {
@@ -312,6 +319,7 @@ internal fun TermScreen(
                                     paneHeightPx = panePx,
                                     contentBottomRow = contentBottomRow,
                                     cellHeightPx = cellHeightPx,
+                                    bottomInsetPx = navigationBars.getBottom(this),
                                 )
                                 IntOffset(0, -slide.roundToInt())
                             }
