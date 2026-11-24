@@ -180,15 +180,16 @@ class PocketSession(
     private val clock: () -> Long = System::currentTimeMillis,
     /** How long a progress bar stays without a new report; see [PocketState.progress]. */
     private val progressStaleMs: Long = PROGRESS_STALE_MS,
-    private val clientFactory: () -> RexClient = { RexClient(httpFactory()) },
     /**
      * The host's addresses, when it has others to try: each dial uses the cursor's current one,
      * and one that could not be reached moves it on at once (multi-host.md, "Other addresses").
-     * The factories above read the same cursor.
+     * The factories read the same cursor.
      */
     private val routes: RouteCursor? = null,
     /** Readies what [HostRoute] needs before it is dialed (the tailnet node); throws when it cannot. */
     private val prepare: suspend (HostRoute) -> Unit = {},
+    // Last, so a trailing lambda is the client factory, as callers and tests write it.
+    private val clientFactory: () -> RexClient = { RexClient(httpFactory()) },
 ) {
     /** The address in use now. */
     private val endpoint: Endpoint get() = routes?.current?.endpoint ?: mainEndpoint
