@@ -316,6 +316,27 @@ class TerminalSessionTest {
 
         // Completely empty viewport with hidden cursor: -1.
         assertEquals(-1, terminal(20, 10, "\u001b[?25l").frameOf().contentBottomRow())
+
+        // Inverse-video blank cell (e.g., a TUI software cursor with hardware cursor hidden).
+        assertEquals(8, terminal(20, 10, "\u001b[?25l\u001b[9;1H\u001b[7m \u001b[0m").frameOf().contentBottomRow())
+
+        // Styled blank cells: non-default background, underline, strikethrough.
+        assertEquals(7, terminal(20, 10, "\u001b[?25l\u001b[8;1H\u001b[44m   \u001b[0m").frameOf().contentBottomRow())
+        assertEquals(6, terminal(20, 10, "\u001b[?25l\u001b[7;1H\u001b[4m \u001b[0m").frameOf().contentBottomRow())
+        assertEquals(5, terminal(20, 10, "\u001b[?25l\u001b[6;1H\u001b[9m \u001b[0m").frameOf().contentBottomRow())
+
+        // Explicit background matching the terminal default does not count as visible content.
+        assertEquals(-1, terminal(20, 10, "\u001b[?25l\u001b[48;2;0;0;0m\u001b[2J").frameOf().contentBottomRow())
+    }
+
+    @Test
+    fun contentBottomRowIncludesVisibleKittyImages() {
+        val session = terminal(10, 8)
+        session.resize(10, 8, 8, 16)
+        // 1x40px image placed at row 1 covers rows 1..3 (16..56px -> bottom row 3), with cursor hidden at row 0.
+        val pixels = ByteArray(1 * 40 * 4) { -1 }
+        session.feedOutput(("\u001b[?25l\u001b[2;1H" + kittyImage(9, 1, 40, pixels, ",C=1") + "\u001b[1;1H").toByteArray())
+        assertEquals(3, session.frameOf().contentBottomRow())
     }
 
     private companion object {

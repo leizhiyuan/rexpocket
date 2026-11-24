@@ -94,8 +94,8 @@ internal class TerminalView(context: Context) : View(context) {
     /** A horizontal swipe; true when it went towards the next pane. */
     var onSwipe: ((forward: Boolean) -> Unit)? = null
 
-    /** Reported when the lowest visible row with content, cell height, or scroll-at-bottom state changes. */
-    var onContentBoundsChanged: ((contentBottomRow: Int, cellHeightPx: Float, atBottom: Boolean) -> Unit)? = null
+    /** Reported when the lowest visible row with content or the cell height changes. */
+    var onContentBoundsChanged: ((contentBottomRow: Int, cellHeightPx: Float) -> Unit)? = null
 
     private val regular = Paint(Paint.ANTI_ALIAS_FLAG).apply { isSubpixelText = true }
     private val bold = Paint(regular)
@@ -114,9 +114,9 @@ internal class TerminalView(context: Context) : View(context) {
     private var cellWidth = 1f
     private var cellHeight = 1f
     private var baseline = 0f
+    private var lastReportedFrame: TerminalFrame? = null
     private var lastReportedBottomRow = Int.MIN_VALUE
     private var lastReportedCellHeight = -1f
-    private var lastReportedAtBottom = false
 
     /** What the pane drew last, for the moment a session is being replaced and has nothing yet. */
     private var lastFrame: TerminalFrame? = null
@@ -258,13 +258,13 @@ internal class TerminalView(context: Context) : View(context) {
 
     private fun reportContentBounds(frame: TerminalFrame) {
         val callback = onContentBoundsChanged ?: return
+        if (frame === lastReportedFrame && cellHeight == lastReportedCellHeight) return
+        lastReportedFrame = frame
         val bottomRow = frame.contentBottomRow()
-        val atBottom = frame.atBottom
-        if (bottomRow == lastReportedBottomRow && cellHeight == lastReportedCellHeight && atBottom == lastReportedAtBottom) return
+        if (bottomRow == lastReportedBottomRow && cellHeight == lastReportedCellHeight) return
         lastReportedBottomRow = bottomRow
         lastReportedCellHeight = cellHeight
-        lastReportedAtBottom = atBottom
-        callback(bottomRow, cellHeight, atBottom)
+        callback(bottomRow, cellHeight)
     }
 
     private fun currentFrame(): TerminalFrame? {

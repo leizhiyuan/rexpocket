@@ -39,7 +39,7 @@ class KeyboardTest {
         // Content ending at row 2 (60px) is already well above the keyboard.
         assertEquals(
             0f,
-            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = 2, cellHeightPx = 20f, atBottom = true),
+            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = 2, cellHeightPx = 20f),
             0.01f,
         )
     }
@@ -49,7 +49,7 @@ class KeyboardTest {
         // Row 49 ends at 1000px, so keeping it above the 400px keyboard takes the full 400px shift.
         assertEquals(
             400f,
-            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = 49, cellHeightPx = 20f, atBottom = true),
+            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = 49, cellHeightPx = 20f),
             0.01f,
         )
     }
@@ -59,16 +59,7 @@ class KeyboardTest {
         // Row 34 ends at 700px; visible height above keyboard is 600px, so only a 100px shift is needed.
         assertEquals(
             100f,
-            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = 34, cellHeightPx = 20f, atBottom = true),
-            0.01f,
-        )
-    }
-
-    @Test
-    fun `scrolling back in history keeps the full keyboard shift`() {
-        assertEquals(
-            400f,
-            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = 2, cellHeightPx = 20f, atBottom = false),
+            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = 34, cellHeightPx = 20f),
             0.01f,
         )
     }
@@ -77,7 +68,7 @@ class KeyboardTest {
     fun `an empty viewport with no cursor does not shift`() {
         assertEquals(
             0f,
-            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = -1, cellHeightPx = 20f, atBottom = true),
+            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = -1, cellHeightPx = 20f),
             0.01f,
         )
     }
