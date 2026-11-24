@@ -143,15 +143,39 @@ class CloseOwnedPaneTest {
             }
         }
     }
+
+    @Test
+    fun closingLastPaneDestroysTheSession() = runBlocking {
+        FakeRexForClose(sendBlockClosedEvent = true, initialBlocks = listOf("block:1")).use { rex ->
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(rex.endpoint)
+            try {
+                session.start(scope)
+                withTimeout(5_000) { session.awaitReady() }
+
+                session.closeBlock("block:1")
+                assertEquals(listOf("session:1"), rex.destroyedSessions)
+                assertTrue("session should be removed after closing its last pane", session.state.value.sessions.isEmpty())
+                assertNull("activeSessionId should be cleared", session.state.value.activeSessionId)
+            } finally {
+                session.stop()
+                scope.cancel()
+            }
+        }
+    }
 }
 
-private class FakeRexForClose(private val sendBlockClosedEvent: Boolean) : AutoCloseable {
+private class FakeRexForClose(
+    private val sendBlockClosedEvent: Boolean,
+    initialBlocks: List<String> = listOf("block:1", "block:2"),
+) : AutoCloseable {
     private val server = MockWebServer()
-    private val liveBlocks = CopyOnWriteArrayList(listOf("block:1", "block:2"))
+    private val liveBlocks = CopyOnWriteArrayList(initialBlocks)
     private val owners = ConcurrentHashMap<String, String>()
     private val revision = AtomicLong(1)
     private val dataSockets = CopyOnWriteArrayList<WebSocket>()
     val disownCalls = CopyOnWriteArrayList<String>()
+    val destroyedSessions = CopyOnWriteArrayList<String>()
 
     private val ticket = ByteArray(16) { (it + 1).toByte() }
     private val ticketText = Base64.getUrlEncoder().withoutPadding().encodeToString(ticket)
@@ -216,6 +240,14 @@ private class FakeRexForClose(private val sendBlockClosedEvent: Boolean) : AutoC
                 ),
             )
             "session.view" -> webSocket.send(response(id, viewJson()))
+            "session.destroy" -> {
+                destroyedSessions += payload.getString("session_id")
+                liveBlocks.clear()
+                owners.clear()
+                dataSockets.forEach { it.close(4000, "session destroyed") }
+                dataSockets.clear()
+                webSocket.send(response(id, JSONObject()))
+            }
             "session.own_block" -> {
                 val ids = payload.optJSONArray("block_ids") ?: JSONArray()
                 for (i in 0 until ids.length()) {

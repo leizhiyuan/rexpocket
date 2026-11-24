@@ -422,17 +422,29 @@ class PocketSession(
         focusBlock(pane.id)
     }
 
-    /** Closes a pane, the shown one by default. Closing a tab's last pane closes the tab. */
+    /** Closes a pane, the shown one by default. Closing a session's last pane destroys the session. */
     suspend fun closeBlock(blockId: String? = null) {
         val sid = requireSession()
-        val block = blockId ?: _state.value.view?.focusedBlock()?.id ?: return
+        val view = _state.value.view?.takeIf { it.sessionId == sid }
+        val block = blockId ?: view?.focusedBlock()?.id ?: return
+        val remaining = view?.allBlocks()?.filter { it.id != block }
+        if (remaining != null && remaining.isEmpty()) {
+            destroySession()
+            return
+        }
         rpc("block.close", JSONObject().put("session_id", sid).put("block_id", block))
     }
 
-    /** Closes a tab and every pane in it, the shown tab by default. */
+    /** Closes a tab and every pane in it, the shown tab by default. Closing a session's last tab destroys the session. */
     suspend fun closeWindow(windowId: String? = null) {
         val sid = requireSession()
-        val window = windowId ?: _state.value.view?.activeWindow()?.id
+        val view = _state.value.view?.takeIf { it.sessionId == sid }
+        val window = windowId ?: view?.activeWindow()?.id
+        val remaining = window?.let { id -> view?.windows?.filter { it.id != id } }
+        if (remaining != null && remaining.isEmpty()) {
+            destroySession()
+            return
+        }
         val body = JSONObject().put("session_id", sid)
         if (window != null) body.put("window_id", window)
         rpc("session.close_window", body)
