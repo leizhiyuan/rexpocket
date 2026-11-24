@@ -103,6 +103,34 @@ abstract class PromptAnswerTest {
     }
 
     @Test
+    fun ompsToolApprovalTakesReturnAndEsc() = withPhone {
+        ask(this, "omp", "Allow bash: npm test?")
+        val record = seen("Allow bash: npm test?")
+        assertEquals(ApprovalKeys.OMP, approvalKeys(record))
+        assertEquals(PromptAnswer.Sent, phone.answerPrompt(sid, other, promptStamp(record), approve = true))
+        awaitKey(this, "enter")
+    }
+
+    @Test
+    fun ompsConfirmIsDeniedWithEsc() = withPhone {
+        ask(this, "omp", "Install skill with scripts? setup.sh")
+        val record = seen("Install skill with scripts? setup.sh")
+        assertEquals(PromptAnswer.Sent, phone.answerPrompt(sid, other, promptStamp(record), approve = false))
+        awaitKey(this, "escape")
+    }
+
+    /** omp's plan review has no Approve and Deny: the phone types nothing even when asked to. */
+    @Test
+    fun ompsPlanReviewIsNotAnswered() = withPhone {
+        ask(this, "omp", "Review plan: Split the parser")
+        val record = seen("Review plan: Split the parser")
+        assertEquals(null, approvalKeys(record))
+        assertEquals(PromptAnswer.Changed, phone.answerPrompt(sid, other, promptStamp(record), approve = true))
+        delay(300)
+        assertNothingTyped(this)
+    }
+
+    @Test
     fun anAnswerToAnOlderPromptTypesNothing() = withPhone {
         ask(this, "claude", "Allow Bash?")
         val record = seen("Allow Bash?")

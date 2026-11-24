@@ -141,10 +141,28 @@ and Deny only for those (`ApprovalKeys`, core `Approvals.kt`):
 | --- | --- | --- | --- |
 | Claude Code (`claude`) | Return | Esc | Its permission prompt is a menu, "1. Yes" first and selected; Return takes it. Its last option is "No, and tell Claude what to do differently (esc)". |
 | Codex (`codex`) | `y` | Esc | Its approval prompt names a key per answer: "Yes, proceed (y)", "No, and tell Codex what to do differently (esc)". |
+| omp (`omp`), tool approval | Return | Esc | The dialog opens with Approve (Approve Once beside grants) selected; Return (`tui.select.confirm`) takes it once 500 ms have passed (`APPROVE_ARM_MS`), Esc (`tui.select.cancel`) is Deny. Its own approve chord, Ctrl+Enter or Ctrl+Q (`app.approval.approve`), also approves once, but a confirm does not take it, so the phone sends Return. |
+| omp (`omp`), confirm | Return | Esc | `showHookConfirm` (Yes, No) and the settings-change prompt (Approve once selected): Return takes the selected, which is yes; Esc cancels, which omp counts as no. |
+| omp (`omp`), plan review | - | - | Not answered: `msg` "Review plan: <title>". Return moves between the plan, its contents and the buttons, and Esc only closes the review; it keeps Reply and Interrupt. |
+
+**omp's sources** (can1357/oh-my-pi at 6b96042, read 2026-11-24), under
+`packages/coding-agent/src/`: `utils/run-status.ts` (`holdBlockedStatus`: the newest open dialog is
+the record, `app=omp`), `modes/controllers/extension-ui-controller.ts` (`showCollabAwareApproval`
+reports `permission` with the compact prompt as `msg`; `showHookConfirm` and `showHookSelector` with
+`kind: "permission"` report the title), `ui/overlays/panels/approval-dialog.tsx` (the tool
+approval's keys), `ui/overlays/pickers/hook-selector.tsx` (a confirm's keys),
+`modes/interactive-mode.ts` (the plan review's "Review plan: " record, `#promptCfgChange` with
+`initialIndex: 1`), `ui/overlays/panels/plan-review-model.ts` (the plan review's keys) and
+`config/keybindings/tui-keybindings.ts`, `app-keybindings.ts` (the defaults: Return, Esc or Ctrl+C,
+Ctrl+Enter or Ctrl+Q). A person who rebound those keys in omp's keybindings gets the defaults from
+the phone. One case answers differently: with text typed in omp's composer under the tool
+approval, Return sends that text, which denies the call with it as the reason; the phone cannot see
+the draft. The records and keys are checked in `ApprovalsTest`, `PromptAnswerTest` (ScriptedRex and
+real Rex) and the `omp` replay (`answers` lines, AgentReplayTest).
 
 **Sources.** The agents' own prompts, as they show them, not Rex: Rex's docs (llms-full.txt, read
 2026-11-23) name Claude Code, Codex, OpenCode and Pi as the agents `rex skill setup` knows, and
-Program Status's `app` examples (`claude-code`, `terraform`), but no keys. OpenCode, Pi, Gemini and
+Program Status's `app` examples (`claude-code`, `terraform`), but no keys. OpenCode, Pi (omp's upstream), Gemini and
 others are left out until their prompts are checked; a program not in the table (Terraform's
 "Apply?", a script's own question) keeps Reply and Interrupt, as before. Which keys a given agent
 version takes is **unconfirmed** on a real phone with a real agent (see the report).

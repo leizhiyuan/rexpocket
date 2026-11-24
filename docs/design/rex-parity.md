@@ -256,8 +256,12 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 Rex reports that a program waits for approval (`state=blocked`, `kind=permission`) and which
 program it is (`app`, inherited as `effective_app`), and gives every client `client.key` to answer
 it; it does not say which key means yes. That is each agent's, so Approve and Deny exist only for a
-short table of agents (notifications.md, "Approve and Deny"): Claude Code (Return / Esc) and Codex
-(`y` / Esc). Before the keys go, the pane's records are read again (`program_status`, which a
+short table of agents (notifications.md, "Approve and Deny"): Claude Code (Return / Esc), Codex
+(`y` / Esc) and omp (Return / Esc for its tool approval and Yes/No confirms, from
+`packages/coding-agent/src/ui/overlays/panels/approval-dialog.tsx` and
+`ui/overlays/pickers/hook-selector.tsx` with the default `tui.select.confirm` and
+`tui.select.cancel` bindings in `config/keybindings/tui-keybindings.ts`; not its plan review,
+`msg` "Review plan: ...", whose keys depend on focus). Before the keys go, the pane's records are read again (`program_status`, which a
 bootstrapped connection may call on any session) and compared with the prompt the person saw,
 `updated_at` included, so an answer never lands on a newer prompt. `PromptAnswerTest` runs it on
 ScriptedRex and on real Rex, where a shell reports the prompt (OSC 7501) and reads the key.

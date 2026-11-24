@@ -14,8 +14,20 @@ data class PromptKey(val code: String, val text: String = "") {
  * `blocked` with `kind=permission` ("approval to do something") but not how to answer it; that is
  * the program's own, so the phone only offers Approve and Deny for the agents in [ApprovalKeys.table].
  */
-data class ApprovalKeys(val agent: String, val approve: List<PromptKey>, val deny: List<PromptKey>) {
+data class ApprovalKeys(
+    val agent: String,
+    val approve: List<PromptKey>,
+    val deny: List<PromptKey>,
+    /**
+     * Prompts of this agent the keys do not answer, by how their `msg` starts: a dialog that also
+     * reports `permission` but takes other keys (omp's plan review) keeps Reply and Interrupt.
+     */
+    val notFor: List<String> = emptyList(),
+) {
     fun keys(approve: Boolean): List<PromptKey> = if (approve) this.approve else deny
+
+    /** Whether these keys answer the prompt whose message is [msg]. */
+    fun answers(msg: String?): Boolean = notFor.none { msg.orEmpty().trimStart().startsWith(it) }
 
     companion object {
         /**
@@ -30,8 +42,21 @@ data class ApprovalKeys(val agent: String, val approve: List<PromptKey>, val den
          */
         val CODEX = ApprovalKeys("codex", approve = listOf(PromptKey("key_y", "y")), deny = listOf(PromptKey("escape")))
 
+        /**
+         * omp (oh-my-pi) reports `permission` for its tool approval and its Yes/No confirms
+         * (can1357/oh-my-pi, packages/coding-agent/src/modes/controllers/extension-ui-controller.ts).
+         * The tool approval (`ui/overlays/panels/approval-dialog.tsx`) opens with Approve (or Approve
+         * Once) selected and takes it on Return (`tui.select.confirm`) once 500 ms have passed;
+         * Esc (`tui.select.cancel`) denies. A confirm (`ui/overlays/pickers/hook-selector.tsx`,
+         * Yes then No, or a settings change with Approve once selected) takes the selected on Return
+         * and cancels, which is no, on Esc. Not its plan review ("Review plan: ...",
+         * `modes/interactive-mode.ts`): there Return depends on which part has focus and Esc only
+         * closes it, so that prompt keeps Reply and Interrupt.
+         */
+        val OMP = ApprovalKeys("omp", approve = listOf(PromptKey("enter")), deny = listOf(PromptKey("escape")), notFor = listOf("Review plan:"))
+
         /** Every agent the phone can answer, by the `app` it reports (docs:program-status, Keys). */
-        val table: List<ApprovalKeys> = listOf(CLAUDE, CODEX)
+        val table: List<ApprovalKeys> = listOf(CLAUDE, CODEX, OMP)
 
         /**
          * The keys for the program that reported [app], or null for one the phone does not know: a
@@ -52,7 +77,7 @@ data class ApprovalKeys(val agent: String, val approve: List<PromptKey>, val den
  */
 fun approvalKeys(record: ProgramRecord?): ApprovalKeys? {
     if (record == null || record.state != "blocked" || record.kind != "permission") return null
-    return ApprovalKeys.forApp(record.app)
+    return ApprovalKeys.forApp(record.app)?.takeIf { it.answers(record.msg) }
 }
 
 /**

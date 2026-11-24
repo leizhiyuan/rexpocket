@@ -16,6 +16,8 @@ class ApprovalsTest {
         assertEquals(listOf(PromptKey("escape")), approvalKeys(record(app = "claude"))!!.deny)
         assertEquals(listOf(PromptKey("key_y", "y")), approvalKeys(record(app = "codex"))!!.approve)
         assertEquals(listOf(PromptKey("escape")), approvalKeys(record(app = "codex"))!!.deny)
+        assertEquals(listOf(PromptKey("enter")), approvalKeys(record(app = "omp", msg = "Allow bash: npm test?"))!!.approve)
+        assertEquals(listOf(PromptKey("escape")), approvalKeys(record(app = "omp", msg = "Allow bash: npm test?"))!!.deny)
         assertEquals('y'.code, PromptKey("key_y", "y").codepoint)
         assertEquals(0, PromptKey("enter").codepoint)
     }
@@ -30,8 +32,18 @@ class ApprovalsTest {
     }
 
     @Test
+    fun ompsToolApprovalAndConfirmsAreAnsweredButNotItsPlanReview() {
+        assertEquals(ApprovalKeys.OMP, approvalKeys(record(app = "omp", msg = "Allow bash: rm -rf build?")))
+        assertEquals("a Yes/No confirm", ApprovalKeys.OMP, approvalKeys(record(app = "omp", msg = "Install skill with scripts? setup.sh")))
+        assertNull("its plan review takes other keys", approvalKeys(record(app = "omp", msg = "Review plan: Split the parser")))
+        assertNull(approvalKeys(record(app = "omp", msg = " Review plan: x")))
+        assertNull("an ask wants words", approvalKeys(record(app = "omp", kind = "question", msg = "Which branch?")))
+        assertEquals("only omp skips it", ApprovalKeys.CLAUDE, approvalKeys(record(app = "claude", msg = "Review plan: x")))
+    }
+
+    @Test
     fun anyOtherProgramGetsNoButtons() {
-        for (name in listOf(null, "", "terraform", "brew", "gemini", "opencode", "pi", "claudette", "deploy")) {
+        for (name in listOf(null, "", "terraform", "brew", "gemini", "opencode", "pi", "ompx", "claudette", "deploy")) {
             assertNull(name, ApprovalKeys.forApp(name))
         }
     }

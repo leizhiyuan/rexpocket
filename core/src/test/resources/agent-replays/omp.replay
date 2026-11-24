@@ -7,7 +7,11 @@
 #
 # Lines: `report <pairs>` is one OSC 7501 report (`| msg=` and `| title=` are plain text, encoded
 # by the harness); `see` is the person looking at the pane (on the phone or at a desk); `expect`
-# says which of the home's lists the tab is in now: running, needs-you, both or none.
+# says which of the home's lists the tab is in now: running, needs-you, both or none; `answers
+# <approve> <deny>` the keys Approve and Deny send for the record now (`answers none`: no buttons).
+# Which dialogs take which keys: Approvals.kt, ApprovalKeys.OMP (the tool approval and confirms take
+# Return and Esc; the plan review, "Review plan: <title>" from modes/interactive-mode.ts, is not
+# answered).
 
 report state=idle:app=omp
 expect none
@@ -15,6 +19,7 @@ report state=working:app=omp
 expect running
 report state=blocked:kind=permission:app=omp | msg=Allow bash: npm test?
 expect needs-you
+answers enter escape
 report state=working:app=omp
 expect running
 report state=done:app=omp
@@ -26,6 +31,19 @@ report state=working:app=omp
 expect running
 report state=blocked:kind=question:app=omp | msg=Which branch?
 expect needs-you
+answers none
+report state=working:app=omp
+expect running
+# A confirm (showHookConfirm: "title\nmessage", whitespace joined to one line).
+report state=blocked:kind=permission:app=omp | msg=Install skill with scripts? setup.sh runs on install
+expect needs-you
+answers enter escape
+report state=working:app=omp
+expect running
+# The plan review, after the turn that proposed the plan has ended.
+report state=blocked:kind=permission:app=omp | msg=Review plan: Split the parser
+expect needs-you
+answers none
 report state=working:app=omp
 expect running
 report state=error:app=omp | msg=Rate limited, try later

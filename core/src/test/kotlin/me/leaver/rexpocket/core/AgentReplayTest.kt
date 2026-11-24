@@ -26,7 +26,8 @@ import java.util.Base64
  * Fixture lines: `report <pairs>` is one OSC 7501 report (`| msg=` and `| title=` plain text, the
  * harness encodes them); `drop <id>...` is Rex dropping those records itself (`(root)` the root),
  * as when the program exits or the shell prompts; `see` is the person looking at the pane; `expect
- * running|needs-you|both|none` is the home's lists for the tab.
+ * running|needs-you|both|none` is the home's lists for the tab; `answers <approve> <deny>|none` the
+ * keys Approve and Deny send for the root record (Approvals.kt).
  *
  * [ScriptedAgentReplayTest] runs them on ScriptedRex (rex-integration); [RealRexAgentReplayTest]
  * on a real Rex (rex-real), where a loop in the pane's shell writes each report as an agent does.
@@ -51,6 +52,9 @@ abstract class AgentReplayTest {
         data class Drop(val ids: List<String>) : Step
         data object See : Step
         data class Expect(val running: Boolean, val needsYou: Boolean) : Step
+
+        /** The keys Approve and Deny send for the root record now; null: no Approve and Deny. */
+        data class Answers(val approve: String?, val deny: String?) : Step
     }
 
     companion object {
@@ -59,6 +63,10 @@ abstract class AgentReplayTest {
             return text.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.map { line ->
                 when {
                     line == "see" -> Step.See
+                    line.startsWith("answers ") -> {
+                        val keys = line.removePrefix("answers ").trim().split(' ').filter { it.isNotEmpty() }
+                        if (keys == listOf("none")) Step.Answers(null, null) else Step.Answers(keys[0], keys[1])
+                    }
                     line.startsWith("drop ") -> Step.Drop(line.removePrefix("drop ").split(' ').filter { it.isNotEmpty() }.map { if (it == "(root)") "" else it })
                     line.startsWith("expect ") -> when (val what = line.removePrefix("expect ").trim()) {
                         "none" -> Step.Expect(running = false, needsYou = false)
@@ -129,6 +137,10 @@ abstract class AgentReplayTest {
                 }
                 Step.See -> mark = mergeMarks(mark, seenMark(phone.state.value.records[block].orEmpty()))
                 is Step.Expect -> check(where, step)
+                is Step.Answers -> {
+                    val keys = approvalKeys(phone.state.value.records[block].orEmpty().firstOrNull { it.id.isEmpty() })
+                    assertEquals(where, step, Step.Answers(keys?.approve?.joinToString(" ") { it.code }, keys?.deny?.joinToString(" ") { it.code }))
+                }
             }
         }
     }
