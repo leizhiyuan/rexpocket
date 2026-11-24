@@ -62,6 +62,12 @@ data class PocketState(
      */
     val blockStatus: Map<String, ProgramRecord> = emptyMap(),
     /**
+     * Every record of each pane, as Rex lists them: root first, each parent before its children.
+     * Rex sums nothing up; [blockStatus] is the phone's summary of these, and the home decides
+     * Running and Needs you from all of them ([tabAttention]).
+     */
+    val records: Map<String, List<ProgramRecord>> = emptyMap(),
+    /**
      * The panes with a program at work or waiting: any record `working` or `blocked`, whatever the
      * summary shows. A pane whose child record is done while its root still works is both done in
      * Activity and busy here.
@@ -89,7 +95,7 @@ data class PocketState(
      */
     val closed: ClosedPane? = null,
     /**
-     * Done and failed panes a desk looked at, by pane, with the [seenStamp] of the report it saw: an
+     * Done and failed panes a desk looked at, by pane, with the [seenMark] of the reports it saw: an
      * inference from what Rex tells, as Rex keeps no seen state of its own. See [PocketSession]'s
      * `noteDeskLooks` and docs/design/home.md, "Seen".
      */
@@ -1375,8 +1381,11 @@ class PocketSession(
                 paneProgram(summary[block], foregrounds[block])?.let { programs[block] = it }
             }
             val busy = statusRecords.filterValues { records -> records.values.any { it.state == "working" || it.state == "blocked" } }.keys
+            val all = LinkedHashMap<String, List<ProgramRecord>>()
+            for ((block, records) in statusRecords) if (records.isNotEmpty()) all[block] = rootFirst(records.values)
             st.copy(
                 blockStatus = summary,
+                records = all,
                 busy = HashSet(busy),
                 statusSince = HashMap(sinceOf),
                 pwd = st.view?.focusedBlock()?.id?.let { pwds[it] },
@@ -1387,6 +1396,9 @@ class PocketSession(
         }
         noteDeskLooks()
     }
+
+    /** [records] in Rex's order: the root record first, each parent before its children (ids sort that way). */
+    private fun rootFirst(records: Collection<ProgramRecord>): List<ProgramRecord> = records.sortedBy { it.id }
 
     /** Rex's own view of each session, before the phone's place is put on it: where Rex's focus is. */
     private val rexViews = java.util.concurrent.ConcurrentHashMap<String, SessionView>()
@@ -1404,9 +1416,9 @@ class PocketSession(
      */
     private fun tookOnDesk(block: String, owner: String) {
         if (owner == _state.value.clientId) return
-        val record = _state.value.blockStatus[block] ?: return
-        if (ActivityGroup.of(record.state)?.needsSeeing != true) return
-        takes[block] = owner to seenStamp(record)
+        val records = _state.value.records[block] ?: return
+        if (records.none { ActivityGroup.of(it.state)?.needsSeeing == true }) return
+        takes[block] = owner to (seenMark(records) ?: return)
         noteDeskLooks()
     }
 
@@ -1426,9 +1438,9 @@ class PocketSession(
             val window = view.windows.firstOrNull { it.id == view.activeWindowId } ?: continue
             val block = window.focusedBlock() ?: continue
             val owner = block.owner ?: continue
-            val record = st.blockStatus[block.id] ?: continue
-            if (ActivityGroup.of(record.state)?.needsSeeing != true) continue
-            if (desk(owner) == true) looked[block.id] = seenStamp(record)
+            val records = st.records[block.id] ?: continue
+            if (records.none { ActivityGroup.of(it.state)?.needsSeeing == true }) continue
+            if (desk(owner) == true) looked[block.id] = seenMark(records) ?: continue
         }
         for ((block, take) in takes.entries.toList()) {
             when (desk(take.first)) {
@@ -1442,7 +1454,10 @@ class PocketSession(
         }
         if (looked.isEmpty()) return
         updateState { s ->
-            val merged = s.deskSeen + looked.filterKeys { it in s.blockStatus }
+            // A look adds to what the desk saw before, kept to the reports the pane still has.
+            val merged = s.deskSeen + looked.filterKeys { it in s.blockStatus }.mapNotNull { (block, mark) ->
+                mergeMarks(s.deskSeen[block], mark, s.records[block].orEmpty())?.let { block to it }
+            }
             if (merged == s.deskSeen) s else s.copy(deskSeen = merged)
         }
     }

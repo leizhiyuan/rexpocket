@@ -18,6 +18,8 @@ import me.leaver.rexpocket.core.ProgramRecord
 import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketState
+import me.leaver.rexpocket.core.paneRecords
+import me.leaver.rexpocket.core.tabDetails
 import me.leaver.rexpocket.data.HomeFolds
 import me.leaver.rexpocket.data.SavedHost
 
@@ -45,6 +47,9 @@ internal sealed interface HomeDialog {
 
     /** Remove a saved host; Undo brings it back, not connected. */
     data class RemoveHost(override val target: ManageTarget.Host, val name: String) : HomeDialog
+
+    /** A tab's Status details: every report Rex has of its programs, and what the phone made of them. */
+    data class StatusDetails(override val target: ManageTarget.Tab) : HomeDialog
 }
 
 /**
@@ -93,17 +98,20 @@ internal class HomeOps(
     val seen: (hostId: String, blockId: String, ProgramRecord) -> Boolean = { _, _, _ -> false },
     /** Marks panes seen, with an Undo. */
     val markSeen: (hostId: String, blockIds: List<String>) -> Unit = { _, _ -> },
+    /** A pane's seen mark on this phone ([me.leaver.rexpocket.core.seenMark]), for Status details. */
+    val markOf: (hostId: String, blockId: String) -> String? = { _, _ -> null },
     /** Moves a host to place [to] in the phone's own order of its hosts. */
     val moveHost: (hostId: String, to: Int) -> Unit = { _, _ -> },
     /** Removes a host, once confirmed, with an Undo. */
     val removeHost: (hostId: String) -> Unit = {},
 )
 
-/** The done and failed panes of [windows] whose report was not seen yet. */
+/** The panes of [windows] with a done or failed report not seen yet. */
 internal fun HomeOps.unseen(hostId: String, state: PocketState, windows: List<WindowInfo>): List<String> =
     windows.flatMap { it.blocks }.mapNotNull { block ->
-        val record = state.blockStatus[block.id] ?: return@mapNotNull null
-        block.id.takeIf { ActivityGroup.of(record.state)?.needsSeeing == true && !seen(hostId, block.id, record) }
+        block.id.takeIf {
+            paneRecords(state, block.id).any { record -> ActivityGroup.of(record.state)?.needsSeeing == true && !seen(hostId, block.id, record) }
+        }
     }
 
 /**
@@ -337,9 +345,14 @@ internal fun tabActions(
                 },
             ),
         ),
-        ops.unseen(id, ref.state, listOf(window)).takeIf { it.isNotEmpty() }?.let { panes ->
-            ActionGroup(listOf(RowAction(stringResource(R.string.home_mark_seen), R.drawable.ic_check) { ops.markSeen(id, panes) }))
-        },
+        ActionGroup(
+            listOfNotNull(
+                ops.unseen(id, ref.state, listOf(window)).takeIf { it.isNotEmpty() }?.let { panes ->
+                    RowAction(stringResource(R.string.home_mark_seen), R.drawable.ic_check) { ops.markSeen(id, panes) }
+                },
+                RowAction(stringResource(R.string.status_details), R.drawable.ic_eye) { sheets.dialog = HomeDialog.StatusDetails(target) },
+            ),
+        ),
         moveGroup(view.windows.indexOf(window), view.windows.size, why) { to -> ops.manage(id, HomeAction.MoveTab(sessionId, windowId, to)) },
         ActionGroup(
             listOf(
@@ -487,6 +500,16 @@ internal fun HomeSheetsHost(
                 TextButton(onClick = { sheets.dialog = null }) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
             },
         )
+        is HomeDialog.StatusDetails -> {
+            val t = open.target
+            val details = tabDetails(ref.state, t.windowId) { block -> ops.markOf(t.hostId, block) }
+            val view = ref.state.views[t.sessionId]
+            if (details == null || view == null) {
+                LaunchedEffect(open) { sheets.dialog = null }
+            } else {
+                StatusDetailsSheet(tabTitle(view, details.window, ref.state), details) { sheets.dialog = null }
+            }
+        }
         is HomeDialog.Confirm -> {
             val tab = open.target is ManageTarget.Tab
             AlertDialog(

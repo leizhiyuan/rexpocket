@@ -1,5 +1,6 @@
 package me.leaver.rexpocket.ui
 
+import me.leaver.rexpocket.core.tabDetails
 import android.os.Build
 import android.os.SystemClock
 import android.view.inputmethod.InputMethodManager
@@ -165,6 +166,9 @@ internal sealed interface Sheet {
     data class TabActions(val windowId: String) : Sheet
     data class PaneActions(val blockId: String) : Sheet
 
+    /** The tab's Status details: what Rex reports of its programs and what the phone made of it. */
+    data class StatusDetails(val windowId: String) : Sheet
+
     /** The prompt composer, for the pane that was on screen when it opened. */
     data class Composer(val sessionId: String, val blockId: String, val title: String) : Sheet
 }
@@ -204,6 +208,8 @@ internal fun TermScreen(
     /** The composer's drafts, by host and pane; [draftHost] is the host on screen. */
     drafts: PromptDrafts = remember { PromptDrafts() },
     draftHost: String? = null,
+    /** A pane's seen mark on this phone, for Status details. */
+    seenMark: (blockId: String) -> String? = { null },
 ) {
     val context = LocalContext.current
     val ime = LocalSoftwareKeyboardController.current
@@ -735,6 +741,7 @@ internal fun TermScreen(
                 if (view != null && tab != null) {
                     val title = tabTitle(view, tab, state)
                     SheetItem(stringResource(R.string.menu_rename_tab), icon = R.drawable.ic_edit) { rename = Rename(Level.Tab, tab.id, tab.label) }
+                    SheetItem(stringResource(R.string.status_details), icon = R.drawable.ic_eye) { sheet = Sheet.StatusDetails(tab.id) }
                     SheetItem(stringResource(R.string.menu_close_tab), Colors.danger, icon = R.drawable.ic_close) { confirm = Confirm(Level.Tab, tab.id, title) }
                 }
             }
@@ -948,6 +955,15 @@ internal fun TermScreen(
                         SheetItem(stringResource(R.string.menu_close_tab), Colors.danger, icon = R.drawable.ic_close) { confirm = Confirm(Level.Tab, window.id, title) }
                     }
                 }
+            }
+        }
+        is Sheet.StatusDetails -> {
+            // Gone with its tab, as the tab's sheet is.
+            val details = tabDetails(state, open.windowId, seenMark)
+            if (view != null && details != null) {
+                StatusDetailsSheet(tabTitle(view, details.window, state), details) { sheet = null }
+            } else {
+                LaunchedEffect(open) { sheet = null }
             }
         }
         is Sheet.Composer -> {

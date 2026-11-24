@@ -53,6 +53,9 @@ import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.ProgramRecord
 import me.leaver.rexpocket.core.activityAge
 import me.leaver.rexpocket.core.activitySections
+import me.leaver.rexpocket.core.needsYouSections
+import me.leaver.rexpocket.core.runningItems
+import me.leaver.rexpocket.core.TabAttention
 
 // The home's filters: Needs you - what waits on the person, and what failed or finished that they
 // have not seen - and Running, each a flat list in Rex's priority order (Waiting, Failed, Done,
@@ -70,17 +73,30 @@ enum class HomeFilter {
 
 /**
  * The tabs [filter] lists of one host, most pressing first: for Needs you the waiting ones, and the
- * failed and done ones not yet [seen]; for Running the working ones. A seen done tab with a pane
- * still at work counts as running.
+ * failed and done ones not yet [seen]; for Running every tab with anything at work, whatever else
+ * it has - so a tab can be in both. Seen is per report: a seen done report of a pane that still
+ * works leaves it running.
  */
 internal fun filterSections(state: PocketState, filter: HomeFilter, seen: (String, ProgramRecord) -> Boolean): List<ActivitySection> =
-    activitySections(state, seen).filter { section ->
-        when (filter) {
-            HomeFilter.All -> true
-            HomeFilter.NeedsYou -> section.group != ActivityGroup.Running
-            HomeFilter.Running -> section.group == ActivityGroup.Running
-        }
+    when (filter) {
+        HomeFilter.All -> activitySections(state, seen)
+        HomeFilter.NeedsYou -> needsYouSections(state, seen)
+        HomeFilter.Running -> runningItems(state, seen).takeIf { it.isNotEmpty() }?.let { listOf(ActivitySection(ActivityGroup.Running, it)) }.orEmpty()
     }
+
+/**
+ * The words for what else a tab has besides a report of group [shown], in Rex's order: "running",
+ * "1 done", "2 waiting". A row says them after its own state.
+ */
+@Composable
+internal fun alsoWords(attention: TabAttention, shown: ActivityGroup): List<String> = attention.alsoBesides(shown).map { (group, n) ->
+    when (group) {
+        ActivityGroup.Running -> stringResource(R.string.state_running)
+        ActivityGroup.Waiting -> stringResource(R.string.home_count_waiting, n)
+        ActivityGroup.Failed -> stringResource(R.string.home_count_failed, n)
+        ActivityGroup.Done -> stringResource(R.string.home_count_done, n)
+    }
+}
 
 /** [sections] narrowed by [query] on a tab's title, its session and its message. */
 @Composable
@@ -203,7 +219,9 @@ private fun AttentionRow(item: ActivityItem, state: PocketState, ops: AttentionO
     }
     val age = item.since?.let { activityAge(it, now) ?: stringResource(R.string.activity_now) }
     val progress = item.record.progress?.takeIf { item.group == ActivityGroup.Running || item.group == ActivityGroup.Waiting }
-    val tint = activityTint(item.group)
+    // The dot is the tab's most pressing state, in Rex's order; the words lead with the row's own.
+    val tint = activityTint(item.attention.group)
+    val ownTint = activityTint(item.group)
     val manageLabel = stringResource(R.string.manage_actions_for, title)
     val actions = ops.actionsOf(item)
     Column(Modifier.fillMaxWidth()) {
@@ -228,9 +246,9 @@ private fun AttentionRow(item: ActivityItem, state: PocketState, ops: AttentionO
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, color = Colors.ink, fontSize = TextStyles.body, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val word = statusWord(item.record) ?: activityGroupName(item.group)
+                val word = (listOf(statusWord(item.record) ?: activityGroupName(item.group)) + alsoWords(item.attention, item.group)).joinToString(" · ")
                 val detail = listOfNotNull(item.sessionLabel, progress?.let { "$it%" }, age).joinToString(" · ")
-                Text(word, color = tint, fontSize = TextStyles.label, fontWeight = FontWeight.Medium)
+                Text(word, color = ownTint, fontSize = TextStyles.label, fontWeight = FontWeight.Medium)
                 Text(detail, color = Colors.muted, fontSize = TextStyles.label)
                 val message = item.record.msg?.takeIf { it.isNotBlank() }
                 if (message != null) {

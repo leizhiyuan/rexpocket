@@ -43,7 +43,9 @@ import me.leaver.rexpocket.alerts.AlertTarget
 import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.core.ActivityGroup
 import me.leaver.rexpocket.core.AlertKind
-import me.leaver.rexpocket.core.seenStamp
+import me.leaver.rexpocket.core.markCovers
+import me.leaver.rexpocket.core.mergeMarks
+import me.leaver.rexpocket.core.seenMark
 import me.leaver.rexpocket.data.HomeMarks
 import me.leaver.rexpocket.core.AlertPrefs
 import me.leaver.rexpocket.core.HostBackground
@@ -266,9 +268,11 @@ class Connections private constructor(private val app: Application, val nodes: T
             lives.collect { all ->
                 for ((hostId, live) in all) {
                     val st = live.state
-                    for ((block, stamp) in st.deskSeen) {
-                        val record = st.blockStatus[block] ?: continue
-                        if (seenStamp(record) == stamp && marks.seen.value[HomeMarks.key(hostId, block)] != stamp) seen(hostId, block)
+                    for ((block, deskMark) in st.deskSeen) {
+                        val mine = marks.seen.value[HomeMarks.key(hostId, block)]
+                        val records = st.records[block].orEmpty()
+                        // Only the reports the desk saw: a child that finished after it looked is news still.
+                        if (records.any { markCovers(deskMark, it) && !markCovers(mine, it) }) seen(hostId, block, only = deskMark)
                     }
                     if (st.phase == Phase.Live) marks.prune(hostId, st.blockStatus.keys)
                 }
@@ -669,12 +673,19 @@ class Connections private constructor(private val app: Application, val nodes: T
         }
     }
 
-    /** The person is looking at [block] of [hostId]: whatever its notification said, they see it now. */
-    private fun seen(hostId: String, block: String) {
+    /**
+     * The person is looking at [block] of [hostId]: whatever its notification said, they see it now.
+     * Every report of the pane is marked seen, or, with [only], those that mark covers (what a desk
+     * saw). See docs/design/home.md, "Seen".
+     */
+    private fun seen(hostId: String, block: String, only: String? = null) {
         fleet.member(hostId)?.planner?.seen(block)
         Alerts.settle(app, hostId, block)
-        val record = this[hostId]?.pocket?.value?.blockStatus?.get(block) ?: return
-        if (ActivityGroup.of(record.state)?.needsSeeing == true) marks.mark(mapOf(HomeMarks.key(hostId, block) to seenStamp(record)))
+        val records = this[hostId]?.pocket?.value?.records?.get(block) ?: return
+        val looked = if (only == null) records else records.filter { markCovers(only, it) }
+        val key = HomeMarks.key(hostId, block)
+        val next = mergeMarks(marks.seen.value[key], seenMark(looked), records) ?: return
+        marks.mark(mapOf(key to next))
     }
 
     /** A pane's bell or desktop notification: a buzz on screen, a notification while away. */

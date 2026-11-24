@@ -113,7 +113,7 @@ import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.HomeFolds
 import me.leaver.rexpocket.data.HomeMarks
-import me.leaver.rexpocket.core.seenStamp
+import me.leaver.rexpocket.core.markCovers
 import androidx.compose.material3.SnackbarDuration
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -332,7 +332,8 @@ internal fun HomeScreen(
             toast(context, context.getString(R.string.home_address_copied))
         },
         tailnetDetails = { tailnetDetails = true },
-        seen = { hostId, block, record -> seenMarks[HomeMarks.key(hostId, block)] == seenStamp(record) },
+        seen = { hostId, block, record -> markCovers(seenMarks[HomeMarks.key(hostId, block)], record) },
+        markOf = { hostId, block -> seenMarks[HomeMarks.key(hostId, block)] },
         moveHost = onMoveHost,
         removeHost = { hostId ->
             onRemoveHost(hostId)?.let { removed ->

@@ -163,7 +163,20 @@ data class ProgramRecord(
      * Rex 0.1.0-preview.22 sends it at every API revision the app speaks; null if a Rex leaves it out.
      */
     val updatedAt: Long? = null,
-)
+    /** The `app` the program itself put in this report; [app] is the one Rex resolved (`effective_app`). */
+    val reportedApp: String? = null,
+    /** Rex's `effective_app`: [reportedApp], or the app of the nearest parent record that has one. */
+    val effectiveApp: String? = null,
+    /** The terminal's foreground process when the report arrived (`owner`), as Rex names it. */
+    val ownerPid: Int? = null,
+    val ownerName: String? = null,
+) {
+    /**
+     * The id of the record this one is a child of: `build` for `build/test`, the root record ("")
+     * for `build`, and null for the root record itself (docs:program-status, "Records and ids").
+     */
+    val parent: String? get() = if (id.isEmpty()) null else id.substringBeforeLast('/', "")
+}
 
 /**
  * The order Rex's Activity puts states in, most pressing first: "blocked failed done working idle"
@@ -264,6 +277,10 @@ private fun parseProgramRecord(o: JSONObject, id: String) = ProgramRecord(
     msg = o.optNullableString("msg"),
     progress = if (o.has("progress") && !o.isNull("progress")) o.optInt("progress") else null,
     updatedAt = o.optNullableString("updated_at")?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() },
+    reportedApp = o.optNullableString("app"),
+    effectiveApp = o.optNullableString("effective_app"),
+    ownerPid = o.optJSONObject("owner")?.takeIf { it.has("pid") }?.optInt("pid"),
+    ownerName = o.optJSONObject("owner")?.optNullableString("name"),
 )
 
 /**

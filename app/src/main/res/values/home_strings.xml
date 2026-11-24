@@ -53,4 +53,9 @@
     <string name="home_failed_end">Couldn\'t end the session: %1$s</string>
     <string name="home_failed_close">Couldn\'t close the tab: %1$s</string>
     <string name="home_failed_move">Couldn\'t move it: %1$s</string>
+    <string name="status_details">Status details</string>
+    <string name="status_details_copy">Copy</string>
+    <string name="status_details_copied">Status details copied</string>
+    <string name="status_details_tab">This tab</string>
+    <string name="status_details_pane">Pane %1$d · %2$s</string>
 </resources>

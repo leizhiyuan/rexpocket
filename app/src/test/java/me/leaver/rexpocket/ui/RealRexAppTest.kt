@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
@@ -169,6 +170,39 @@ class RealRexAppTest {
         // A row opens the pane that reported.
         compose.onNodeWithTag(activityRowTag(tabs[1].first)).performClick()
         compose.awaitThat { m.route.value == Route.Term && shown(m) == tabs[1].second }
+    }
+
+    /**
+     * The user's report on a real Rex: an agent works (the root record) while one of its tasks is
+     * done (a child record), as Rex.app shows such a tab under Working. The phone lists it in
+     * Running and, until the result is seen, in Needs you; marked as seen, it is still running.
+     * Status details shows Rex's own fields: the child's parent, `effective_app` and `owner`.
+     */
+    @Test
+    fun anAgentAtWorkWithAChildDoneIsRunning() {
+        val m = launch(onTerminal = false)
+        val (tab, pane) = tabs[0]
+        val reports = printf("state=working:app=claude:msg=" + b64("Refactoring")) + "; " +
+            printf("state=done:id=task-1:title=" + b64("Explore") + ":msg=" + b64("Found 3 files"))
+        // The shell keeps running a program, so Rex keeps the working record (it drops working
+        // records when the program exits or the shell prompts again).
+        runBlocking { desk.type(sid, pane, "sh -c \"${reports.replace("\"", "\\\"")}; sleep 120\"\n") }
+        compose.awaitThat(20_000) { m.pocket.value.records[pane]?.size == 2 }
+        val child = m.pocket.value.records.getValue(pane).first { it.id == "task-1" }
+        assertEquals("", child.parent)
+        assertEquals("claude", child.effectiveApp)
+        compose.waitForIdle()
+        compose.onNodeWithTag(filterChipTag(HomeFilter.Running)).assert(hasText(string(R.string.filter_running, 1)))
+        compose.onNodeWithTag(filterChipTag(HomeFilter.NeedsYou)).assert(hasText(string(R.string.filter_needs_you, 1)))
+        compose.runOnUiThread { m.markSeen("real-rex", listOf(pane)) }
+        compose.awaitThat { compose.onAllNodes(hasText(string(R.string.filter_needs_you, 0))).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(filterChipTag(HomeFilter.Running)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(activityRowTag(tab)).assertIsDisplayed()
+        val details = me.leaver.rexpocket.core.tabDetails(m.pocket.value, tab) { block -> m.seenMarks.value[me.leaver.rexpocket.data.HomeMarks.key("real-rex", block)] }!!
+        val text = details.text("t", System.currentTimeMillis())
+        assertTrue(text, text.contains("record task-1") && text.contains("effective_app: claude") && text.contains("home lists: Running"))
+        assertTrue("Rex names the foreground process: $text", Regex("owner: \\d+ \\S+").containsMatchIn(text))
     }
 
     /** The palette's actions do on a real Rex what they say: split, new tab, rename, release and take over, close. */

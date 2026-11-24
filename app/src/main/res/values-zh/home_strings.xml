@@ -52,4 +52,9 @@
     <string name="home_failed_end">无法结束会话：%1$s</string>
     <string name="home_failed_close">无法关闭标签页：%1$s</string>
     <string name="home_failed_move">无法移动：%1$s</string>
+    <string name="status_details">状态详情</string>
+    <string name="status_details_copy">复制</string>
+    <string name="status_details_copied">已复制状态详情</string>
+    <string name="status_details_tab">此标签页</string>
+    <string name="status_details_pane">窗格 %1$d · %2$s</string>
 </resources>

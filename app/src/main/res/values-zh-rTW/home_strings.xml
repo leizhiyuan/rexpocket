@@ -52,4 +52,9 @@
     <string name="home_failed_end">無法結束工作階段：%1$s</string>
     <string name="home_failed_close">無法關閉分頁：%1$s</string>
     <string name="home_failed_move">無法移動：%1$s</string>
+    <string name="status_details">狀態詳情</string>
+    <string name="status_details_copy">複製</string>
+    <string name="status_details_copied">已複製狀態詳情</string>
+    <string name="status_details_tab">此分頁</string>
+    <string name="status_details_pane">窗格 %1$d · %2$s</string>
 </resources>

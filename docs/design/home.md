@@ -8,9 +8,12 @@ glance what a fleet of agents needs. It builds on several hosts at once (multi-h
 
 ## What a row says
 
-- **A tab** is dotted and worded by its most pressing pane (`tabAttention`): amber *waiting*, red
-  *failed*, blue *done*, green *running* - the word always with the colour ("waiting for approval ·
-  2 panes"). A waiting or failed tab shows the first line of its program's message. When the pane
+- **A tab** is dotted and worded by its most pressing report (`tabAttention`), across every record
+  of every pane: amber *waiting*, red *failed*, blue *done*, green *running* - the word always with
+  the colour ("waiting for approval · 2 panes"). What else it has follows: "running · 1 done · 1
+  pane" for an agent at work whose task finished, "waiting for an answer · running · 2 panes" for a
+  tab working in one pane and asking in another. A waiting or failed tab shows the first line of
+  its program's message. When the pane
   that has the news is not the one the tab shows, a line names it ("pane claude waiting for
   approval") and opens that pane.
 - **A session** has a chip of its most pressing state that is news, and its tab count.
@@ -50,7 +53,7 @@ device, closes. End session and Close tab confirm; Remove host confirms and offe
   Copy address, Tailnet details; Remove host….
 - Session: Connect or Retry first while the host is not live; Open, New tab, Rename…; Collapse or
   Expand, Mark all as seen; Move up, Move down ("2 of 7", Rex's full order); End session….
-- Tab: Open, Rename…; Mark as seen; Move up, Move down; Close tab….
+- Tab: Open, Rename…; Mark as seen, Status details; Move up, Move down; Close tab….
 
 **Hosts** are in the phone's own order (Move up and Move down in the host sheet; Rex has no order
 of hosts), never moved by their connection, so positions stay put; their headers stick to the top
@@ -67,8 +70,13 @@ confirm first, so they have no Undo, nor does Rename.
 ## Filters, search and the bottom bar
 
 **All, Needs you, Running** are chips at the top, with counts across every connected host; the
-choice is kept. Needs you is waiting tabs, and failed and done tabs not yet seen; Running is working
-tabs. Each is a flat list in Rex's priority order under each host's header (no folds), with Reply
+choice is kept. **Needs you** is the tabs whose most pressing report waits on the person, or failed
+or finished and was not seen. **Running is anything working**: every tab with a `working` record in
+any pane, root or child, whatever else it has - so a tab can be in both, and its row says both
+("running · 1 done" in Running, "done · running" in Needs you). The dot is always the tab's most
+pressing state, in Rex's order. A tab with no records, or only idle ones, is in neither. Each is a
+flat list (Needs you in Rex's priority order, Running newest first) under each host's header (no
+folds), with Reply
 (never for `auth`, as in notifications) and Interrupt on Needs you's rows, and a line for each host
 that is not connected, with Connect.
 
@@ -95,8 +103,12 @@ sheet's caption says the place, in Rex's full order, which a move always uses).
 ## Seen
 
 Rex keeps no seen state and does not tell one client what another shows (rex-parity.md, "What other
-clients show"), so seen is the phone's, by host and pane, for the report it was (`seenStamp`: state,
-kind, message; a new report is news again), in `HomeMarks`. A done or failed pane is seen when:
+clients show"), so seen is the phone's, in `HomeMarks`: by host and pane, a mark that lists **each
+record's report** that was seen (`seenMark`: one `seenStamp` per record - its id, state, kind and
+message; a new report is news again). Seen is per record: a seen done or failed record is left out
+and the pane falls back to its next report, so an agent whose root works while a child record is
+done and seen is running, not gone. A mark made before marks were per record is the root record's
+stamp, which still holds. A pane's reports are seen when:
 
 1. it was on the phone's screen (`Connections.seen`, which also settles its notification);
 2. the person marked it (Mark as seen, Mark all as seen; Undo puts the marks back);
@@ -107,21 +119,42 @@ kind, message; a new report is news again), in `HomeMarks`. A done or failed pan
    - Rex.app on a Mac, not this phone (which says `other`), another phone or Rex's CLI.
    `Connections` marks it and settles its notification.
 
+What a desk saw is the reports the pane had when it looked; a child record that finishes later is
+news again until the next look.
+
 **Limits of the inference.** It says a desk *showed* the pane, not that the person looked: a Mac
 asleep on that tab counts, and a desk already on the tab when the program finished sees it at once.
 A desk showing the tab in a second window that did not take the pane is not seen. Another phone
 showing it is not counted. Marks of panes that have no report any more are dropped while the host
 is live.
 
+## Status details
+
+The tab sheet's **Status details** (and the terminal ⋮'s, for the tab on screen) says why a tab is,
+or is not, where the home puts it: what the phone shows for it and the lists it is in, then pane by
+pane the phone's summary and **every record Rex reports** - id, parent, state, kind, `app`,
+`effective_app`, owner pid and name, title, msg, progress, `updated_at` with its age - and whether
+the phone's mark and a desk's cover it. **Copy** puts it all on the clipboard as plain text: the
+person asked, so the programs' titles and messages are in it. The field names stay Rex's, in
+English, as a log's do. The diagnostics report carries a redacted digest instead
+(`activityDigest`): each tab by place ("session 1 tab 2"), each record as root or child with its
+state, kind, app, owner name, age and seen marks, what the phone made of it and its lists - no
+titles, messages, record ids or labels.
+
 ## Tests
 
-`HomeStateTest` (status words, summaries, hidden-pane line; folds kept; a session without its tabs
+`RunningTest` (core, ScriptedRex: root working with a child done, unseen and seen; seen on a desk;
+a tab working in one pane and waiting in another; a tab with nothing at work; old marks still
+hold), `RealRexAppTest.anAgentAtWorkWithAChildDoneIsRunning` (rex-real: a shell reporting OSC 7501
+root working and a child done), `HomeStateTest` (status words, summaries, hidden-pane line; folds kept; a session without its tabs
 folds and opens from its button; Collapse all's Undo restores the folds exactly),
 `HomeManageTest` (sheets and TalkBack offer the same items, in order; moves, renames, ends, closes
 reach Rex without attaching; a session ended at the desk closes its sheet and says so),
 `MultiHostTest` (host taps fold, never connect; the three-state fold; the host sheet following its
 connection; a failing host's Retry; + with two, one and no hosts connected; host order and Remove
-host with Undo), `ActivityViewTest` (Needs you and Running: order, counts, Mark as seen and Undo, seen on
+host with Undo), `ActivityViewTest` (Needs you and Running: an agent at work with a child done in both lists and
+still running once seen, a tab working and waiting in both, Status details and its Copy; order,
+counts, Mark as seen and Undo, seen on
 the phone and on a desk, Reply hidden for `auth`, Interrupt, the not-connected line, the filter
 kept; Approve's Return for Claude and Deny's Esc for Codex, none for Terraform, a changed prompt
 opening the pane and typing nothing, Reply's Compose on the emulator), `DeskSeenTest` (core, ScriptedRex: the desk inference), `ClientViewProbeTest` (rex-real:

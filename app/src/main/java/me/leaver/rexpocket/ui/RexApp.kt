@@ -36,6 +36,7 @@ import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.LoginLinkGate
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.Trouble
+import me.leaver.rexpocket.data.HomeMarks
 import me.leaver.rexpocket.data.SavedHost
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -262,6 +263,7 @@ fun RexPocketApp(
                     quickReplies = quickReplies.items,
                     drafts = model.drafts,
                     draftHost = model.host?.id,
+                    seenMark = { block -> model.host?.id?.let { seenMarks[HomeMarks.key(it, block)] } },
                 )
             }
             when (layoutFor(window, hasHosts = hosts.isNotEmpty(), terminalOpen = route == Route.Term)) {

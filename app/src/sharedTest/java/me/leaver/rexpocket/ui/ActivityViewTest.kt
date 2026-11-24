@@ -12,6 +12,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -125,6 +126,65 @@ class ActivityViewTest {
         assertTrue(rowGone(waitingTab.id))
         // The choice is kept for the next start.
         assertEquals(HomeFilter.Running, RexViewModel(compose.activity.application).homeFilter.value)
+    }
+
+    /**
+     * The user's report: Rex.app shows an agent's tab as Working while the phone's Running did not
+     * list it. Its root record works while a child record is done; the tab is in Running and, until
+     * that result is seen, in Needs you too, its row saying both. Seeing the result leaves it running.
+     */
+    @Test
+    fun anAgentAtWorkWithAChildDoneIsInBothListsAndStaysRunningOnceSeen() {
+        val m = start()
+        val tab = tabs(m, other)[0]
+        val pane = tab.blocks[0].id
+        desk.rex.report(pane, "working", app = "claude", msg = "Refactoring")
+        desk.rex.report(pane, "done", id = "task-1", title = "Explore", msg = "Found 3 files")
+        compose.awaitThat { m.pocket.value.records[pane]?.size == 2 }
+        compose.waitForIdle()
+        chip(HomeFilter.NeedsYou).assert(hasText(string(R.string.filter_needs_you, 1)))
+        chip(HomeFilter.Running).assert(hasText(string(R.string.filter_running, 1)))
+        chip(HomeFilter.Running).performClick()
+        compose.waitForIdle()
+        row(tab.id).assertExists()
+        val both = string(R.string.state_running) + " · " + string(R.string.home_count_done, 1)
+        compose.onNode(hasTestTag(activityRowTag(tab.id)) and hasText(both, substring = true)).assertExists()
+
+        // Mark as seen, from the row's sheet: the done result is seen, the work goes on.
+        compose.onNode(hasTestTag(activityRowTag(tab.id)) and hasClickAction()).performTouchInput { longClick() }
+        compose.waitForIdle()
+        inSheet(string(R.string.home_mark_seen)).performScrollTo().performClick()
+        compose.awaitThat { compose.onAllNodes(hasText(string(R.string.filter_needs_you, 0))).fetchSemanticsNodes().isNotEmpty() }
+        chip(HomeFilter.Running).assert(hasText(string(R.string.filter_running, 1)))
+        row(tab.id).assertExists()
+
+        // Status details: every record, and the phone's seen marks.
+        compose.onNode(hasTestTag(activityRowTag(tab.id)) and hasClickAction()).performTouchInput { longClick() }
+        compose.waitForIdle()
+        inSheet(string(R.string.status_details)).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNode(hasTestTag(statusDetailsPaneTag(0)) and hasText("record task-1", substring = true)).assertExists()
+        compose.onNode(hasTestTag(statusDetailsPaneTag(0)) and hasText("seen: phone yes", substring = true)).assertExists()
+        inSheet(string(R.string.status_details_copy)).performScrollTo().performClick()
+        val clip = compose.activity.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.getItemAt(0)?.text.toString()
+        assertTrue(clip, clip.contains("msg: Found 3 files") && clip.contains("home lists: Running"))
+    }
+
+    /** A tab working in one pane and waiting in another is in both lists. */
+    @Test
+    fun aTabWorkingInOnePaneAndWaitingInAnotherIsInBoth() {
+        val m = start()
+        val tab = tabs(m, other)[1]
+        val second = desk.split(other, tab.blocks[0].id)
+        desk.rex.report(tab.blocks[0].id, "working", app = "cargo")
+        desk.rex.report(second, "blocked", kind = "question", msg = "Which branch?", app = "claude")
+        compose.awaitThat { m.pocket.value.blockStatus.size == 2 }
+        compose.waitForIdle()
+        chip(HomeFilter.NeedsYou).assert(hasText(string(R.string.filter_needs_you, 1)))
+        chip(HomeFilter.Running).assert(hasText(string(R.string.filter_running, 1)))
+        needsYou()
+        val waiting = string(R.string.state_waiting_answer) + " · " + string(R.string.state_running)
+        compose.onNode(hasTestTag(activityRowTag(tab.id)) and hasText(waiting, substring = true)).assertExists()
     }
 
     @Test

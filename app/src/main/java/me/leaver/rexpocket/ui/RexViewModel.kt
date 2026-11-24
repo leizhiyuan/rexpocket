@@ -62,7 +62,9 @@ import me.leaver.rexpocket.data.downloadedTypeface
 import me.leaver.rexpocket.data.SavedHost
 import me.leaver.rexpocket.data.HomeFolds
 import me.leaver.rexpocket.data.HomeMarks
-import me.leaver.rexpocket.core.seenStamp
+import me.leaver.rexpocket.core.mergeMarks
+import me.leaver.rexpocket.core.activityDigest
+import me.leaver.rexpocket.core.seenMark
 import me.leaver.rexpocket.data.TailnetSettings
 import me.leaver.rexpocket.core.ReportedFact
 import me.leaver.rexpocket.diagnostics.Diagnostics
@@ -331,7 +333,12 @@ class RexViewModel @JvmOverloads constructor(
      */
     fun markSeen(hostId: String, blockIds: Collection<String>): Map<String, String?> {
         val st = connections[hostId]?.pocket?.value ?: return emptyMap()
-        val marks = blockIds.mapNotNull { block -> st.blockStatus[block]?.let { HomeMarks.key(hostId, block) to seenStamp(it) } }.toMap()
+        // Every report each pane has now; the marks it had stay, kept to the reports still there.
+        val marks = blockIds.mapNotNull { block ->
+            val records = st.records[block] ?: return@mapNotNull null
+            val key = HomeMarks.key(hostId, block)
+            mergeMarks(seenMarks.value[key], seenMark(records), records)?.let { key to it }
+        }.toMap()
         val before = marks.keys.associateWith { seenMarks.value[it] }
         connections.marks.mark(marks)
         // Seen is seen: a notification about it has done its job.
@@ -1091,6 +1098,14 @@ class RexViewModel @JvmOverloads constructor(
             }
             state.programs.values.toSortedSet().takeIf { it.isNotEmpty() }?.let {
                 add(ReportedFact("programs", it.joinToString(", ")))
+            }
+            // What each connected host's programs reported, by place and without their words:
+            // states, kinds, apps, owner names, ages and seen marks (activityDigest).
+            hosts.value.forEachIndexed { i, known ->
+                val st = connections[known.id]?.pocket?.value ?: return@forEachIndexed
+                if (st.phase != Phase.Live) return@forEachIndexed
+                val digest = activityDigest(st, { block -> seenMarks.value[HomeMarks.key(known.id, block)] }, System.currentTimeMillis())
+                for (line in digest) add(ReportedFact("activity host ${i + 1}", line))
             }
             for (known in hosts.value) {
                 add(

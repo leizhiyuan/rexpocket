@@ -115,9 +115,20 @@ internal typealias Seen = (blockId: String, record: ProgramRecord) -> Boolean
 internal fun sessionChip(tabs: List<WindowInfo>, state: PocketState, seen: Seen = { _, _ -> false }): ActivityGroup? =
     tabs.mapNotNull { tabAttention(it, state, seen)?.group }.minByOrNull { it.ordinal }
 
-/** How many tabs of a live host are in each state that is news, for its summary line. */
-internal fun hostCounts(state: PocketState, seen: Seen = { _, _ -> false }): Map<ActivityGroup, Int> =
-    state.views.values.flatMap { it.windows }.mapNotNull { tabAttention(it, state, seen)?.group }.groupingBy { it }.eachCount()
+/**
+ * How many tabs of a live host are in each state that is news, for its summary line, counted as
+ * the home's filters count them: a tab by its most pressing state, and in running too when
+ * anything in it works.
+ */
+internal fun hostCounts(state: PocketState, seen: Seen = { _, _ -> false }): Map<ActivityGroup, Int> {
+    val counts = LinkedHashMap<ActivityGroup, Int>()
+    for (window in state.views.values.flatMap { it.windows }) {
+        val attention = tabAttention(window, state, seen) ?: continue
+        if (attention.needsYou) counts[attention.group] = (counts[attention.group] ?: 0) + 1
+        if (attention.isRunning) counts[ActivityGroup.Running] = (counts[ActivityGroup.Running] ?: 0) + 1
+    }
+    return counts
+}
 
 /**
  * The summary line of a connected host, its most pressing news first: "2 waiting · 1 failed ·
@@ -432,8 +443,10 @@ internal fun TabCard(
             if (index > 0) {
                 Box(Modifier.padding(start = KEY_TEXT).fillMaxWidth().height(1.dp).background(Colors.line))
             }
-            val attention = tabAttention(window, state)
-            val old = attention != null && attention.group.needsSeeing && seen(attention.block.id, attention.record)
+            // What is news; failing that, a done or failed report that was seen, said quietly.
+            val fresh = tabAttention(window, state, seen)
+            val attention = fresh ?: tabAttention(window, state)
+            val old = fresh == null && attention != null
             // A pane other than the one the tab shows is named, so the tap that opens it is there.
             val hidden = attention?.takeIf { !old && it.group != ActivityGroup.Running && it.block.id != window.focusedBlock()?.id }
             TabRow(
@@ -476,12 +489,18 @@ internal fun TabCard(
 internal fun tabDetail(panes: Int, attention: TabAttention?, seen: Boolean = false): AnnotatedString {
     val count = pluralStringResource(R.plurals.pane_count, panes, panes)
     val word = attention?.let { statusWord(it.record) }
+    val also = if (attention != null && !seen) alsoWords(attention, attention.group) else emptyList()
     return buildAnnotatedString {
         if (word != null) {
             // A done or failed report that was seen keeps its word, quietly.
             val color = if (seen) Colors.muted else activityTint(attention.group)
             withStyle(SpanStyle(color = color, fontWeight = if (seen) FontWeight.Normal else FontWeight.Medium)) { append(word) }
             append(" · ")
+            // What else the tab has: "waiting for approval · running", "running · 1 done".
+            for (more in also) {
+                append(more)
+                append(" · ")
+            }
         }
         append(count)
     }

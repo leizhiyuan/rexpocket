@@ -87,9 +87,44 @@ revision 7 too. The app now takes a state's age from `updated_at`, so a state fo
 has its age (capped at now, as the phone's clock may differ). Rex itself sums nothing up:
 `program_status` lists every record, root first, and the summary is the app's. It follows Activity's
 order, blocked, error, done, working, idle (`statusPriority`), so a pane whose root works while a child
-record is done shows as done, everywhere the summary is shown (Activity, tab and pane dots, the eye's
-filter). Whether a program is still busy - for the key bar's C-c and the running dots - is asked of
+record is done sums up to done (`PocketState.blockStatus`, which the terminal's pane and tab dots
+show). Whether a program is still busy - for the key bar's C-c and the running dots - is asked of
 every record instead (`PocketState.busy`).
+
+**The home no longer works from the summary (this change).** The user's Mac showed an agent's tab
+as Working while the phone's Running did not list it. Three causes, all confirmed in code and held
+by `RunningTest`: (1) the pane's records were summed up to the most pressing, so root `working` plus
+child `done` read as done; (2) once that done was seen - on the phone, by Mark as seen, or by the
+desk inference, which is exactly what a Mac looking at the tab triggers - `tabAttention` dropped the
+pane and never fell back to its working record, so the tab left both Needs you and Running; (3) each
+tab stood in one group only, so a tab working in one pane and waiting in another was never in
+Running. Now the phone keeps every record (`PocketState.records`), seen is per record
+(home.md, "Seen"), and the home reads all of them: Running is every tab with a working record,
+Needs you every tab whose most pressing unseen report needs the person, and a tab can be in both.
+
+### How Rex decides a tab is Working
+
+Rex's docs do not spell out the sidebar's rule, so this is an inference from them, documented as
+such:
+
+- A tab shows "working dots, progress pies, and needs-attention dots and messages ... when a program
+  in them reports its status" (docs:mac-settings, Show activity in tabs), and each state's activity
+  is configured on its own: Working, Blocked, Error, Done (docs:mac-settings, Program Activity). So
+  a tab is Working when **a program in it reports `working`** - any record, as a record is "what a
+  program in the terminal reports" and root and children "exist at the same time ... Both are true,
+  and the terminal decides which to show" (docs:program-status, "Records and ids", "Several
+  records").
+- `done` is "ready to look at and the user has not seen it yet", and the terminal "decides when to
+  stop showing" done and error (docs:program-status, States); the Dock badge counts tabs with a
+  program "blocked, failed, or finished that you haven't seen" (docs:mac-settings, Badge Dock
+  icon). So seen applies to the finished report, not to the program still at work: once seen, the
+  tab shows what is left - its working record. That is what the user's Mac showed, and what the
+  phone now does.
+- Activity by priority still puts a tab in one group, its most pressing (blocked, failed, done,
+  working, idle); the phone's Running filter is wider on purpose: "anything working".
+- Not used, as Rex's docs give them no meaning for this: a record's `owner` (the foreground process
+  when it was reported) and `reason`. A working record whose owner is gone is dropped by Rex itself
+  (`program_status_removed`), which the phone follows.
 
 ## Activity
 
