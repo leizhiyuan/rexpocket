@@ -102,6 +102,9 @@ class ScriptedRex(
 
         /** What it said about itself in its hello (`client`: kind, platform, name, version). */
         @Volatile var info: JSONObject? = null
+
+        /** The API revision its hello asked for, as far as this Rex goes. */
+        @Volatile var apiRevision: Int = 0
     }
 
     private class Stream(val client: String, val block: String, val token: ByteString, val nonce: Long) {
@@ -188,6 +191,81 @@ class ScriptedRex(
      * (`+enter` with no modifiers).
      */
     val inputs = CopyOnWriteArrayList<String>()
+
+    /** The block of each tab's layout, as `session.create` and `session.new_window` asked for it, in order. */
+    val layouts = CopyOnWriteArrayList<JSONObject>()
+
+    /**
+     * A configuration file's action (`rex.action`), as `client.keymap` lists it: [prompt], when
+     * given, is the question it asks (`rex.ui`), and [result] makes what it returns from the
+     * answer (`{text}`, `{ids}`, `{cancelled}`; `{why: "unsupported"}` for a connection below
+     * revision 17, which Rex sends no question) and the action's context.
+     */
+    class ScriptedAction(
+        val name: String,
+        val title: String,
+        val category: String? = null,
+        val description: String? = null,
+        val args: JSONObject? = null,
+        val prompt: JSONObject? = null,
+        val result: (answer: JSONObject?, ctx: JSONObject) -> JSONObject? = { _, ctx -> ctx },
+    )
+
+    val luaActions = CopyOnWriteArrayList<ScriptedAction>()
+
+    /** Each `client.action` run: `name session block origin`. */
+    val actionRuns = CopyOnWriteArrayList<String>()
+
+    private val questions = ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<JSONObject>>()
+
+    /** Runs [payload]'s action for [client] off the socket's thread, and gives its response. */
+    private fun runAction(client: Client, id: String, payload: JSONObject): JSONObject {
+        val reply = JSONObject().put("type", "response").put("id", id).put("seq", client.seq.get())
+        val name = payload.optString("action")
+        val action = luaActions.firstOrNull { it.name == name }
+        if (action == null) {
+            return reply.put("error", JSONObject().put("code", "not_found").put("status", 404).put("message", "the configuration file defines no action \"$name\""))
+        }
+        val ctx = JSONObject().put("origin", payload.optString("origin").ifEmpty { "api" })
+        payload.optString("session_id").takeIf { it.isNotEmpty() }?.let { sid ->
+            if (synchronized(this) { client.scope == null && sid !in client.attached }) {
+                return reply.put("error", JSONObject().put("code", "conflict").put("status", 409).put("message", "stream is not attached to session $sid"))
+            }
+            ctx.put("session", sid)
+            ctx.put("block", payload.optString("block_id").ifEmpty { synchronized(this) { sessions[sid]?.tabs?.firstOrNull()?.blocks?.firstOrNull() } })
+        }
+        actionRuns += listOf(name, ctx.optString("session"), ctx.optString("block"), ctx.optString("origin")).joinToString(" ")
+        var answer: JSONObject? = null
+        if (action.prompt != null) {
+            answer = if (client.apiRevision < 17) {
+                JSONObject().put("why", "unsupported")
+            } else {
+                val call = next("call")
+                val waiter = java.util.concurrent.CompletableFuture<JSONObject>()
+                questions[call] = waiter
+                val event = JSONObject().put("type", "client_prompt_requested").put(
+                    "payload",
+                    JSONObject().put("call_id", call).put("action", name).put("prompt", action.prompt).put("timeout_ms", 20_000),
+                )
+                client.socket?.send(JSONObject().put("type", "event").put("seq", client.seq.incrementAndGet()).put("payload", event).toString())
+                try {
+                    waiter.get(20, TimeUnit.SECONDS)
+                } catch (e: java.util.concurrent.TimeoutException) {
+                    questions.remove(call)
+                    client.socket?.send(
+                        JSONObject().put("type", "event").put("seq", client.seq.incrementAndGet()).put(
+                            "payload",
+                            JSONObject().put("type", "client_prompt_ended").put("payload", JSONObject().put("call_id", call).put("reason", "timeout")),
+                        ).toString(),
+                    )
+                    JSONObject().put("why", "timeout")
+                }
+            }
+        }
+        val out = JSONObject().put("client_actions", JSONArray())
+        action.result(answer, ctx)?.let { out.put("result", it) }
+        return reply.put("payload", out)
+    }
 
     /** What Rex says when own or disown names a pane that is not in the session (`bad_request`). */
     fun paneRefusal(block: String) = "block $block is not in the session"
@@ -533,9 +611,10 @@ class ScriptedRex(
         return s to block
     }
 
-    private fun newTab(s: Session, owner: String?): Tab {
+    private fun newTab(s: Session, owner: String?, window: JSONObject? = null): Tab {
         val tab = Tab(next("window"), "", mutableListOf(next("block")), null)
-        tab.label = "Window " + tab.id.takeLast(8)
+        tab.label = window?.optString("window_label")?.trim()?.takeIf { it.isNotEmpty() } ?: ("Window " + tab.id.takeLast(8))
+        window?.optJSONObject("layout")?.optJSONObject("block")?.let { layouts += JSONObject(it.toString()) }
         s.tabs += tab
         val block = tab.blocks.first()
         if (owner != null) {
@@ -661,8 +740,8 @@ class ScriptedRex(
                 // Its first panes start with no owner: the caller cannot be attached to it yet.
                 val count = payload.optJSONArray("initial_windows")?.length() ?: 0
                 val made = JSONArray()
-                repeat(count) {
-                    val tab = newTab(s, owner = null)
+                repeat(count) { i ->
+                    val tab = newTab(s, owner = null, window = payload.optJSONArray("initial_windows")?.optJSONObject(i))
                     made.put(JSONObject().put("window_id", tab.id).put("block_ids", JSONArray(tab.blocks)).put("revision", 1))
                 }
                 s.activeTab = s.tabs.lastOrNull()?.id
@@ -680,7 +759,7 @@ class ScriptedRex(
                 val s = reached(client, payload)
                 // Only an attached caller becomes the new pane's owner.
                 val attached = s.id in client.attached
-                val tab = newTab(s, owner = if (attached) client.id else null)
+                val tab = newTab(s, owner = if (attached) client.id else null, window = payload)
                 if (!attached) sessionEvent(s.id, "block_created", JSONObject().put("block_id", tab.blocks.first()))
                 sessionEvent(s.id, "window_created", JSONObject().put("window_id", tab.id).put("label", tab.label))
                 if (payload.optBoolean("focus", true) || s.activeTab == null) {
@@ -916,7 +995,8 @@ class ScriptedRex(
             }
             "session.set_label" -> {
                 val s = reached(client, payload)
-                s.label = payload.optString("label")
+                // An empty label is the one Rex chose at creation, even for a session made with a label.
+                s.label = payload.optString("label").trim().ifEmpty { "quiet-meadow" }
                 sessionEvent(s.id, "session_label_changed", JSONObject().put("label", s.label))
                 changed(s)
                 JSONObject().put("revision", s.revision)
@@ -925,7 +1005,8 @@ class ScriptedRex(
                 val s = reached(client, payload)
                 val window = payload.optString("window_id")
                 val tab = s.tabs.firstOrNull { it.id == window } ?: throw Refused("not_found", 404, "window $window not found")
-                tab.label = payload.optString("label")
+                // An empty label is Rex's own again, made from the window's id.
+                tab.label = payload.optString("label").trim().ifEmpty { "Window " + tab.id.takeLast(8) }
                 sessionEvent(s.id, "window_label_changed", JSONObject().put("window_id", window).put("label", tab.label))
                 changed(s)
                 JSONObject().put("revision", s.revision)
@@ -973,7 +1054,23 @@ class ScriptedRex(
                 if (removed) hostsChanged()
                 JSONObject().put("removed", removed).put("hash", hostsHash())
             }
-            "client.keymap" ->JSONObject().put("bindings", JSONArray()).put("diagnostics", JSONArray()).put("actions", JSONArray())
+            "client.keymap" -> JSONObject().put("bindings", JSONArray()).put("diagnostics", JSONArray()).put(
+                "actions",
+                JSONArray().apply {
+                    luaActions.forEach { a ->
+                        val o = JSONObject().put("name", a.name).put("kind", "lua").put("title", a.title).put("category", a.category ?: "Actions")
+                            .put("source", "init.lua:1")
+                        a.description?.let { o.put("description", it) }
+                        a.args?.let { o.put("args", it) }
+                        put(o)
+                    }
+                },
+            )
+            "client.reply" -> {
+                val waiter = questions.remove(payload.optString("call_id")) ?: throw Refused("not_found", 404, "no prompt ${payload.optString("call_id")}")
+                waiter.complete(payload.optJSONObject("result") ?: JSONObject().put("error", payload.optJSONObject("error")))
+                JSONObject()
+            }
             else -> JSONObject()
         }
     }
@@ -1024,6 +1121,7 @@ class ScriptedRex(
                     val client = previous ?: Client(next("client"))
                     client.socket = webSocket
                     client.info = message.optJSONObject("client")
+                    client.apiRevision = message.optInt("api_revision").coerceAtMost(19)
                     client.seq.set(0)
                     val token = Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(16).also { java.util.Random().nextBytes(it) })
                     tokens[token] = client
@@ -1060,6 +1158,11 @@ class ScriptedRex(
                     val payload = message.optJSONObject("payload") ?: JSONObject()
                     holds[method]?.await(30, TimeUnit.SECONDS)
                     calls += "$method ${payload.optString("block_id").ifEmpty { payload.optJSONArray("block_ids")?.optString(0) ?: payload.optString("session_id") }}"
+                    // An action may wait on a question, whose answer comes on this same socket.
+                    if (method == "client.action") {
+                        Thread { webSocket.send(runAction(client, id, payload).toString()) }.start()
+                        return
+                    }
                     val events = mutableListOf<Outgoing>()
                     pending.set(events)
                     val reply = JSONObject().put("type", "response").put("id", id).put("seq", client.seq.get())

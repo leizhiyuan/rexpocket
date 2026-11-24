@@ -216,6 +216,9 @@ fun RexPocketApp(
                     onMoveHost = model::moveHost,
                     onRemoveHost = model::removeHost,
                     onRestoreHost = model::restoreHost,
+                    launchTemplates = model.launchTemplates.collectAsState().value,
+                    onLaunchTemplates = model::setLaunchTemplates,
+                    onRunTemplate = model::runTemplate,
                     notices = model.homeNotices,
                     onNoticeAction = model::noticeAction,
                     onFoldSession = model::setSessionFolded,
@@ -296,6 +299,9 @@ fun RexPocketApp(
                     onQuickReplies = model::setQuickReplies,
                     tabMuted = { window -> model.host?.id?.let { background.of(it).mutes(window) } == true },
                     onMuteTab = { window, muted -> model.host?.id?.let { model.muteTab(it, window, muted) } },
+                    rexActions = model.rexActions.collectAsState().value,
+                    onPaletteOpen = model::loadRexActions,
+                    onRexAction = model::runRexAction,
                 )
             }
             when (layoutFor(window, hasHosts = hosts.isNotEmpty(), terminalOpen = route == Route.Term)) {
@@ -316,6 +322,11 @@ fun RexPocketApp(
                 }
                 WindowLayout.OneColumn -> if (route == Route.Term) term(false) else home(false)
             }
+        }
+        // A question one of the person's Rex actions asks, over whatever is on screen.
+        model.rexPrompt.collectAsState().value?.let { prompt ->
+            val actions = model.rexActions.collectAsState().value
+            RexPromptDialog(prompt, actions.firstOrNull { it.name == prompt.action }?.title ?: prompt.action, model::answerRexPrompt)
         }
         val offered = update
         val offeredTag = when (offered) {

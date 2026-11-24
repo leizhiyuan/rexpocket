@@ -44,11 +44,42 @@ Not in it, with why (the full list is in [rex-parity.md](rex-parity.md)):
   Balance Splits, Resize Pane, Zoom (the phone shows one pane at a time already).
 - Split left and split up: `session.new_split` takes a side, but the phone's split always puts the
   new pane after; the two directions it has are kept as they are in the ⋮ menu.
-- The configuration file's custom actions (`rex.action`, run with `client.action`, listed by
-  `client.keymap`), and the prompts they can open (`client_prompt_requested`). They belong here
-  and are the next step; see rex-parity.md for the work it takes.
+- A custom action with required arguments: the palette has no way to ask for them (Rex's own
+  palette runs such an action from a binding that gives them).
 - Switching to another host: the terminal screen belongs to one host. Back to hosts goes to the
   list, where the hosts are.
+
+## Rex's custom actions
+
+The person's own actions, `rex.action{...}` in Rex's configuration file, are rows of the palette,
+under their `category` as Rex's palette files them ("Actions" when the file gives none), with their
+`description` as the detail and their name and `keywords` searched. The list is read with
+`client.keymap` each time the palette opens (the file can be reloaded at any time); those with
+required arguments are left out. A row runs `client.action {action, origin: "palette", session_id,
+block_id}` for the pane on screen, so the action's `ctx` is that pane's, as on the desk.
+
+An action may ask the person (`rex.ui.input`, `rex.ui.pick`): Rex sends `client_prompt_requested`
+to every app that can show it, and the phone shows it as a dialog over whatever is on screen - its
+title, the action's title under it, a field (with its placeholder, starting value and the action's
+`confirm` label, or "Use “…”"), or the items to choose from (subtitle and detail; one tap answers,
+or tick any number with `multiple`, or type an answer with `allow_other`). Cancel answers
+`{cancelled: true}`; the dialog closes when its `timeout_ms` passes or `client_prompt_ended` says
+another device answered. A question kind the phone does not know is answered `not_supported`, which
+takes only this app out of it. A failed action is a toast with Rex's message.
+
+Rex sends questions only to connections at API revision 17 or later (seen on preview.22: revision
+16 and below get none, and the action is told `unsupported`). The phone's own connection is at 7,
+so an action runs on a connection of its own at 17, opened for the run over the host's route and
+closed after, as an upload has its own at 11; the main connection keeps its contract. That
+connection bootstraps the session first, which Rex requires of a `client.action` that names one.
+`client_call_requested` (an action calling another server) is answered `not_supported`: the phone
+offers no other servers. Questions asked by an action someone else ran (`rex do` on the desk) do
+not reach the phone, since it listens on its main connection only.
+
+Code: `RexActions` (core), `RexPromptDialog.kt`; tests: `RexActionsTest` (core, ScriptedRex and a
+real Rex started with `tools/rex/test-init.lua`: the list, a run's context, a typed answer, a
+choice and a cancel), `RexActionsScreenTest` (the palette row, the dialog's pick and Cancel, a
+typed answer on the emulator).
 
 ## Ranking
 

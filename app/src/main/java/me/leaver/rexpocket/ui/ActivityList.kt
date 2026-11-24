@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -246,7 +249,16 @@ internal fun filterChipTag(filter: HomeFilter) = "filter-${filter.name}"
  * host. The chip on is said as selected; its count is in its words, so TalkBack reads it.
  */
 @Composable
-internal fun FilterChips(filter: HomeFilter, needsYou: Int, running: Int, onFilter: (HomeFilter) -> Unit, modifier: Modifier = Modifier) {
+internal fun FilterChips(
+    filter: HomeFilter,
+    needsYou: Int,
+    running: Int,
+    onFilter: (HomeFilter) -> Unit,
+    modifier: Modifier = Modifier,
+    /** Some hosts are not connected, so the counts are the connected hosts' only: the counted chips carry a hollow mark. */
+    partial: Boolean = false,
+) {
+    val connectedOnly = stringResource(R.string.home_counts_connected_only)
     Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         for (choice in HomeFilter.entries) {
             val label = when (choice) {
@@ -255,10 +267,16 @@ internal fun FilterChips(filter: HomeFilter, needsYou: Int, running: Int, onFilt
                 HomeFilter.NeedsYou -> stringResource(R.string.filter_needs_you, needsYou)
                 HomeFilter.Running -> stringResource(R.string.filter_running, running)
             }
+            val marked = partial && choice != HomeFilter.All
             FilterChip(
                 selected = filter == choice,
                 onClick = { onFilter(choice) },
                 label = { Text(label, fontSize = TextStyles.label, fontWeight = FontWeight.Medium) },
+                trailingIcon = if (marked) {
+                    { Box(Modifier.size(7.dp).border(1.5.dp, Colors.muted, androidx.compose.foundation.shape.CircleShape)) }
+                } else {
+                    null
+                },
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = Colors.surface,
                     labelColor = Colors.ink,
@@ -266,9 +284,23 @@ internal fun FilterChips(filter: HomeFilter, needsYou: Int, running: Int, onFilt
                     selectedLabelColor = Colors.accent,
                 ),
                 border = null,
-                modifier = Modifier.heightIn(min = 48.dp).testTag(filterChipTag(choice)),
+                modifier = Modifier.heightIn(min = 48.dp).testTag(filterChipTag(choice))
+                    .semantics { if (marked) stateDescription = connectedOnly },
             )
         }
+    }
+}
+
+/**
+ * How many idle tabs the Activity view leaves out because they were seen, across [states]: the
+ * count of "N idle tabs hidden · Show", which turns Include idle on. Zero with Include idle on.
+ */
+internal fun hiddenIdle(states: List<Pair<PocketState, (String, ProgramRecord) -> Boolean>>, prefs: ActivityPrefs): Int {
+    if (prefs.includeIdle) return 0
+    return states.sumOf { (state, seen) ->
+        val all = activitySections(state, seen, prefs.copy(includeIdle = true).idle(seen)).sumOf { it.items.size }
+        val shown = activitySections(state, seen, prefs.idle(seen)).sumOf { it.items.size }
+        (all - shown).coerceAtLeast(0)
     }
 }
 
@@ -282,6 +314,8 @@ internal class AttentionOps(
     val interrupt: ((ActivityItem) -> Unit)?,
     /** Approve (true) or Deny an agent's approval prompt; Needs you's only. */
     val answer: ((ActivityItem, Boolean) -> Unit)? = null,
+    /** Marks a done or failed row seen, so it leaves the list (with Undo); Needs you's and Activity's. */
+    val dismiss: ((ActivityItem) -> Unit)? = null,
 )
 
 /** The rows of one host's filtered list: one card, in priority order, no folds. */
@@ -374,7 +408,9 @@ internal fun AttentionRow(item: ActivityItem, state: PocketState, ops: Attention
         val interrupt = ops.interrupt?.takeIf { item.block.id in state.busy }
         // Approve and Deny for an agent's approval prompt the app knows the keys of; never a login.
         val answer = ops.answer?.takeIf { item.group == ActivityGroup.Waiting && approvalKeys(item.record) != null }
-        if (reply != null || interrupt != null || answer != null) {
+        // A finished or failed row is news until seen: one tap says so, as the tab sheet's Mark as seen.
+        val dismiss = ops.dismiss?.takeIf { item.group == ActivityGroup.Done || item.group == ActivityGroup.Failed }
+        if (reply != null || interrupt != null || answer != null || dismiss != null) {
             FlowRow(Modifier.fillMaxWidth().padding(start = 52.dp, end = 8.dp, bottom = 4.dp)) {
                 if (answer != null) {
                     val approveFor = stringResource(R.string.home_approve_for, title)
@@ -384,27 +420,40 @@ internal fun AttentionRow(item: ActivityItem, state: PocketState, ops: Attention
                 }
                 if (reply != null) RowButton(stringResource(R.string.alerts_reply), { reply(item) })
                 if (interrupt != null) RowButton(stringResource(R.string.alerts_interrupt), { interrupt(item) })
+                if (dismiss != null) {
+                    val seenFor = stringResource(R.string.home_mark_seen_for, title)
+                    RowButton(stringResource(R.string.home_mark_seen), { dismiss(item) }, Modifier.semantics { contentDescription = seenFor })
+                }
             }
         }
     }
 }
 
-/** What a filter shows when nothing is in it: why, in one line. */
+/**
+ * What a filter shows when nothing is in it: why, in one line. The filters only hear connected
+ * hosts, so with [away] hosts not connected it says the list is the connected hosts' and offers
+ * Connect all, rather than "Nothing needs you" over hosts it cannot see.
+ */
 @Composable
-internal fun ActivityEmpty(filter: HomeFilter, live: Boolean, searching: Boolean) {
-    Text(
-        stringResource(
-            when {
-                !live -> R.string.activity_offline
-                searching -> R.string.search_none
-                filter == HomeFilter.Running -> R.string.filter_running_none
-                filter == HomeFilter.Activity -> R.string.filter_activity_none
-                else -> R.string.filter_needs_you_none
-            },
-        ),
-        color = Colors.muted,
-        fontSize = TextStyles.subhead,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp, horizontal = 16.dp),
-        textAlign = TextAlign.Center,
+internal fun ActivityEmpty(filter: HomeFilter, live: Boolean, searching: Boolean, away: Int = 0, onConnectAll: (() -> Unit)? = null) {
+    val partial = live && away > 0
+    val text = stringResource(
+        when {
+            !live -> R.string.activity_offline
+            searching -> R.string.search_none
+            filter == HomeFilter.Running -> if (partial) R.string.filter_running_none_connected else R.string.filter_running_none
+            filter == HomeFilter.Activity -> if (partial) R.string.filter_activity_none_connected else R.string.filter_activity_none
+            else -> if (partial) R.string.filter_needs_you_none_connected else R.string.filter_needs_you_none
+        },
     )
+    Column(Modifier.fillMaxWidth().padding(vertical = 32.dp, horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            if (away > 0 && live) text + " · " + stringResource(R.string.home_not_connected_count, away) else text,
+            color = Colors.muted,
+            fontSize = TextStyles.subhead,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+        )
+        if (away > 0 && onConnectAll != null) RowButton(stringResource(R.string.home_connect_all), onConnectAll)
+    }
 }

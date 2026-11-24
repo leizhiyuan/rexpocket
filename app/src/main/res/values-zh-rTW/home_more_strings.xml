@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_connect_all">全部連線</string>
+    <string name="home_disconnect_all">全部中斷連線</string>
+    <string name="home_disconnected_all">已中斷所有主機的連線</string>
+    <string name="home_host_sheet">主機 %1$s…</string>
+    <string name="home_not_connected_count">%1$d 台未連線</string>
+    <string name="home_counts_connected_only">僅計算已連線的主機</string>
+    <string name="filter_needs_you_none_connected">已連線的主機上沒有需要你處理的</string>
+    <string name="filter_running_none_connected">已連線的主機上沒有正在執行的</string>
+    <string name="filter_activity_none_connected">已連線的主機上還沒有程式回報它在做什麼</string>
+    <plurals name="activity_idle_hidden">
+        <item quantity="other">已隱藏 %1$d 個閒置分頁</item>
+    </plurals>
+    <string name="action_show">顯示</string>
+    <string name="home_mark_seen_for">將 %1$s 標為已查看</string>
+    <string name="home_reply_for">回覆 %1$s</string>
+    <string name="home_interrupt_for">中斷 %1$s</string>
+    <string name="rename_automatic">自動名稱</string>
+    <string name="rename_empty_hint">留空或選擇自動名稱，即恢復 Rex 取的名字。</string>
+    <string name="template_new_tab">從範本新增分頁</string>
+    <string name="template_in_session">在 %1$s 中開啟</string>
+    <string name="template_in_new_session">在 %1$s 上的新工作階段中開啟</string>
+    <string name="template_none">還沒有範本。範本會在某個目錄中開啟分頁並在其中啟動指令，例如 claude。</string>
+    <string name="template_add">新增範本…</string>
+    <string name="template_manage">編輯範本…</string>
+    <string name="template_manage_title">%1$s 上的範本</string>
+    <string name="template_edit">編輯…</string>
+    <string name="template_delete">刪除</string>
+    <string name="template_deleted">已刪除 %1$s</string>
+    <string name="template_add_title">新範本</string>
+    <string name="template_edit_title">編輯範本</string>
+    <string name="template_name_hint">在 api 中執行 claude</string>
+    <string name="template_directory">目錄</string>
+    <string name="template_command">指令</string>
+    <string name="template_help">分頁從該目錄開始（~ 是主機上的主目錄），並以 shell 指令列執行該指令；指令結束後，分頁留在該目錄的 shell 中。</string>
+</resources>

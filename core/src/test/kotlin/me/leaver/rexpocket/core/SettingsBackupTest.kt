@@ -263,6 +263,37 @@ class SettingsBackupTest {
         assertEquals(SettingsProblem.Kind.BadSecrets, with { remove("data") }.kind)
     }
 
+    /**
+     * Launch templates ride with their host's name; a file without them (written before they were)
+     * loads; one naming a host it does not have, or a template with nothing to run, is refused; and
+     * the same templates under other ids are no change.
+     */
+    @Test
+    fun launchTemplatesRoundTripByHostAndOldFilesLoad() {
+        val api = LaunchTemplate("phone-1", "api", "~/src/api", "claude")
+        val web = LaunchTemplate("phone-2", "web", "", "npm run dev")
+        val text = SettingsFormat.write(snapshot.copy(templates = mapOf("agents" to listOf(api, web), "gone" to listOf(api)))).text
+        val b = parsed(text)
+        assertEquals(listOf("agents"), b.templates.keys.toList())
+        assertEquals(listOf(api, web).map { Triple(it.name, it.directory, it.command) }, b.templates.getValue("agents").map { Triple(it.name, it.directory, it.command) })
+        assertTrue("no host's id goes in the file", !text.contains("phone-1"))
+
+        assertEquals(emptyMap<String, List<LaunchTemplate>>(), parsed(SettingsFormat.write(snapshot).text).templates)
+        val unknown = JSONObject(text).apply { getJSONArray("templates").getJSONObject(0).put("host", "nobody") }
+        assertEquals(SettingsProblem.Kind.UnknownHost, problem(unknown.toString()).kind)
+        val empty = JSONObject(text).apply { getJSONArray("templates").getJSONObject(0).put("directory", "").put("command", "") }
+        assertEquals("templates[1]", problem(empty.toString()).field)
+
+        val phone = listOf(known("2", "agents", ssh.address, key = fpA, fallbacks = ssh.fallbacks))
+        val plan = (ImportPlan.of(HostImportParse.Parsed(b.hosts), phone) as HostImportPlan.Planned).plan
+        val same = CurrentSettings(hosts = phone, templates = mapOf("2" to listOf(api.copy(id = "x"), web.copy(id = "y"))))
+        assertTrue(settingChanges(b, same, plan).none { it.key == SettingKey.Templates })
+        val change = settingChanges(b, CurrentSettings(hosts = phone, templates = mapOf("2" to listOf(web))), plan).single { it.key == SettingKey.Templates }
+        assertEquals("agents", change.host)
+        assertEquals(listOf("web"), change.old)
+        assertEquals(listOf("api", "web"), change.new)
+    }
+
     private fun known(id: String, name: String, address: ImportAddress, key: String? = null, creds: Boolean = true, fallbacks: List<ImportAddress> = emptyList()) =
         KnownHost(id, name, address, fallbacks, key, creds)
 

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_connect_all">全部连接</string>
+    <string name="home_disconnect_all">全部断开</string>
+    <string name="home_disconnected_all">已断开所有主机</string>
+    <string name="home_host_sheet">主机 %1$s…</string>
+    <string name="home_not_connected_count">%1$d 台未连接</string>
+    <string name="home_counts_connected_only">仅统计已连接的主机</string>
+    <string name="filter_needs_you_none_connected">已连接的主机上没有需要你处理的</string>
+    <string name="filter_running_none_connected">已连接的主机上没有正在运行的</string>
+    <string name="filter_activity_none_connected">已连接的主机上还没有程序报告它在做什么</string>
+    <plurals name="activity_idle_hidden">
+        <item quantity="other">已隐藏 %1$d 个空闲标签页</item>
+    </plurals>
+    <string name="action_show">显示</string>
+    <string name="home_mark_seen_for">将 %1$s 标为已查看</string>
+    <string name="home_reply_for">回复 %1$s</string>
+    <string name="home_interrupt_for">中断 %1$s</string>
+    <string name="rename_automatic">自动名称</string>
+    <string name="rename_empty_hint">留空或选择自动名称，即恢复 Rex 起的名字。</string>
+    <string name="template_new_tab">从模板新建标签页</string>
+    <string name="template_in_session">在 %1$s 中打开</string>
+    <string name="template_in_new_session">在 %1$s 上的新会话中打开</string>
+    <string name="template_none">还没有模板。模板会在某个目录中打开标签页并在其中启动命令，例如 claude。</string>
+    <string name="template_add">添加模板…</string>
+    <string name="template_manage">编辑模板…</string>
+    <string name="template_manage_title">%1$s 上的模板</string>
+    <string name="template_edit">编辑…</string>
+    <string name="template_delete">删除</string>
+    <string name="template_deleted">已删除 %1$s</string>
+    <string name="template_add_title">新模板</string>
+    <string name="template_edit_title">编辑模板</string>
+    <string name="template_name_hint">在 api 中运行 claude</string>
+    <string name="template_directory">目录</string>
+    <string name="template_command">命令</string>
+    <string name="template_help">标签页从该目录开始（~ 是主机上的主目录），并以 shell 命令行运行该命令；命令结束后，标签页留在该目录的 shell 中。</string>
+</resources>

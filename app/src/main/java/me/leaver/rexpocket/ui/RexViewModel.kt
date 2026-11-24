@@ -189,6 +189,7 @@ class RexViewModel @JvmOverloads constructor(
                 folds = folds.value,
                 background = background.value,
                 quickReplies = quickReplies.value.items,
+                templates = launchTemplates.value,
             )
         },
         write = { writeSettings(it) },
@@ -431,6 +432,80 @@ class RexViewModel @JvmOverloads constructor(
         pinchHint.value = false
         terminalPrefs.edit().putBoolean(KEY_PINCH_HINT_SEEN, true).apply()
     }
+    private val templateStore = me.leaver.rexpocket.data.LaunchTemplateStore(app)
+
+    /** Each host's launch templates, by host id, in the person's order (home.md, "Launch templates"). */
+    val launchTemplates = MutableStateFlow(templateStore.all())
+
+    fun setLaunchTemplates(hostId: String, next: List<me.leaver.rexpocket.core.LaunchTemplate>) {
+        templateStore.set(hostId, next)
+        launchTemplates.value = (launchTemplates.value - hostId) + (if (next.isEmpty()) emptyMap() else mapOf(hostId to next))
+    }
+
+    /**
+     * Runs [template] on [target]: a new tab in [sessionId] that starts in its directory with its
+     * command, shown on the phone; a new session with that tab when no session is given. Connects
+     * the host first when it is not connected.
+     */
+    fun runTemplate(target: SavedHost, sessionId: String?, template: me.leaver.rexpocket.core.LaunchTemplate) {
+        val link = connections.ensure(target)
+        if (sessionId == null) {
+            enterSession(link, Opening.New) { createShell(null, template) }
+        } else {
+            enterSession(link, Opening.Existing(sessionId, target.id)) {
+                openSession(sessionId, rememberedPane(target.id, sessionId))
+                newWindow(template)
+            }
+        }
+    }
+
+    /** The focused host's own Rex actions (its configuration file's), for the palette; read when it opens. */
+    val rexActions = MutableStateFlow<List<me.leaver.rexpocket.core.RexAction>>(emptyList())
+
+    /** A question a Rex action is asking, until it is answered here or elsewhere. */
+    val rexPrompt = MutableStateFlow<me.leaver.rexpocket.core.RexPrompt?>(null)
+
+    /** Reads the focused host's actions again: the configuration file may have changed since. */
+    fun loadRexActions() {
+        val s = session ?: return
+        viewModelScope.launch {
+            rexActions.value = runCatching { s.rexActions() }.getOrElse { if (it is CancellationException) throw it else rexActions.value }
+        }
+    }
+
+    /** Runs [action] for the pane on screen; its questions come up as [rexPrompt]; a failure is a toast. */
+    fun runRexAction(action: me.leaver.rexpocket.core.RexAction) {
+        val s = session ?: return
+        viewModelScope.launch {
+            s.runRexAction(action.name).collect { e ->
+                when (e) {
+                    is me.leaver.rexpocket.core.ActionEvent.Prompt -> rexPrompt.value = e.prompt
+                    is me.leaver.rexpocket.core.ActionEvent.PromptEnded -> if (rexPrompt.value?.callId == e.callId) rexPrompt.value = null
+                    is me.leaver.rexpocket.core.ActionEvent.Done -> rexPrompt.value = null
+                    is me.leaver.rexpocket.core.ActionEvent.Failed -> {
+                        rexPrompt.value = null
+                        toast(getApplication(), getApplication<Application>().getString(R.string.rex_action_failed, action.title, e.message))
+                    }
+                }
+            }
+        }
+    }
+
+    /** Answers the open question: [RexActions.text], [RexActions.ids] or [RexActions.cancelled]. */
+    fun answerRexPrompt(result: org.json.JSONObject) {
+        val prompt = rexPrompt.value ?: return
+        rexPrompt.value = null
+        viewModelScope.launch {
+            try {
+                prompt.answer(result)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Answered elsewhere first, or the action stopped waiting: nothing is left to answer.
+            }
+        }
+    }
+
 
     /** Drops the folds of [hostId]'s sessions that are not in [alive], so gone sessions do not pile up. */
     private fun pruneFolds(hostId: String, alive: Collection<String>) {
@@ -677,6 +752,7 @@ class RexViewModel @JvmOverloads constructor(
         w.folds?.let(::setFolds)
         w.background.forEach { (id, b) -> setHostBackground(id, b) }
         w.quickReplies?.let { setQuickReplies(QuickReplies(it)) }
+        w.templates.forEach { (id, list) -> setLaunchTemplates(id, list) }
         val on = w.backgroundMode ?: return true
         if (on == Alerts.enabled.value) return true
         if (on && !Alerts.allowed(getApplication())) return false

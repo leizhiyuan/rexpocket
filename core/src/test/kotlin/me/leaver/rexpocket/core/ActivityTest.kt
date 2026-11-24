@@ -177,7 +177,11 @@ class ActivityTest {
         rex.report(tabs[2].second, "idle", app = "claude")
         rex.report(tabs[0].second, "working", app = "cargo")
         rex.report(otherTabs[1].second, "error", app = "pi")
-        val st = phone.until("three reports") { it.blockStatus.size == 3 }
+        // The reports can come before the view of the session the phone did not open: a tab is
+        // listed once its session's view is there, so the test waits for both.
+        val st = phone.until("three reports and both views") {
+            it.blockStatus.size == 3 && it.views[first]?.windows?.size == 3 && it.views[second]?.windows?.size == 3
+        }
         val none: SeenCheck = { _, _ -> false }
         assertEquals(
             listOf(ActivityGroup.Failed to listOf(otherTabs[1].first), ActivityGroup.Running to listOf(tabs[0].first), ActivityGroup.Idle to listOf(tabs[2].first)),

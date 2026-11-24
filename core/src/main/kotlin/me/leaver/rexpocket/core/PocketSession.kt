@@ -176,6 +176,8 @@ class PocketSession(
     private val httpFactory: () -> OkHttpClient = { RexClient.defaultHttp(socksPort) },
     /** Uploads speak API revision 11 on their own connection, so the live one keeps its contract. */
     private val uploadClientFactory: () -> RexClient = { RexClient(httpFactory(), apiRevision = FileUpload.API_REVISION) },
+    /** Rex's custom actions run on a connection of their own, at the revision Rex asks questions on. */
+    private val actionClientFactory: () -> RexClient = { RexClient(httpFactory(), apiRevision = RexActions.API_REVISION) },
     /** The time a state change is stamped with; a test's own clock in tests. */
     private val clock: () -> Long = System::currentTimeMillis,
     /** How long a progress bar stays without a new report; see [PocketState.progress]. */
@@ -532,19 +534,17 @@ class PocketSession(
         }
     }
 
-    suspend fun createShell(label: String?) {
-        val body = JSONObject().put(
-            "initial_windows",
-            JSONArray().put(
-                JSONObject().put(
-                    "layout",
-                    JSONObject().put(
-                        "block",
-                        JSONObject().put("flavor", "com.superlogical.terminal.shell"),
-                    ),
-                ),
+    /** Creates a session with one tab, a shell or [template]'s tab (see [LaunchTemplate]), and shows it. */
+    suspend fun createShell(label: String?, template: LaunchTemplate? = null) {
+        val window = JSONObject().put(
+            "layout",
+            JSONObject().put(
+                "block",
+                template?.block() ?: JSONObject().put("flavor", "com.superlogical.terminal.shell"),
             ),
         )
+        template?.tabLabel?.takeIf { it.isNotEmpty() }?.let { window.put("window_label", it) }
+        val body = JSONObject().put("initial_windows", JSONArray().put(window))
         if (!label.isNullOrBlank()) body.put("label", label.trim())
         val payload = rpc("session.create", body)
         val id = payload.getString("session_id")
@@ -553,22 +553,24 @@ class PocketSession(
         openSession(id)
     }
 
-    /** Makes a tab and shows it on the phone; the desktop stays on the tab it has. */
-    suspend fun newWindow() {
+    /**
+     * Makes a tab and shows it on the phone; the desktop stays on the tab it has. With [template],
+     * the tab starts in its directory running its command, labelled with its name.
+     */
+    suspend fun newWindow(template: LaunchTemplate? = null) {
         val sid = requireSession()
-        val made = rpc(
-            "session.new_window",
-            JSONObject()
-                .put("session_id", sid)
-                .put("focus", false)
-                .put(
-                    "layout",
-                    JSONObject().put(
-                        "block",
-                        JSONObject().put("flavor", "com.superlogical.terminal.shell"),
-                    ),
+        val body = JSONObject()
+            .put("session_id", sid)
+            .put("focus", false)
+            .put(
+                "layout",
+                JSONObject().put(
+                    "block",
+                    template?.block() ?: JSONObject().put("flavor", "com.superlogical.terminal.shell"),
                 ),
-        )
+            )
+        template?.tabLabel?.takeIf { it.isNotEmpty() }?.let { body.put("window_label", it) }
+        val made = rpc("session.new_window", body)
         val block = made.optJSONArray("block_ids")?.optString(0)?.takeIf { it.isNotEmpty() } ?: return
         places[sid] = block
         updateState { it.showing(block) }
@@ -841,6 +843,19 @@ class PocketSession(
         )
         uploader.upload(sid, block, file, name) { trySend(it) }
     }.flowOn(Dispatchers.IO)
+
+    /** The configuration file's actions the palette can run (`client.keymap`), in its order. */
+    suspend fun rexActions(): List<RexAction> = RexActions.parse(rpc("client.keymap", JSONObject())).filter { !it.needsArgs }
+
+    /**
+     * Runs the configuration file's action [name] for the pane on screen, as Rex's palette does,
+     * on a connection of its own (see [RexActions]); the flow says its questions and how it ended.
+     */
+    fun runRexAction(name: String): Flow<ActionEvent> {
+        val sid = _state.value.activeSessionId
+        val block = _state.value.view?.focusedBlock()?.id
+        return RexActions.run(actionClientFactory(), endpoint, name, sid, block).flowOn(Dispatchers.IO)
+    }
 
     /**
      * Pastes [text] into the shown pane, or into [blockId] of [sessionId]: Rex's paste event, so

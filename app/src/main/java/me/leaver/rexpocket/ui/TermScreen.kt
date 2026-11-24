@@ -234,6 +234,10 @@ internal fun TermScreen(
     /** Whether tab (window) [windowId] of this host is muted, and muting or unmuting it: the tab's ⋮ menu. */
     tabMuted: (windowId: String) -> Boolean = { false },
     onMuteTab: (windowId: String, muted: Boolean) -> Unit = { _, _ -> },
+    /** The host's own Rex actions for the palette, read again each time it opens; and running one. */
+    rexActions: List<me.leaver.rexpocket.core.RexAction> = emptyList(),
+    onPaletteOpen: () -> Unit = {},
+    onRexAction: (me.leaver.rexpocket.core.RexAction) -> Unit = {},
 ) {
     val context = LocalContext.current
     val ime = LocalSoftwareKeyboardController.current
@@ -1010,7 +1014,12 @@ internal fun TermScreen(
                     val active = s.id == state.activeSessionId
                     add(PaletteEntry(s.label, sessionGroup, null, PaletteRun(marked = active) { if (!active) onOpenSession(s.id) }, "Go to Session session.select"))
                 }
+                // The configuration file's own actions, under their category as Rex's palette files them.
+                for (a in rexActions) {
+                    add(PaletteEntry(a.title, a.category, a.description, PaletteRun { onRexAction(a) }, keywords = listOfNotNull(a.name, a.keywords).joinToString(" ")))
+                }
             }
+            LaunchedEffect(Unit) { onPaletteOpen() }
             CommandPalette(entries, onDismiss = { sheet = null })
         }
         Sheet.Shortcuts -> ShortcutsSheet(onDismiss = { sheet = null }, onRun = ::runShortcut)

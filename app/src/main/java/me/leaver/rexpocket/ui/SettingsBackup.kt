@@ -84,6 +84,8 @@ data class PhoneSettings(
     val folds: HomeFolds,
     val background: BackgroundHosts,
     val quickReplies: List<String>,
+    /** Each host's launch templates, by host id. */
+    val templates: Map<String, List<me.leaver.rexpocket.core.LaunchTemplate>> = emptyMap(),
 )
 
 /** What an import writes beside the hosts; null leaves a setting as it is. Hosts by id. */
@@ -99,6 +101,8 @@ data class SettingsWrite(
     val folds: HomeFolds? = null,
     val background: Map<String, HostBackground> = emptyMap(),
     val quickReplies: List<String>? = null,
+    /** Launch templates, by host id: each host's replace that host's. */
+    val templates: Map<String, List<me.leaver.rexpocket.core.LaunchTemplate>> = emptyMap(),
 )
 
 /** The sealed SSH credentials of the file being imported. */
@@ -202,6 +206,7 @@ class SettingsBackupper(
             quickReplies = now.quickReplies,
             tailnets = tailnetChoicesOf(Connections.of(app)),
             tiles = tileBindingsOf(app, hosts),
+            templates = now.templates.mapNotNull { (id, list) -> label[id]?.let { it to list } }.toMap(),
             secrets = if (!withSecrets) emptyList() else hosts.filter { it.viaSsh }.map { h ->
                 HostSecret(h.label, h.sshPassword.ifEmpty { null }, h.sshPrivateKey.ifBlank { null }, h.sshPassphrase.ifEmpty { null })
             },
@@ -346,6 +351,7 @@ class SettingsBackupper(
             quickReplies = now.quickReplies,
             tailnets = tailnetChoicesOf(Connections.of(app), all = true),
             tiles = tileBindingsOf(app, hosts),
+            templates = now.templates,
         )
     }
 
@@ -437,6 +443,7 @@ class SettingsBackupper(
                     folds = folds,
                     background = b.hostBackground.mapNotNull { (n, bg) -> id(n)?.let { it to bg } }.toMap(),
                     quickReplies = b.quickReplies,
+                    templates = b.templates.mapNotNull { (n, list) -> id(n)?.let { it to list } }.toMap(),
                 ),
             )
             b.tailnets?.let { applyTailnetChoices(Connections.of(app), it) }
@@ -693,12 +700,18 @@ private fun ChangeRow(c: SettingChange) {
         SettingKey.HostBackground -> stringResource(R.string.backup_setting_host_background, c.host.orEmpty())
         SettingKey.TailnetChoices -> stringResource(R.string.backup_setting_tailnet, c.host.orEmpty())
         SettingKey.Tile -> stringResource(R.string.backup_setting_tile, c.host.orEmpty())
+        SettingKey.Templates -> stringResource(R.string.template_manage_title, c.host.orEmpty())
         else -> settingName(c.key)
     }
     val text = when (c.key) {
         SettingKey.TailnetChoices, SettingKey.Tile -> tailnetChangeText(c)
         SettingKey.HostFolds -> stringResource(R.string.backup_setting_folds_value, (c.new as? List<*>).orEmpty().joinToString(", "))
         SettingKey.HostOrder -> stringResource(R.string.import_change_short, (c.old as? List<*>).orEmpty().joinToString(", "), (c.new as? List<*>).orEmpty().joinToString(", "))
+        SettingKey.Templates -> stringResource(
+            R.string.import_change_short,
+            (c.old as? List<*>).orEmpty().joinToString(", ").ifEmpty { stringResource(R.string.import_none) },
+            (c.new as? List<*>).orEmpty().joinToString(", ").ifEmpty { stringResource(R.string.import_none) },
+        )
         SettingKey.QuickReplies -> stringResource(
             R.string.import_change_short,
             (c.old as? List<*>).orEmpty().joinToString(", ") { QuickReplies.short(it.toString()) },
@@ -737,6 +750,7 @@ private fun settingName(key: SettingKey): String = stringResource(
         SettingKey.QuickReplies -> R.string.quick_replies_title
         SettingKey.TailnetChoices -> R.string.backup_setting_tailnets
         SettingKey.Tile -> R.string.tile_group_all
+        SettingKey.Templates -> R.string.template_new_tab
     },
 )
 

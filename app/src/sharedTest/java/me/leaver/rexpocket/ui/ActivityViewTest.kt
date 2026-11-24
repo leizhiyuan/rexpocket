@@ -205,6 +205,7 @@ class ActivityViewTest {
         assertTrue(exists(activityGroupTag(me.leaver.rexpocket.core.ActivityGroup.Waiting)))
         row(waiting.id).assertExists()
         scrollTo(activityGroupTag(me.leaver.rexpocket.core.ActivityGroup.Idle))
+        scrollTo(activityRowTag(idle.id))
         row(idle.id).assertExists()
         // Idle is never in Needs you's or Running's count.
         chip(HomeFilter.NeedsYou).assert(hasText(string(R.string.filter_needs_you, 2)))
@@ -217,6 +218,7 @@ class ActivityViewTest {
         compose.onNodeWithTag(ACTIVITY_IDLE_TAG).performClick()
         compose.waitForIdle()
         scrollTo(activityGroupTag(me.leaver.rexpocket.core.ActivityGroup.Idle))
+        scrollTo(activityRowTag(idle.id))
         row(idle.id).assertExists()
 
         // By session: the same tabs under their sessions.

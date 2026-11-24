@@ -183,10 +183,26 @@ object SettingsFormat {
                 }.distinct()
             }
         }
+        // Launch templates, each naming its host; added after version 1 was out, so optional.
+        val templates = LinkedHashMap<String, MutableList<LaunchTemplate>>()
+        root.opt("templates").let { v ->
+            if (v == null || v == JSONObject.NULL) return@let
+            val arr = v as? JSONArray ?: refuse(SettingsProblem.Kind.BadValue, "templates")
+            for (i in 0 until arr.length()) {
+                val field = "templates[${i + 1}]"
+                val o = arr.opt(i) as? JSONObject ?: refuse(SettingsProblem.Kind.BadValue, field)
+                val name = host("$field.host", o.opt("host"))
+                val t = LaunchTemplate.fromJson(JSONObject().put("name", o.opt("name")).put("directory", o.opt("directory")).put("command", o.opt("command")))
+                    ?: refuse(SettingsProblem.Kind.BadValue, field)
+                val list = templates.getOrPut(name) { ArrayList() }
+                if (list.size < LaunchTemplate.MAX_ITEMS) list += t
+            }
+        }
         val secrets = section(root, "secrets")?.let { s -> readSealed(s) }
         val tailnets = TailnetBackupFormat.readTailnets(root) { kind, field, detail -> refuse(kind, field, detail) }
         val tiles = TailnetBackupFormat.readTiles(root, { kind, field, detail -> refuse(kind, field, detail) }, ::host)
         return SettingsBackup(
+            templates = templates,
             appearance = appearance,
             terminalFontScale = fontScale,
             notifications = notifications,
@@ -305,6 +321,14 @@ object SettingsFormat {
         snapshot.quickReplies?.let { root.put("quickReplies", JSONArray(it.take(QuickReplies.MAX_ITEMS))) }
         TailnetBackupFormat.writeTailnets(root, snapshot.tailnets)
         TailnetBackupFormat.writeTiles(root, snapshot.tiles, written)
+        val templates = JSONArray()
+        for ((name, list) in snapshot.templates) {
+            if (name !in written) continue
+            list.take(LaunchTemplate.MAX_ITEMS).forEach { t ->
+                templates.put(JSONObject().put("host", name).put("name", t.name).put("directory", t.directory).put("command", t.command))
+            }
+        }
+        if (templates.length() > 0) root.put("templates", templates)
         var sealedCount = 0
         if (passphrase != null) {
             // Only an SSH host signs in: a Rex port has nothing to carry.
@@ -395,6 +419,8 @@ data class SettingsBackup(
     val tailnets: List<TailnetChoices>? = null,
     /** The Quick Settings tiles' bindings, by slot; optional, added later. */
     val tiles: List<TileBinding>? = null,
+    /** Each host's launch templates, by its name in [hosts], in order. A host the file has none for keeps its own. */
+    val templates: Map<String, List<LaunchTemplate>> = emptyMap(),
 )
 
 /** The sealed credentials of a file, and how many hosts it says they are for (shown before it is opened). */
@@ -435,6 +461,8 @@ data class SettingsSnapshot(
     val tailnets: List<TailnetChoices>? = null,
     /** By host name (as in [hosts]) or tailnet; a tile whose host is not written is left out. */
     val tiles: List<TileBinding>? = null,
+    /** Each host's launch templates, by host name. */
+    val templates: Map<String, List<LaunchTemplate>> = emptyMap(),
 )
 
 /** A written settings file: its text, the hosts in it and those left out, and how many hosts' credentials went in sealed. */
@@ -485,6 +513,8 @@ data class CurrentSettings(
     val tailnets: List<TailnetChoices> = emptyList(),
     /** The phone's tiles, a host's by its name. */
     val tiles: List<TileBinding> = emptyList(),
+    /** Each host's launch templates, by host id. */
+    val templates: Map<String, List<LaunchTemplate>> = emptyMap(),
 )
 
 enum class SettingKey {
@@ -497,6 +527,8 @@ enum class SettingKey {
 
     /** One tile's binding: [SettingChange.host] is its slot, old and new are [TileBinding] (old null for a free tile). */
     Tile,
+    /** One host's launch templates: old and new are their names, in order. */
+    Templates,
 }
 
 /** One preference an import changes: [old] → [new], for [host] when it is one host's. */
@@ -548,6 +580,12 @@ fun settingChanges(backup: SettingsBackup, current: CurrentSettings, plan: Impor
         val existing = planned[name]?.existing
         val now = existing?.let { current.hostBackground[it.id] } ?: HostBackground()
         change(SettingKey.HostBackground, now, next, host = name)
+    }
+    for ((name, next) in backup.templates) {
+        val now = planned[name]?.existing?.let { current.templates[it.id] }.orEmpty()
+        // The same templates are no change, whatever ids the phone gave them.
+        fun same(a: List<LaunchTemplate>, b: List<LaunchTemplate>) = a.map { Triple(it.name, it.directory, it.command) } == b.map { Triple(it.name, it.directory, it.command) }
+        if (!same(now, next)) add(SettingChange(SettingKey.Templates, now.map { it.name }, next.map { it.name }, host = name))
     }
     // A new host comes after the phone's own in Import hosts; the file's order is then laid on.
     val names = current.hosts.map { k -> plan.hosts.firstOrNull { it.existing?.id == k.id }?.imported?.name ?: k.name } +

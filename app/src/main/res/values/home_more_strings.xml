@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The home's bulk actions, answers in every list, renames back to Rex's name and launch templates. See docs/design/home.md. -->
+<resources>
+    <string name="home_connect_all">Connect all</string>
+    <string name="home_disconnect_all">Disconnect all</string>
+    <string name="home_disconnected_all">Disconnected all hosts</string>
+    <string name="home_host_sheet">Host %1$s…</string>
+    <string name="home_not_connected_count">%1$d not connected</string>
+    <string name="home_counts_connected_only">Connected hosts only</string>
+    <string name="filter_needs_you_none_connected">Nothing needs you on connected hosts</string>
+    <string name="filter_running_none_connected">Nothing is working on connected hosts</string>
+    <string name="filter_activity_none_connected">No program on a connected host has said what it is doing</string>
+    <plurals name="activity_idle_hidden">
+        <item quantity="one">%1$d idle tab hidden</item>
+        <item quantity="other">%1$d idle tabs hidden</item>
+    </plurals>
+    <string name="action_show">Show</string>
+    <string name="home_mark_seen_for">Mark %1$s as seen</string>
+    <string name="home_reply_for">Reply to %1$s</string>
+    <string name="home_interrupt_for">Interrupt %1$s</string>
+    <string name="rename_automatic">Automatic name</string>
+    <string name="rename_empty_hint">Empty, or Automatic name, gives it back the name Rex chose.</string>
+    <string name="template_new_tab">New tab from template</string>
+    <string name="template_in_session">Opens in %1$s</string>
+    <string name="template_in_new_session">Opens in a new session on %1$s</string>
+    <string name="template_none">No templates yet. A template opens a tab in a directory and starts a command in it, such as claude.</string>
+    <string name="template_add">Add template…</string>
+    <string name="template_manage">Edit templates…</string>
+    <string name="template_manage_title">Templates on %1$s</string>
+    <string name="template_edit">Edit…</string>
+    <string name="template_delete">Delete</string>
+    <string name="template_deleted">Deleted %1$s</string>
+    <string name="template_add_title">New template</string>
+    <string name="template_edit_title">Edit template</string>
+    <string name="template_name_hint">claude in api</string>
+    <string name="template_directory">Directory</string>
+    <string name="template_command">Command</string>
+    <string name="template_help">The tab starts in the directory (~ is the home on the host) and runs the command as a shell line; when it ends, the tab is a shell there.</string>
+</resources>

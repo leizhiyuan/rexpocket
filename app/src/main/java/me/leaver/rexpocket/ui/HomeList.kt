@@ -446,6 +446,8 @@ internal fun TabCard(
     /** Adds a tab; null where the session cannot take one now. */
     onNewTab: (() -> Unit)?,
     seen: Seen = { _, _ -> false },
+    /** A waiting tab's buttons, as Needs you's row has them: Approve, Deny, Reply, Interrupt. */
+    answersOf: @Composable (WindowInfo) -> List<RowAction> = { emptyList() },
 ) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Colors.surface)) {
         row.tabs.forEachIndexed { index, window ->
@@ -472,6 +474,8 @@ internal fun TabCard(
                 onManage = { onManage(window.id) },
                 actions = actionsOf(window.id),
                 progress = tabProgress(window, state.progress),
+                // On a waiting tab only: the tree stays quiet for the rest, whose sheet has them.
+                answers = if (fresh?.group == ActivityGroup.Waiting) answersOf(window) else emptyList(),
             )
         }
         if (onNewTab != null) {
@@ -526,7 +530,7 @@ internal fun firstLine(text: String?): String? = text?.lineSequence()?.firstOrNu
  * person names that pane on a line of its own, which opens that pane.
  */
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 internal fun TabRow(
     /** True for a done or failed tab whose report was seen: no dot, its word quiet. */
     seen: Boolean = false,
@@ -545,6 +549,8 @@ internal fun TabRow(
     actions: List<CustomAccessibilityAction> = emptyList(),
     /** The tab's progress bar, under what it is doing. */
     progress: PaneProgress? = null,
+    /** Buttons under a waiting tab: Approve, Deny, Reply, Interrupt. */
+    answers: List<RowAction> = emptyList(),
 ) {
     val selected = stringResource(R.string.state_selected)
     val manageLabel = stringResource(R.string.manage_actions_for, title)
@@ -616,6 +622,13 @@ internal fun TabRow(
                     modifier = Modifier.weight(1f),
                 )
                 Glyph(R.drawable.ic_chevron_right, Colors.muted, size = 20.dp)
+            }
+        }
+        if (answers.isNotEmpty()) {
+            FlowRow(Modifier.fillMaxWidth().padding(start = KEY_TEXT - 12.dp, end = 8.dp, bottom = 4.dp)) {
+                for (a in answers) {
+                    RowButton(a.label, a.run, Modifier.semantics { a.said?.let { contentDescription = it } }, enabled = a.enabled && !opening)
+                }
             }
         }
     }
@@ -940,6 +953,7 @@ private fun SessionBody(env: TreeEnv, ref: HostRef, row: HomeSession, opening: B
                 onOpenPane = { windowId, blockId -> env.ops.openPane(host, sid, windowId, blockId) },
                 onManage = { windowId -> env.sheets.sheet = ManageTarget.Tab(host.id, sid, windowId) },
                 actionsOf = { windowId -> tabActions(ref, sid, windowId, env.ops, env.sheets).talkBack() },
+                answersOf = { window -> answerItems(ref, sid, window, env.ops) },
                 onNewTab = if (manageable(ref.connected, state, row)) {
                     { env.ops.newTab(host, sid) }
                 } else {

@@ -21,6 +21,8 @@ import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.paneRecords
 import me.leaver.rexpocket.core.markable
 import me.leaver.rexpocket.core.tabDetails
+import me.leaver.rexpocket.core.approvalKeys
+import me.leaver.rexpocket.core.tabAttention
 import me.leaver.rexpocket.data.HomeFolds
 import me.leaver.rexpocket.data.SavedHost
 
@@ -65,6 +67,8 @@ internal class RowAction(
     val detail: String? = null,
     /** Keeps the sheet open: Move up and Move down, so a row can be moved several places in a row. */
     val keepOpen: Boolean = false,
+    /** What TalkBack says for the item as a button on a row, where its label alone would not say whose it is: "Approve for build". */
+    val said: String? = null,
     val run: () -> Unit,
 )
 
@@ -107,7 +111,63 @@ internal class HomeOps(
     val removeHost: (hostId: String) -> Unit = {},
     /** Opens a host's page: the background and its notifications, as a tailnet's page. */
     val page: (hostId: String) -> Unit = {},
+    /** Marks panes of several hosts seen at once, with one Undo: Mark all as seen in the home's ⋮. */
+    val markSeenAll: (Map<String, List<String>>) -> Unit = { panes -> panes.forEach { (host, blocks) -> markSeen(host, blocks) } },
+    /** Opens Reply for a waiting pane, called [title] in the dialog. */
+    val reply: (hostId: String, sessionId: String, blockId: String, title: String) -> Unit = { _, _, _, _ -> },
+    /** Interrupts the program of a pane that works or waits. */
+    val interrupt: (hostId: String, sessionId: String, blockId: String) -> Unit = { _, _, _ -> },
+    /** Approve (true) or Deny the approval prompt [record] of a pane shows. */
+    val answer: (hostId: String, sessionId: String, windowId: String, blockId: String, record: ProgramRecord, approve: Boolean) -> Unit =
+        { _, _, _, _, _, _ -> },
+    /** Opens the launch templates of a host, to run one in [sessionId] (null: in a new session) or manage them. */
+    val templates: (hostId: String, sessionId: String?) -> Unit = { _, _ -> },
 )
+
+/**
+ * What a waiting or busy tab can be answered with, as Needs you's rows have it: Approve and Deny
+ * for an agent's approval prompt whose keys the app knows, Reply (never for a login, whose password
+ * is typed into the pane), and Interrupt while a program works or waits. Empty for a tab with
+ * neither. They need the host live, and stay in place greyed out while it is not.
+ */
+@Composable
+internal fun answerItems(ref: HostRef, sessionId: String, window: WindowInfo, ops: HomeOps): List<RowAction> {
+    val id = ref.host.id
+    val state = ref.state
+    val why = needsLive(ref)
+    val waiting = tabAttention(window, state) { block, record -> ops.seen(id, block, record) }?.takeIf { it.group == ActivityGroup.Waiting }
+    val busy = waiting?.block?.takeIf { it.id in state.busy } ?: window.blocks.firstOrNull { it.id in state.busy }
+    val title = state.views[sessionId]?.let { tabTitle(it, window, state) } ?: window.label
+    val items = ArrayList<RowAction>()
+    if (waiting != null) {
+        val record = waiting.record
+        val block = waiting.block
+        if (approvalKeys(record) != null) {
+            items += RowAction(
+                stringResource(R.string.alerts_approve), R.drawable.ic_check, enabled = why == null, detail = why,
+                said = stringResource(R.string.home_approve_for, title),
+            ) { ops.answer(id, sessionId, window.id, block.id, record, true) }
+            items += RowAction(
+                stringResource(R.string.alerts_deny), R.drawable.ic_block, enabled = why == null, detail = why,
+                said = stringResource(R.string.home_deny_for, title),
+            ) { ops.answer(id, sessionId, window.id, block.id, record, false) }
+        }
+        if (record.kind != "auth") {
+            val paneName = paneTitle(block, record, state.programs[block.id])
+            items += RowAction(
+                stringResource(R.string.alerts_reply), R.drawable.ic_return, enabled = why == null, detail = why,
+                said = stringResource(R.string.home_reply_for, title),
+            ) { ops.reply(id, sessionId, block.id, paneName) }
+        }
+    }
+    if (busy != null) {
+        items += RowAction(
+            stringResource(R.string.alerts_interrupt), R.drawable.ic_stop, enabled = why == null, detail = why,
+            said = stringResource(R.string.home_interrupt_for, title),
+        ) { ops.interrupt(id, sessionId, busy.id) }
+    }
+    return items
+}
 
 /** The panes of [windows] with a done, failed or idle report not seen yet. */
 internal fun HomeOps.unseen(hostId: String, state: PocketState, windows: List<WindowInfo>): List<String> =
@@ -212,6 +272,11 @@ internal fun hostActions(
         ActionGroup(
             listOfNotNull(
                 RowAction(stringResource(R.string.session_new), R.drawable.ic_add, enabled = why == null, detail = why) { ops.newSession(ref.host) },
+                // A template opens its tab in the session the phone shows on this host, or the first;
+                // with no session yet, in a new one. Its sheet also adds, edits and orders them.
+                RowAction(stringResource(R.string.template_new_tab), R.drawable.ic_command) {
+                    ops.templates(id, ref.state.activeSessionId ?: ref.state.sessions.firstOrNull()?.id)
+                },
                 if (expanded) {
                     RowAction(stringResource(R.string.home_action_collapse), R.drawable.ic_expand) { ops.foldHost(id, false) }
                 } else {
@@ -223,6 +288,9 @@ internal fun hostActions(
                 RowAction(stringResource(R.string.home_expand_sessions), R.drawable.ic_expand, enabled = folded > 0) {
                     ops.foldSessions(id, sessions.map { it.id }, false)
                 }.takeIf { sessions.isNotEmpty() },
+                ops.unseen(id, ref.state, ref.state.views.values.flatMap { it.windows }).takeIf { it.isNotEmpty() }?.let { panes ->
+                    RowAction(stringResource(R.string.home_mark_all_seen), R.drawable.ic_check) { ops.markSeen(id, panes) }
+                },
             ),
         ),
         // The phone's own order: hosts are not Rex's, so this order is kept here only.
@@ -297,6 +365,7 @@ internal fun sessionActions(
                 RowAction(stringResource(R.string.menu_new_tab), R.drawable.ic_add, enabled = why == null, detail = why) {
                     ops.manage(id, HomeAction.NewTab(session.id))
                 },
+                RowAction(stringResource(R.string.template_new_tab), R.drawable.ic_command) { ops.templates(id, session.id) },
                 RowAction(stringResource(R.string.home_rename), R.drawable.ic_edit, enabled = why == null, detail = why) {
                     sheets.dialog = HomeDialog.Rename(target, label)
                 },
@@ -349,12 +418,16 @@ internal fun tabActions(
                 },
             ),
         ),
+        // What Needs you's row offers, here for the same tab wherever it is listed.
+        ActionGroup(answerItems(ref, sessionId, window, ops)),
         ActionGroup(
             listOfNotNull(
                 ops.unseen(id, ref.state, listOf(window)).takeIf { it.isNotEmpty() }?.let { panes ->
                     RowAction(stringResource(R.string.home_mark_seen), R.drawable.ic_check) { ops.markSeen(id, panes) }
                 },
                 RowAction(stringResource(R.string.status_details), R.drawable.ic_eye) { sheets.dialog = HomeDialog.StatusDetails(target) },
+                // A filtered list names the host on its rows; this is the way to its connection and settings.
+                RowAction(stringResource(R.string.home_host_sheet, ref.host.label), R.drawable.ic_host) { sheets.sheet = ManageTarget.Host(id) },
             ),
         ),
         moveGroup(view.windows.indexOf(window), view.windows.size, why) { to -> ops.manage(id, HomeAction.MoveTab(sessionId, windowId, to)) },

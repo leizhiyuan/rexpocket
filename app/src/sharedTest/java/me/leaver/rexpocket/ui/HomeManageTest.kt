@@ -182,8 +182,11 @@ class HomeManageTest {
         compose.waitForIdle()
         assertEquals(enabledSheetItems(), sessionActions)
         assertEquals(
-            listOf(string(R.string.home_action_open), string(R.string.menu_new_tab), string(R.string.home_rename), string(R.string.home_action_collapse)),
-            sessionActions.take(4),
+            listOf(
+                string(R.string.home_action_open), string(R.string.menu_new_tab), string(R.string.template_new_tab),
+                string(R.string.home_rename), string(R.string.home_action_collapse),
+            ),
+            sessionActions.take(5),
         )
         assertNotAttached()
     }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rex_action_failed">%1$s 失败：%2$s</string>
+    <string name="rex_prompt_use">使用“%1$s”</string>
+    <string name="rex_prompt_done">完成</string>
+    <string name="rex_prompt_other">或直接输入</string>
+    <string name="rex_prompt_answer">回答</string>
+</resources>

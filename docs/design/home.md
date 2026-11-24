@@ -28,7 +28,7 @@ glance what a fleet of agents needs. It builds on several hosts at once (multi-h
 | --- | --- | --- | --- |
 | Host | folds, in every state; never connects | host sheet | Connect, Cancel, Retry, or the tailnet's fix (Sign in, Join) |
 | Session | folds, whether its tabs are loaded or not | session sheet | Open ("Tabs load when opened"), Connect ("Connect mac to see tabs") |
-| Tab, pane line, Needs you row | opens it (queued while the host reconnects) | tab sheet | Approve, Deny, Reply, Interrupt (Needs you only) |
+| Tab, pane line, Needs you row | opens it (queued while the host reconnects) | tab sheet | Approve, Deny, Reply, Interrupt (a filtered row; a blocked tab in the tree); Mark as seen (a done or failed filtered row) |
 
 Nothing connects, retries or probes on a plain tap: the error line and the tailnet path line are
 text; the path is measured again from the tailnet sheet.
@@ -49,11 +49,22 @@ dialog cannot confirm while its host is away; a sheet or dialog whose session or
 device, closes. End session and Close tab confirm; Remove host confirms and offers Undo.
 
 - Host: Connect / Retry now / Cancel / Disconnect (a failing host offers Retry now and Disconnect);
-  New session, Collapse or Expand, Collapse and Expand all sessions; Move up, Move down; Edit host,
-  Copy address, Tailnet details; Remove host….
-- Session: Connect or Retry first while the host is not live; Open, New tab, Rename…; Collapse or
-  Expand, Mark all as seen; Move up, Move down ("2 of 7", Rex's full order); End session….
-- Tab: Open, Rename…; Mark as seen, Status details; Move up, Move down; Close tab….
+  New session, New tab from template, Collapse or Expand, Collapse and Expand all sessions, Mark all
+  as seen (every tab of the host with news); Move up, Move down; Edit host, Copy address, Tailnet
+  details; Remove host….
+- Session: Connect or Retry first while the host is not live; Open, New tab, New tab from template,
+  Rename…; Collapse or Expand, Mark all as seen; Move up, Move down ("2 of 7", Rex's full order); End
+  session….
+- Tab: Open, Rename…; Approve, Deny, Reply and Interrupt where they apply (as on Needs you's row:
+  Approve and Deny for an approval prompt whose keys the app knows, Reply for a blocked tab but never
+  a login, Interrupt while a program works or waits); Mark as seen, Status details, Host mac… (the
+  host's own sheet, the way to its connection from a filtered list, where its header is not in
+  sight); Move up, Move down; Close tab….
+
+**Rename** gives a session or tab back the name Rex chose: Automatic name, or Save with the field
+empty, sends an empty label, which `session.set_label` and `session.set_window_label` take as "the
+label the server chose" ("quiet-meadow", "Window 89abcdef"; the API reference). A line under the
+field says so.
 
 **Hosts** are in the phone's own order (Move up and Move down in the host sheet; Rex has no order
 of hosts), never moved by their connection, so positions stay put; their headers stick to the top
@@ -61,8 +72,9 @@ while their sessions scroll, and are TalkBack headings, their ⋮ named "Actions
 host… confirms, disconnects and removes the host with its cached list, folds and seen marks; Undo
 puts it back in its place, not connected. (It is no longer in the host dialog.)
 
-**Snackbars**: "Disconnected mac · Reconnect", "Collapsed all · Undo", "Marked as seen · Undo",
-"Removed mac · Undo", "Couldn't rename: … · Retry" (and the same for a new tab, an end, a close, a
+**Snackbars**: "Disconnected mac · Reconnect", "Disconnected all hosts · Reconnect" (which connects
+the same hosts again), "Collapsed all · Undo", "Marked as seen · Undo" (one Undo for every host a
+Mark all as seen covered), "Removed mac · Undo", "Deleted api · Undo" (a launch template), "Couldn't rename: … · Retry" (and the same for a new tab, an end, a close, a
 move that Rex refused), and "api-work was ended on mac" when a session whose sheet or dialog was
 open, or that was on the terminal, was ended elsewhere (its saved fold goes too). End and Close
 confirm first, so they have no Undo, nor does Rename.
@@ -84,7 +96,8 @@ report (seen done and failed ones left out, as everywhere), arranged as Rex arra
 - **Include idle** (Rex's "Include idle processes in activity"): off, an idle tab is there until
   it was seen - shown on the phone, Mark as seen, or a desk looking at it, as done and failed
   are; on, always. Idle is in the Activity view only: never in Needs you, Running, the counts or
-  the dots.
+  the dots. While it is off and seen idle tabs are left out, a line under the controls says so:
+  "2 idle tabs hidden · Show", which turns it on.
 
 The two choices are a pair of chips and a switch row at the top of the list, every one 48 dp and
 said as selected or on; they are kept, with the chip, and go in the settings backup. A row is the
@@ -102,8 +115,15 @@ any pane, root or child, whatever else it has - so a tab can be in both, and its
 pressing state, in Rex's order. A tab with no records, or only idle ones, is in neither. Each is a
 flat list (Needs you in Rex's priority order, Running newest first) under each host's header (no
 folds), with Reply
-(never for `auth`, as in notifications) and Interrupt on Needs you's rows, and a line for each host
-that is not connected, with Connect.
+(never for `auth`, as in notifications) and Interrupt on Needs you's rows, **Mark as seen** on a
+done or failed one (with Undo, TalkBack "Mark build as seen"), and a line for each host that is
+not connected, with Connect.
+
+**What the filters cannot see.** Only a live connection hears a host's programs, so the counts and
+lists are the connected hosts'. While any saved host is not connected, the counted chips carry a
+small hollow ring and say "Connected hosts only" to TalkBack, and an empty list says "Nothing needs
+you on connected hosts · 2 not connected", with Connect all when more than one is away (one has its
+own line's Connect under it).
 
 **Answering from Needs you** (notifications.md, "Approve and Deny", "Quick replies", "The prompt
 composer"): a row waiting on an agent's approval prompt - `permission` from an agent in the key
@@ -112,9 +132,15 @@ agent's keys without taking the pane. The row's prompt is read again from Rex fi
 nothing is sent, a toast says "Prompt changed, nothing was sent" and the pane opens. **Reply**'s
 dialog has the quick replies as chips that put their text in the field, and **Compose**, which takes
 the pane, with what was typed, to the prompt composer: a longer prompt in one paste, Return after it
-or not, its draft kept for the pane. Every button is at least 48 dp high. The home's ⋮ beside the chips has Expand all, Collapse all
-(with Undo), Add host, Import hosts and Tailnet; the tailnet is a chip there once connected, and the
-full card in the list while it is on its way or needs the person.
+or not, its draft kept for the pane. Every button is at least 48 dp high. The same buttons are under
+a blocked tab in the tree (All), so a prompt is answered without changing the filter, and in the tab
+sheet wherever the tab is listed; the TalkBack actions follow the sheet.
+
+The home's ⋮ beside the chips has Expand all, Collapse all (with Undo), **Mark all as seen** (what
+the list shows now: the filter's tabs, or the tree's as the search narrows it, on every connected
+host; one Undo); **Connect all** (the hosts not connected) and **Disconnect all** (with Reconnect);
+Add host, Import hosts and Tailnet; the tailnet is a chip there once connected, and the full card in
+the list while it is on its way or needs the person.
 
 The **bottom bar** holds ⚙, the search field (above the keyboard while it is up) and +. + makes a
 session on the one connected host, or asks which host, offering one that is not connected as
@@ -124,6 +150,30 @@ the session sheet's New tab makes one without leaving the home.
 
 **Not built from the spec:** the "Moved to place 2 of 7" snackbar for a row moved out of view (the
 sheet's caption says the place, in Rex's full order, which a move always uses).
+
+## Launch templates
+
+A host has a list of templates, each a name, a directory and a command ("api", `~/src/api`,
+`claude`), in the person's order. **New tab from template** in the host's sheet and a session's
+sheet lists them; a tap opens a new tab, labelled with the template's name, that starts in the
+directory and runs the command, and shows it on the phone (the host connects first when it is
+not). From a session's sheet the tab goes in that session; from the host's, in the session the
+phone shows on that host, or its first, or a new session when it has none. The sheet's caption
+says which ("Opens in api-work").
+
+Rex's shell block takes `command` and `cwd` itself (`block-creators.json`, the shell flavor's
+options), so nothing is typed into the tab: it is made running `sh -c 'cd ~/'src/api' && claude;
+exec "${SHELL:-sh}" -l'` with `interactive: true`, so Rex runs it through the person's shell with
+their startup files read and the agent is on the PATH their terminals have. The directory is quoted
+and a leading `~` left to the shell (a plain `cwd` does not expand it; one that is not a directory
+starts in the home); the command is a shell line; when it ends the tab is a login shell in that
+directory, as if the line had been typed. Seen on preview.22 (`RealRexLaunchTemplateTest`).
+
+Edit templates lists them; a template's own sheet has Edit…, Move up, Move down and Delete (with
+Undo; the sheet closes so the snackbar is in sight). The dialog has Name, Directory and Command;
+Save needs a name and a directory or a command. They are kept per host on the phone
+(`LaunchTemplateStore`) and go in the settings backup, by host name (settings-backup.md, an
+optional `templates` list, so older files load). Code: `LaunchTemplate` (core), `HomeTemplates.kt`.
 
 ## Status of tabs never opened
 
@@ -205,7 +255,13 @@ counts, Mark as seen and Undo, seen on
 the phone and on a desk, Reply hidden for `auth`, Interrupt, the not-connected line, the filter
 kept; Approve's Return for Claude and Deny's Esc for Codex, none for Terraform, a changed prompt
 opening the pane and typing nothing, Reply's Compose on the emulator), `DeskSeenTest` (core, ScriptedRex: the desk inference), `ClientViewProbeTest` (rex-real:
-`client.inspect`'s shape).
+`client.inspect`'s shape). `HomeBulkTest` (a blocked tab's buttons in the tree and its sheet, and
+the tab sheet's Host…; a done row's Mark as seen, the home's and a host's Mark all as seen, each with
+Undo; Connect all, Disconnect all and Reconnect; the empty filter and the marked chips while a host
+is away; the idle tabs Activity hides; Automatic name and adding a template on the emulator; a
+template run from the host's sheet, moved, deleted and undone), `LaunchTemplateTest` (core: the
+shell line and its quoting; what the phone asks ScriptedRex for; on a real Rex the tab starts in the
+directory, runs the command and is a shell after), `SettingsBackupTest` (templates by host name).
 
 ## Tailnet controls
 

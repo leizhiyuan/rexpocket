@@ -5,7 +5,9 @@ name: rex-real
 # bell, desktop notifications and replies (RealRexPaneSignalsTest), moving sessions and tabs
 # (RealRexOrderTest),
 # agents' status replayed (RealRexAgentReplayTest), status of tabs never opened (RealRexUnopenedStatusTest),
-# Insert path's folder listing (RealRexListDirTest) and
+# Insert path's folder listing (RealRexListDirTest),
+# launch templates (RealRexLaunchTemplateTest), the person's own actions and their questions
+# (RealRexActionsTest, with tools/rex/test-init.lua as Rex's configuration file) and
 # the app's own flows on Robolectric (RealRexAppTest).
 #
 # Rex is proprietary. The job installs the server pinned in tools/rex/pin.env from Superlogical's
@@ -56,6 +58,7 @@ jobs:
             --extra-listen "http://$REX_TEST_HOST:$REX_TEST_PORT" \
             --allow-anonymous \
             --state-dir "$RUNNER_TEMP/rex-state" \
+            --config "$GITHUB_WORKSPACE/tools/rex/test-init.lua" \
             --log-level debug > "$RUNNER_TEMP/rex.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/rex.pid"
           for i in $(seq 1 100); do
@@ -89,7 +92,8 @@ jobs:
           want = {"RealRexLifecycleTest", "PocketSessionTest", "RexShapeTest", "ReconnectTest", "ForegroundTest",
                   "ForegroundStreamTest", "HelloFirstTest", "ResumeTest", "InputPipelineTest", "RealRexAppTest",
                   "RealRexPaneTextTest", "RealRexPaneSignalsTest", "RealRexPromptAnswerTest", "RealRexOrderTest", "ClientViewProbeTest",
-                  "RealRexAgentReplayTest", "RealRexUnopenedStatusTest", "RealRexListDirTest"}
+                  "RealRexAgentReplayTest", "RealRexUnopenedStatusTest", "RealRexListDirTest",
+                  "RealRexLaunchTemplateTest", "RealRexActionsTest"}
           seen, bad = {}, []
           for f in glob.glob("core/build/test-results/test/*.xml") + glob.glob("app/build/test-results/testDebugUnitTest/*.xml"):
               for case in ET.parse(f).getroot().iter("testcase"):

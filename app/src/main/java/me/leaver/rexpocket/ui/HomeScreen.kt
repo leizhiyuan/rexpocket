@@ -207,6 +207,10 @@ internal fun HomeScreen(
     /** Removes a host; gives back what Undo needs. */
     onRemoveHost: (hostId: String) -> RemovedHost? = { null },
     onRestoreHost: (RemovedHost) -> Unit = {},
+    /** Each host's launch templates, by host id, and their changes; running one opens its tab. */
+    launchTemplates: Map<String, List<me.leaver.rexpocket.core.LaunchTemplate>> = emptyMap(),
+    onLaunchTemplates: (hostId: String, List<me.leaver.rexpocket.core.LaunchTemplate>) -> Unit = { _, _ -> },
+    onRunTemplate: (SavedHost, sessionId: String?, me.leaver.rexpocket.core.LaunchTemplate) -> Unit = { _, _, _ -> },
     /** What the home says of its own accord: an action that failed, a session ended elsewhere. */
     notices: Flow<HomeNotice> = emptyFlow(),
     /** A notice's snackbar action: Rejoin after leaving the tailnet, Undo of an account switch. */
@@ -314,6 +318,9 @@ internal fun HomeScreen(
     var diagnostics by rememberSaveable { mutableStateOf(false) }
     var recording by remember { mutableStateOf(Diagnostics.capture(context) != null) }
     val sheets = rememberSaveable(saver = HomeSheets.Saver) { HomeSheets() }
+    val templateSheets = rememberSaveable(saver = TemplateSheets.Saver) { TemplateSheets() }
+    // What the home's ⋮ marks seen: the panes with news in the list as it is filtered and searched.
+    var unseenInView: Map<String, List<String>> = emptyMap()
     // Sessions of a host that is not live, opened on this screen to see they are there: their
     // tabs are not known, so they start folded, and the choice is not kept past the screen.
     var openCached by rememberSaveable { mutableStateOf(emptySet<String>()) }
@@ -417,6 +424,15 @@ internal fun HomeScreen(
             val before = onMarkSeen(hostId, blocks)
             snack(context.getString(R.string.home_marked_seen), context.getString(R.string.action_undo)) { onRestoreSeen(before) }
         },
+        markSeenAll = { panes ->
+            val before = HashMap<String, String?>()
+            panes.forEach { (hostId, blocks) -> before += onMarkSeen(hostId, blocks) }
+            snack(context.getString(R.string.home_marked_seen), context.getString(R.string.action_undo)) { onRestoreSeen(before) }
+        },
+        reply = { hostId, sessionId, blockId, title -> replyTo = ReplyTarget(hostId, sessionId, blockId, title) },
+        interrupt = onInterrupt,
+        answer = { hostId, sessionId, windowId, blockId, record, approve -> onAnswer(hostId, sessionId, windowId, blockId, promptStamp(record), approve) },
+        templates = { hostId, sessionId -> templateSheets.open(hostId, sessionId) },
     )
     var picking by rememberSaveable { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -489,6 +505,19 @@ internal fun HomeScreen(
                 h.id to searched(filterSections(st, filter, seenOn(h.id), activityPrefs), st, query)
             }
         }
+        // Mark all as seen covers what this list shows: the tabs a filter lists, or the tabs the
+        // tree shows (as the search narrows it) on every connected host.
+        unseenInView = connectedHosts.associate { h ->
+            val st = lives.getValue(h.id).state
+            val windows = if (filter == HomeFilter.All) {
+                treeRows[h.id].orEmpty().flatMap { it.tabs }
+            } else {
+                filtered[h.id].orEmpty().flatMap { s -> s.items.map { it.window } }.distinctBy { it.id }
+            }
+            h.id to ops.unseen(h.id, st, windows)
+        }.filterValues { it.isNotEmpty() }
+        val away = hosts.count { it.id !in lives }
+        val connectAll: () -> Unit = { hosts.filter { it.id !in lives }.forEach(onConnect) }
         Column(Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().imePadding()) {
             // The tailnet's card while it is on its way or needs the person; a chip once it is on.
             val tailnetHosts = hosts.count { it.viaTailscale }
@@ -496,7 +525,7 @@ internal fun HomeScreen(
             // Quiet too once disconnected by hand or waiting for a host: nothing is wrong then.
             val tailnetQuiet = tailnetShown && (tailnetStage is TailnetStage.Connected || tailnetStage is TailnetStage.Disconnected)
             Row(Modifier.fillMaxWidth().padding(start = PAGE, end = PAGE - 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                FilterChips(filter, needsYou, running, onHomeFilter, Modifier.weight(1f))
+                FilterChips(filter, needsYou, running, onHomeFilter, Modifier.weight(1f), partial = away > 0)
                 if (tailnetQuiet) {
                     val network = tailnetName(tailnet.backend)
                     TailnetChip(
@@ -560,11 +589,27 @@ internal fun HomeScreen(
                                 } else {
                                     null
                                 },
+                                dismiss = if (answers) {
+                                    { item -> ops.unseen(host.id, ref.state, listOf(item.window)).takeIf { it.isNotEmpty() }?.let { ops.markSeen(host.id, it) } }
+                                } else {
+                                    null
+                                },
                             )
                         }
                         var shown = 0
                         if (filter == HomeFilter.Activity) {
                             item(key = "activity-controls") { ActivityControls(activityPrefs, onActivityPrefs) }
+                            // Include idle off hides the idle tabs that were seen: say how many, with the way to them.
+                            val hidden = hiddenIdle(connectedHosts.map { lives.getValue(it.id).state to seenOn(it.id) }, activityPrefs)
+                            if (hidden > 0 && q.isEmpty()) {
+                                item(key = "activity-idle-hidden") {
+                                    NoteRow(
+                                        pluralStringResource(R.plurals.activity_idle_hidden, hidden, hidden),
+                                        stringResource(R.string.action_show) to { onActivityPrefs(activityPrefs.copy(includeIdle = true)) },
+                                        card = false,
+                                    )
+                                }
+                            }
                         }
                         if (filter == HomeFilter.Activity && !activityPrefs.bySession) {
                             // By priority: one list across every connected host, group by group, as
@@ -612,7 +657,9 @@ internal fun HomeScreen(
                             }
                         }
                         if (shown == 0) {
-                            item(key = "filter-empty") { ActivityEmpty(filter, live = connectedHosts.isNotEmpty(), searching = q.isNotEmpty()) }
+                            item(key = "filter-empty") {
+                                ActivityEmpty(filter, live = connectedHosts.isNotEmpty(), searching = q.isNotEmpty(), away = away, onConnectAll = connectAll.takeIf { away > 1 })
+                            }
                         }
                         // What the filter cannot see: the hosts that are not connected, each with its way in.
                         for (host in hosts.filter { it.id !in lives }) {
@@ -668,6 +715,24 @@ internal fun HomeScreen(
                             val before = folds
                             onSetFolds(hosts.fold(folds) { f, h -> f.withHost(h.id, false) })
                             snack(context.getString(R.string.home_collapsed_all), context.getString(R.string.action_undo)) { onSetFolds(before) }
+                        },
+                        // What the list shows now, as the filter and the search narrow it; Undo puts the marks back.
+                        unseenInView.takeIf { it.isNotEmpty() }?.let { panes ->
+                            RowAction(stringResource(R.string.home_mark_all_seen), R.drawable.ic_check) { ops.markSeenAll(panes) }
+                        },
+                    ).filterNotNull(),
+                ),
+                // Every host at once, as each host's sheet has its own; Disconnect all has Reconnect.
+                ActionGroup(
+                    listOfNotNull(
+                        hosts.filter { it.id !in lives }.takeIf { it.isNotEmpty() }?.let { away ->
+                            RowAction(stringResource(R.string.home_connect_all), R.drawable.ic_host) { away.forEach(onConnect) }
+                        },
+                        hosts.filter { it.id in lives }.takeIf { it.isNotEmpty() }?.let { on ->
+                            RowAction(stringResource(R.string.home_disconnect_all), R.drawable.ic_disconnect, danger = true) {
+                                on.forEach { onDisconnect(it.id) }
+                                snack(context.getString(R.string.home_disconnected_all), context.getString(R.string.action_reconnect)) { on.forEach(onConnect) }
+                            }
                         },
                     ),
                 ),
@@ -796,6 +861,18 @@ internal fun HomeScreen(
     HomeSheetsHost(sheets, hosts, lives, folds, cachedSessions, ops) { session, host ->
         snack(context.getString(R.string.home_ended_elsewhere, session, host))
     }
+    TemplateSheetsHost(
+        sheets = templateSheets,
+        hosts = hosts,
+        templatesOf = { launchTemplates[it].orEmpty() },
+        sessionName = { hostId, sessionId ->
+            val st = lives[hostId]?.state
+            st?.views?.get(sessionId)?.label ?: (st?.sessions.orEmpty() + cachedSessions(hostId)).firstOrNull { it.id == sessionId }?.label
+        },
+        onSet = onLaunchTemplates,
+        onRun = onRunTemplate,
+        snack = { message, action, onAction -> snack(message, action, onAction) },
+    )
     LaunchedEffect(notices) {
         notices.collect { notice ->
             when (notice) {

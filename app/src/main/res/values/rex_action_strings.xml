@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The person's own Rex actions in the palette, and the questions they ask. See docs/design/command-palette.md. -->
+<resources>
+    <string name="rex_action_failed">%1$s failed: %2$s</string>
+    <string name="rex_prompt_use">Use “%1$s”</string>
+    <string name="rex_prompt_done">Done</string>
+    <string name="rex_prompt_other">Or type one</string>
+    <string name="rex_prompt_answer">Answer</string>
+</resources>

@@ -50,7 +50,8 @@ own connection) and keeps the welcome's client id, reconnect token, `resumed`, `
 | `session.zoom_block`, `session.swap_blocks`, `session.move_block`, `session.resize_pane` | not used | see the verdicts below |
 | floating layers: `session.new_layer`, `float_block`, `close_layer`, `raise_layer`, `lower_layer`, `resize_layer`, `set_layer_state` | not used | the app shows only a window's tiled blocks (**code**: `parseView` reads every layer's blocks as one list) |
 | `session.detach_block`, `session.new_block`, `session.list_blocks`, `session.describe_block`, `session.help`, `help.all`, `block_creator.list` | not used | |
-| `client.action`, `client.keymap`, `client.reply`, `client.perform`, `client.inspect`, `client.list`, `client.set_label`, `client.set_script` | not used | custom actions and prompts, below |
+| `client.action`, `client.keymap`, `client.reply` | used | the person's custom actions in the palette and their questions (command-palette.md, "Rex's custom actions") |
+| `client.perform`, `client.list`, `client.set_label`, `client.set_script` | not used | |
 | `hosts.list` | Used | Import hosts › From Rex: the connected Rex's host list read as hosts to import, through the same preview as a host list (host-import.md); `hosts.put` and `hosts.remove` only seed it in the tests |
 | `hosts.put`, `hosts.remove` | not used | the phone never writes Rex's list |
 | `server.*` (status, version, whoami, config_reload, stop, tailscale.*, apple.*) | not used | |
@@ -64,7 +65,8 @@ own connection) and keeps the welcome's client id, reconnect token, `resumed`, `
 | `session_view_changed`, `session_label_changed` | used |
 | `block_owner_changed`, `block_closed`, `window_closed`, `window_created`, `active_window_changed` | used: the view is read again |
 | `window_label_changed`, `block_created` | not handled by name; the `session_view_changed` that follows them is (docs:events: it "follows almost every other event") |
-| `client_connected`, `client_disconnected`, `client_connection_changed`, `client_joined`, `client_left`, `client_changed`, `creator_changed`, `keymap_changed`, `hosts_changed`, `tailscale_status_changed`, `client_performed`, `client_call_requested`, `client_perform_requested`, `client_prompt_requested`, `client_prompt_ended` | ignored |
+| `client_connected`, `client_disconnected`, `client_connection_changed`, `client_joined`, `client_left`, `client_changed`, `creator_changed`, `keymap_changed`, `hosts_changed`, `tailscale_status_changed`, `client_performed`, `client_perform_requested` | ignored |
+| `client_prompt_requested`, `client_prompt_ended`, `client_call_requested` | used on an action's own connection: questions shown, `client_call_requested` answered `not_supported` |
 | `terminal.program_status_changed` (`id`, `record`, `reason`) | used: Activity, tab dots, alerts. `reason` is always `report` (verified on preview.22 / api 19) and is not read; the record's `updated_at` gives Activity its ages |
 | `terminal.program_status_removed` (`ids`, `reason`) | **was ignored, now used** (this change): Rex drops working and blocked records when the program exits or the shell prompts again (docs:program-status, "Lifetime"), and a `clear` removes records; the phone kept them, so a pane stayed "running" |
 | `terminal.pwd_changed`, `terminal.process_changed`, `terminal.title_changed` | used |
@@ -228,8 +230,8 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 | Show Activity by Session, by Priority (docs:mac-actions) | Built (this change) | the home's Activity chip, its By priority and By session chips |
 | Include idle processes in activity (docs:mac-settings) | Built (this change) | the Activity view's Include idle: off, idle tabs until seen (the phone's per-record seen marks, a desk's look included); on, always |
 | Mark as Unread (`client.tab.unread`) | Adapt, 0.5 day | the phone's seen marks can be taken back (Undo does); a sheet item would do it on demand |
-| Custom actions in the palette (`rex.action`; `client.keymap` lists them, `client.action` runs them; docs:actions, docs:api) | Adapt, 1-2 days | the palette's next step: list the configuration file's actions with a `title` and no required `args`, run with `origin: palette`; the shape of `client.keymap`'s `actions` must be checked on a real Rex first |
-| Prompts from actions (`rex.ui`, `client_prompt_requested`, answered with `client.reply`; docs:api) | Adapt, 2 days | in the palette's sheet; without it an action that asks waits until another app answers |
+| Custom actions in the palette (`rex.action`; `client.keymap` lists them, `client.action` runs them; docs:actions, docs:api) | Done | the configuration file's actions with no required `args`, under their category, run with `origin: palette` for the pane on screen (command-palette.md); shapes held by `RealRexActionsTest` |
+| Prompts from actions (`rex.ui`, `client_prompt_requested`, answered with `client.reply`; docs:api) | Done | a dialog over the screen: a line of text, or items to pick (one, several, or typed); Cancel; closed by `client_prompt_ended` or its timeout. Rex asks only connections at revision 17 or later, so an action runs on its own connection at 17 |
 | Move Tab, Move Tab Backward/Forward (`session.move_window`); session order (`session.move`) | Done | Move up and Move down in the home's session and tab sheets and in TalkBack's actions ("Ordering") |
 | Zoom Pane (`session.zoom_block`) | Skip | the phone shows one pane at a time already; zooming would change the desktop's layout |
 | Swap/Move Pane, Balance, Resize Pane, floating panes, Move Tab to New Window (docs:mac-actions) | Skip | layout editing for a screen that shows several panes; the phone shows one |
@@ -373,7 +375,7 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
   `config` (path, exists, generation, hash) and 22 `actions`, all `kind: block`, each with `name`,
   `description` and `args` (a JSON Schema); only `com.superlogical.terminal.clear` ("Clear Terminal")
   and `…reset` ("Reset Terminal") have a `title`, `category` (`Pane`) and `keywords` - the ones a
-  palette would list (the phone's palette has both, as `block.method` `clear` and `reset`). Custom `rex.action`s need an `init.lua`, which was not tried. Saved in
+  palette would list (the phone's palette has both, as `block.method` `clear` and `reset`). With an `init.lua` (`tools/rex/test-init.lua`), each `rex.action` is listed with `kind: lua`, `name`, `title`, `category` (`Actions` when the file gives none), `description`, `keywords`, `source` (`init.lua:12`) and `args` as a JSON Schema whose `required` lists what must be given; `client.action` answers `{result, client_actions}`, `result` what `run` returned, `ctx` carrying the call's `origin`, `session_id` and `block_id` (the focused one when left out). A `rex.ui.input` or `rex.ui.pick` sends `client_prompt_requested` `{call_id, action, prompt: {kind, title, placeholder, value, confirm, allow_other, multiple, items: [{id, title, subtitle, icon, detail}]}, timeout_ms}` (a plain-string item comes as `{id, title}`); `client.reply {call_id, result: {text} | {ids} | {cancelled: true}}` answers `{}` and the action gets the answer; a timeout sends `client_prompt_ended {call_id, reason: timeout}`. Only connections whose hello asked for revision 17 or later are sent questions: at 7 to 16 the action gets `nil, "unsupported"` (`RealRexActionsTest`). Saved in
   `rex-protocol/client-keymap.json`.
 - **Ordering** (verified on preview.22 / api 19, at the app's revision 7). `session.move` takes
   `session_id` and `before_session_id` (left out: to the end) and answers `{}`; a bootstrapped
@@ -484,7 +486,6 @@ platform other than `other`) owns it, marks it seen on the phone.
 ### Not verified
 
 - `program_status_removed` with `reason` `prompt`, `foreground`, `reset` or `evicted` (they need shell
-  integration, a reset, or 64 records); a configuration file's own actions in `client.keymap`;
-  prompts from actions; anything over Tailscale or TLS (the tests use the anonymous loopback listener).
+  integration, a reset, or 64 records); a question answered on two devices at once; anything over Tailscale or TLS (the tests use the anonymous loopback listener).
 - The rename dialog's text field on Robolectric: Compose never goes idle with it focused, so
   `RealRexAppTest` sends the rename as the dialog's Save does instead of typing into it.
