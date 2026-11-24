@@ -902,6 +902,7 @@ class PocketSession(
      * happen here too, because all three belong to watching it. Ending the collection stops it.
      */
     fun watchPane(blockId: String): Flow<TerminalFeed> = flow {
+        if (blockId.isBlank()) return@flow
         var backoff = MIN_BACKOFF_MS
         while (true) {
             // A data connection needs a ticket from the control connection: while that one is down,

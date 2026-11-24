@@ -65,7 +65,7 @@ class CloseOwnedPaneTest {
                 }
                 try {
                     withTimeout(5_000) {
-                        while (rex.ownerOf("block:2") != "client:test") delay(20)
+                        while (rex.ownerOf("block:2") != "client:test" || !session.state.value.owning) delay(20)
                     }
                     assertTrue("new pane should be reported as owned", session.state.value.owning)
                     assertNull("no problem should be noted", session.state.value.notice)
@@ -109,7 +109,7 @@ class CloseOwnedPaneTest {
                 }
                 try {
                     withTimeout(5_000) {
-                        while (rex.ownerOf("block:2") != "client:test") delay(20)
+                        while (rex.ownerOf("block:2") != "client:test" || !session.state.value.owning) delay(20)
                     }
                     assertTrue("new pane should be reported as owned", session.state.value.owning)
                     assertNull("no problem should be noted", session.state.value.notice)
@@ -117,6 +117,26 @@ class CloseOwnedPaneTest {
                 } finally {
                     watchSecond.cancel()
                 }
+            } finally {
+                session.stop()
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun watchingABlankBlockIdEndsImmediatelyWithoutCallingRex() = runBlocking {
+        FakeRexForClose(sendBlockClosedEvent = true).use { rex ->
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(rex.endpoint)
+            try {
+                session.start(scope)
+                withTimeout(5_000) { session.awaitReady() }
+
+                withTimeout(5_000) {
+                    session.watchPane("").collect { }
+                }
+                assertNull("blank blockId should not note a problem", session.state.value.notice)
             } finally {
                 session.stop()
                 scope.cancel()

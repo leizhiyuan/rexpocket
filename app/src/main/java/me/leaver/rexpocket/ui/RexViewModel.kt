@@ -484,12 +484,15 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
                 .filterNotNull().distinctUntilChanged()
                 .collect { (sid, block) -> store.setLastPane(hostId, sid, block, s.state.value.sessions.map { it.id }) }
         }
-        // A session that is no longer on Rex, such as after Rex restarted, leaves nothing to show:
-        // back to the list rather than an empty terminal.
+        // A session that is no longer on Rex, or has no panes left after closing its last one,
+        // leaves nothing to show: back to the list rather than an empty terminal.
         launch {
-            s.state.map { it.phase to it.activeSessionId }.distinctUntilChanged().collect { (phase, active) ->
-                if (phase == Phase.Live && active == null && route.value == Route.Term) route.value = Route.Home
-            }
+            s.state
+                .map { it.phase to (it.activeSessionId != null && it.view?.focusedBlock() != null) }
+                .distinctUntilChanged()
+                .collect { (phase, hasPane) ->
+                    if (phase == Phase.Live && !hasPane && route.value == Route.Term) route.value = Route.Home
+                }
         }
         // Measured once the connection is up, which is when Tailscale has had a chance to find a
         // direct path; earlier it would almost always report the DERP fallback it starts on.
