@@ -160,7 +160,7 @@
     <string name="key_right">→</string>
 
 
-    <string name="state_running">running</string>
+    <string name="state_running">working</string>
     <string name="state_waiting_approval">waiting for approval</string>
     <string name="state_waiting_answer">waiting for an answer</string>
     <string name="state_waiting_login">waiting for login</string>
@@ -235,12 +235,12 @@
     <string name="empty_session_title">No tabs in this session</string>
     <string name="empty_session_body">Its last tab was closed. The session is still on the host; open a new tab to use it.</string>
     <string name="action_show_active">Activity</string>
-    <string name="no_activity">No program is waiting, failed, done or running</string>
+    <string name="no_activity">No program is blocked, failed, done or working</string>
     <string name="activity_offline">Connect to a host to see its activity</string>
-    <string name="activity_waiting">Waiting</string>
+    <string name="activity_waiting">Blocked</string>
     <string name="activity_failed">Failed</string>
     <string name="activity_done">Done</string>
-    <string name="activity_running">Running</string>
+    <string name="activity_running">Working</string>
     <string name="activity_now">now</string>
     <string name="action_more">More actions</string>
     <string name="action_full_screen">Full screen</string>

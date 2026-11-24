@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The home list: its rows, filters, sheets and snackbars. See docs/design/home.md. -->
 <resources>
-    <string name="home_count_waiting">%1$d waiting</string>
+    <string name="home_count_waiting">%1$d blocked</string>
     <string name="home_count_failed">%1$d failed</string>
     <string name="home_count_done">%1$d done</string>
-    <string name="home_count_running">%1$d running</string>
+    <string name="home_count_running">%1$d working</string>
     <string name="home_pane_line">pane %1$s %2$s</string>
     <string name="home_action_collapse">Collapse</string>
     <string name="home_action_expand">Expand</string>
@@ -25,9 +25,9 @@
     <string name="home_connect_to_see">Connect %1$s to see tabs</string>
     <string name="filter_all">All</string>
     <string name="filter_needs_you">Needs you %1$d</string>
-    <string name="filter_running">Running %1$d</string>
+    <string name="filter_running">Working %1$d</string>
     <string name="filter_needs_you_none">Nothing needs you</string>
-    <string name="filter_running_none">Nothing is running</string>
+    <string name="filter_running_none">Nothing is working</string>
     <string name="home_not_connected_line">%1$s not connected</string>
     <string name="home_mark_seen">Mark as seen</string>
     <string name="home_mark_all_seen">Mark all as seen</string>

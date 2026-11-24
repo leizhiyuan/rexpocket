@@ -73,8 +73,9 @@ confirm first, so they have no Undo, nor does Rename.
 lists every connected host's tabs that a program reported on, each once, by its most pressing
 report (seen done and failed ones left out, as everywhere), arranged as Rex arranges it:
 
-- **By priority** (Rex's "Show Activity by Priority", the default): captions Waiting, Failed,
-  Done, Running, Idle, each with its count, as TalkBack headings; under each, one card of rows
+- **By priority** (Rex's "Show Activity by Priority", the default): captions Blocked, Failed,
+  Done, Working, Idle (Rex's own words: its Program Activity settings say Working, Blocked,
+  Done, and its priority view blocked, failed, done, working, idle), each with its count, as TalkBack headings; under each, one card of rows
   from every connected host, newest first, a row naming its host when more than one is
   connected. One list across hosts is what Rex's priority view is for: the most pressing thing
   first, wherever it is.
@@ -92,11 +93,12 @@ same TalkBack actions, Reply, Approve and Deny on a waiting row, Interrupt on a 
 Activity view is Needs you and Running together, with idle, and Rex's two arrangements; those two
 chips stay as they were, for the one-handed "what needs me" and "what runs".
 
-**All, Needs you, Running** are chips at the top, with counts across every connected host; the
+**All, Needs you, Working** are chips (the Working chip was Running until 2026-11-24; its stored
+and backed-up value is still `Running`, so older backups load) at the top, with counts across every connected host; the
 choice is kept. **Needs you** is the tabs whose most pressing report waits on the person, or failed
-or finished and was not seen. **Running is anything working**: every tab with a `working` record in
+or finished and was not seen. **Working is anything working**: every tab with a `working` record in
 any pane, root or child, whatever else it has - so a tab can be in both, and its row says both
-("running · 1 done" in Running, "done · running" in Needs you). The dot is always the tab's most
+("working · 1 done" in Working, "done · working" in Needs you). The dot is always the tab's most
 pressing state, in Rex's order. A tab with no records, or only idle ones, is in neither. Each is a
 flat list (Needs you in Rex's priority order, Running newest first) under each host's header (no
 folds), with Reply
@@ -134,6 +136,14 @@ screen and every minute while only background alerts run, backing off to 2 min w
 fail, until a status event comes from that session. Rex has no call for many panes at once, so
 one sweep is a burst of calls sent together. Details in rex-parity.md, "Status of sessions the
 phone never opened"; `UnopenedStatusTest` (scripted and real Rex).
+
+A tab also counts as working when its program's title spins (a braille frame such as ⠇ standing
+as a word: omp's "π ⠇ ROTATE: …", Claude Code's "⠐ Claude Code") and Rex holds no working or
+blocked record for it: the phone adds a `working` record with id `~title` (Status details shows
+it). On a person's Mac, Rex.app listed three omp tabs as Working whose records the phone did not
+have, even once opened; a prompt mark (OSC 133;A) makes Rex drop a `working` record (reason
+`prompt`, checked on preview.22) and omp does not report a state twice, while its title keeps
+spinning. `UnopenedStatusTest.aSpinningTitleIsWorkingWhenRexDroppedTheRecord` (scripted and real).
 
 ## Seen
 

@@ -45,7 +45,7 @@
     <string name="backup_setting_folds_value">按文件折叠或展开：%1$s</string>
     <string name="backup_setting_host_background">%1$s 的后台设置</string>
     <string name="backup_filter_needs_you">需要你</string>
-    <string name="backup_filter_running">运行中</string>
+    <string name="backup_filter_running">工作中</string>
     <string name="backup_problem_too_large">文件大于 %1$d KiB。</string>
     <string name="backup_problem_value">%1$s 的值这个应用不认识。</string>
     <string name="backup_problem_unknown_host">%1$s 提到了 %2$s，但它不是文件里的主机。</string>

@@ -72,6 +72,55 @@ abstract class UnopenedStatusTest {
         }
     }
 
+    /**
+     * The program in [block] reports working, a prompt mark makes Rex drop that record, and the
+     * program's title goes on spinning ([title]), as omp's did on the Mac that listed it Working.
+     */
+    abstract suspend fun workWithDroppedRecord(desk: Desk, rex: RexUnderTest, sid: String, block: String, title: String)
+
+    /** The program in [block] is idle again: its title stops spinning. */
+    abstract suspend fun settle(desk: Desk, rex: RexUnderTest, sid: String, block: String, title: String)
+
+    /**
+     * A tab whose agent's title spins is Working on the home even when Rex holds no record for it,
+     * in a session the phone opened and in one it did not.
+     */
+    @Test
+    fun aSpinningTitleIsWorkingWhenRexDroppedTheRecord() = runBlocking {
+        val under = rex()
+        val desk = Desk(under.endpoint, platform = "macos")
+        val phone = PocketSession(under.endpoint)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            desk.connect()
+            val (opened, mine) = desk.newSession(tabs = 1)
+            val (other, theirs) = desk.newSession(tabs = 1)
+            phone.start(scope, preferredSessionId = opened)
+            withTimeout(15_000) { phone.awaitReady() }
+            phone.setActive(true)
+            phone.openSession(opened)
+            fun running(st: PocketState) = runningItems(st).map { it.window.id }
+            suspend fun until(what: String, ok: (PocketState) -> Boolean) {
+                withTimeoutOrNull(SWEEP_BOUND_MS) { while (!ok(phone.state.value)) delay(50) }
+                    ?: throw AssertionError("$what never happened: records=${phone.state.value.records} titles=${phone.state.value.titles}")
+            }
+            until("both sessions known") { st -> other in st.views && opened in st.views }
+            delay(1_000)
+            for ((sid, tabs) in listOf(opened to mine, other to theirs)) {
+                val (tab, block) = tabs[0]
+                workWithDroppedRecord(desk, under, sid, block, "π ⠇ 🔑 ROTATE: Rotate preview")
+                until("$sid's spinning tab in Working") { tab in running(it) && it.blockStatus[block]?.state == "working" }
+                settle(desk, under, sid, block, "π 🔑 ROTATE: Rotate preview")
+                until("$sid's settled tab out of Working") { tab !in running(it) }
+            }
+        } finally {
+            phone.stop()
+            scope.cancel()
+            desk.close()
+            under.close()
+        }
+    }
+
     private fun b64(s: String) = java.util.Base64.getEncoder().encodeToString(s.toByteArray())
 
     private companion object {
@@ -89,6 +138,16 @@ class ScriptedUnopenedStatusTest : UnopenedStatusTest() {
         val msg = kv["msg"]?.let { String(java.util.Base64.getDecoder().decode(it)) }
         (rex as FakeRexUnderTest).rex.report(block, kv.getValue("state"), kind = kv["kind"], msg = msg, app = kv["app"])
     }
+
+    override suspend fun workWithDroppedRecord(desk: Desk, rex: RexUnderTest, sid: String, block: String, title: String) {
+        val scripted = (rex as FakeRexUnderTest).rex
+        scripted.report(block, "working", app = "omp")
+        scripted.dropRecords(block, listOf(""), reason = "prompt")
+        scripted.setTitle(block, title)
+    }
+
+    override suspend fun settle(desk: Desk, rex: RexUnderTest, sid: String, block: String, title: String) =
+        (rex as FakeRexUnderTest).rex.setTitle(block, title)
 }
 
 /** On a real Rex: the pane's shell writes each report as an agent's process does. */
@@ -107,5 +166,24 @@ class RealRexUnopenedStatusTest : UnopenedStatusTest() {
 
     override suspend fun report(desk: Desk, rex: RexUnderTest, sid: String, block: String, pairs: String) {
         desk.type(sid, block, "$pairs\n")
+    }
+
+    /**
+     * A program reports working, writes a prompt mark (OSC 133;A), which makes Rex drop the record
+     * (`program_status_removed`, reason `prompt`), then sets each line typed to it as its title.
+     */
+    override suspend fun workWithDroppedRecord(desk: Desk, rex: RexUnderTest, sid: String, block: String, title: String) {
+        delay(1_500)
+        val script = "import sys; w=sys.stdout.write; E=chr(27); " +
+            "w(E+']7501;state=working:app=omp'+E+chr(92)); sys.stdout.flush(); " +
+            "w(E+']133;A'+chr(7)); sys.stdout.flush(); " +
+            "[(w(E+']0;'+l.strip()+chr(7)), sys.stdout.flush()) for l in sys.stdin]"
+        desk.type(sid, block, "python3 -c \"$script\"\n")
+        delay(1_000)
+        desk.type(sid, block, "$title\n")
+    }
+
+    override suspend fun settle(desk: Desk, rex: RexUnderTest, sid: String, block: String, title: String) {
+        desk.type(sid, block, "$title\n")
     }
 }

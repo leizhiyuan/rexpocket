@@ -156,7 +156,7 @@
     <string name="key_right">→</string>
 
 
-    <string name="state_running">執行中</string>
+    <string name="state_running">工作中</string>
     <string name="state_waiting_approval">等待核准</string>
     <string name="state_waiting_answer">等待回答</string>
     <string name="state_waiting_login">等待登入</string>
@@ -230,12 +230,12 @@
     <string name="empty_session_title">這個工作階段沒有分頁</string>
     <string name="empty_session_body">它的最後一個分頁已關閉。工作階段仍在主機上；新增一個分頁即可使用。</string>
     <string name="action_show_active">活動</string>
-    <string name="no_activity">沒有等待中、失敗、已完成或執行中的程式</string>
+    <string name="no_activity">沒有受阻、失敗、已完成或工作中的程式</string>
     <string name="activity_offline">連線到主機即可查看它的活動</string>
-    <string name="activity_waiting">等待中</string>
+    <string name="activity_waiting">受阻</string>
     <string name="activity_failed">失敗</string>
     <string name="activity_done">已完成</string>
-    <string name="activity_running">執行中</string>
+    <string name="activity_running">工作中</string>
     <string name="activity_now">剛剛</string>
     <string name="action_more">更多動作</string>
     <string name="action_full_screen">全螢幕</string>

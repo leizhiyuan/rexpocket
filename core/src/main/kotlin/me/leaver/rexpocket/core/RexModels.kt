@@ -378,3 +378,28 @@ fun JSONObject.optNullableString(key: String): String? {
 }
 
 class RexCallException(val code: String, val status: Int, message: String) : Exception(message)
+
+/** The id of the record the phone makes from a working title: no record Rex holds has it. */
+const val TITLE_RECORD_ID = "~title"
+
+private val TITLE_SPINNER = Regex("(^|\\s)[\\u2801-\\u28FF](\\s|$)")
+
+/**
+ * Whether a program's [title] shows it at work: a braille spinner frame (⠋ ⠙ ⠹ … ⠇) standing as a
+ * word, as omp's "π ⠇ ROTATE: …" and Claude Code's "⠐ Claude Code" do while a turn runs. The
+ * idle title has no frame ("π ROTATE: …").
+ */
+fun titleSaysWorking(title: String?): Boolean = title != null && TITLE_SPINNER.containsMatchIn(title)
+
+/**
+ * [records] with a `working` record added when the pane's program [title] says it works and no
+ * record Rex holds does - working or blocked. Rex drops a `working` record at a shell prompt mark
+ * (`program_status_removed`, reason `prompt`), and an agent does not report a state it already
+ * reported; Rex.app on a Mac still listed such tabs as Working, their titles spinning.
+ */
+fun withTitleWork(records: Map<String, ProgramRecord>, title: String?, app: String?): Map<String, ProgramRecord> {
+    if (!titleSaysWorking(title)) return records
+    if (records.values.any { it.state == "working" || it.state == "blocked" }) return records
+    val made = ProgramRecord(id = TITLE_RECORD_ID, state = "working", kind = null, app = app, title = null, msg = null, progress = null)
+    return records + (TITLE_RECORD_ID to made)
+}

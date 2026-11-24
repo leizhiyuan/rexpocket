@@ -172,7 +172,7 @@ class ActivityViewTest {
         // TabDetails.text's, which RealRexAppTest reads on a real Rex.
         if (onRobolectric) {
             val clip = compose.activity.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.getItemAt(0)?.text.toString()
-            assertTrue(clip, clip.contains("msg: Found 3 files") && clip.contains("home lists: Running"))
+            assertTrue(clip, clip.contains("msg: Found 3 files") && clip.contains("home lists: Working"))
         }
     }
 

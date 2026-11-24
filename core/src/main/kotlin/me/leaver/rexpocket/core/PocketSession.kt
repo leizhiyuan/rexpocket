@@ -1431,16 +1431,23 @@ class PocketSession(
 
     private fun publishStatus() {
         updateState { st ->
+            // What Rex holds, plus a working record where only the program's title says it works.
+            val held = LinkedHashMap<String, Map<String, ProgramRecord>>()
+            for (block in statusRecords.keys + titleOf.keys) {
+                val records = statusRecords[block].orEmpty()
+                val app = summarizeStatus(records.values.toList())?.app ?: foregrounds[block]
+                held[block] = withTitleWork(records, titleOf[block], app)
+            }
             val summary = LinkedHashMap<String, ProgramRecord>()
-            for ((block, records) in statusRecords) summarizeStatus(records.values.toList())?.let { summary[block] = it }
+            for ((block, records) in held) summarizeStatus(records.values.toList())?.let { summary[block] = it }
             // A program that reported itself names the pane; otherwise the foreground process does.
             val programs = LinkedHashMap<String, String>()
             for (block in statusRecords.keys + foregrounds.keys) {
                 paneProgram(summary[block], foregrounds[block])?.let { programs[block] = it }
             }
-            val busy = statusRecords.filterValues { records -> records.values.any { it.state == "working" || it.state == "blocked" } }.keys
+            val busy = held.filterValues { records -> records.values.any { it.state == "working" || it.state == "blocked" } }.keys
             val all = LinkedHashMap<String, List<ProgramRecord>>()
-            for ((block, records) in statusRecords) if (records.isNotEmpty()) all[block] = rootFirst(records.values)
+            for ((block, records) in held) if (records.isNotEmpty()) all[block] = rootFirst(records.values)
             st.copy(
                 blockStatus = summary,
                 records = all,
@@ -2192,7 +2199,16 @@ class PocketSession(
         reportedDuringRead -= block
         val payload = JSONObject().put("session_id", sid).put("block_id", block).put("args", JSONObject())
         val records = try {
-            parseProgramRecords(rpc("com.superlogical.terminal.program_status", payload)).associateBy { it.id }
+            coroutineScope {
+                // The title too: a spinner in it is how some agents say they work (withTitleWork).
+                val title = async { runCatching { rpc("com.superlogical.terminal.title", payload) }.getOrNull() }
+                val status = parseProgramRecords(rpc("com.superlogical.terminal.program_status", payload)).associateBy { it.id }
+                title.await()?.let { answer ->
+                    val named = programTitle(answer)
+                    if (block !in reportedDuringRead) if (named == null) titleOf -= block else titleOf[block] = named
+                }
+                status
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {

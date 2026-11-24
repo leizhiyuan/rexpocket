@@ -46,7 +46,7 @@
     <string name="backup_setting_folds_value">Folded or opened as in the file: %1$s</string>
     <string name="backup_setting_host_background">Background for %1$s</string>
     <string name="backup_filter_needs_you">Needs you</string>
-    <string name="backup_filter_running">Running</string>
+    <string name="backup_filter_running">Working</string>
     <string name="backup_problem_too_large">The file is larger than %1$d KiB.</string>
     <string name="backup_problem_value">%1$s is not a value this app knows.</string>
     <string name="backup_problem_unknown_host">%1$s names %2$s, which is not one of the file\'s hosts.</string>

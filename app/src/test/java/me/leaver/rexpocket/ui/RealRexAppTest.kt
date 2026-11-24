@@ -201,7 +201,7 @@ class RealRexAppTest {
         compose.onNodeWithTag(activityRowTag(tab)).assertIsDisplayed()
         val details = me.leaver.rexpocket.core.tabDetails(m.pocket.value, tab) { block -> m.seenMarks.value[me.leaver.rexpocket.data.HomeMarks.key("real-rex", block)] }!!
         val text = details.text("t", System.currentTimeMillis())
-        assertTrue(text, text.contains("record task-1") && text.contains("effective_app: claude") && text.contains("home lists: Running"))
+        assertTrue(text, text.contains("record task-1") && text.contains("effective_app: claude") && text.contains("home lists: Working"))
         assertTrue("Rex names the foreground process: $text", Regex("owner: \\d+ \\S+").containsMatchIn(text))
     }
 

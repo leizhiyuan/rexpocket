@@ -288,6 +288,18 @@ class ScriptedRex(
         }
     }
 
+    /** Titles programs set (OSC 0/2), by pane, with the process that set each; `title` answers them. */
+    private val titles = ConcurrentHashMap<String, Pair<String, String>>()
+
+    /** The program [owner] in [block] sets the title [title]: `title_changed` with the title and its owner. */
+    fun setTitle(block: String, title: String, owner: String = "omp") {
+        synchronized(this) {
+            val session = sessions.values.firstOrNull { it.tabOf(block) != null } ?: return
+            titles[block] = title to owner
+            blockEvent(session.id, block, "title_changed", JSONObject().put("title", title).put("owner", JSONObject().put("pid", 4343).put("name", owner)))
+        }
+    }
+
     /**
      * The program in [block] exits with [code]: its working and blocked records go (reason
      * `child_exited`), `child_exited` is told, and the pane closes, as a shell pane does by default
@@ -853,8 +865,8 @@ class ScriptedRex(
                 JSONObject().put("last_exit", JSONObject.NULL).put("child", bash).put("foreground", bash).put("home", "/root")
             }
             "com.superlogical.terminal.title" -> {
-                pane(client, payload)
-                JSONObject().put("title", "root@rex: ~").put("owner", JSONObject().put("pid", 4242).put("name", "bash"))
+                val set = titles[pane(client, payload).second]
+                JSONObject().put("title", set?.first ?: "root@rex: ~").put("owner", JSONObject().put("pid", 4242).put("name", set?.second ?: "bash"))
             }
             "data.connect" -> {
                 val s = session(payload)

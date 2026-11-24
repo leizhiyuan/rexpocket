@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="home_count_waiting">%1$d 个等待中</string>
+    <string name="home_count_waiting">%1$d 个受阻</string>
     <string name="home_count_failed">%1$d 个失败</string>
     <string name="home_count_done">%1$d 个完成</string>
-    <string name="home_count_running">%1$d 个运行中</string>
+    <string name="home_count_running">%1$d 个工作中</string>
     <string name="home_pane_line">窗格 %1$s %2$s</string>
     <string name="home_action_collapse">收起</string>
     <string name="home_action_expand">展开</string>
@@ -24,9 +24,9 @@
     <string name="home_connect_to_see">连接 %1$s 以查看标签页</string>
     <string name="filter_all">全部</string>
     <string name="filter_needs_you">需要你 %1$d</string>
-    <string name="filter_running">运行中 %1$d</string>
+    <string name="filter_running">工作中 %1$d</string>
     <string name="filter_needs_you_none">没有需要你处理的</string>
-    <string name="filter_running_none">没有正在运行的</string>
+    <string name="filter_running_none">没有正在工作的</string>
     <string name="home_not_connected_line">%1$s 未连接</string>
     <string name="home_mark_seen">标记为已看</string>
     <string name="home_mark_all_seen">全部标记为已看</string>

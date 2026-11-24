@@ -159,7 +159,7 @@ own SSH daemon. How the transport works is described in
      palette (Rex's names, such as "Split Pane Right", find them too). Arrows, Return and Escape work
      from a keyboard. See [docs/design/command-palette.md](docs/design/command-palette.md).
 5. **On the home screen,** the eye shows the connected host's Activity, as Rex does: the tabs whose
-   program reported its status, grouped Waiting, Failed, Done and Running, each with its session,
+   program reported its status, grouped Blocked, Failed, Done and Working (Rex's words), each with its session,
    how long ago the phone saw it change, and the program's message; tap one to open that pane. Search
    filters hosts, sessions and tabs (or the Activity rows while the eye is on). What comes from Rex
    and what does not: [docs/design/rex-parity.md](docs/design/rex-parity.md). A folded host or session stays folded - after a trip to

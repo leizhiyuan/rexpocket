@@ -315,6 +315,16 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
   as that Mac did; `ScriptedUnopenedStatusTest` fails without the sweep, and
   `RealRexUnopenedStatusTest` runs the same two-session case (an OSC 7501 loop reporting working,
   blocked, done in the session the phone did not open) on the real Rex.
+- **Working without a record (2026-11-24).** On preview.22, OSC 9;4 gives only `progress_report`
+  and a title (OSC 0/2) only `title_changed`: neither makes a status record. A prompt mark
+  (OSC 133;A) after `state=working` gives `program_status_removed` `{ids: [""], reason: "prompt"}`.
+  Rex answers the feature query `OSC 7501 ; ?` with `states=idle,working,done,blocked,error:
+  kinds=permission,question,auth`. omp (run-status.ts) writes only the root record, never the same
+  report twice, and sets a spinner title while it works. Rex's docs say Activity comes from
+  reports, and name nothing else; yet the Mac listed omp tabs Working with nothing the phone could
+  read. The phone now counts a pane whose program title has a braille spinner frame, and no
+  working or blocked record, as working (a record `~title`; home.md). The groups use Rex's words:
+  Working (was Running), Blocked (was Waiting), Failed, Done, Idle.
 - **A program that fails.** Rex makes no status record of an exit code: `sh -c 'exit 3'` gives only
   `child_exited` (`exit_code: 3`, `error: "exit status 3"`), `process`'s `last_exit`, and on the
   stream an APC `{"type":"child_exited","exit_code":3}`. Activity's Failed group comes only from a

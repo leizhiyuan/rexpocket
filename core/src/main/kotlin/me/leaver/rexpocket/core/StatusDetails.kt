@@ -26,18 +26,18 @@ data class TabDetails(
     val attention: TabAttention?,
     val panes: List<PaneDetail>,
 ) {
-    /** The tab's lists on the home: Needs you, Running, both, or neither. */
+    /** The tab's lists on the home: Needs you, Working (HomeFilter.Running), both, or neither. */
     fun lists(): String = listOfNotNull(
         "Needs you".takeIf { attention?.needsYou == true },
-        "Running".takeIf { attention?.isRunning == true },
+        "Working".takeIf { attention?.isRunning == true },
     ).ifEmpty { listOf("neither") }.joinToString(", ")
 
-    /** What the phone shows for the tab, in short: "done (record task-1) · also running". */
+    /** What the phone shows for the tab, in short: "done (record task-1) · also working". */
     fun phoneShows(): String {
         val a = attention ?: return "nothing (no report that is news)"
-        val also = a.alsoBesides(a.group).joinToString(", ") { (g, n) -> if (g == ActivityGroup.Running) "running" else "$n ${g.state}" }
+        val also = a.alsoBesides(a.group).joinToString(", ") { (g, n) -> if (g == ActivityGroup.Running) "working" else "$n ${g.state}" }
         return buildString {
-            append(a.group.name.lowercase()).append(" (pane ").append(a.block.label).append(", record ").append(recordName(a.record.id)).append(')')
+            append(a.group.state).append(" (pane ").append(a.block.label).append(", record ").append(recordName(a.record.id)).append(')')
             if (also.isNotEmpty()) append(" · also ").append(also)
         }
     }
@@ -136,7 +136,7 @@ fun activityDigest(state: PocketState, phoneMark: (blockId: String) -> String?, 
                 }
                 "pane ${pane.index + 1}${if (pane.focused) "*" else ""}: $records"
             }
-            val shows = details.attention?.let { a -> a.group.name.lowercase() + (if (a.isRunning && a.group != ActivityGroup.Running) "+running" else "") } ?: "nothing"
+            val shows = details.attention?.let { a -> a.group.state + (if (a.isRunning && a.group != ActivityGroup.Running) "+working" else "") } ?: "nothing"
             lines += "session ${s + 1} tab ${t + 1}: ${parts.joinToString(" | ")} -> $shows [${details.lists()}]"
         }
     }
