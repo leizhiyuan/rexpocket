@@ -520,8 +520,13 @@ class RexViewModel @JvmOverloads constructor(
         runs[settings.backend.storageKey]?.error?.let { TailnetFailure(it.ifBlank { null }) }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /** The joined tailnet's settings, and whether its node can keep accounts now. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val tailnetAccounts: Flow<Pair<TailnetSettings, Boolean>> =
+        tailnet.flatMapLatest { settings -> nodeFor(settings.backend).keepsAccounts.map { settings to it } }
+
     /** The joined tailnet as its page, chip and sheet show it: its choices, its run, its hosts. */
-    val tailnetView: StateFlow<TailnetView> = combine(tailnet, control.runs, control.policies, connections.links, connections.profiles) { settings, runs, _, _, profiles ->
+    val tailnetView: StateFlow<TailnetView> = combine(tailnetAccounts, control.runs, control.policies, connections.links, connections.profiles) { (settings, keepsAccounts), runs, _, _, profiles ->
         val id = settings.backend.storageKey
         val run = runs[id] ?: TailnetRun()
         val accounts = profiles.of(settings.backend)
@@ -533,7 +538,7 @@ class RexViewModel @JvmOverloads constructor(
             joined = settings.enabled,
             policy = control.policyOf(id),
             off = control.isOff(id),
-            accounts = if (settings.backend.accounts) accounts else emptyList(),
+            accounts = if (settings.backend.accounts && keepsAccounts) accounts else emptyList(),
             account = active.id,
             running = run.running,
             lingerUntil = run.lingerUntil,

@@ -276,6 +276,7 @@ internal fun TailnetPage(
             StateRow(linkState, tailnetSupporting(view, stage))
             Actions(connectionActions(linkState, ConnectableKind.Tailnet, onConnect, onDisconnect, onRetry))
         }
+        me.leaver.rexpocket.net.addon.TailnetBackendRow(this, view.backend)
         if (accounts != null && view.accounts.isNotEmpty()) AccountsGroup(view, accounts)
         Group(stringResource(R.string.conn_group_open)) {
             ChoiceRow(

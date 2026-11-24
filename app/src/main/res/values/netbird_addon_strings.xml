@@ -6,6 +6,17 @@
     <string name="netbird_addon_get">Get the add-on</string>
     <string name="netbird_addon_not_allowed">RexPocket may not use the Netbird add-on: the two were signed with different keys. Install both from the same release or CI run.</string>
     <string name="netbird_addon_no_answer">The Netbird add-on did not answer.</string>
-    <string name="netbird_addon_version">The Netbird add-on speaks version %1$d of its interface, and this RexPocket version %2$d. Install both from the same release or CI run.</string>
+    <string name="netbird_addon_version">The Netbird add-on is older than this RexPocket: it speaks version %1$d of its interface, RexPocket version %2$d. Update the add-on.</string>
     <string name="netbird_addon_restarting">The Netbird add-on stopped. RexPocket is starting it again.</string>
+    <string name="netbird_addon_version_newer">The Netbird add-on is newer than this RexPocket: it speaks version %1$d of its interface, RexPocket version %2$d. Update RexPocket.</string>
+    <string name="netbird_addon_accounts_update">This Netbird add-on is too old for a second account. Update the add-on, or use the first account.</string>
+    <string name="netbird_addon_outdated">The Netbird add-on (%1$s) is older than this RexPocket (%2$s).</string>
+    <string name="netbird_addon_outdated_accounts">Update it to keep more than one Netbird account.</string>
+    <string name="netbird_addon_update">Update the add-on</string>
+    <string name="netbird_addon_update_checking">Looking for the add-on…</string>
+    <string name="netbird_addon_update_downloading">Downloading the add-on… %1$d%%</string>
+    <string name="netbird_addon_update_installing">Install the add-on in the window that opened. RexPocket connects to it again by itself.</string>
+    <string name="netbird_addon_update_permission">Allow RexPocket to install apps, then tap Update the add-on again.</string>
+    <string name="netbird_addon_update_none">No release carries the add-on for this version: the releases page is open.</string>
+    <string name="netbird_addon_update_failed">The add-on could not be downloaded: %1$s</string>
 </resources>

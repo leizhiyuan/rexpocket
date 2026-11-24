@@ -104,4 +104,17 @@ class TailnetAccountsTest {
         compose.runOnUiThread { m.removeTailnetAccount(home.id) }
         assertTrue(HostStore(compose.activity.application).list().none { it.tailnetProfile == home.id })
     }
+
+    @Test
+    fun aNodeThatCannotKeepAccountsShowsNoneUntilItCan() {
+        val m = launch()
+        compose.runOnUiThread { m.addTailnetAccount("Work") }
+        compose.awaitThat { m.tailnetView.value.accounts.size == 2 }
+        // The node can no longer keep them (its helper app went back to an older version): the
+        // page shows no Accounts group; the accounts are kept for when it can again.
+        node.accountsKept.value = false
+        compose.awaitThat { m.tailnetView.value.accounts.isEmpty() }
+        node.accountsKept.value = true
+        compose.awaitThat { m.tailnetView.value.accounts.size == 2 }
+    }
 }

@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.Parcel
 import android.os.ParcelFileDescriptor
 import android.os.RemoteCallbackList
 import android.util.Log
@@ -18,7 +19,6 @@ import me.leaver.rexpocket.go.netbird.Platform
 import me.leaver.rexpocket.netbird.api.INetbirdNode
 import me.leaver.rexpocket.netbird.api.INetbirdNodeListener
 import me.leaver.rexpocket.netbird.api.NetbirdAddon
-import java.io.File
 
 /**
  * The Netbird node the add-on runs for RexPocket, and the bound service RexPocket reaches it by.
@@ -35,14 +35,9 @@ import java.io.File
  */
 class NodeService : Service() {
     private val listeners = RemoteCallbackList<INetbirdNodeListener>()
-    private val lock = Any()
 
-    @Volatile private var node: Node? = null
-    @Volatile private var running: Pair<String, String>? = null
     @Volatile private var keepRunning = false
     @Volatile private var foreground = false
-
-    private val stateDirectory: File get() = File(filesDir, "netbird")
 
     private val platform = object : Platform {
         override fun log(line: String) {
@@ -52,41 +47,50 @@ class NodeService : Service() {
         override fun stateChanged() = notifyListeners()
     }
 
+    private val nodes by lazy {
+        Nodes(filesDir, engine = { dir, hostname, setupKey, managementUrl ->
+            GoNode(Netbird.startPrivate(dir.absolutePath, hostname, setupKey, managementUrl, platform))
+        }) {
+            updateForeground()
+            notifyListeners()
+        }
+    }
+
     private val binder = object : INetbirdNode.Stub() {
         override fun version(): Int {
             enforce()
-            return NetbirdAddon.VERSION
+            return BuildConfig.ADDON_VERSION
         }
 
         override fun start(hostname: String, setupKey: String, managementUrl: String) {
             enforce()
-            startNode(hostname, setupKey, managementUrl)
+            failing { nodes.start(NetbirdAddon.FIRST_PROFILE, hostname, setupKey, managementUrl) }
         }
 
         override fun stop() {
             enforce()
-            stopNode()
+            nodes.stop()
         }
 
         override fun state(): String {
             enforce()
-            val current = node ?: return STOPPED
+            val current = nodes.node ?: return STOPPED
             return failing { current.state() }
         }
 
         override fun ping(ip: String, timeoutMillis: Int): String {
             enforce()
-            return failing { running().ping(ip, timeoutMillis) }
+            return failing { nodes.running().ping(ip, timeoutMillis) }
         }
 
         override fun dialError(host: String): String {
             enforce()
-            return node?.dialError(host).orEmpty()
+            return nodes.node?.dialError(host).orEmpty()
         }
 
         override fun dial(host: String, port: Int, timeoutMillis: Int): ParcelFileDescriptor {
             enforce()
-            val fd = failing { running().dialFd(host, port, timeoutMillis) }
+            val fd = failing { nodes.running().dialFd(host, port, timeoutMillis) }
             return ParcelFileDescriptor.adoptFd(fd)
         }
 
@@ -106,6 +110,32 @@ class NodeService : Service() {
             keepRunning = background
             updateForeground()
         }
+
+        override fun revision(clientRevision: Int): Int {
+            enforce()
+            Log.i(TAG, "RexPocket speaks revision $clientRevision, the add-on ${BuildConfig.ADDON_REVISION}")
+            return BuildConfig.ADDON_REVISION
+        }
+
+        override fun startProfile(profile: String, hostname: String, setupKey: String, managementUrl: String) {
+            enforce()
+            failing { nodes.start(profile, hostname, setupKey, managementUrl) }
+        }
+
+        override fun forgetProfile(profile: String) {
+            enforce()
+            failing { nodes.forget(profile) }
+            Log.i(TAG, "an account's registration was removed")
+        }
+
+        // An add-on built as an older revision (the tests' -Prexpocket.addonRevision) has none of the
+        // later calls, as a real one of that revision: such a call is not answered.
+        override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
+            if (BuildConfig.ADDON_REVISION < NetbirdAddon.REVISION_ACCOUNTS && code in FIRST_REVISION_2_CALL..IBinder.LAST_CALL_TRANSACTION) {
+                return false
+            }
+            return super.onTransact(code, data, reply, flags)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -113,7 +143,7 @@ class NodeService : Service() {
     /** RexPocket is gone, or let go of the node: nothing else may use it, so it stops. */
     override fun onUnbind(intent: Intent?): Boolean {
         keepRunning = false
-        stopNode()
+        nodes.stop()
         stopSelf()
         return false
     }
@@ -127,7 +157,7 @@ class NodeService : Service() {
     }
 
     override fun onDestroy() {
-        stopNode()
+        nodes.stop()
         listeners.kill()
         super.onDestroy()
     }
@@ -138,8 +168,6 @@ class NodeService : Service() {
         }
     }
 
-    private fun running(): Node = node ?: throw IllegalStateException("the Netbird node is not running")
-
     /** Runs [block], turning the Go library's error into one Binder carries to RexPocket. */
     private inline fun <T> failing(block: () -> T): T = try {
         block()
@@ -147,30 +175,6 @@ class NodeService : Service() {
         throw e
     } catch (e: Exception) {
         throw IllegalStateException(e.message?.ifBlank { null } ?: "Netbird failed")
-    }
-
-    private fun startNode(hostname: String, setupKey: String, managementUrl: String) = synchronized(lock) {
-        val config = hostname to managementUrl
-        if (node != null && running == config) return@synchronized
-        closeLocked()
-        stateDirectory.mkdirs()
-        node = failing { Netbird.startPrivate(stateDirectory.absolutePath, hostname, setupKey, managementUrl, platform) }
-        running = config
-        updateForeground()
-        notifyListeners()
-    }
-
-    private fun stopNode() = synchronized(lock) {
-        closeLocked()
-        updateForeground()
-        notifyListeners()
-    }
-
-    private fun closeLocked() {
-        val current = node ?: return
-        node = null
-        running = null
-        runCatching { current.close() }
     }
 
     private fun notifyListeners() {
@@ -184,7 +188,7 @@ class NodeService : Service() {
         }
     }
 
-    private fun wantsForeground(): Boolean = keepRunning && node != null
+    private fun wantsForeground(): Boolean = keepRunning && nodes.node != null
 
     private fun updateForeground() {
         if (wantsForeground() == foreground) return
@@ -237,5 +241,17 @@ class NodeService : Service() {
 
         /** The state of a node that is not running, in the shape [Node.state] reports. */
         const val STOPPED = """{"backendState":"Stopped","peers":[]}"""
+
+        /** The transaction code of revision 2's first call, revision(): after revision 1's nine. */
+        const val FIRST_REVISION_2_CALL = IBinder.FIRST_CALL_TRANSACTION + 9
     }
+}
+
+/** The Go library's node, as [Nodes] uses one. */
+private class GoNode(private val node: Node) : EngineNode {
+    override fun state(): String = node.state()
+    override fun ping(ip: String, timeoutMillis: Int): String = node.ping(ip, timeoutMillis)
+    override fun dialError(host: String): String = node.dialError(host)
+    override fun dialFd(host: String, port: Int, timeoutMillis: Int): Int = node.dialFd(host, port, timeoutMillis)
+    override fun close() = node.close()
 }

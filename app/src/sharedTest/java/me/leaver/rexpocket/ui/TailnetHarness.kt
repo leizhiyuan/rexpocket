@@ -71,6 +71,10 @@ internal class FakeTailnetNode : TailnetNode {
         stops++
     }
     override fun stopAsync() = stop()
+
+    /** Whether the node can keep accounts now; a test turns it off as an older helper app would. */
+    val accountsKept = MutableStateFlow(true)
+    override val keepsAccounts: StateFlow<Boolean> = accountsKept
 }
 
 /** What a node reports at each stage, with a tailnet of five devices. */

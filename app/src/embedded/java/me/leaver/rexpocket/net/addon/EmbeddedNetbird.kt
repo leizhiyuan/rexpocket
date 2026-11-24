@@ -17,3 +17,8 @@ internal fun addonEntries(context: Context, netbird: NetbirdBox): List<TailnetEn
 /** Nothing to say about a backend: the embedded build has no add-on. */
 @Composable
 internal fun TailnetBackendNote(@Suppress("UNUSED_PARAMETER") backend: TailnetBackend) = Unit
+
+/** No row on the tailnet's page either. */
+@Composable
+@Suppress("UNUSED_PARAMETER")
+internal fun TailnetBackendRow(scope: me.leaver.rexpocket.ui.SheetScope, backend: TailnetBackend) = Unit
