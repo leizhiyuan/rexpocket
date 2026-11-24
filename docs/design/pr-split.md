@@ -86,7 +86,7 @@ netbird-paths.txt. The script then keeps its worktree and says where it is. To f
   embedded build's stand-in), `values*/netbird_addon_strings.xml`, and `core/…/DialedSocket.kt`
   with its test (the socket an add-on dial gives the connection).
 
-### Shared files, with Netbird hunks (netbird.patch, 44 files)
+### Shared files, with Netbird hunks (netbird.patch, 45 files)
 
 | Area | Files | What PR B adds |
 | --- | --- | --- |
