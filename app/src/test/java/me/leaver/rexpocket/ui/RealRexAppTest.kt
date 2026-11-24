@@ -287,6 +287,9 @@ class RealRexAppTest {
             runBlocking { desk.type(sid, pane, "seq 1 30; echo end-\$((40+2))-mark\n") }
             compose.awaitThat { runBlocking { desk.text(sid, pane) }.contains("\nend-42-mark") }
             palette(string(label))
+            // Clear and Reset ask first.
+            val confirm = if (label == R.string.palette_clear_terminal) R.string.action_clear else R.string.confirm_reset_action
+            compose.onNode(hasText(string(confirm)) and hasClickAction()).performClick()
             compose.awaitThat { !runBlocking { desk.text(sid, pane) }.contains("end-42-mark") }
         }
         assertEquals(null, m.pocket.value.notice)

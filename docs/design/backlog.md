@@ -4,10 +4,8 @@ Ideas reviewed and judged worth having, but not worth the effort yet. Each notes
 
 | Idea | What | Size | Needs |
 | --- | --- | --- | --- |
-| Agent launch templates | A per-host list of "name, directory, command". Running one opens a new tab and starts the agent, for example `cd ~/proj && claude`. | M | Check whether Rex's block layout takes a command or a cwd directly. If it doesn't, the phone types the line. |
 | Host onboarding | Import hosts from a connected Rex (`hosts.list`). Suggest tailnet devices that answer as Rex on 443 or 7297. Add a host from a `rexpocket://add?addr=&name=` link or QR code, with no secrets in it. | M | A QR made on the desk needs Rex or a small script. |
 | App lock and screenshot block | An optional biometric or device-credential lock with a timeout. An optional `FLAG_SECURE`, which blocks screenshots and blanks the recents thumbnail. | S | - |
-| Rex custom actions | Run the user's Rex Lua actions from the palette (`client.keymap`, `client.action`) and answer their prompts (`client_prompt_requested`, `client.reply`). | M-L | Check the payload shapes on a real Rex first. |
 
 ## Next: a QoL scout pass
 
@@ -53,8 +51,18 @@ before Android 13. A selection is still one screen: Select all is "Select screen
 selection's menu offers Copy output for the rest (an autoscroll into the scrollback would need the
 frozen frame to follow the viewport). Insert path is built (4.3).
 
+**Done: Home and its sheets** (home.md). Mark all as seen is in the host sheet and the home's ⋮
+(scoped to what the list shows, one Undo), and a done or failed row has its own Mark as seen;
+Approve, Deny, Reply and Interrupt are in the tab sheet and under a blocked tab in the tree, and
+the tab sheet has Host… for the host's own sheet; Rename has Automatic name (Rex restores its own
+label for an empty one); the ⋮ has Connect all and Disconnect all, with Reconnect; while hosts are
+away the counted chips are marked and an empty list says it covers connected hosts, with Connect
+all; Activity says how many seen idle tabs it hides, with Show. Launch templates and Rex's custom
+actions, from the table above, are built too (home.md, "Launch templates"; command-palette.md,
+"Rex's custom actions"). The tailnet dialog's Leave confirm went to the tailnets pass.
+
 Areas, one per scout:
-- Home and its sheets;
+- Home and its sheets (done: see above);
 - the terminal and key bar;
 - hosts, import and backup;
 - tailnets, tiles and background (done: account removal and sign-out, Leave with its hosts and Rejoin, sign-in and Restart on the page, why a tailnet is up or a host is off, tile taps and Add a tile confirmed, tiles and tailnet choices in the backup; launcher shortcuts with it);
