@@ -166,9 +166,11 @@ titles, messages, record ids or labels.
 
 ## Tests
 
-`ActivityTest` (core: idle until seen or always, by session in Rex's order), `SettingsBackupTest` (the Activity fields optional), `RunningTest` (core, ScriptedRex: root working with a child done, unseen and seen; seen on a desk;
-a tab working in one pane and waiting in another; a tab with nothing at work; old marks still
-hold), `RealRexAppTest.anAgentAtWorkWithAChildDoneIsRunning` (rex-real: a shell reporting OSC 7501
+`AgentReplayTest` (core, ScriptedRex and rex-real: omp, Codex, Claude Code and an agent with child
+records replayed through their states turn by turn; the phone holds Rex's records and lists the tab
+as they imply; rex-parity.md, "How the agents report"), `ActivityTest` (core: idle until seen or always, by session in Rex's order), `SettingsBackupTest` (the Activity fields optional), `RunningTest` (core, ScriptedRex: root working with a child done, unseen and seen; seen on a desk;
+a tab working in one pane and waiting in another; a tab with nothing at work; a session whose view
+came late; nothing seen hides a working report; old marks still hold), `RealRexAppTest.anAgentAtWorkWithAChildDoneIsRunning` (rex-real: a shell reporting OSC 7501
 root working and a child done), `HomeStateTest` (status words, summaries, hidden-pane line; folds kept; a session without its tabs
 folds and opens from its button; Collapse all's Undo restores the folds exactly),
 `HomeManageTest` (sheets and TalkBack offer the same items, in order; moves, renames, ends, closes

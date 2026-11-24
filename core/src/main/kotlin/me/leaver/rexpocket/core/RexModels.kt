@@ -344,9 +344,11 @@ private val SHELLS = setOf("sh", "bash", "zsh", "fish", "nu", "nushell", "dash",
 fun programMark(program: String?): ProgramMark {
     val name = program?.trim()?.removePrefix("-")?.substringAfterLast('/')?.lowercase()
         ?.substringBefore(' ')?.takeIf { it.isNotEmpty() } ?: return ProgramMark.Shell
+    // `claude-code` (the protocol's own example of an app) is Claude; `omp` is the pi fork.
+    if (name == "claude-code") return ProgramMark.Claude
     return when (name) {
         in SHELLS -> ProgramMark.Shell
-        "pi" -> ProgramMark.Pi
+        "pi", "omp" -> ProgramMark.Pi
         "claude" -> ProgramMark.Claude
         "codex" -> ProgramMark.Codex
         "gemini" -> ProgramMark.Gemini

@@ -151,6 +151,56 @@ class RunningTest {
         phone.until("stopped") { running(it).isEmpty() }
     }
 
+    /**
+     * A session the phone has not opened, whose view could not be read when the phone connected
+     * (a slow tailnet, a refused call): a program in it that starts working reaches Running, as
+     * its report makes the phone read the view again. Before, its tabs stayed unknown.
+     */
+    @Test
+    fun aSessionWhoseViewCameLateStillReachesRunning() = runBlocking<Unit> {
+        val rex = ScriptedRex()
+        val mac = Desk(rex.endpoint, platform = "macos")
+        val phone = PocketSession(rex.endpoint)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            mac.connect()
+            val (shown, _) = mac.newSession(tabs = 1)
+            val (other, otherTabs) = mac.newSession(tabs = 2)
+            rex.refuse("session.view")
+            phone.start(scope, preferredSessionId = shown)
+            withTimeout(15_000) { phone.awaitReady() }
+            phone.setActive(true)
+            delay(500)
+            assertFalse("the view was read in spite of the refusal", other in phone.state.value.views)
+            rex.allow("session.view")
+            rex.report(otherTabs[1].second, "working", app = "omp")
+            phone.until("the omp tab running") { running(it) == listOf(otherTabs[1].first) }
+        } finally {
+            phone.stop()
+            scope.cancel()
+            mac.close()
+            rex.close()
+        }
+    }
+
+    /** No seen mark, from the phone or a desk, ever hides a working report. */
+    @Test
+    fun nothingSeenHidesAWorkingReport() = withRex { rex, mac, phone, sid, tabs ->
+        val (tab, pane) = tabs[0]
+        rex.report(pane, "done", app = "omp")
+        phone.until("done") { it.blockStatus[pane]?.state == "done" }
+        mac.focus(sid, tab)
+        mac.take(sid, pane)
+        phone.until("seen on the desk") { pane in it.deskSeen }
+        // The next turn, with the desk still on the tab.
+        rex.report(pane, "working", app = "omp")
+        val st = phone.until("working") { it.blockStatus[pane]?.state == "working" }
+        val everything: SeenCheck = { _, _ -> true }
+        assertEquals(listOf(tab), running(st, everything))
+        assertEquals(listOf(tab), running(st, seenBy(st.deskSeen)))
+        assertNull(seenMark(st.records.getValue(pane)))
+    }
+
     @Test
     fun aRootRecordsMarkFromBeforeMarksWerePerRecordStillHolds() {
         val root = ProgramRecord(id = "", state = "done", kind = null, app = "pi", title = null, msg = "built", progress = null)

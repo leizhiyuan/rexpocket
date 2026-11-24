@@ -1,0 +1,28 @@
+# Claude Code (2.1.295 and later). It is not open source; its states are as other terminals
+# document them (Kaku's docs/agent-skill.md: working, blocked, done, error, idle over OSC 7501).
+# The app value and messages here are **unconfirmed** - `claude-code` is the protocol's own
+# example (docs:program-status, Keys) - until a real session is captured with
+# tools/agent-status-capture and added as its own fixture. Root record only, as a single agent.
+
+report state=idle:app=claude-code
+expect none
+report state=working:app=claude-code
+expect running
+report state=blocked:kind=permission:app=claude-code | msg=Bash(npm test)
+expect needs-you
+report state=working:app=claude-code
+expect running
+report state=done:app=claude-code
+expect needs-you
+report state=working:app=claude-code
+expect running
+report state=blocked:kind=question:app=claude-code | msg=Which file?
+expect needs-you
+report state=working:app=claude-code
+expect running
+report state=done:app=claude-code
+expect needs-you
+see
+expect none
+report state=idle:app=claude-code
+expect none

@@ -93,7 +93,7 @@ pinned in `tools/rex/pin.env` with `tools/rex/install-rex.sh` - the archive key'
 package's SHA256 checked, apt pinned to Superlogical's origin (Debian and Ubuntu have an unrelated
 `rex`) - starts it on loopback (`rex server run --listen unix://… --extra-listen
 http://127.0.0.1:7297 --allow-anonymous`), and runs everything that needs a real Rex: `:core:test`
-(the scenarios, `PocketSessionTest`, the reconnect tests, `RexShapeTest`) and the app's
+(the scenarios, `PocketSessionTest`, the reconnect tests, `RexShapeTest`, `RealRexAgentReplayTest`) and the app's
 `RealRexAppTest`, then fails if any of them was skipped. Rex is proprietary: nothing of it is
 committed, cached or uploaded, only the test reports. To move to a new Rex, bump `pin.env`; see its
 comment.
