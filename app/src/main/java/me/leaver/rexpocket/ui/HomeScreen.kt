@@ -847,8 +847,16 @@ internal fun HomeScreen(
         )
     }
 
+    // What a tile's item is called, as the pages and Settings name it.
+    val tileName: (Connectable) -> String? = { c ->
+        when (c.kind) {
+            ConnectableKind.Host -> hosts.firstOrNull { it.id == c.id }?.let { it.label.ifBlank { it.host } }
+            ConnectableKind.Tailnet -> tailnetView.name.takeIf { tailnetView.joined && c.id == tailnetView.id }
+        }
+    }
     if (notifications) {
         NotificationsSheet(
+            tileName = tileName,
             onDismiss = { notifications = false },
             alerts = alerts,
             onAlerts = toggleAlerts,
@@ -886,7 +894,8 @@ internal fun HomeScreen(
                 onRetry = { onRetry(host.id) },
                 onBack = pageBack,
                 onDismiss = closePage,
-                tile = { TileGroup(Connectable.host(host.id), host.label.ifBlank { host.host }) },
+                tile = { TileGroup(Connectable.host(host.id), host.label.ifBlank { host.host }, tileName) },
+                onBackgroundMode = toggleAlerts,
             )
         } ?: LaunchedEffect(page) { page = null }
         ConnectableKind.Tailnet -> TailnetPage(
@@ -899,7 +908,8 @@ internal fun HomeScreen(
             onRetry = onTailnetRetry,
             onBack = pageBack,
             onDismiss = closePage,
-            tile = { TileGroup(Connectable.tailnet(tailnetView.id), tailnetView.name) },
+            tile = { TileGroup(Connectable.tailnet(tailnetView.id), tailnetView.name, tileName) },
+            onBackgroundMode = toggleAlerts,
             accounts = tailnetAccounts?.let { ops -> TailnetAccountOps(ops.switch, ops.add, ops.rename, ops.remove, ops.hostsNaming) { accountEdit = it } },
         )
         null -> Unit

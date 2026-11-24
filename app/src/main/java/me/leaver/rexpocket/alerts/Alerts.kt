@@ -118,6 +118,29 @@ object Alerts {
         return manager.getNotificationChannel(channelOf(kind))?.importance == NotificationManager.IMPORTANCE_NONE
     }
 
+    /**
+     * Whether Android hides the watch notification: notifications not allowed, or the Background
+     * connection channel switched off. The foreground service runs either way (Android 13 and
+     * later let it run without the permission); only its notification and its buttons are gone.
+     */
+    fun watchHidden(context: Context): Boolean {
+        if (!allowed(context)) return true
+        channels(context)
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+        return manager.getNotificationChannel(CHANNEL_WATCH)?.importance == NotificationManager.IMPORTANCE_NONE
+    }
+
+    /** Where to show the watch notification again: the app's notifications, or the watch's channel. */
+    fun watchSettings(context: Context): Intent {
+        channels(context)
+        val intent = if (!allowed(context)) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        } else {
+            Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL_WATCH)
+        }
+        return intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
     /** Android's page for the app's notifications, or for one [kind]'s channel: sound, vibration, lock screen. */
     fun systemSettings(context: Context, kind: AlertKind? = null): Intent {
         channels(context)

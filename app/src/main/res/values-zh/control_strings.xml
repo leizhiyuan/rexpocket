@@ -73,7 +73,7 @@
     <string name="tile_add_body">在快捷设置中连接和断开。长按磁贴可回到这里。</string>
     <string name="tile_added">在磁贴 %1$d 上</string>
     <string name="tile_add_manual">编辑快捷设置，把 RexPocket %1$d 磁贴拖进来。</string>
-    <string name="tile_slots_full">三个磁贴都在使用中。在其中一个上选择别的项目即可空出来。</string>
+    <string name="tile_slots_full">三个磁贴都在使用中。在下面替换一个，或在设置 › 后台和通知中更改。</string>
     <string name="tile_slot_label">RexPocket %1$d</string>
 
     <string name="tailnet_group_accounts">账户</string>
@@ -97,4 +97,25 @@
     </plurals>
     <string name="tailnet_account_label">Tailnet 账户</string>
     <string name="tailnet_account_follow">使用中的账户</string>
+    <string name="tile_change">更改…</string>
+    <string name="tile_remove">从磁贴移除</string>
+    <string name="tile_replace">替换磁贴 %1$d（%2$s）</string>
+    <string name="tile_item_gone">已删除</string>
+    <string name="tile_free">空闲</string>
+    <string name="tile_slot_item">磁贴 %1$d · %2$s</string>
+    <string name="tile_clear">清空磁贴</string>
+    <string name="tile_clear_n">清空磁贴 %1$d</string>
+    <string name="tile_group_all">快捷设置磁贴</string>
+    <string name="tile_picker_title_slot">磁贴 %1$d 要连接什么？</string>
+    <string name="tile_picker_tiles">磁贴</string>
+    <string name="tile_picker_items">连接</string>
+    <string name="tile_on_this">在此磁贴上</string>
+    <string name="tile_moves_from">从磁贴 %1$d 移到这里</string>
+    <string name="bg_turn_on">开启后台模式</string>
+    <string name="bg_turn_on_short">开启</string>
+    <string name="bg_watch_only_with_mode">后台通知及其停止、连接和断开按钮只在后台模式开启时显示。</string>
+    <string name="bg_watch_check">后台通知</string>
+    <string name="bg_watch_check_off">后台模式已关闭，通知栏中没有通知和按钮。RexPocket 打开时磁贴仍可连接。</string>
+    <string name="bg_watch_check_hidden">后台模式正在运行，但 Android 隐藏了它的通知和按钮。</string>
+    <string name="bg_watch_check_shown">后台模式运行时显示，带有停止按钮以及每个主机或 tailnet 的按钮。</string>
 </resources>

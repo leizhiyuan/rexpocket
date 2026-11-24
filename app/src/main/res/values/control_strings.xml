@@ -84,7 +84,7 @@
     <string name="tile_add_body">Connect and disconnect from Quick Settings. Long-press the tile to come back here.</string>
     <string name="tile_added">On tile %1$d</string>
     <string name="tile_add_manual">Edit Quick Settings and drag the RexPocket %1$d tile in.</string>
-    <string name="tile_slots_full">All three tiles are in use. Choose another item on one of them to free it.</string>
+    <string name="tile_slots_full">All three tiles are in use. Replace one below, or change one in Settings › Background and notifications.</string>
     <string name="tile_slot_label">RexPocket %1$d</string>
 
     <!-- Accounts: several sign-ins to one tailnet, one running at a time. -->
@@ -111,4 +111,25 @@
     </plurals>
     <string name="tailnet_account_label">Tailnet account</string>
     <string name="tailnet_account_follow">The one in use</string>
+    <string name="tile_change">Change…</string>
+    <string name="tile_remove">Remove from tile</string>
+    <string name="tile_replace">Replace tile %1$d (%2$s)</string>
+    <string name="tile_item_gone">removed</string>
+    <string name="tile_free">free</string>
+    <string name="tile_slot_item">Tile %1$d · %2$s</string>
+    <string name="tile_clear">Clear tile</string>
+    <string name="tile_clear_n">Clear tile %1$d</string>
+    <string name="tile_group_all">Quick Settings tiles</string>
+    <string name="tile_picker_title_slot">What should tile %1$d connect?</string>
+    <string name="tile_picker_tiles">Tile</string>
+    <string name="tile_picker_items">Connects</string>
+    <string name="tile_on_this">On this tile</string>
+    <string name="tile_moves_from">Moves here from tile %1$d</string>
+    <string name="bg_turn_on">Turn on background mode</string>
+    <string name="bg_turn_on_short">Turn on</string>
+    <string name="bg_watch_only_with_mode">The background notification, with its Stop, Connect and Disconnect buttons, shows only while background mode is on.</string>
+    <string name="bg_watch_check">Background notification</string>
+    <string name="bg_watch_check_off">Background mode is off, so there is no notification and no buttons in the shade. A tile still connects while RexPocket is open.</string>
+    <string name="bg_watch_check_hidden">Background mode is running, but Android hides its notification and its buttons.</string>
+    <string name="bg_watch_check_shown">Shown while background mode runs, with Stop and a button per host or tailnet.</string>
 </resources>

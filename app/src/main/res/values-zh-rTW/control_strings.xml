@@ -73,7 +73,7 @@
     <string name="tile_add_body">在快速設定中連線和中斷。長按圖塊可回到這裡。</string>
     <string name="tile_added">在圖塊 %1$d 上</string>
     <string name="tile_add_manual">編輯快速設定，把 RexPocket %1$d 圖塊拖進來。</string>
-    <string name="tile_slots_full">三個圖塊都在使用中。在其中一個上選擇別的項目即可空出來。</string>
+    <string name="tile_slots_full">三個圖塊都在使用中。在下面取代一個，或在設定 › 背景和通知中變更。</string>
     <string name="tile_slot_label">RexPocket %1$d</string>
 
     <string name="tailnet_group_accounts">帳號</string>
@@ -97,4 +97,25 @@
     </plurals>
     <string name="tailnet_account_label">Tailnet 帳號</string>
     <string name="tailnet_account_follow">使用中的帳號</string>
+    <string name="tile_change">變更…</string>
+    <string name="tile_remove">從圖塊移除</string>
+    <string name="tile_replace">取代圖塊 %1$d（%2$s）</string>
+    <string name="tile_item_gone">已刪除</string>
+    <string name="tile_free">空閒</string>
+    <string name="tile_slot_item">圖塊 %1$d · %2$s</string>
+    <string name="tile_clear">清空圖塊</string>
+    <string name="tile_clear_n">清空圖塊 %1$d</string>
+    <string name="tile_group_all">快速設定圖塊</string>
+    <string name="tile_picker_title_slot">圖塊 %1$d 要連線什麼？</string>
+    <string name="tile_picker_tiles">圖塊</string>
+    <string name="tile_picker_items">連線</string>
+    <string name="tile_on_this">在此圖塊上</string>
+    <string name="tile_moves_from">從圖塊 %1$d 移到這裡</string>
+    <string name="bg_turn_on">開啟背景模式</string>
+    <string name="bg_turn_on_short">開啟</string>
+    <string name="bg_watch_only_with_mode">背景通知及其停止、連線和中斷連線按鈕只在背景模式開啟時顯示。</string>
+    <string name="bg_watch_check">背景通知</string>
+    <string name="bg_watch_check_off">背景模式已關閉，通知欄中沒有通知和按鈕。RexPocket 開啟時圖塊仍可連線。</string>
+    <string name="bg_watch_check_hidden">背景模式正在執行，但 Android 隱藏了它的通知和按鈕。</string>
+    <string name="bg_watch_check_shown">背景模式執行時顯示，帶有停止按鈕以及每個主機或 tailnet 的按鈕。</string>
 </resources>

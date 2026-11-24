@@ -39,7 +39,11 @@ class TileStore(context: Context) {
 
     fun bind(slot: Int, item: Connectable?) {
         prefs.edit().apply { if (item == null) remove(key(slot)) else putString(key(slot), item.key) }.commit()
+        changes.value++
     }
+
+    /** Every slot's item, slot 1 first; null for a free one. */
+    fun all(): List<Connectable?> = (1..SLOTS).map { of(it) }
 
     /** The slot [item] is on, if any. */
     fun slotOf(item: Connectable): Int? = (1..SLOTS).firstOrNull { of(it) == item }
@@ -51,6 +55,32 @@ class TileStore(context: Context) {
 
     companion object {
         const val SLOTS = 3
+
+        /** Counts every change to a binding, so the pages that show them read them again. */
+        val changes = kotlinx.coroutines.flow.MutableStateFlow(0)
+
+        /**
+         * Puts [item] on [slot], or frees it when [item] is null. An item is on one tile at most:
+         * one that was on another tile leaves it. Every tile that changed is told to redraw.
+         */
+        fun assign(context: Context, slot: Int, item: Connectable?) {
+            val store = TileStore(context)
+            val was = item?.let { store.slotOf(it) }?.takeIf { it != slot }
+            if (was != null) store.bind(was, null)
+            store.bind(slot, item)
+            Diagnostics.event(TAG, "tile $slot: ${item?.kind ?: "cleared"}${if (was != null) " (moved from $was)" else ""}")
+            refresh(context, slot)
+            if (was != null) refresh(context, was)
+        }
+
+        /** Frees whichever tile shows [item]. */
+        fun remove(context: Context, item: Connectable) {
+            TileStore(context).slotOf(item)?.let { assign(context, it, null) }
+        }
+
+        /** The picker for [slot], in the app's own activity: Change… on a page and in Settings. */
+        fun pickerIntent(context: Context, slot: Int): Intent =
+            Intent(context, TilePickerActivity::class.java).putExtra(TilePickerActivity.EXTRA_SLOT, slot)
 
         fun component(context: Context, slot: Int): ComponentName = ComponentName(context, serviceOf(slot))
 
@@ -79,8 +109,13 @@ class TileStore(context: Context) {
         fun add(context: Context, item: Connectable, label: String): Int? {
             val store = TileStore(context)
             val slot = store.slotFor(item) ?: return null
-            store.bind(slot, item)
-            refresh(context, slot)
+            assign(context, slot, item)
+            return requestAdd(context, slot, item, label)
+        }
+
+        /** On Android 13 and later, asks Android to put [slot]'s tile in Quick Settings. */
+        @SuppressLint("WrongConstant")
+        fun requestAdd(context: Context, slot: Int, item: Connectable, label: String): Int {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 runCatching {
                     context.getSystemService(StatusBarManager::class.java)?.requestAddTileService(

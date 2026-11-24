@@ -284,9 +284,11 @@ internal fun SheetScope.SheetItem(
     supporting: String? = null,
     enabled: Boolean = true,
     opens: Boolean = false,
+    /** For a test to find the row by: a tag, say. */
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
         // Beside the label while both fit there; under it once the detail would wrap or the label would
         // have to break a word to make room for it, as large text on a narrow phone makes them.
         val measurer = rememberTextMeasurer()

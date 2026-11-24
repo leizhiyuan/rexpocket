@@ -26,6 +26,11 @@ data class BackgroundChecks(
     val restricted: Boolean,
     /** Data Saver keeps the app off mobile data in the background. */
     val dataSaver: Boolean,
+    /**
+     * The watch notification can show: notifications allowed and its channel not switched off.
+     * When it cannot, background mode still runs, with its notification and buttons hidden.
+     */
+    val watch: Boolean = notifications,
 ) {
     val allGood: Boolean get() = notifications && battery && !restricted && !dataSaver
 
@@ -39,6 +44,7 @@ data class BackgroundChecks(
                 battery = power?.isIgnoringBatteryOptimizations(context.packageName) ?: true,
                 restricted = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && activity?.isBackgroundRestricted == true,
                 dataSaver = connectivity?.restrictBackgroundStatus == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED,
+                watch = !Alerts.watchHidden(context),
             )
         }
 

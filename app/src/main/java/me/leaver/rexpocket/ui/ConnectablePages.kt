@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
@@ -151,9 +152,19 @@ private fun lingerChoice(ms: Long?): Choice = Choice(
     R.string.tailnet_linger_choice_body,
 )
 
-/** The background group: the choice, and a line when background mode is off and it applies to nothing. */
+/**
+ * The background group: the choice, and while background mode is off, a line saying it applies
+ * to nothing yet, and that the watch notification and its buttons show only with it on, with a
+ * tap that turns it on ([onBackgroundMode]; null leaves it out).
+ */
 @Composable
-private fun SheetScope.BackgroundGroup(kind: ConnectableKind, keep: BackgroundKeep, backgroundMode: Boolean, onKeep: (BackgroundKeep) -> Unit) {
+private fun SheetScope.BackgroundGroup(
+    kind: ConnectableKind,
+    keep: BackgroundKeep,
+    backgroundMode: Boolean,
+    onBackgroundMode: (() -> Unit)?,
+    onKeep: (BackgroundKeep) -> Unit,
+) {
     Group(stringResource(R.string.conn_group_background)) {
         ChoiceRow(
             label = stringResource(R.string.bg_keep),
@@ -163,6 +174,17 @@ private fun SheetScope.BackgroundGroup(kind: ConnectableKind, keep: BackgroundKe
             supporting = if (backgroundMode) null else stringResource(R.string.bg_keep_mode_off),
             onPick = onKeep,
         )
+        if (!backgroundMode && onBackgroundMode != null) {
+            SheetItem(
+                label = stringResource(R.string.bg_turn_on),
+                icon = R.drawable.ic_notifications,
+                supporting = stringResource(R.string.bg_watch_only_with_mode),
+                color = Colors.accent,
+                keepOpen = true,
+                modifier = Modifier.testTag(BG_TURN_ON_TAG),
+                onClick = onBackgroundMode,
+            )
+        }
     }
 }
 
@@ -184,6 +206,8 @@ internal fun HostPage(
     onBack: (() -> Unit)?,
     onDismiss: () -> Unit,
     tile: @Composable SheetScope.() -> Unit = {},
+    /** Turns background mode on, from the line that says what it brings; null leaves it out. */
+    onBackgroundMode: (() -> Unit)? = null,
 ) {
     val on = stringResource(R.string.alerts_on)
     val off = stringResource(R.string.alerts_off)
@@ -194,7 +218,7 @@ internal fun HostPage(
             StateRow(linkState, "${host.host}:${host.port}")
             Actions(connectionActions(linkState, ConnectableKind.Host, onConnect, onDisconnect, onRetry))
         }
-        BackgroundGroup(ConnectableKind.Host, choices.keep, backgroundMode) { onChoices(choices.withKeep(it)) }
+        BackgroundGroup(ConnectableKind.Host, choices.keep, backgroundMode, onBackgroundMode) { onChoices(choices.withKeep(it)) }
         Group(stringResource(R.string.conn_group_notifications), icons = false) {
             SheetItem(
                 label = stringResource(R.string.bg_notify),
@@ -240,6 +264,8 @@ internal fun TailnetPage(
     onDismiss: () -> Unit,
     tile: @Composable SheetScope.() -> Unit = {},
     accounts: TailnetAccountOps? = null,
+    /** Turns background mode on, from the line that says what it brings; null leaves it out. */
+    onBackgroundMode: (() -> Unit)? = null,
 ) {
     val policy = view.policy
     val on = stringResource(R.string.alerts_on)
@@ -268,7 +294,7 @@ internal fun TailnetPage(
                 onPick = { onPolicy(policy.copy(lingerMs = it)) },
             )
         }
-        BackgroundGroup(ConnectableKind.Tailnet, policy.keep, backgroundMode) { onPolicy(policy.copy(keep = it)) }
+        BackgroundGroup(ConnectableKind.Tailnet, policy.keep, backgroundMode, onBackgroundMode) { onPolicy(policy.copy(keep = it)) }
         Group(stringResource(R.string.conn_group_notifications), icons = false) {
             SheetItem(
                 label = stringResource(R.string.tailnet_notify),
@@ -317,31 +343,97 @@ internal fun TailnetDisconnectDialog(view: TailnetView, onDismiss: () -> Unit, o
     )
 }
 
+internal const val TILE_CHANGE_TAG = "tile-change"
+internal const val TILE_REMOVE_TAG = "tile-remove"
+internal const val TILE_REPLACE_TAG = "tile-replace-"
+internal const val BG_TURN_ON_TAG = "background-turn-on"
+
 /**
- * A page's Quick Settings group: which of the three tiles shows this host or tailnet, or Add a
- * tile, which binds a free one and, on Android 13 and later, asks to put it in Quick Settings.
+ * A page's Quick Settings group, the same for a host and a tailnet. On a tile: "On tile N" with
+ * Change… (the picker, for that tile) and Remove from tile. On none: Add a tile, which binds a free
+ * one and, on Android 13 and later, asks to put it in Quick Settings; with all three taken, a
+ * Replace row per tile, naming what it shows now. [nameOf] names a tile's item.
  */
 @Composable
-internal fun SheetScope.TileGroup(item: me.leaver.rexpocket.core.Connectable, name: String) {
+internal fun SheetScope.TileGroup(item: me.leaver.rexpocket.core.Connectable, name: String, nameOf: (me.leaver.rexpocket.core.Connectable) -> String? = { null }) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var slot by remember(item) { androidx.compose.runtime.mutableStateOf(me.leaver.rexpocket.alerts.TileStore(context).slotOf(item)) }
+    val version by me.leaver.rexpocket.alerts.TileStore.changes.collectAsState()
+    val slots = remember(item, version) { me.leaver.rexpocket.alerts.TileStore(context).all() }
+    val slot = slots.indexOf(item).takeIf { it >= 0 }?.plus(1)
     var full by remember(item) { androidx.compose.runtime.mutableStateOf(false) }
-    val supporting = when {
-        full -> stringResource(R.string.tile_slots_full)
-        slot != null && android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU -> stringResource(R.string.tile_add_manual, slot!!)
-        else -> stringResource(R.string.tile_add_body)
-    }
     Group(stringResource(R.string.conn_group_tile)) {
-        SheetItem(
-            label = stringResource(R.string.tile_add),
-            icon = R.drawable.ic_add,
-            supporting = supporting,
-            detail = slot?.let { stringResource(R.string.tile_added, it) },
-            keepOpen = true,
-        ) {
-            val added = me.leaver.rexpocket.alerts.TileStore.add(context, item, name)
-            full = added == null
-            slot = added ?: slot
+        if (slot != null) {
+            SheetItem(
+                label = stringResource(R.string.tile_added, slot),
+                icon = R.drawable.ic_check,
+                supporting = if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) stringResource(R.string.tile_add_manual, slot) else stringResource(R.string.tile_add_body),
+                detail = stringResource(R.string.tile_change),
+                keepOpen = true,
+                opens = true,
+                modifier = Modifier.testTag(TILE_CHANGE_TAG),
+            ) { context.startActivity(me.leaver.rexpocket.alerts.TileStore.pickerIntent(context, slot).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            SheetItem(
+                label = stringResource(R.string.tile_remove),
+                icon = R.drawable.ic_close,
+                keepOpen = true,
+                modifier = Modifier.testTag(TILE_REMOVE_TAG),
+            ) { me.leaver.rexpocket.alerts.TileStore.remove(context, item) }
+        } else {
+            SheetItem(
+                label = stringResource(R.string.tile_add),
+                icon = R.drawable.ic_add,
+                supporting = stringResource(if (full) R.string.tile_slots_full else R.string.tile_add_body),
+                keepOpen = true,
+            ) {
+                full = me.leaver.rexpocket.alerts.TileStore.add(context, item, name) == null
+            }
+            if (full || slots.none { it == null }) {
+                for (n in 1..me.leaver.rexpocket.alerts.TileStore.SLOTS) {
+                    val now = slots[n - 1]?.let(nameOf) ?: stringResource(R.string.tile_item_gone)
+                    SheetItem(
+                        label = stringResource(R.string.tile_replace, n, now),
+                        icon = R.drawable.ic_swap,
+                        keepOpen = true,
+                        modifier = Modifier.testTag(TILE_REPLACE_TAG + n),
+                    ) {
+                        me.leaver.rexpocket.alerts.TileStore.assign(context, n, item)
+                        me.leaver.rexpocket.alerts.TileStore.requestAdd(context, n, item, name)
+                        full = false
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Settings › Background and notifications › Quick Settings tiles: the three tiles, each with what
+ * it shows, Change… (the picker) and Clear.
+ */
+@Composable
+internal fun SheetScope.TileSlotsGroup(nameOf: (me.leaver.rexpocket.core.Connectable) -> String?) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val version by me.leaver.rexpocket.alerts.TileStore.changes.collectAsState()
+    val slots = remember(version) { me.leaver.rexpocket.alerts.TileStore(context).all() }
+    Group(stringResource(R.string.tile_group_all)) {
+        for (n in 1..me.leaver.rexpocket.alerts.TileStore.SLOTS) {
+            val on = slots[n - 1]
+            SheetItem(
+                label = stringResource(R.string.tile_slot_item, n, on?.let { nameOf(it) ?: stringResource(R.string.tile_item_gone) } ?: stringResource(R.string.tile_free)),
+                icon = if (on?.kind == ConnectableKind.Tailnet) R.drawable.ic_tailnet else R.drawable.ic_host,
+                detail = stringResource(R.string.tile_change),
+                keepOpen = true,
+                opens = true,
+                modifier = Modifier.testTag(TILE_CHANGE_TAG + n),
+            ) { context.startActivity(me.leaver.rexpocket.alerts.TileStore.pickerIntent(context, n).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            if (on != null) {
+                SheetItem(
+                    label = stringResource(R.string.tile_clear_n, n),
+                    icon = R.drawable.ic_close,
+                    keepOpen = true,
+                    modifier = Modifier.testTag(TILE_REMOVE_TAG + n),
+                ) { me.leaver.rexpocket.alerts.TileStore.assign(context, n, null) }
+            }
         }
     }
 }

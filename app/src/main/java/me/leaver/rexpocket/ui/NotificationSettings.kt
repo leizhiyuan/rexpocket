@@ -10,6 +10,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.alerts.Alerts
@@ -55,6 +56,8 @@ internal fun NotificationsSheet(
     tailnets: List<TailnetView> = emptyList(),
     /** Opens a host's or a tailnet's page. */
     onPage: (Connectable) -> Unit = {},
+    /** Names a Quick Settings tile's item; see [TileSlotsGroup]. */
+    tileName: (Connectable) -> String? = { null },
 ) {
     val context = LocalContext.current
     // Read again whenever the app comes back: the person may have changed them in Android's settings.
@@ -83,6 +86,33 @@ internal fun NotificationsSheet(
         }
         // What Android lets background mode do, and a Fix for each that is not as it should be.
         Group(stringResource(R.string.bg_group_checks)) {
+            // The watch notification: only with background mode on, and hidden when Android hides
+            // it - the service still runs then, without its Stop and Connect or Disconnect buttons.
+            val watch = watchCheck(alerts, checks)
+            SheetItem(
+                label = stringResource(R.string.bg_watch_check),
+                icon = R.drawable.ic_notifications,
+                supporting = when (watch) {
+                    WatchCheck.ModeOff -> stringResource(R.string.bg_watch_check_off)
+                    WatchCheck.Hidden -> stringResource(R.string.bg_watch_check_hidden)
+                    WatchCheck.Shown -> stringResource(R.string.bg_watch_check_shown)
+                },
+                detail = when (watch) {
+                    WatchCheck.ModeOff -> stringResource(R.string.bg_turn_on_short)
+                    WatchCheck.Hidden -> fix
+                    WatchCheck.Shown -> stringResource(R.string.notifications_allowed)
+                },
+                keepOpen = true,
+                opens = watch == WatchCheck.Hidden,
+                modifier = androidx.compose.ui.Modifier.testTag(WATCH_CHECK_TAG),
+                onClick = {
+                    when (watch) {
+                        WatchCheck.ModeOff -> onAlerts()
+                        WatchCheck.Hidden -> context.startActivity(Alerts.watchSettings(context))
+                        WatchCheck.Shown -> context.startActivity(Alerts.watchSettings(context))
+                    }
+                },
+            )
             SheetItem(
                 label = stringResource(R.string.notifications_android),
                 icon = R.drawable.ic_lock,
@@ -155,6 +185,7 @@ internal fun NotificationsSheet(
                 }
             }
         }
+        TileSlotsGroup(tileName)
         Group(stringResource(R.string.notifications_group_when), icons = false) {
             // Each switch stays usable with alerts off: the choice is kept for when they come on.
             for ((event, label) in EVENTS) {
@@ -194,6 +225,17 @@ internal fun NotificationsSheet(
             }
         }
     }
+}
+
+internal const val WATCH_CHECK_TAG = "watch-check"
+
+/** Whether the watch notification shows: not while background mode is off; hidden when Android hides it. */
+internal enum class WatchCheck { ModeOff, Hidden, Shown }
+
+internal fun watchCheck(backgroundMode: Boolean, checks: BackgroundChecks): WatchCheck = when {
+    !backgroundMode -> WatchCheck.ModeOff
+    !checks.watch -> WatchCheck.Hidden
+    else -> WatchCheck.Shown
 }
 
 /** A host's row on the page: whether it stays connected, and whether it is silent. */
