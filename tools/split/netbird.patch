@@ -65,7 +65,7 @@ index 29579da649afcbcaed4869e6f87e3a82c467cbd3..92bc557e43678ae173db4757cf5771fa
        - uses: actions/upload-artifact@v4
          with:
 diff --git a/.github/workflows/device-test.yml b/.github/workflows/device-test.yml
-index 4b7ee73ec28db211e917221513719860c68968c7..638fe730ff1096e086d84024934fa1cd5dd9c09a 100644
+index 672ebc569fe4e74e7e1ffa1c9815d7c2b9d8d488..b7de90635ffa49d5623220887dd4de3bc209a5b6 100644
 --- a/.github/workflows/device-test.yml
 +++ b/.github/workflows/device-test.yml
 @@ -3,7 +3,7 @@ name: device-test
@@ -109,7 +109,7 @@ index 4b7ee73ec28db211e917221513719860c68968c7..638fe730ff1096e086d84024934fa1cd
  
        - name: Build libghostty for x86_64
          run: |
-@@ -137,6 +144,21 @@ jobs:
+@@ -143,6 +150,21 @@ jobs:
            # broadcast (as root, the only sender Android takes it from), and the process is killed;
            # the watch must come back in the foreground on its own (START_STICKY).
            sh "$RUNNER_TEMP/background.sh" || status=1
@@ -571,7 +571,7 @@ index e96e8095cf085fe6116628944dde55e59a185050..c27abde50778ce2c20be64b3032db0ef
          val snapshot = parseTailnetState("""{"backendState":"Starting","peers":[]}""")
          assertEquals("Starting", snapshot.backendState)
 diff --git a/app/src/main/java/me/leaver/rexpocket/data/HostStore.kt b/app/src/main/java/me/leaver/rexpocket/data/HostStore.kt
-index bf8555cb58221dd89a638cb712d7218279305b25..f46929c72c45270240660365e1f968fee36174ae 100644
+index 9cc26118472e35aa904395f28e4035fa60630e37..4cc7d3ffd837ede5505e488290fb67d90c4a9340 100644
 --- a/app/src/main/java/me/leaver/rexpocket/data/HostStore.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/data/HostStore.kt
 @@ -42,12 +42,13 @@ data class SavedHost(
@@ -589,7 +589,7 @@ index bf8555cb58221dd89a638cb712d7218279305b25..f46929c72c45270240660365e1f968fe
  )
  
  /**
-@@ -196,6 +197,7 @@ class HostStore(context: Context) {
+@@ -217,6 +218,7 @@ class HostStore(context: Context) {
          backend = TailnetBackend.fromStorage(prefs.getString(KEY_TAILNET_BACKEND, null)),
          enabled = prefs.getBoolean(KEY_TAILSCALE_ENABLED, false),
          hostname = prefs.getString(KEY_TAILSCALE_HOSTNAME, "").orEmpty(),
@@ -597,7 +597,7 @@ index bf8555cb58221dd89a638cb712d7218279305b25..f46929c72c45270240660365e1f968fe
      )
  
      fun setTailnet(settings: TailnetSettings) {
-@@ -203,6 +205,7 @@ class HostStore(context: Context) {
+@@ -224,6 +226,7 @@ class HostStore(context: Context) {
              .putString(KEY_TAILNET_BACKEND, settings.backend.storageKey)
              .putBoolean(KEY_TAILSCALE_ENABLED, settings.enabled)
              .putString(KEY_TAILSCALE_HOSTNAME, settings.hostname.trim())
@@ -605,7 +605,7 @@ index bf8555cb58221dd89a638cb712d7218279305b25..f46929c72c45270240660365e1f968fe
              .apply()
      }
  
-@@ -436,6 +439,7 @@ class HostStore(context: Context) {
+@@ -463,6 +466,7 @@ class HostStore(context: Context) {
          private const val KEY_TAILSCALE_ENABLED = "tailscale_enabled"
          private const val KEY_TAILSCALE_HOSTNAME = "tailscale_hostname"
          private const val KEY_TAILNET_BACKEND = "tailnet_backend"
@@ -627,7 +627,7 @@ index 4b36af793bed46310b2415ae798c23219d793b8f..96fbcc88a5f07150234bf3e8eead28aa
          return names.firstNotNullOfOrNull { name ->
              runCatching { current.dialError(name) }.getOrNull()?.takeIf { it.isNotBlank() }
 diff --git a/app/src/main/java/me/leaver/rexpocket/net/TailnetNode.kt b/app/src/main/java/me/leaver/rexpocket/net/TailnetNode.kt
-index 0432e8b7368c4ce57d2ab39037c355a1db430429..212e98a613ce3d6b3eea1c717545ddb4b71f3caf 100644
+index 07976423ef6031dd02b36eab984a65cfa984c2e6..659cb68d480209fe23d0625c8f2c80fae757f95c 100644
 --- a/app/src/main/java/me/leaver/rexpocket/net/TailnetNode.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/net/TailnetNode.kt
 @@ -1,6 +1,7 @@
@@ -679,7 +679,7 @@ index 0432e8b7368c4ce57d2ab39037c355a1db430429..212e98a613ce3d6b3eea1c717545ddb4
      /** Whether the node can route to [host] yet: an address always, a name once the netmap lists it. */
      fun knows(host: String): Boolean
  
-@@ -119,10 +139,14 @@ class TailnetNodes(entries: List<TailnetEntry>) {
+@@ -127,10 +147,14 @@ class TailnetNodes(entries: List<TailnetEntry>) {
      val all: List<TailnetNode> get() = registered.map { byBackend.getValue(it).node }
  
      companion object {
@@ -713,10 +713,10 @@ index c1c71966521ca6ebcdb42e8d4f40fc25bd5722a4..9c142330515b14a0400de0fc50de04c1
  @Composable
  internal fun problemText(problem: Problem, endpoint: String, network: String = "tailnet"): String = when (problem.trouble) {
 diff --git a/app/src/main/java/me/leaver/rexpocket/ui/Connections.kt b/app/src/main/java/me/leaver/rexpocket/ui/Connections.kt
-index bc73261317e4d42f16f4327cd1762d35ac4d7212..ac61c5be1ca7b366cfc5a2896889a46cab836384 100644
+index 3fcbed68b4d3cedb8b8e59a8a4e8ede82bad434c..e0ad2f145084f8d994c3e3c789911db7af96be62 100644
 --- a/app/src/main/java/me/leaver/rexpocket/ui/Connections.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/ui/Connections.kt
-@@ -63,6 +63,7 @@ import me.leaver.rexpocket.data.HostStore
+@@ -88,6 +88,7 @@ import me.leaver.rexpocket.data.HostStore
  import me.leaver.rexpocket.data.SavedHost
  import me.leaver.rexpocket.data.TailnetSettings
  import me.leaver.rexpocket.diagnostics.Diagnostics
@@ -724,7 +724,16 @@ index bc73261317e4d42f16f4327cd1762d35ac4d7212..ac61c5be1ca7b366cfc5a2896889a46c
  import me.leaver.rexpocket.net.NetworkWatcher
  import me.leaver.rexpocket.net.TailnetConfig
  import me.leaver.rexpocket.net.TailnetNode
-@@ -302,8 +303,13 @@ class Connections private constructor(private val app: Application, val nodes: T
+@@ -201,7 +202,7 @@ class Connections private constructor(private val app: Application, val nodes: T
+             node = nodes[backend],
+             joined = settings.enabled && settings.backend == backend,
+             // The settings as they are at the start, which a join has just written.
+-            config = { _ -> configFor(tailnet.value.copy(backend = backend)) },
++            config = { key -> configFor(tailnet.value.copy(backend = backend), key) },
+         )
+         }
+     }
+@@ -464,8 +465,13 @@ class Connections private constructor(private val app: Application, val nodes: T
      private fun nodeFor(backend: TailnetBackend): TailnetNode = nodes[backend]
  
      /** The credentials and settings a backend's node starts with. */
@@ -739,7 +748,7 @@ index bc73261317e4d42f16f4327cd1762d35ac4d7212..ac61c5be1ca7b366cfc5a2896889a46c
      }
  
      private fun remember() = store.setConnectedHosts(_links.value.keys.toList() + parked)
-@@ -472,6 +478,8 @@ class Connections private constructor(private val app: Application, val nodes: T
+@@ -733,6 +739,8 @@ class Connections private constructor(private val app: Application, val nodes: T
              } else {
                  0
              }
@@ -748,7 +757,7 @@ index bc73261317e4d42f16f4327cd1762d35ac4d7212..ac61c5be1ca7b366cfc5a2896889a46c
              val trace = { line: String -> if (BuildConfig.DEBUG) Log.i(CONN_TAG, line) }
              // The SSH tunnel is per host and outlives a reconnect attempt: only the channels under it
              // come and go. Every Rex connection of this host goes through the same route.
-@@ -488,13 +496,14 @@ class Connections private constructor(private val app: Application, val nodes: T
+@@ -749,13 +757,14 @@ class Connections private constructor(private val app: Application, val nodes: T
                          ),
                          hostKey = target.sshHostKey.takeIf { it.isNotEmpty() },
                          socksPort = socksPort,
@@ -765,10 +774,10 @@ index bc73261317e4d42f16f4327cd1762d35ac4d7212..ac61c5be1ca7b366cfc5a2896889a46c
                  endpoint,
                  httpFactory = httpFactory,
 diff --git a/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt b/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt
-index 7a58314658e3534d5e838b0e28c6d2d495db6b9c..e140eaf2f1298066502acffaf6528cfd4baed486 100644
+index e5cc06a24c545debb0e5ea685958cdd6f8c43728..1d7e8d5b4b56b2d7c80c8d9aeb6742e305e68ed4 100644
 --- a/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt
-@@ -1387,15 +1387,18 @@ internal fun TailnetDialog(
+@@ -1193,15 +1193,18 @@ internal fun TailnetDialog(
      status: TailnetStatus,
      error: TailnetFailure?,
      onDismiss: () -> Unit,
@@ -788,7 +797,7 @@ index 7a58314658e3534d5e838b0e28c6d2d495db6b9c..e140eaf2f1298066502acffaf6528cfd
      AlertDialog(
          onDismissRequest = onDismiss,
          containerColor = Colors.surface,
-@@ -1419,6 +1422,21 @@ internal fun TailnetDialog(
+@@ -1225,6 +1228,21 @@ internal fun TailnetDialog(
                      }
                  }
                  Field(stringResource(R.string.tailscale_hostname), hostname) { hostname = it }
@@ -810,7 +819,7 @@ index 7a58314658e3534d5e838b0e28c6d2d495db6b9c..e140eaf2f1298066502acffaf6528cfd
                  if (joinedHere) {
                      Text(
                          listOfNotNull(
-@@ -1446,8 +1464,12 @@ internal fun TailnetDialog(
+@@ -1252,8 +1270,12 @@ internal fun TailnetDialog(
                      )
                      Text(stringResource(R.string.tailscale_login_hint), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
                  }
@@ -824,7 +833,7 @@ index 7a58314658e3534d5e838b0e28c6d2d495db6b9c..e140eaf2f1298066502acffaf6528cfd
                      color = Colors.muted,
                      fontSize = TextStyles.label,
                      lineHeight = labelLeading,
-@@ -1455,7 +1477,7 @@ internal fun TailnetDialog(
+@@ -1261,7 +1283,7 @@ internal fun TailnetDialog(
              }
          },
          confirmButton = {
@@ -834,10 +843,10 @@ index 7a58314658e3534d5e838b0e28c6d2d495db6b9c..e140eaf2f1298066502acffaf6528cfd
                      stringResource(if (joinedHere) R.string.action_save else R.string.tailscale_join),
                      color = Colors.accent,
 diff --git a/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt b/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt
-index 4b2ef1c2d8f0989e688aaa3554d631c4accbf040..53e6d7f865f3695907d7e5bb6a3b1236a31a1b63 100644
+index 24f69def8fc3789f282c8839a7d9b8712831bf84..0a8328b0b7dc8d0e75f7a03f1fdfe6e6e7bc7bcb 100644
 --- a/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt
-@@ -311,9 +311,9 @@ fun RexPocketApp(
+@@ -352,9 +352,9 @@ fun RexPocketApp(
                  status = tailnetStatus,
                  error = tailnetError,
                  onDismiss = { tailnetOpen = false },
@@ -850,10 +859,10 @@ index 4b2ef1c2d8f0989e688aaa3554d631c4accbf040..53e6d7f865f3695907d7e5bb6a3b1236
                  },
                  onLeave = {
 diff --git a/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt b/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt
-index 80d0e6e37cf460bfe5859bc9c1593e2d46afe561..78b6453815b65f1e926ed2c49082cdb39e0dbaf8 100644
+index 695450692cadc6f2549f016863fb0fdfe65c21df..ef679f4fb3c1ab92b882f67e2946e2a1b28b6c22 100644
 --- a/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt
-@@ -68,6 +68,7 @@ import me.leaver.rexpocket.core.ConnectStep
+@@ -76,6 +76,7 @@ import me.leaver.rexpocket.core.ConnectStep
  import me.leaver.rexpocket.core.TailnetStage
  import me.leaver.rexpocket.core.explainTailnetProblem
  import me.leaver.rexpocket.core.tailnetStage
@@ -861,7 +870,7 @@ index 80d0e6e37cf460bfe5859bc9c1593e2d46afe561..78b6453815b65f1e926ed2c49082cdb3
  import me.leaver.rexpocket.net.TailnetConfig
  import me.leaver.rexpocket.net.TailnetNode
  import me.leaver.rexpocket.net.TailnetStatus
-@@ -504,26 +505,27 @@ class RexViewModel @JvmOverloads constructor(
+@@ -683,21 +684,22 @@ class RexViewModel @JvmOverloads constructor(
      /**
       * Joins the tailnet of [backend] under [hostname] (blank means the device's own name). The node
       * starts here, not on the first connect, so the app can hand out the login link while the user is
@@ -877,25 +886,20 @@ index 80d0e6e37cf460bfe5859bc9c1593e2d46afe561..78b6453815b65f1e926ed2c49082cdb3
 +        store.setTailnet(TailnetSettings(backend, enabled = true, hostname = hostname.trim(), managementUrl = managementUrl.trim()))
          val next = store.tailnet()
          tailnet.value = next
-         // Only one node runs: the one that was joined before gives way.
-         if (previous.enabled && previous.backend != backend) nodeFor(previous.backend).stopAsync()
--        startTailnet(next)
-+        startTailnet(next, setupKey)
+         // Only one node runs: the one that was joined before is no longer joined, and its plan
+-        // stops it. A join is a connect by hand.
++        // stops it. A join is a connect by hand, and it hands the setup key to this one start.
+         Diagnostics.event(CONN_TAG, "tailnet ${if (previous.enabled && previous.backend != backend) "switched" else "joined"}")
+         val id = backend.storageKey
+         control.switchOn(id)
+-        // Started first, so the plan finds it starting and does not start it again.
+-        viewModelScope.launch { runCatching { control.start(id) } }
++        // Started first, so the plan finds it starting and does not start it again without the key.
++        viewModelScope.launch { runCatching { control.start(id, setupKey) } }
+         control.begin()
      }
  
-     /** Brings the selected node up for [settings]; the login it already has makes this a plain restart. */
--    private fun startTailnet(settings: TailnetSettings) {
-+    private fun startTailnet(settings: TailnetSettings, setupKey: String = "") {
-         tailnetJob?.cancel()
-         _tailnetError.value = null
-         tailnetJob = viewModelScope.launch {
-             withContext(Dispatchers.IO) {
--                runCatching { nodeFor(settings.backend).start(connections.configFor(settings)) }
-+                runCatching { nodeFor(settings.backend).start(connections.configFor(settings, setupKey)) }
-                     .onFailure { _tailnetError.value = TailnetFailure(it.message) }
-             }
-         }
-@@ -1005,6 +1007,7 @@ class RexViewModel @JvmOverloads constructor(
+@@ -1227,6 +1229,7 @@ class RexViewModel @JvmOverloads constructor(
                  if (it.sshUser.isNotBlank()) add(it.sshUser)
              }
              add(tailnet.value.hostname)
@@ -904,10 +908,10 @@ index 80d0e6e37cf460bfe5859bc9c1593e2d46afe561..78b6453815b65f1e926ed2c49082cdb3
          return Diagnostics.report(getApplication(), facts, secrets, limit)
      }
 diff --git a/app/src/main/java/me/leaver/rexpocket/ui/TailnetUi.kt b/app/src/main/java/me/leaver/rexpocket/ui/TailnetUi.kt
-index e9d03dd316f152fbb7fa00434c6672303e6c10cf..2b4c4eb5449dff4b212fdddcf70f1f00ef632d7a 100644
+index c60d5e6974c4ebbd438caa11d1e2a542d221880a..c617cb3212a9e8f6bf5206e3cbb98e78a7392fcc 100644
 --- a/app/src/main/java/me/leaver/rexpocket/ui/TailnetUi.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/ui/TailnetUi.kt
-@@ -274,10 +274,10 @@ private fun peerLook(peer: TailnetPeer): PeerLook {
+@@ -276,10 +276,10 @@ private fun peerLook(peer: TailnetPeer): PeerLook {
              peer.lastSeen?.let { stringResource(R.string.tailnet_peer_last_seen, relativeTime(it)) }
                  ?: stringResource(R.string.tailnet_peer_offline),
          )
@@ -920,7 +924,7 @@ index e9d03dd316f152fbb7fa00434c6672303e6c10cf..2b4c4eb5449dff4b212fdddcf70f1f00
                  PeerLink.Connecting -> Colors.amber
                  else -> Colors.muted
              },
-@@ -289,10 +289,12 @@ private fun peerLook(peer: TailnetPeer): PeerLook {
+@@ -291,10 +291,12 @@ private fun peerLook(peer: TailnetPeer): PeerLook {
  /** How the node's traffic reaches the device right now, when it has sent any. */
  @Composable
  private fun linkText(peer: TailnetPeer): String? {
@@ -936,7 +940,7 @@ index e9d03dd316f152fbb7fa00434c6672303e6c10cf..2b4c4eb5449dff4b212fdddcf70f1f00
          PeerLink.Connecting -> stringResource(R.string.tailnet_link_connecting)
          PeerLink.Idle, PeerLink.Unknown -> null
      }
-@@ -318,6 +320,7 @@ internal fun pathText(path: TailnetPath, network: String): Pair<String, Color> {
+@@ -320,6 +322,7 @@ internal fun pathText(path: TailnetPath, network: String): Pair<String, Color> {
          is TailnetPath.PeerRelay -> stringResource(R.string.tailnet_path_peer_relay, network) + ms to Colors.amber
          is TailnetPath.Derp ->
              stringResource(R.string.tailnet_path_derp, network, path.regionCode.ifBlank { path.regionId.toString() }) + ms to Colors.amber
@@ -1072,10 +1076,10 @@ index 67f863e421e55d1c4e8cc0e614f24cfe8e932b12..8e4c094880517b70bf98681f10736527
      <string name="connect_step_sign_in">Waiting for the %1$s sign-in…</string>
      <!-- %1$s is the host, %2$s the network. -->
 diff --git a/app/src/sharedTest/java/me/leaver/rexpocket/ui/TailnetHarness.kt b/app/src/sharedTest/java/me/leaver/rexpocket/ui/TailnetHarness.kt
-index 69cfdcb59ab5b3b7c381c5d1c05091f87798f27d..830d93d462335efc0f9b4967d5734f6bfa44aa60 100644
+index 37a4d8866535bef237ac9c5cec540872601c59cf..579df9ec19d8eaaf04ffb8280a51af2fb9af69e7 100644
 --- a/app/src/sharedTest/java/me/leaver/rexpocket/ui/TailnetHarness.kt
 +++ b/app/src/sharedTest/java/me/leaver/rexpocket/ui/TailnetHarness.kt
-@@ -97,6 +97,18 @@ internal object TailnetSamples {
+@@ -100,6 +100,18 @@ internal object TailnetSamples {
      fun connected(peers: List<TailnetPeer> = this.peers, health: List<String> = emptyList()) =
          TailnetStatus(backendState = "Running", networkName = "example.com", self = self, peers = peers, health = health)
  
@@ -1094,7 +1098,7 @@ index 69cfdcb59ab5b3b7c381c5d1c05091f87798f27d..830d93d462335efc0f9b4967d5734f6b
      /** Saved hosts on the tailnet: one on [mac], one on the offline [nas]. */
      val macHost = SavedHost(id = "mac-host", label = "mac", host = "mac.tail1234.ts.net", port = 7297, plaintext = true, viaTailscale = true)
      val nasHost = SavedHost(id = "nas-host", label = "nas", host = "nas.tail1234.ts.net", port = 7297, plaintext = true, viaTailscale = true)
-@@ -122,7 +134,13 @@ internal fun tailnetModel(
+@@ -128,7 +140,13 @@ internal fun tailnetModel(
      app.getSharedPreferences("rexpocket", Context.MODE_PRIVATE).edit()
          .putLong("update.checkedAt", System.currentTimeMillis()).commit()
      lateinit var model: RexViewModel
@@ -1110,10 +1114,10 @@ index 69cfdcb59ab5b3b7c381c5d1c05091f87798f27d..830d93d462335efc0f9b4967d5734f6b
      return model
  }
 diff --git a/app/src/test/java/me/leaver/rexpocket/ui/ScreenshotsTest.kt b/app/src/test/java/me/leaver/rexpocket/ui/ScreenshotsTest.kt
-index f003653cbb08c3a858ed4f529c94a43c49cea9ca..d71ef8688f06b4480c5e4189f8b8c17073442666 100644
+index b76419b1aa51a93f793738fa5ccc5f14d50b1e4c..90e80b6ed73556308021803d30ebb0e0f1fd9a63 100644
 --- a/app/src/test/java/me/leaver/rexpocket/ui/ScreenshotsTest.kt
 +++ b/app/src/test/java/me/leaver/rexpocket/ui/ScreenshotsTest.kt
-@@ -371,6 +371,13 @@ class ScreenshotsTest {
+@@ -377,6 +377,13 @@ class ScreenshotsTest {
      @Test fun tailnetDetailsLandscape() { landscape(); tailnet("tailnet-details-landscape", TailnetSamples.connected(), details = true) }
      @Test fun tailnetErrorPortrait() = tailnet("tailnet-error-portrait", TailnetSamples.starting, startError = "tsnet: open state: permission denied")
      @Test fun tailnetNotJoinedPortrait() = tailnet("tailnet-not-joined-portrait", TailnetSamples.starting, joined = false)
@@ -1160,10 +1164,10 @@ index 967639b3f2ad11c99124d7a69d7452c8e546d117..b91757dbbf0b29d07163d5eef1c65146
          val parts = name.split('.')
          if (parts.size != 4) return false
 diff --git a/core/src/main/kotlin/me/leaver/rexpocket/core/RexClient.kt b/core/src/main/kotlin/me/leaver/rexpocket/core/RexClient.kt
-index 2a22b575a1cfd4430b778b983c03122938846970..f63b277ec5a99d29dd5004619a3529222559a22b 100644
+index e7ebefc4a5002687e3edfaf24b53695c03f46fa4..3e6fdcfda00049055a443da0e699ade1186e3d27 100644
 --- a/core/src/main/kotlin/me/leaver/rexpocket/core/RexClient.kt
 +++ b/core/src/main/kotlin/me/leaver/rexpocket/core/RexClient.kt
-@@ -220,12 +220,15 @@ class RexClient(
+@@ -224,12 +224,15 @@ class RexClient(
           * [socksPort] is the loopback port of the app's own Tailscale inbound. OkHttp hands a SOCKS5
           * proxy the hostname unresolved, so a tailnet name is resolved by Tailscale itself.
           */
@@ -1182,7 +1186,7 @@ index 2a22b575a1cfd4430b778b983c03122938846970..f63b277ec5a99d29dd5004619a352922
                  }
              }
 diff --git a/core/src/main/kotlin/me/leaver/rexpocket/core/SshTunnel.kt b/core/src/main/kotlin/me/leaver/rexpocket/core/SshTunnel.kt
-index 3e7c97f821d4a69a5c860f9e1b9c145ff5ebbe45..3c9b5117868693039ecc87820151913d9f2cb395 100644
+index 8e36fd37accf43002ccb9f9d92b8940ea4c7fb6b..fa5b1eca10f4ddd5764760bffde906c06c986a7c 100644
 --- a/core/src/main/kotlin/me/leaver/rexpocket/core/SshTunnel.kt
 +++ b/core/src/main/kotlin/me/leaver/rexpocket/core/SshTunnel.kt
 @@ -46,6 +46,8 @@ data class SshSettings(
@@ -1194,7 +1198,7 @@ index 3e7c97f821d4a69a5c860f9e1b9c145ff5ebbe45..3c9b5117868693039ecc87820151913d
  )
  
  /** Something SSH could not do. The UI turns these into its own words. */
-@@ -270,6 +272,9 @@ class SshTunnel(
+@@ -279,6 +281,9 @@ class SshTunnel(
      /** The machine as seen by JSch: the phone's network, or the app's Tailscale node when asked. */
      private inner class TunnelSocketFactory : com.jcraft.jsch.SocketFactory {
          override fun createSocket(host: String, port: Int): Socket {
@@ -1261,7 +1265,7 @@ index 53b8467bea12ad08efb8aff38b8e9f59668be175..4dea9f46d39c487a4e57a05a68478037
          }
      }
 diff --git a/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetStage.kt b/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetStage.kt
-index c8333a044c64dcd3b0b3b9f0a82d405f89221940..ba216bb178805c3ebbb29897523e00aa98e1b4da 100644
+index 609c46339c8c0e398f83a371231c0b09908009a5..b33493c09bd931805f3ee9b37d5a9191f22f498b 100644
 --- a/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetStage.kt
 +++ b/core/src/main/kotlin/me/leaver/rexpocket/core/TailnetStage.kt
 @@ -3,8 +3,8 @@ package me.leaver.rexpocket.core
