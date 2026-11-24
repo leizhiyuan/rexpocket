@@ -48,7 +48,16 @@ Things every option keeps:
 - A long press on a link always offers the link, whatever the long press is set to. Links are
   printed by agents for the person to open; losing them to a setting would be a trap.
 - Drag scrolls the history (or sends the wheel), a horizontal swipe changes pane, a pinch changes
-  the font size. None of these is configurable now.
+  the tab's text size. None of these is configurable now.
+
+**Nothing only a gesture reaches.** Each gesture's job is also a row someone can find: the pinch is
+the ⋮ menu's Text size row (4.2) and the palette's Bigger, Smaller and Reset text size; a long press
+set to Full screen or the keyboard still leaves Select text in the ⋮ menu and the palette (a
+selection started there takes the last line with text, handles to drag); Return held is Shift+Return,
+with "New line" as its long-press label and as a TalkBack action of its own. A hint over the foot of
+the pane, shown once, names the two that have no row of their own on the bar: "Pinch with two
+fingers to change the text size. Hold Return for a new line." It goes with Got it, or once the size
+is changed any way, and is stored as gone (`pinch_hint_seen` in the `terminal` preferences).
 
 **Open keyboard in full screen.** In full screen the key bar, and the keyboard key with it, is
 gone. A tap that can only open the keyboard leaves a person with a keyboard and no way to put it
@@ -142,11 +151,14 @@ default, so a key added to the bar has to be put on one side.
 The menu, top to bottom; each section's destructive row last, in red:
 
 1. No caption: Command palette; Find (9); Keyboard shortcuts › (10); then, in the bar's order:
-   Paste; Send a file; Show / Hide keyboard; Full screen.
+   Paste; Send a file; Show / Hide keyboard; Full screen; Compose prompt; then Text size (4.2).
 2. Pane: Release / Take over (while the session is live and a tab is open, as the top bar's chip);
-   New pane on the right; New pane below; Rename pane; Close pane.
-3. Tab: New tab; Rename tab; Close tab.
-4. Session: Sessions; Rename session; End session.
+   New pane on the right; New pane below; Rename pane; Select text; Copy output; Share output;
+   Insert path › (4.3); Close pane.
+3. More: Clear terminal; Reset terminal - both red, both asking first, as Close pane does: what
+   they erase does not come back. The palette's rows ask the same way.
+4. Tab: New tab; Rename tab; Status details; Close tab.
+5. Session: Sessions; Rename session; End session.
 
 What changes it: Find, Paste, Send a file, the keyboard, Rename pane and Close pane need a pane on screen,
 so the closed-pane note leaves them out. Send a file is greyed out, not removed, while a file is on
@@ -324,6 +336,54 @@ Deferred: a key with its own text or sequence (a macro, such as tmux's `C-b c` i
 key on a swipe up, as Termux has; dragging a key from one list into another; resetting one group to
 its preset; key size and a second row.
 
+### 4.2 Text size
+
+The terminal draws at 12 sp times a scale from 70% to 180%. There are two of them:
+
+- **The default**, for every tab that has not set its own: Settings › Appearance › Terminal text
+  size (a dialog with − / +, a step of 10%, and Reset to 100%), and the same line in the Terminal
+  font dialog, beside the face it sizes. Stored as `font_scale`, as before, and carried by the
+  settings backup as `terminalFontScale`; a backup from before this change loads as it did.
+- **A tab's own**, set by a pinch, by the ⋮ menu's Text size row, by the palette's Bigger text,
+  Smaller text and Reset text size, and by Ctrl+= / Ctrl+- / Ctrl+0. It belongs to that tab of
+  that host (`TabTextSizes`, core): an omp table can be made to fit in one tab while the others
+  stay readable. Reset, or stepping back to the default, drops it, and the tab follows the default
+  again. Kept while the app runs, not stored: Rex's tab ids would pile up with nothing to prune
+  them.
+
+Before, a pinch changed the one stored size for every tab; that size is now the default, so nothing
+a person had set is lost.
+
+**The row**: an icon, "Text size" with "110% · 52×30" under it (the size, then the columns and rows
+the pane fits at it, from the view's own grid), − and +, and Reset, which waits greyed while the
+size is the default. − and + stop at the ends and go to the next step of 10%, so a size a pinch left
+between steps is not stepped past. The sheet stays open: what the row changes shows on the row and
+on the pane behind it. TalkBack reads the row as one ("Text size, 110 percent, 52 columns by 30
+rows"), politely again as it changes; − and + are "Smaller text" and "Bigger text".
+
+### 4.3 Insert path
+
+A folder browser that types the path picked into the pane: for a shell, where an agent's own `@`
+picker is not there to help. From the ⋮ menu's Pane group and the palette (Rex's own Insert Path…
+words find it).
+
+- It asks Rex, `block.method` `list_dir` (`com.superlogical.terminal.list_dir`) with `path` empty -
+  the working directory of the pane's foreground program, as Rex resolves it - and `files` on. So
+  it starts where the program is, with nothing for the phone to work out from the title or OSC 7.
+- Rex's answer, as preview.22 gives it (`RexShapeTest`, `RealRexListDirTest`): `path` absolute,
+  `home`, `status` (`ok`, `missing`, `not_dir`, `denied`), `entries` of `name` with `file` for
+  what is not a folder and `symlink` for a link (a link leading nowhere is left out), `truncated`.
+  The phone sorts them - folders first, then files, by name ignoring case - and keeps dot entries
+  back until Show hidden. At most 1000 are listed; past that it says so.
+- The sheet's title is the folder, the home as `~`. Its rows: Insert this folder; Up to the parent;
+  Show / Hide hidden; then the folders, which open in place, and the files, which are typed.
+- What is typed is one shell word (`shellPath`, core): as it is when every character is one no
+  shell treats specially, otherwise in single quotes, a quote inside as `'\''`; a path under the
+  home starts `~/` outside the quotes (`~/'my notes'`), so the shell still expands it. It goes as a
+  paste, so nothing runs until Return, and no space is added.
+- A folder that cannot be read says why, with Up still there; no answer in 15 s is "Could not
+  list this folder".
+
 ## 5. Short windows and landscape
 
 A phone on its side is some 400 dp tall; with the keyboard up, little more than 130 dp is left. The
@@ -399,6 +459,8 @@ default), so a light app can have a dark terminal. They are stored as `app_theme
 colours set only the pane's paper, ink, cursor and selection (`Colors.pane`, `terminalTheme()`):
 the bars around it stay the app's, and the closed-pane and empty notes, which are app text, keep
 the app's paper. Matching the desk's own terminal colours is not offered yet (rex-parity.md).
+
+**Terminal text size** opens the default for new tabs (4.2): − / +, Reset, and what it is for.
 
 **Text size** (System · 85% · 115% · 130% · 150%; System by default, stored as `text_size`) scales
 the app's text on top of Android's font size: `RexTheme` provides a `LocalDensity` whose font scale
@@ -568,6 +630,17 @@ the tab's name and host; it follows the bar at most once a second and goes with 
 app comes back. A host whose notifications are off has none. A tap opens the pane.
 
 ## 12. Testing
+
+- This pass's rows (`TextSizeTest`, shared): the Text size row steps the tab on screen and Reset
+  goes back, another tab follows the default while one keeps its own, Appearance's default with its
+  Reset and kept, the pinch hint shown once and remembered (and gone once the size changes), Select
+  text and Copy output from the menu, Clear terminal asking first, Insert path from the palette
+  asking Rex. `InsertPathTest` (shared): the browser over a made-up host - where it starts, hidden
+  entries, a file typed quoted, a folder opened and inserted, a folder that could not be read, one
+  Rex may not read, Up. `ListDirTest` (core, ScriptedRex and real Rex) and `DirListingTest` (the
+  answer read, parents, quoting). `TextScaleTest` (core): steps and per-tab sizes. `TermAgentTest`:
+  Return held's label and TalkBack action, Edit quick replies from an empty panel and from the
+  composer, Restore defaults, Clear's Restore in the composer, Return after kept.
 
 - `GesturesTest` (core, JVM): every gesture under every combination of double taps on or off and
   waiting on or off, custom times, drags, far second taps, held second presses, late timers, and

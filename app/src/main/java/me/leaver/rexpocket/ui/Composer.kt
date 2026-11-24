@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -50,10 +51,12 @@ import me.leaver.rexpocket.core.QuickReplies
 /**
  * The drafts of the prompt composer, by host and pane: what was written and not sent stays with its
  * pane while the app runs, so leaving the composer, or the pane, loses nothing. Not stored: a draft
- * is for this sitting.
+ * is for this sitting. The composer's Return after is the person's choice per host, kept in [prefs]
+ * when there are any, so it does not go back on at every opening.
  */
-class PromptDrafts {
+class PromptDrafts(private val prefs: android.content.SharedPreferences? = null) {
     private val drafts = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val enter = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
     operator fun get(key: String): String = drafts[key].orEmpty()
 
@@ -61,14 +64,32 @@ class PromptDrafts {
         if (text.isEmpty()) drafts.remove(key) else drafts[key] = text
     }
 
+    /** Whether the composer presses Return after sending, on [hostId]; on until the person turns it off. */
+    fun enterAfter(hostId: String?): Boolean {
+        val host = hostId.orEmpty()
+        return enter[host] ?: prefs?.getBoolean(ENTER_KEY + host, true) ?: true
+    }
+
+    fun setEnterAfter(hostId: String?, on: Boolean) {
+        val host = hostId.orEmpty()
+        enter[host] = on
+        prefs?.edit()?.putBoolean(ENTER_KEY + host, on)?.apply()
+    }
+
     companion object {
         fun key(hostId: String?, blockId: String) = "${hostId.orEmpty()}/$blockId"
+
+        private const val ENTER_KEY = "composer_enter_after_"
     }
 }
 
 internal const val COMPOSER_FIELD_TAG = "composer-field"
 internal const val COMPOSER_SEND_TAG = "composer-send"
 internal const val COMPOSER_ENTER_TAG = "composer-enter"
+internal const val COMPOSER_CLEAR_TAG = "composer-clear"
+internal const val COMPOSER_EDIT_REPLIES_TAG = "composer-edit-replies"
+internal const val QUICK_REPLIES_RESTORE_TAG = "quick-replies-restore"
+internal const val QUICK_REPLY_UNDO_TAG = "quick-reply-undo"
 internal const val QUICK_REPLIES_ADD_TAG = "quick-replies-add"
 internal const val QUICK_REPLY_FIELD_TAG = "quick-reply-field"
 internal fun quickReplyRowTag(index: Int) = "quick-reply-$index"
@@ -77,8 +98,12 @@ internal fun quickReplyChipTag(index: Int) = "quick-reply-chip-$index"
 /**
  * A longer prompt, written in a field of its own and sent to the pane in one paste - bracketed when
  * the program turned bracketed paste on, as Rex's paste event is, so an agent takes the lines as one
- * prompt rather than one per line - then Return, unless [enterAfter] is switched off. The draft is
- * [draft]'s and goes back to it with every change; Send clears it. Quick replies put their text in.
+ * prompt rather than one per line - then Return, unless [enterAfter] is switched off; the switch
+ * is the person's, kept by [onEnterAfter]. The draft is [draft]'s and goes back to it with every
+ * change; Send clears it, or with [clearOnSend] off the caller does once Rex has the prompt, so a
+ * send that fails keeps it. Clear can be
+ * taken back: Restore puts the text back until something new is typed. Quick replies put their
+ * text in, and [onEditReplies] opens Settings › Quick replies from here.
  */
 @Composable
 internal fun PromptComposer(
@@ -89,12 +114,20 @@ internal fun PromptComposer(
     quickReplies: List<String>,
     onSend: (text: String, enter: Boolean) -> Unit,
     onDismiss: () -> Unit,
+    enterAfter: Boolean = true,
+    onEnterAfter: (Boolean) -> Unit = {},
+    onEditReplies: (() -> Unit)? = null,
+    /** False where the caller clears the draft itself once the prompt was taken. */
+    clearOnSend: Boolean = true,
 ) {
     var text by remember { mutableStateOf(draft) }
-    var enter by rememberSaveable { mutableStateOf(true) }
+    var enter by rememberSaveable { mutableStateOf(enterAfter) }
+    // What Clear took, while Restore can still put it back.
+    var cleared by rememberSaveable { mutableStateOf<String?>(null) }
     fun change(next: String) {
         text = next
         onDraft(next)
+        if (next.isNotEmpty()) cleared = null
     }
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.composer_title)) {
         val sheet = this
@@ -120,10 +153,25 @@ internal fun PromptComposer(
             if (quickReplies.isNotEmpty()) {
                 QuickReplyChips(quickReplies, insert = true) { reply -> change(joinReply(text, reply)) }
             }
+            // The way to the quick replies from where they are used, with none or many.
+            if (onEditReplies != null) {
+                Text(
+                    stringResource(R.string.quick_replies_edit_all),
+                    color = Colors.accent,
+                    fontSize = TextStyles.label,
+                    modifier = Modifier.padding(top = 4.dp).heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.chip))
+                        .clickable(role = Role.Button) { sheet.close(onEditReplies) }
+                        .testTag(COMPOSER_EDIT_REPLIES_TAG)
+                        .padding(horizontal = 4.dp, vertical = 14.dp),
+                )
+            }
             Row(
                 Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = 56.dp).clip(RoundedCornerShape(Radius.card))
                     .background(Colors.surface)
-                    .toggleable(value = enter, role = Role.Switch) { enter = it }
+                    .toggleable(value = enter, role = Role.Switch) {
+                        enter = it
+                        onEnterAfter(it)
+                    }
                     .testTag(COMPOSER_ENTER_TAG)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -136,7 +184,26 @@ internal fun PromptComposer(
                 Switch(checked = enter, onCheckedChange = null, colors = SwitchDefaults.colors(checkedTrackColor = Colors.accent))
             }
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                RowButton(stringResource(R.string.composer_clear), { change("") }, enabled = text.isNotEmpty())
+                val restore = cleared
+                if (restore != null && text.isEmpty()) {
+                    val spoken = stringResource(R.string.composer_restore_a11y)
+                    RowButton(
+                        stringResource(R.string.composer_restore),
+                        { change(restore) },
+                        modifier = Modifier.testTag(COMPOSER_CLEAR_TAG).semantics { contentDescription = spoken },
+                    )
+                } else {
+                    RowButton(
+                        stringResource(R.string.composer_clear),
+                        {
+                            val was = text
+                            change("")
+                            cleared = was
+                        },
+                        enabled = text.isNotEmpty(),
+                        modifier = Modifier.testTag(COMPOSER_CLEAR_TAG),
+                    )
+                }
                 Spacer(Modifier.width(8.dp))
                 PrimaryButton(
                     stringResource(R.string.composer_send),
@@ -144,7 +211,7 @@ internal fun PromptComposer(
                     enabled = text.isNotBlank(),
                 ) {
                     val sent = text
-                    change("")
+                    if (clearOnSend) change("")
                     sheet.close { onSend(sent, enter) }
                 }
             }
@@ -204,6 +271,8 @@ internal fun QuickReplyChips(replies: List<String>, insert: Boolean, modifier: M
 internal fun QuickRepliesSheet(replies: QuickReplies, onChange: (QuickReplies) -> Unit, onDismiss: () -> Unit) {
     // The reply being edited: its index, NEW for one being added, null on the list.
     var editing by rememberSaveable { mutableStateOf<Int?>(null) }
+    // The list as it was before the last delete, while Undo can put it back.
+    var undo by remember { mutableStateOf<Pair<String, QuickReplies>?>(null) }
     val at = editing
     if (at != null) {
         val adding = at == NEW
@@ -224,6 +293,7 @@ internal fun QuickRepliesSheet(replies: QuickReplies, onChange: (QuickReplies) -
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                     if (!adding) {
                         RowButton(stringResource(R.string.action_delete), {
+                            replies.items.getOrNull(at)?.let { undo = it to replies }
                             onChange(replies.delete(at))
                             editing = null
                         })
@@ -243,6 +313,36 @@ internal fun QuickRepliesSheet(replies: QuickReplies, onChange: (QuickReplies) -
             lineHeight = labelLeading,
             modifier = Modifier.padding(start = 4.dp, top = 4.dp, end = 4.dp),
         )
+        // A delete says so, with the way back, until the list changes again.
+        undo?.let { (gone, before) ->
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.card))
+                    .background(Colors.surface).padding(start = 16.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.quick_reply_deleted, QuickReplies.short(gone, max = 24)),
+                    color = Colors.ink,
+                    fontSize = TextStyles.label,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite },
+                )
+                Text(
+                    stringResource(R.string.action_undo),
+                    color = Colors.accent,
+                    fontSize = TextStyles.label,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.chip))
+                        .clickable(role = Role.Button) {
+                            onChange(before)
+                            undo = null
+                        }
+                        .testTag(QUICK_REPLY_UNDO_TAG)
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
+                )
+            }
+        }
         Group(icons = false) {
             if (replies.items.isEmpty()) {
                 Text(
@@ -272,6 +372,22 @@ internal fun QuickRepliesSheet(replies: QuickReplies, onChange: (QuickReplies) -
                 opens = true,
                 onClick = { editing = NEW },
             )
+            // The app's own replies, put back at the end of the list, when any have gone.
+            val missing = QuickReplies.DEFAULTS.filter { it !in replies.items }
+            if (missing.isNotEmpty()) {
+                SheetItem(
+                    label = stringResource(R.string.quick_replies_restore),
+                    icon = R.drawable.ic_restart,
+                    supporting = stringResource(R.string.quick_replies_restore_hint),
+                    enabled = replies.canAdd,
+                    keepOpen = true,
+                    modifier = Modifier.testTag(QUICK_REPLIES_RESTORE_TAG),
+                    onClick = {
+                        undo = null
+                        onChange(missing.fold(replies) { list, reply -> list.add(reply) })
+                    },
+                )
+            }
         }
     }
 }

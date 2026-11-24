@@ -35,6 +35,8 @@ internal fun freshApp(): Application {
     app.getSharedPreferences("rexpocket", Context.MODE_PRIVATE).edit().clear().commit()
     // The home's seen marks and filter (HomeMarks), which a pane id from an earlier test would match.
     app.getSharedPreferences("home_marks", Context.MODE_PRIVATE).edit().clear().commit()
+    // The terminal's pinch hint and the composer's Return after.
+    app.getSharedPreferences(TERMINAL_PREFS, Context.MODE_PRIVATE).edit().clear().commit()
     return app
 }
 

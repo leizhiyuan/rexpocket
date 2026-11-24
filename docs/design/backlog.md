@@ -9,7 +9,6 @@ Ideas reviewed and judged worth having, but not worth the effort yet. Each notes
 | App lock and screenshot block | An optional biometric or device-credential lock with a timeout. An optional `FLAG_SECURE`, which blocks screenshots and blanks the recents thumbnail. | S | - |
 | Shortcuts, tile, widget | Launcher shortcuts to recent and pinned panes. A Quick Settings tile that turns background mode on and off. A Glance widget with waiting, done and running counts per host. | S, then M | The background service's state. |
 | Rex custom actions | Run the user's Rex Lua actions from the palette (`client.keymap`, `client.action`) and answer their prompts (`client_prompt_requested`, `client.reply`). | M-L | Check the payload shapes on a real Rex first. |
-| Insert path | Browse the host's folders over `terminal.list_dir` and type the chosen path. Agents such as Claude Code already have an `@` file picker that works from the phone, so this mainly helps in a plain shell. | M | `list_dir` isn't wired up yet. |
 
 ## Next: a QoL scout pass
 
@@ -41,6 +40,19 @@ What to look for:
   showing the current columns), a one-time "Pinch to change text size" hint, and a default size
   in Settings › Appearance that the backup carries. Check other gestures the same way: long
   press, swipe, double tap.
+
+**Done: the terminal and key bar.** The pinch has a Text size row in the ⋮ menu (− / +, Reset, the
+columns and rows), a one-time hint, and a default for new tabs in Settings › Appearance and the
+Terminal font dialog, which the backup already carried (terminal-controls.md, 4.2). Select text is
+in the menu and the palette for a long press set to something else; Clear and Reset terminal ask
+first; Copy and Share output are in the menu's Pane group, Clear and Reset under More; Return held
+is labelled "New line" with a TalkBack action and named in the hint; an empty Quick replies panel
+and the composer link to Edit quick replies; a deleted quick reply has Undo and the list has
+Restore defaults; the composer's Clear has Restore, its draft goes only once Rex took the prompt,
+and its Return after is kept per host; a selection's Copy shows the same toast as other copies
+before Android 13. A selection is still one screen: Select all is "Select screen" and the
+selection's menu offers Copy output for the rest (an autoscroll into the scrollback would need the
+frozen frame to follow the viewport). Insert path is built (4.3).
 
 Areas, one per scout:
 - Home and its sheets;

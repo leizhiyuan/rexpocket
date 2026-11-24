@@ -233,7 +233,7 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 | Move Tab, Move Tab Backward/Forward (`session.move_window`); session order (`session.move`) | Done | Move up and Move down in the home's session and tab sheets and in TalkBack's actions ("Ordering") |
 | Zoom Pane (`session.zoom_block`) | Skip | the phone shows one pane at a time already; zooming would change the desktop's layout |
 | Swap/Move Pane, Balance, Resize Pane, floating panes, Move Tab to New Window (docs:mac-actions) | Skip | layout editing for a screen that shows several panes; the phone shows one |
-| Go to Directory…, Insert Path… (`terminal.list_dir`, docs:lua) | Adapt, 1 day | a directory picker that types a path; useful with agents |
+| Insert Path… (`terminal.list_dir`, docs:lua) | Built | Insert path in the ⋮ menu and the palette: the pane's program's folders from its working directory, the path picked typed as one shell word (terminal-controls.md, 4.3); Go to Directory… (typing `cd` with it) is not offered |
 | Insert Photo… (docs:ios-actions) | Adapt, 0.5 day | Send a file already uploads any file; a photo picker entry point |
 | Compose Input… (`client.composer.open`, docs:ios-actions) | Adapted (this change) | the phone's own composer, not the desk's: a multi-line sheet that sends one `block.event` paste, then Return or not, with a draft per pane (notifications.md, "The prompt composer"); typing still goes straight into the pane |
 | Jump to Previous/Next Prompt, Scroll Page Up/Down (docs:ios-actions) | Adapt, 1 day | needs OSC 133 marks from the terminal library |

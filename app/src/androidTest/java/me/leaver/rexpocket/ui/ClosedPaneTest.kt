@@ -44,7 +44,6 @@ class ClosedPaneTest {
                     state = PocketState(phase = Phase.Live, activeSessionId = SESSION, view = view, closed = closed),
                     fontScale = 1f,
                     terminalTypeface = Typeface.MONOSPACE,
-                    onFont = {},
                     onBack = { backs++ },
                     onOpenSession = {},
                     watchPane = { emptyFlow() },

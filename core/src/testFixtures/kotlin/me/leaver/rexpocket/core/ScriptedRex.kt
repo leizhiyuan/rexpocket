@@ -789,6 +789,43 @@ class ScriptedRex(
                 screens -= block
                 JSONObject()
             }
+            // The folders of the machine the test runs on, as Rex lists its own (preview.22's shape):
+            // the program's working directory is the home here.
+            "com.superlogical.terminal.list_dir" -> {
+                pane(client, payload)
+                val args = payload.optJSONObject("args") ?: JSONObject()
+                val home = java.io.File(System.getProperty("user.home")).absoluteFile
+                val asked = args.optString("path")
+                val dir = when {
+                    asked.isEmpty() || asked == "~" -> home
+                    asked.startsWith("~/") -> java.io.File(home, asked.removePrefix("~/"))
+                    asked.startsWith("/") -> java.io.File(asked)
+                    else -> java.io.File(home, asked)
+                }.normalize()
+                val files = args.optBoolean("files")
+                val prefix = args.optString("prefix")
+                val limit = args.optInt("limit").takeIf { it > 0 } ?: 2000
+                val status = when {
+                    !dir.exists() -> "missing"
+                    !dir.isDirectory -> "not_dir"
+                    !dir.canRead() -> "denied"
+                    else -> "ok"
+                }
+                val all = if (status == "ok") dir.listFiles().orEmpty().filter { it.exists() } else emptyList()
+                val matching = all.filter { files || it.isDirectory }.filter { it.name.startsWith(prefix, ignoreCase = true) }
+                val entries = JSONArray()
+                matching.take(limit).forEach { f ->
+                    val link = java.nio.file.Files.isSymbolicLink(f.toPath())
+                    entries.put(
+                        JSONObject().put("name", f.name).apply {
+                            if (link) put("symlink", true)
+                            if (files && !f.isDirectory) put("file", true)
+                        },
+                    )
+                }
+                JSONObject().put("path", dir.path).put("home", home.path).put("status", status)
+                    .put("entries", entries).put("truncated", matching.size > limit)
+            }
             "com.superlogical.terminal.format" -> {
                 val (_, block) = pane(client, payload)
                 val args = payload.optJSONObject("args") ?: JSONObject()

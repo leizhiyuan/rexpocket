@@ -70,9 +70,6 @@ internal fun paletteRowTag(index: Int) = "palette-row-$index"
 internal fun opensPalette(event: android.view.KeyEvent): Boolean =
     event.action == android.view.KeyEvent.ACTION_DOWN && shortcutOf(event) == me.leaver.rexpocket.core.AppShortcut.Palette
 
-/** How much Bigger text and Smaller text change the font, as a share of the default size. */
-internal const val FONT_STEP = 0.1f
-
 /** The most rows shown at once; a query narrows the rest. */
 private const val PALETTE_MAX_ROWS = 80
 

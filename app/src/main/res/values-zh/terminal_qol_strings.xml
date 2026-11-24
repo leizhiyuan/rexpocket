@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="text_size_row">文字大小</string>
+    <string name="text_size_detail">%1$d%% · %2$d×%3$d</string>
+    <string name="text_size_percent">%1$d%%</string>
+    <string name="text_size_reset">重置</string>
+    <string name="text_size_reset_a11y">将文字大小重置为默认值</string>
+    <string name="text_size_state">百分之 %1$d，%2$d 列 %3$d 行</string>
+    <string name="text_size_state_short">百分之 %1$d</string>
+    <string name="pinch_hint">用两根手指捏合可以改变文字大小。按住回车键可换行。</string>
+    <string name="pinch_hint_dismiss">知道了</string>
+    <string name="appearance_terminal_text_size">终端文字大小</string>
+    <string name="appearance_terminal_text_size_hint">新标签页以这个大小打开。捏合或 ⋮ › 文字大小只改变一个标签页。</string>
+    <string name="appearance_terminal_text_size_short">新标签页的起始大小</string>
+    <string name="terminal_font_size">新标签页的文字大小：%1$d%%</string>
+
+    <string name="select_text">选择文本</string>
+    <string name="select_text_nothing">屏幕上还没有可选择的内容</string>
+    <string name="selection_select_screen">选择整屏</string>
+
+    <string name="confirm_clear_terminal">清除终端？</string>
+    <string name="confirm_clear_terminal_body">屏幕和回滚记录会被清除，正在输入的那一行保留。此操作无法撤销。</string>
+    <string name="confirm_reset_terminal">重置终端？</string>
+    <string name="confirm_reset_terminal_body">终端会重新开始并清空，就像刚打开一样。其中的程序继续运行。</string>
+    <string name="confirm_reset_action">重置</string>
+    <string name="group_pane_more">更多</string>
+
+    <string name="quick_replies_edit_all">编辑快捷回复</string>
+    <string name="quick_reply_deleted">已删除“%1$s”</string>
+    <string name="quick_replies_restore">恢复默认</string>
+    <string name="quick_replies_restore_hint">重新加入 yes、continue 和 /compact</string>
+
+    <string name="key_enter_new_line">换行</string>
+
+    <string name="composer_restore">恢复</string>
+    <string name="composer_restore_a11y">恢复刚清除的文本</string>
+
+    <string name="insert_path">插入路径</string>
+    <string name="insert_path_here">插入此文件夹</string>
+    <string name="insert_path_up">返回上级 %1$s</string>
+    <string name="insert_path_show_hidden">显示隐藏项</string>
+    <string name="insert_path_hide_hidden">不显示隐藏项</string>
+    <string name="insert_path_loading">正在读取文件夹…</string>
+    <string name="insert_path_missing">此文件夹不存在</string>
+    <string name="insert_path_not_dir">这不是文件夹</string>
+    <string name="insert_path_denied">Rex 无权读取此文件夹</string>
+    <string name="insert_path_failed">无法列出此文件夹</string>
+    <string name="insert_path_empty">此文件夹是空的</string>
+    <string name="insert_path_truncated">只列出了前 %1$d 项</string>
+</resources>

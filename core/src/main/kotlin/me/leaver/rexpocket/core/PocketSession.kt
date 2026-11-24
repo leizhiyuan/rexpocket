@@ -868,6 +868,17 @@ class PocketSession(
     }
 
     /**
+     * A folder of the host, as the pane on screen's program would resolve [path]
+     * (`com.superlogical.terminal.list_dir`): empty is the program's working directory, `~` its
+     * home. Files are listed too, marked. Null when the pane went away meanwhile.
+     */
+    suspend fun listDir(path: String, files: Boolean = true, limit: Int = LIST_DIR_LIMIT): DirListing? {
+        val (sid, block) = requireBlock()
+        val args = JSONObject().put("path", path).put("files", files).put("limit", limit)
+        return paneMethod(sid, block, "list_dir", args)?.let(DirListing::parse)
+    }
+
+    /**
      * Rex's host list (`hosts.list`): the other Rex servers it knows, read as hosts the phone could
      * import (see [RexHostList]). Nothing on the phone changes.
      */
@@ -2368,6 +2379,9 @@ private const val MAX_COPY_BYTES = 512 * 1024L
 
 /** The most of a pane's output Copy output and Share output take: what a clip or a share can carry. */
 const val MAX_TEXT_BYTES = 512 * 1024
+
+/** The most entries one folder of Insert path lists: a phone's list, not a desk's. */
+const val LIST_DIR_LIMIT = 1000
 
 /** How much of a pane's text one call reads: Rex's default for blob_read. */
 private const val TEXT_PART_BYTES = 48 * 1024

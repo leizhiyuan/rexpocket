@@ -116,8 +116,71 @@ class TermAgentTest {
         compose.onNodeWithTag(COMPOSER_SEND_TAG).performClick()
         compose.waitForIdle()
         assertEquals("one paste went to the pane", 1, acts.size)
-        assertEquals("a sent draft is gone", "", model.drafts[PromptDrafts.key(null, "block:left")])
+        // The draft goes only once Rex has taken the prompt (the act, not run here), so a send
+        // that fails loses nothing.
+        assertEquals("the draft waits for Rex", "Look at the failing test continue", model.drafts[PromptDrafts.key(null, "block:left")])
         compose.waitUntil(5_000) { !composerOpen() }
+
+        // Return after stays as it was last chosen, not back on at the next opening.
+        assertTrue(!model.drafts.enterAfter(null))
+        compose.onNodeWithContentDescription(string(R.string.key_compose)).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(string(R.string.composer_enter_after_body)).assertExists()
+    }
+
+    @Test
+    fun clearInTheComposerCanBeTakenBack() {
+        compose.onNodeWithContentDescription(string(R.string.key_compose)).performScrollTo().performClick()
+        compose.waitForIdle()
+        composerField().performTextInput("a long prompt")
+        compose.onNodeWithText(string(R.string.composer_clear)).performClick()
+        compose.waitForIdle()
+        assertEquals("", fieldText())
+        compose.onNodeWithText(string(R.string.composer_restore)).performClick()
+        compose.waitForIdle()
+        assertEquals("a long prompt", fieldText())
+        assertEquals("a long prompt", model.drafts[PromptDrafts.key(null, "block:left")])
+        // Restore goes once there is text again; Clear is back.
+        compose.onNodeWithText(string(R.string.composer_clear)).assertExists()
+    }
+
+    @Test
+    fun anEmptyQuickRepliesPanelOpensTheListToEdit() {
+        model.setQuickReplies(me.leaver.rexpocket.core.QuickReplies(emptyList()))
+        compose.waitForIdle()
+        compose.onNodeWithTag(REPLIES_KEY_TAG).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(string(R.string.quick_replies_none)).assertExists()
+        compose.onNodeWithTag(REPLIES_EDIT_TAG).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(string(R.string.quick_replies_title)).assertExists()
+        // Restore defaults puts the app's own back, and the panel has them.
+        compose.onNodeWithTag(QUICK_REPLIES_RESTORE_TAG).performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(me.leaver.rexpocket.core.QuickReplies.DEFAULTS, model.quickReplies.value.items)
+    }
+
+    @Test
+    fun theComposerOpensTheQuickRepliesToEdit() {
+        compose.onNodeWithContentDescription(string(R.string.key_compose)).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(COMPOSER_EDIT_REPLIES_TAG).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText(string(R.string.quick_replies_title))).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(!composerOpen())
+    }
+
+    @Test
+    fun returnHeldIsANewLineAndSaysSo() {
+        val enter = compose.onNodeWithTag(ENTER_KEY_TAG)
+        enter.performScrollTo()
+        val node = enter.fetchSemanticsNode()
+        val newLine = string(R.string.key_enter_new_line)
+        assertEquals(newLine, node.config[androidx.compose.ui.semantics.SemanticsActions.OnLongClick].label)
+        val action = node.config[androidx.compose.ui.semantics.SemanticsActions.CustomActions].single { it.label == newLine }
+        compose.runOnUiThread { action.action() }
+        compose.waitForIdle()
+        assertEquals("Shift+Return went to the pane", 1, acts.size)
     }
 
     @Test

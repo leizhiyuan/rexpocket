@@ -139,8 +139,26 @@ class CommandPaletteTest {
         assertEquals(listOf(string(R.string.palette_clear_terminal), string(R.string.palette_reset_terminal)), rows())
         compose.onNodeWithText(string(R.string.palette_reset_terminal)).performClick()
         compose.waitForIdle()
-        assertEquals("the row goes to the pane", 1, acts.size)
         assertFalse(paletteOpen())
+        // What it erases does not come back, so it asks first, as Close pane does.
+        assertEquals("nothing goes before the confirmation", 0, acts.size)
+        compose.onNodeWithText(string(R.string.confirm_reset_terminal)).assertExists()
+        compose.onNodeWithText(string(R.string.confirm_reset_action)).performClick()
+        compose.waitForIdle()
+        assertEquals("the row goes to the pane", 1, acts.size)
+    }
+
+    @Test
+    fun clearTerminalCanBeCancelled() {
+        show()
+        openFromMenu()
+        type("clear terminal")
+        compose.onNodeWithText(string(R.string.palette_clear_terminal)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(string(R.string.confirm_clear_terminal)).assertExists()
+        compose.onNodeWithText(string(R.string.action_cancel)).performClick()
+        compose.waitForIdle()
+        assertEquals(0, acts.size)
     }
 
     @Test

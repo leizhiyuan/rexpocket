@@ -213,6 +213,12 @@ starting as `yes`, `continue`, `/compact`. At most 20, each up to 2000 character
 - rows of the command palette (group Quick reply), sent the same way;
 - chips in the composer and in Needs you's Reply, which put the text in the field to change first.
 
+A delete says so at the top of the list with **Undo**, which puts the list back as it was; once any
+of the app's own three is gone the list ends with **Restore defaults**, which adds them back at the
+end. The list is one tap from where replies are used in the terminal: **Edit quick replies** at the
+foot of the key bar's panel (so an empty panel is not a dead end), under the composer's chips, and
+in the palette.
+
 ## The prompt composer
 
 A multi-line sheet for a longer prompt, from the terminal (the bar's **Compose prompt** key, which
@@ -221,7 +227,11 @@ Arrange keys can add, the ⋮ menu's Compose prompt and the palette's) and from 
 `block.event` `paste` - so the terminal brackets it when the program turned bracketed paste on, and
 an agent takes the lines as one prompt - then Return, unless **Press Return after it** is switched
 off. The draft is kept per host and pane (`PromptDrafts`, the view model's) while the app runs:
-leaving the composer or the pane loses nothing; Send clears it. The pane it goes to is fixed when it
+leaving the composer or the pane loses nothing. From the terminal the draft goes only once Rex has
+taken the prompt, so a send that fails keeps it; from Needs you, Send clears it. **Clear** can be
+taken back: it becomes **Restore** until something is typed. Press Return after it is the person's
+choice per host, kept (`composer_enter_after_<host>` in the `terminal` preferences), rather than on
+again at every opening. The pane it goes to is fixed when it
 opens. Rex's own Compose Input… (`client.composer.open`) opens the desk's composer; this one is the
 phone's and sends the same paste.
 

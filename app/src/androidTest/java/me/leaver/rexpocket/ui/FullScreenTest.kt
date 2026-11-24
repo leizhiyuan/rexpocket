@@ -48,7 +48,6 @@ class FullScreenTest {
                     state = PocketState(),
                     fontScale = 1f,
                     terminalTypeface = Typeface.MONOSPACE,
-                    onFont = {},
                     onBack = { backs++ },
                     onOpenSession = {},
                     watchPane = { emptyFlow() },

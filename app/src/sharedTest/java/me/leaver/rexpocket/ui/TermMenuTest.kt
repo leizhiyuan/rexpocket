@@ -39,7 +39,7 @@ class TermMenuTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private fun string(id: Int) = compose.activity.getString(id)
+    private fun string(id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
     /**
      * Edge to edge, as MainActivity is. Otherwise the window keeps its insets from Compose, which
@@ -86,11 +86,22 @@ class TermMenuTest {
         string(keyboard),
         string(R.string.action_full_screen),
         string(R.string.composer_title),
+        // The tab's text size: its name and size as one line, − and + (marks only), and Reset,
+        // which waits while the size is the default.
+        "# " + string(R.string.text_size_row) + " " + string(R.string.text_size_percent, 100),
+        string(R.string.text_size_reset),
         "# " + string(R.string.level_pane),
         string(holder),
         string(R.string.menu_split_right),
         string(R.string.menu_split_below),
         string(R.string.menu_rename_pane),
+        string(R.string.select_text),
+        string(R.string.palette_copy_output),
+        string(R.string.palette_share_output),
+        string(R.string.insert_path),
+        "# " + string(R.string.group_pane_more),
+        string(R.string.palette_clear_terminal),
+        string(R.string.palette_reset_terminal),
         "# " + string(R.string.level_tab),
         string(R.string.menu_new_tab),
         string(R.string.menu_rename_tab),
@@ -113,7 +124,7 @@ class TermMenuTest {
     fun aSplitTabHandedBackOffersTakeOverAndClosePane() {
         val lines = open(liveState(tabOf(testPane("left"), testPane("right")), released = true))
         val expected = onePane(holder = R.string.action_take_over).toMutableList()
-        expected.add(expected.indexOf(string(R.string.menu_rename_pane)) + 1, string(R.string.menu_close_pane))
+        expected.add(expected.indexOf(string(R.string.insert_path)) + 1, string(R.string.menu_close_pane))
         assertEquals(expected, texts(lines))
     }
 
@@ -161,7 +172,7 @@ class TermMenuTest {
         assertEquals(idle.map { it.top }, sending.map { it.top })
         val attach = sending.single { it.text == string(R.string.upload_attach) }
         assertFalse("Send a file waits for the file on its way", attach.enabled)
-        assertEquals(listOf(string(R.string.upload_attach)), sending.filter { !it.enabled }.map { it.text })
+        assertEquals(listOf(string(R.string.upload_attach), string(R.string.text_size_reset)), sending.filter { !it.enabled }.map { it.text })
     }
 
     @Test

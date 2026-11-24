@@ -256,6 +256,9 @@ internal fun HomeScreen(
     /** Settings › Appearance: the app's theme and the terminal's colours. */
     appearance: Appearance = Appearance(),
     onAppearance: (Appearance) -> Unit = {},
+    /** The terminal's default text size, for new tabs: Settings › Appearance's Terminal text size. */
+    terminalTextSize: Float = 1f,
+    onTerminalTextSize: (Float) -> Unit = {},
     /** Opens Import hosts: a host list, or a connected Rex's hosts. */
     onImportHosts: () -> Unit = {},
     /** Settings › Backup: export and import every setting. */
@@ -936,7 +939,7 @@ internal fun HomeScreen(
         onKeyArrangement = onKeyArrangement,
     )
 
-    if (appearanceOpen) AppearanceSheet(appearance, onAppearance, onDismiss = { appearanceOpen = false })
+    if (appearanceOpen) AppearanceSheet(appearance, onAppearance, onDismiss = { appearanceOpen = false }, terminalTextSize = terminalTextSize, onTerminalTextSize = onTerminalTextSize)
 
     if (diagnostics) {
         DiagnosticsSheet(

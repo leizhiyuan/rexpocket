@@ -44,6 +44,23 @@ internal class TerminalSelection(val frame: TerminalFrame, column: Int, row: Int
         if (moveAnchor) anchor = point(column, row) else extent = point(column, row)
     }
 
+    /**
+     * Selects the last line on screen with text in it, whole: where a selection started from the
+     * menu begins, since a program's newest output is at the bottom. A blank screen selects its
+     * first cell.
+     */
+    fun lastLine() {
+        val row = (frame.rows - 1 downTo 0).firstOrNull { r -> (0 until frame.columns).any { c -> !blank(c, r) } } ?: run {
+            anchor = Point(0, 0)
+            extent = anchor
+            return
+        }
+        val start = (0 until frame.columns).first { c -> !blank(c, row) }
+        val end = (frame.columns - 1 downTo 0).first { c -> !blank(c, row) }
+        anchor = point(start, row)
+        extent = point(end, row)
+    }
+
     fun all() {
         anchor = Point(0, 0)
         extent = point(frame.columns - 1, frame.rows - 1)

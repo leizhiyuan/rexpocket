@@ -4,7 +4,8 @@ name: rex-real
 # integration tests, RexShapeTest (what Rex sends, against the shapes ScriptedRex is held to), the
 # bell, desktop notifications and replies (RealRexPaneSignalsTest), moving sessions and tabs
 # (RealRexOrderTest),
-# agents' status replayed (RealRexAgentReplayTest), status of tabs never opened (RealRexUnopenedStatusTest) and
+# agents' status replayed (RealRexAgentReplayTest), status of tabs never opened (RealRexUnopenedStatusTest),
+# Insert path's folder listing (RealRexListDirTest) and
 # the app's own flows on Robolectric (RealRexAppTest).
 #
 # Rex is proprietary. The job installs the server pinned in tools/rex/pin.env from Superlogical's
@@ -88,7 +89,7 @@ jobs:
           want = {"RealRexLifecycleTest", "PocketSessionTest", "RexShapeTest", "ReconnectTest", "ForegroundTest",
                   "ForegroundStreamTest", "HelloFirstTest", "ResumeTest", "InputPipelineTest", "RealRexAppTest",
                   "RealRexPaneTextTest", "RealRexPaneSignalsTest", "RealRexPromptAnswerTest", "RealRexOrderTest", "ClientViewProbeTest",
-                  "RealRexAgentReplayTest", "RealRexUnopenedStatusTest"}
+                  "RealRexAgentReplayTest", "RealRexUnopenedStatusTest", "RealRexListDirTest"}
           seen, bad = {}, []
           for f in glob.glob("core/build/test-results/test/*.xml") + glob.glob("app/build/test-results/testDebugUnitTest/*.xml"):
               for case in ET.parse(f).getroot().iter("testcase"):

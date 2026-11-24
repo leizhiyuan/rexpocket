@@ -53,7 +53,11 @@ internal fun TermOnModel(
     onAct: (suspend PocketSession.() -> Unit) -> Unit = {},
     onOpenSession: (String) -> Unit = {},
     onOpenTab: (String, String) -> Unit = { _, _ -> },
+    /** Shows the one-time pinch hint as the model has it; off by default so other tests see the pane bare. */
+    pinchHint: Boolean = false,
 ) {
+    val hint by model.pinchHint.collectAsState()
+    val font by model.fontScale.collectAsState()
     val route by model.route.collectAsState()
     val keyBar by model.keyBar.collectAsState()
     val arrangement by model.keyArrangement.collectAsState()
@@ -64,9 +68,8 @@ internal fun TermOnModel(
         if (route == Route.Term) {
             TermScreen(
                 state = state,
-                fontScale = 1f,
+                fontScale = font,
                 terminalTypeface = Typeface.MONOSPACE,
-                onFont = {},
                 onBack = model::showHome,
                 onOpenSession = onOpenSession,
                 onOpenTab = onOpenTab,
@@ -85,6 +88,10 @@ internal fun TermOnModel(
                 gestures = gestures,
                 quickReplies = quickReplies.items,
                 drafts = model.drafts,
+                textSizes = model.textSizes,
+                pinchHint = pinchHint && hint,
+                onPinchHintSeen = model::pinchHintSeen,
+                onQuickReplies = model::setQuickReplies,
             )
         }
     }

@@ -98,6 +98,15 @@ internal class TerminalView(context: Context) : View(context) {
     /** Share in the selection's menu: the selected text, offered to another app. */
     var onShare: ((String) -> Unit)? = null
 
+    /**
+     * Copy output in the selection's menu: the whole of the pane's output, scrollback too, which a
+     * selection - one screen - cannot reach.
+     */
+    var onCopyOutput: (() -> Unit)? = null
+
+    /** The grid the pane fits, in columns and rows, each time it changes: the Text size row shows it. */
+    var onGrid: ((columns: Int, rows: Int) -> Unit)? = null
+
     /** A tap that was not the start of anything else. */
     var onTap: (() -> Unit)? = null
 
@@ -400,6 +409,7 @@ internal class TerminalView(context: Context) : View(context) {
         val columns = max(1, floor(width / cellWidth).toInt())
         val rows = max(1, floor(height / cellHeight).toInt())
         active.resize(columns, rows, cellWidth.roundToInt(), cellHeight.roundToInt())
+        onGrid?.invoke(columns, rows)
     }
 
     private fun currentFrame(): TerminalFrame? {
@@ -872,6 +882,22 @@ internal class TerminalView(context: Context) : View(context) {
         invalidate()
     }
 
+    /**
+     * Starts a selection without a long press, for the menu's and the palette's Select text: a long
+     * press may be set to do something else (terminal-controls.md, 2.1). The last line with text is
+     * selected, with its handles to drag. False when there is nothing to select yet.
+     */
+    fun startSelection(): Boolean {
+        if (session == null) return false
+        val frame = currentFrame() ?: return false
+        clearSelection()
+        selection = TerminalSelection(frame, 0, 0).also { it.lastLine() }
+        selectionDrag = false
+        startSelectionMode()
+        invalidate()
+        return true
+    }
+
     private fun selectionEvent(event: MotionEvent): Boolean {
         val current = selection ?: return true
         when (event.actionMasked) {
@@ -904,7 +930,10 @@ internal class TerminalView(context: Context) : View(context) {
                     menu.add(0, android.R.id.copy, 0, android.R.string.copy).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                     if (onShare != null) menu.add(0, android.R.id.shareText, 1, R.string.selection_share).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                     if (onPaste != null) menu.add(0, android.R.id.paste, 2, android.R.string.paste).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                    menu.add(0, android.R.id.selectAll, 3, android.R.string.selectAll).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                    // A selection holds one screen, so "all" would promise more than it takes: it says
+                    // what it selects, and Copy output takes the rest.
+                    menu.add(0, android.R.id.selectAll, 3, R.string.selection_select_screen).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                    if (onCopyOutput != null) menu.add(0, R.id.copy_output, 4, R.string.palette_copy_output).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                     return true
                 }
 
@@ -915,7 +944,17 @@ internal class TerminalView(context: Context) : View(context) {
                         val text = selection?.text().orEmpty()
                         context.getSystemService(ClipboardManager::class.java)
                             ?.setPrimaryClip(ClipData.newPlainText("Terminal selection", text))
+                        // Android 13 and later say a copy was made themselves; before, the app does,
+                        // as every other copy in it does.
+                        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
+                            android.widget.Toast.makeText(context, R.string.toast_copied, android.widget.Toast.LENGTH_SHORT).show()
+                        }
                         mode.finish()
+                        true
+                    }
+                    R.id.copy_output -> {
+                        mode.finish()
+                        onCopyOutput?.invoke()
                         true
                     }
                     android.R.id.shareText -> {

@@ -102,6 +102,11 @@ import me.leaver.rexpocket.core.PaneProgress
 import me.leaver.rexpocket.core.repeats
 import me.leaver.rexpocket.core.tabProgress
 import me.leaver.rexpocket.core.QuickReplies
+import me.leaver.rexpocket.core.TabTextSizes
+import me.leaver.rexpocket.core.DirListing
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
+import me.leaver.rexpocket.core.TextScale
 import me.leaver.rexpocket.core.ProgramMark
 import me.leaver.rexpocket.core.programMark
 import me.leaver.rexpocket.core.ProgramRecord
@@ -171,14 +176,23 @@ internal sealed interface Sheet {
 
     /** The prompt composer, for the pane that was on screen when it opened. */
     data class Composer(val sessionId: String, val blockId: String, val title: String) : Sheet
+
+    /** Insert path: the host's folders, from where the pane's program is. */
+    data object InsertPath : Sheet
+
+    /** Settings › Quick replies, reached from the key bar's panel and the composer. */
+    data object QuickReplies : Sheet
 }
+
+/** Clear and Reset terminal, which ask first: what they erase does not come back. */
+internal enum class Wipe { Clear, Reset }
 
 @Composable
 internal fun TermScreen(
     state: PocketState,
+    /** The text size new tabs start at, and every tab follows until its own is changed. */
     fontScale: Float,
     terminalTypeface: android.graphics.Typeface,
-    onFont: (Float) -> Unit,
     onBack: () -> Unit,
     onOpenSession: (String) -> Unit,
     watchPane: (String) -> Flow<TerminalFeed>,
@@ -210,6 +224,13 @@ internal fun TermScreen(
     draftHost: String? = null,
     /** A pane's seen mark on this phone, for Status details. */
     seenMark: (blockId: String) -> String? = { null },
+    /** Each tab's own text size, which a pinch, the Text size row and the palette change. */
+    textSizes: TabTextSizeState = remember { TabTextSizeState() },
+    /** True until the one-time "Pinch to change text size" hint has been seen. */
+    pinchHint: Boolean = false,
+    onPinchHintSeen: () -> Unit = {},
+    /** Changes the quick replies, for Edit quick replies on the key bar's panel and in the composer; null leaves it out. */
+    onQuickReplies: ((QuickReplies) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val ime = LocalSoftwareKeyboardController.current
@@ -224,6 +245,7 @@ internal fun TermScreen(
     var link by remember { mutableStateOf<String?>(null) }
     var rename by remember { mutableStateOf<Rename?>(null) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
+    var wipe by remember { mutableStateOf<Wipe?>(null) }
     var termSession by remember { mutableStateOf<TerminalSession?>(null) }
     // The pane's editor: what the keyboard key raises, and what Back and the session list drop.
     var keyboard by remember { mutableStateOf<TerminalImeView?>(null) }
@@ -235,6 +257,22 @@ internal fun TermScreen(
     val focused = if (closed != null) null else view?.focusedBlock()
     val status = focused?.let { state.blockStatus[it.id] }
     val panes = tab?.blocks.orEmpty()
+
+    // The tab's own text size, or the default; see TextSize.kt. A change is made to this tab only.
+    val sizeKey = if (view != null && tab != null) TabTextSizes.key(draftHost, view.sessionId, tab.id) else null
+    val tabScale = sizeKey?.let { textSizes.sizes.of(it, fontScale) } ?: fontScale
+    fun setTabScale(next: Float) {
+        val key = sizeKey ?: return
+        textSizes.sizes = textSizes.sizes.with(key, next, fontScale)
+        // Whoever changes the size has found it: the hint has done its job.
+        if (pinchHint) onPinchHintSeen()
+    }
+    fun resetTabScale() {
+        val key = sizeKey ?: return
+        textSizes.sizes = textSizes.sizes.reset(key)
+    }
+    // The grid the pane fits at that size, for the Text size row.
+    var grid by remember(focused?.id) { mutableStateOf<Pair<Int, Int>?>(null) }
 
     // A program's OSC 52 copy goes on the phone's clipboard, from the pane on screen only and only
     // while the app is in front: a copy is the program speaking for the person at the keyboard.
@@ -274,6 +312,59 @@ internal fun TermScreen(
         val v = view ?: return
         val pane = focused ?: return
         sheet = Sheet.Composer(v.sessionId, pane.id, paneTitle(pane, state.blockStatus[pane.id], state.programs[pane.id]))
+    }
+
+    /** The pane's whole output, screen and scrollback, on the clipboard: the palette's, the menu's and the selection's Copy output. */
+    fun copyOutput() {
+        onAct {
+            val out = paneText() ?: return@onAct
+            when {
+                out.text.isBlank() -> toast(context, context.getString(R.string.toast_output_empty))
+                else -> {
+                    clipboardSet(context, out.text)
+                    // Android 13 and later say a copy was made themselves.
+                    if (out.cut) {
+                        toast(context, context.getString(R.string.toast_output_copied_cut))
+                    } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                        toast(context, context.getString(R.string.toast_output_copied))
+                    }
+                }
+            }
+        }
+    }
+
+    fun shareOutput() {
+        onAct {
+            val out = paneText() ?: return@onAct
+            if (out.text.isBlank()) toast(context, context.getString(R.string.toast_output_empty)) else shareText(context, out.text)
+        }
+    }
+
+    /**
+     * Starts a selection on the pane on screen, its last line selected with handles to drag: the
+     * way to select when a long press is set to do something else.
+     */
+    fun selectText() {
+        if (keyboard?.pane?.startSelection() != true) toast(context, context.getString(R.string.select_text_nothing))
+    }
+
+    /** A folder for Insert path, read through the session; null when it could not be in time. */
+    suspend fun listFolder(path: String): DirListing? {
+        val answer = CompletableDeferred<DirListing?>()
+        onAct {
+            try {
+                answer.complete(listDir(path))
+            } finally {
+                answer.complete(null)
+            }
+        }
+        return withTimeoutOrNull(LIST_DIR_WAIT_MS) { answer.await() }
+    }
+
+    /** The path Insert path picked, typed into the pane as a paste: nothing runs until Return. */
+    fun insertPath(word: String) {
+        followNewest()
+        onAct { paste(word) }
     }
 
     /** A quick reply from the key bar or the palette: pasted into the pane on screen, then Return. */
@@ -390,9 +481,9 @@ internal fun TermScreen(
             AppShortcut.NextTab -> stepTab(forward = true)
             AppShortcut.PreviousTab -> stepTab(forward = false)
             AppShortcut.CloseTab -> if (view != null && tab != null) confirm = Confirm(Level.Tab, tab.id, shownTabTitle)
-            AppShortcut.FontBigger -> onFont(fontScale + FONT_STEP)
-            AppShortcut.FontSmaller -> onFont(fontScale - FONT_STEP)
-            AppShortcut.FontReset -> onFont(1f)
+            AppShortcut.FontBigger -> setTabScale(TextScale.bigger(tabScale))
+            AppShortcut.FontSmaller -> setTabScale(TextScale.smaller(tabScale))
+            AppShortcut.FontReset -> resetTabScale()
             AppShortcut.Palette -> sheet = Sheet.Palette
             AppShortcut.Home -> onBack()
             AppShortcut.Help -> sheet = Sheet.Shortcuts
@@ -534,9 +625,11 @@ internal fun TermScreen(
                     TerminalPane(
                         blockId = shown.orEmpty(),
                         feeds = watchPane,
-                        fontScale = fontScale,
+                        fontScale = tabScale,
                         terminalTypeface = terminalTypeface,
-                        onFont = onFont,
+                        onFont = ::setTabScale,
+                        onGrid = { columns, rows -> grid = columns to rows },
+                        onCopyOutput = ::copyOutput,
                         onInput = { bytes -> onAct { writeBytes(bytes) } },
                         onTyped = ::typed,
                         onLink = { link = it },
@@ -583,6 +676,10 @@ internal fun TermScreen(
                             modifier = Modifier.align(Alignment.TopCenter).padding(end = if (chrome.fullScreen) 44.dp else 0.dp),
                         )
                     }
+                }
+                // Once, over the foot of the pane: the gestures nothing on screen names.
+                if (pinchHint && focused != null && sheet == null) {
+                    PinchHint(onDismiss = onPinchHintSeen, modifier = Modifier.align(Alignment.BottomCenter))
                 }
                 // The way back out of full screen, always on screen while it is on: small, in the
                 // corner a video player uses, and over the pane rather than taking a row from it.
@@ -649,6 +746,7 @@ internal fun TermScreen(
                             quickReplies = quickReplies,
                             onQuickReply = ::sendQuickReply,
                             onCompose = ::openComposer,
+                            onEditReplies = if (onQuickReplies != null) { { sheet = Sheet.QuickReplies } } else null,
                         )
                     }
                 }
@@ -714,6 +812,10 @@ internal fun TermScreen(
                         else -> Unit
                     }
                 }
+                // The tab's text size, which only a pinch reached before: − / +, Reset, the grid.
+                if (focused != null && sizeKey != null) {
+                    TextSizeRow(tabScale, fontScale, grid, onScale = ::setTabScale, onReset = ::resetTabScale)
+                }
             }
             Group(stringResource(R.string.level_pane)) {
                 // The top bar's holder chip, which full screen and a short window's keyboard hide.
@@ -728,12 +830,24 @@ internal fun TermScreen(
                 SheetItem(stringResource(R.string.menu_split_below), icon = R.drawable.ic_split_below) { onAct { split(vertical = true) } }
                 if (focused != null) {
                     SheetItem(stringResource(R.string.menu_rename_pane), icon = R.drawable.ic_edit) { rename = Rename(Level.Pane, focused.id, focused.label) }
+                    // Selecting without a long press, which may be set to do something else.
+                    SheetItem(stringResource(R.string.select_text), icon = R.drawable.ic_text_select) { selectText() }
+                    SheetItem(stringResource(R.string.palette_copy_output), icon = R.drawable.ic_copy) { copyOutput() }
+                    SheetItem(stringResource(R.string.palette_share_output), icon = R.drawable.ic_share) { shareOutput() }
+                    SheetItem(stringResource(R.string.insert_path), icon = R.drawable.ic_folder, opens = true) { sheet = Sheet.InsertPath }
                     // A tab's last pane closing closes the tab on Rex: that is Close tab, below.
                     if (panes.size > 1) {
                         SheetItem(stringResource(R.string.menu_close_pane), Colors.danger, icon = R.drawable.ic_close) {
                             confirm = Confirm(Level.Pane, focused.id, focused.label)
                         }
                     }
+                }
+            }
+            // Rex's own two Pane actions that erase what the pane shows: each asks first.
+            if (focused != null) {
+                Group(stringResource(R.string.group_pane_more)) {
+                    SheetItem(stringResource(R.string.palette_clear_terminal), Colors.danger, icon = R.drawable.ic_clear_all) { wipe = Wipe.Clear }
+                    SheetItem(stringResource(R.string.palette_reset_terminal), Colors.danger, icon = R.drawable.ic_restart) { wipe = Wipe.Reset }
                 }
             }
             Group(stringResource(R.string.level_tab)) {
@@ -791,36 +905,17 @@ internal fun TermScreen(
                         stringResource(R.string.palette_clear_terminal),
                         paneGroup,
                         "Clear Terminal com.superlogical.terminal.clear screen scrollback erase cmd+k ctrl+l",
-                    ) { onAct { clearPane() } }
+                    ) { wipe = Wipe.Clear }
                     action(
                         stringResource(R.string.palette_reset_terminal),
                         paneGroup,
                         "Reset Terminal com.superlogical.terminal.reset clear scrollback emulator ris",
-                    ) { onAct { resetPane() } }
+                    ) { wipe = Wipe.Reset }
                     // The whole output, screen and scrollback, each line as the program wrote it.
-                    action(stringResource(R.string.palette_copy_output), paneGroup, "Copy Output terminal format text scrollback") {
-                        onAct {
-                            val out = paneText() ?: return@onAct
-                            when {
-                                out.text.isBlank() -> toast(context, context.getString(R.string.toast_output_empty))
-                                else -> {
-                                    clipboardSet(context, out.text)
-                                    // Android 13 and later say a copy was made themselves.
-                                    if (out.cut) {
-                                        toast(context, context.getString(R.string.toast_output_copied_cut))
-                                    } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                                        toast(context, context.getString(R.string.toast_output_copied))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    action(stringResource(R.string.palette_share_output), paneGroup, "Share Output terminal format text scrollback send") {
-                        onAct {
-                            val out = paneText() ?: return@onAct
-                            if (out.text.isBlank()) toast(context, context.getString(R.string.toast_output_empty)) else shareText(context, out.text)
-                        }
-                    }
+                    action(stringResource(R.string.palette_copy_output), paneGroup, "Copy Output terminal format text scrollback") { copyOutput() }
+                    action(stringResource(R.string.palette_share_output), paneGroup, "Share Output terminal format text scrollback send") { shareOutput() }
+                    action(stringResource(R.string.select_text), paneGroup, "Select Text selection copy mark highlight") { selectText() }
+                    action(stringResource(R.string.insert_path), paneGroup, "Insert Path… terminal.list_dir folder directory browse cd file") { sheet = Sheet.InsertPath }
                     action(stringResource(R.string.find_title), paneGroup, "Find client.find.show search scrollback ctrl+shift+f") { openFind() }
                     action(stringResource(R.string.palette_copy_pane_id), paneGroup, "Copy Block ID pane.copy_id") {
                         clipboardSet(context, focused.id)
@@ -860,14 +955,17 @@ internal fun TermScreen(
                     action(stringResource(if (imeUp) R.string.menu_hide_keyboard else R.string.menu_show_keyboard), phoneGroup, "Show Keyboard client.keyboard.show Hide Keyboard client.keyboard.hide") { toggleKeyboard() }
                 }
                 action(stringResource(if (chrome.fullScreen) R.string.palette_leave_full_screen else R.string.action_full_screen), phoneGroup, "Toggle Full Screen client.window.fullscreen.toggle") { toggleFullScreen() }
-                action(stringResource(R.string.palette_font_bigger), phoneGroup, "Increase Font Size client.font.increase") { onFont(fontScale + FONT_STEP) }
-                action(stringResource(R.string.palette_font_smaller), phoneGroup, "Decrease Font Size client.font.decrease") { onFont(fontScale - FONT_STEP) }
-                action(stringResource(R.string.palette_font_reset), phoneGroup, "Reset Font Size client.font.reset") { onFont(1f) }
+                if (sizeKey != null) {
+                    action(stringResource(R.string.palette_font_bigger), phoneGroup, "Increase Font Size client.font.increase zoom") { setTabScale(TextScale.bigger(tabScale)) }
+                    action(stringResource(R.string.palette_font_smaller), phoneGroup, "Decrease Font Size client.font.decrease zoom") { setTabScale(TextScale.smaller(tabScale)) }
+                    action(stringResource(R.string.palette_font_reset), phoneGroup, "Reset Font Size client.font.reset zoom") { resetTabScale() }
+                }
                 action(stringResource(R.string.palette_back_home), phoneGroup) { onBack() }
                 action(stringResource(R.string.shortcuts_title), phoneGroup, "Keyboard Shortcuts keys help ctrl+shift+/") { sheet = Sheet.Shortcuts }
                 if (focused != null) {
                     // Rex's own Compose Input… opens its composer; the phone's sends one paste.
                     action(stringResource(R.string.composer_title), phoneGroup, "Compose Input client.composer.open prompt message") { openComposer() }
+                    if (onQuickReplies != null) action(stringResource(R.string.quick_replies_edit_all), phoneGroup, "Quick Replies settings edit") { sheet = Sheet.QuickReplies }
                     val replyGroup = stringResource(R.string.palette_group_quick_reply)
                     for (reply in quickReplies) {
                         add(PaletteEntry(QuickReplies.short(reply), replyGroup, null, PaletteRun { sendQuickReply(reply) }, keywords = "send reply snippet $reply"))
@@ -952,6 +1050,7 @@ internal fun TermScreen(
                 ActionSheet(onDismiss = { sheet = null }, title = title) {
                     Group {
                         SheetItem(stringResource(R.string.menu_rename_tab), icon = R.drawable.ic_edit) { rename = Rename(Level.Tab, window.id, window.label) }
+                        SheetItem(stringResource(R.string.status_details), icon = R.drawable.ic_eye) { sheet = Sheet.StatusDetails(window.id) }
                         SheetItem(stringResource(R.string.menu_close_tab), Colors.danger, icon = R.drawable.ic_close) { confirm = Confirm(Level.Tab, window.id, title) }
                     }
                 }
@@ -973,12 +1072,28 @@ internal fun TermScreen(
                 draft = drafts[key],
                 onDraft = { drafts[key] = it },
                 quickReplies = quickReplies,
+                // Return after, as the person last chose it on this host.
+                enterAfter = drafts.enterAfter(draftHost),
+                onEnterAfter = { drafts.setEnterAfter(draftHost, it) },
                 onSend = { text, enter ->
                     followNewest()
-                    onAct { replyTo(open.sessionId, open.blockId, text, enter) }
+                    // The draft stays until Rex has taken the prompt: a send that fails keeps it.
+                    onAct { if (replyTo(open.sessionId, open.blockId, text, enter) && drafts[key] == text) drafts[key] = "" }
                 },
+                onEditReplies = if (onQuickReplies != null) { { sheet = Sheet.QuickReplies } } else null,
+                clearOnSend = false,
                 onDismiss = { sheet = null },
             )
+        }
+        Sheet.InsertPath -> if (focused != null) {
+            InsertPathSheet(
+                list = { path -> listFolder(path) },
+                onInsert = ::insertPath,
+                onDismiss = { sheet = null },
+            )
+        }
+        Sheet.QuickReplies -> if (onQuickReplies != null) {
+            QuickRepliesSheet(QuickReplies(quickReplies), onQuickReplies, onDismiss = { sheet = null })
         }
         is Sheet.PaneActions -> {
             val block = tab?.blocks?.firstOrNull { it.id == open.blockId }
@@ -1083,6 +1198,37 @@ internal fun TermScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirm = null }) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
+            },
+        )
+    }
+
+    wipe?.let { target ->
+        AlertDialog(
+            onDismissRequest = { wipe = null },
+            containerColor = Colors.surface,
+            title = {
+                Text(
+                    stringResource(if (target == Wipe.Clear) R.string.confirm_clear_terminal else R.string.confirm_reset_terminal),
+                    color = Colors.ink,
+                )
+            },
+            text = {
+                Text(
+                    stringResource(if (target == Wipe.Clear) R.string.confirm_clear_terminal_body else R.string.confirm_reset_terminal_body),
+                    color = Colors.muted,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    wipe = null
+                    followNewest()
+                    onAct { if (target == Wipe.Clear) clearPane() else resetPane() }
+                }) {
+                    Text(stringResource(if (target == Wipe.Clear) R.string.action_clear else R.string.confirm_reset_action), color = Colors.danger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { wipe = null }) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
             },
         )
     }
@@ -1598,6 +1744,9 @@ internal fun shortPath(path: String): String {
     val segments = short.split('/').filter { it.isNotEmpty() }
     return "…/" + segments.last()
 }
+
+/** How long Insert path waits for a folder before it says it could not read it. */
+private const val LIST_DIR_WAIT_MS = 15_000L
 
 /** How long a failed action stays on the terminal screen. */
 internal const val NOTICE_MS = 4_000L

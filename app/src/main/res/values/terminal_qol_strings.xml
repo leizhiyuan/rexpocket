@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The ⋮ menu's Text size row: this tab's size, the grid it gives, − / + and Reset. -->
+    <string name="text_size_row">Text size</string>
+    <string name="text_size_detail">%1$d%% · %2$d×%3$d</string>
+    <string name="text_size_percent">%1$d%%</string>
+    <string name="text_size_reset">Reset</string>
+    <string name="text_size_reset_a11y">Reset text size to the default</string>
+    <string name="text_size_state">%1$d percent, %2$d columns by %3$d rows</string>
+    <string name="text_size_state_short">%1$d percent</string>
+    <!-- The one-time hint over the pane. -->
+    <string name="pinch_hint">Pinch with two fingers to change the text size. Hold Return for a new line.</string>
+    <string name="pinch_hint_dismiss">Got it</string>
+    <!-- Settings › Appearance and the Terminal font dialog: the size new tabs start at. -->
+    <string name="appearance_terminal_text_size">Terminal text size</string>
+    <string name="appearance_terminal_text_size_hint">New tabs start at this size. A pinch or ⋮ › Text size changes one tab.</string>
+    <string name="appearance_terminal_text_size_short">Where new tabs start</string>
+    <string name="terminal_font_size">Text size for new tabs: %1$d%%</string>
+
+    <!-- Selection without a long press. -->
+    <string name="select_text">Select text</string>
+    <string name="select_text_nothing">Nothing on screen to select yet</string>
+    <string name="selection_select_screen">Select screen</string>
+
+    <!-- Clear and Reset terminal ask first. -->
+    <string name="confirm_clear_terminal">Clear the terminal?</string>
+    <string name="confirm_clear_terminal_body">The screen and the scrollback are erased; the line being typed stays. This cannot be undone.</string>
+    <string name="confirm_reset_terminal">Reset the terminal?</string>
+    <string name="confirm_reset_terminal_body">The terminal starts over, cleared, as if just opened. The program in it keeps running.</string>
+    <string name="confirm_reset_action">Reset</string>
+    <string name="group_pane_more">More</string>
+
+    <!-- Quick replies, from the key bar's panel and the composer. -->
+    <string name="quick_replies_edit_all">Edit quick replies</string>
+    <string name="quick_reply_deleted">Deleted “%1$s”</string>
+    <string name="quick_replies_restore">Restore defaults</string>
+    <string name="quick_replies_restore_hint">Adds back yes, continue and /compact</string>
+
+    <!-- Return held. -->
+    <string name="key_enter_new_line">New line</string>
+
+    <!-- The composer. -->
+    <string name="composer_restore">Restore</string>
+    <string name="composer_restore_a11y">Restore the text just cleared</string>
+
+    <!-- Insert path: a folder of the host, and the path picked typed into the pane. -->
+    <string name="insert_path">Insert path</string>
+    <string name="insert_path_here">Insert this folder</string>
+    <string name="insert_path_up">Up to %1$s</string>
+    <string name="insert_path_show_hidden">Show hidden</string>
+    <string name="insert_path_hide_hidden">Hide hidden</string>
+    <string name="insert_path_loading">Reading the folder…</string>
+    <string name="insert_path_missing">This folder does not exist</string>
+    <string name="insert_path_not_dir">This is not a folder</string>
+    <string name="insert_path_denied">Rex is not allowed to read this folder</string>
+    <string name="insert_path_failed">Could not list this folder</string>
+    <string name="insert_path_empty">Nothing in this folder</string>
+    <string name="insert_path_truncated">Only the first %1$d are listed</string>
+</resources>

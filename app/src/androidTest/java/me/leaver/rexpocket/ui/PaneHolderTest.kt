@@ -37,7 +37,6 @@ class PaneHolderTest {
                     state = PocketState(phase = Phase.Live, activeSessionId = SESSION, view = view, owning = owning, released = released),
                     fontScale = 1f,
                     terminalTypeface = Typeface.MONOSPACE,
-                    onFont = {},
                     onBack = {},
                     onOpenSession = {},
                     watchPane = { emptyFlow() },

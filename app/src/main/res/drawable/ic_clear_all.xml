@@ -1,0 +1,10 @@
+<!-- A "clear_all" mark in the Material Symbols Rounded style, drawn for RexPocket. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+  <path
+      android:fillColor="#FF000000"
+      android:pathData="M200,680Q183,680 171.5,668.5Q160,657 160,640Q160,623 171.5,611.5Q183,600 200,600L600,600Q617,600 628.5,611.5Q640,623 640,640Q640,657 628.5,668.5Q617,680 600,680L200,680ZM280,520Q263,520 251.5,508.5Q240,497 240,480Q240,463 251.5,451.5Q263,440 280,440L680,440Q697,440 708.5,451.5Q720,463 720,480Q720,497 708.5,508.5Q697,520 680,520L280,520ZM360,360Q343,360 331.5,348.5Q320,337 320,320Q320,303 331.5,291.5Q343,280 360,280L760,280Q777,280 788.5,291.5Q800,303 800,320Q800,337 788.5,348.5Q777,360 760,360L360,360Z"/>
+</vector>

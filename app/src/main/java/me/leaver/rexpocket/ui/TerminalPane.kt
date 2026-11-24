@@ -93,6 +93,10 @@ internal fun TerminalPane(
     onError: (Exception) -> Unit = {},
     /** A key from a keyboard, offered before the terminal gets it; true when the screen took it. */
     onShortcut: (android.view.KeyEvent) -> Boolean = { false },
+    /** The grid the pane fits, in columns and rows, as it changes. */
+    onGrid: (columns: Int, rows: Int) -> Unit = { _, _ -> },
+    /** Copy output in the selection's menu: the pane's whole output. */
+    onCopyOutput: () -> Unit = {},
 ) {
     val context = LocalContext.current
     // Replaced when Rex sends a new snapshot: a reconnect, or a pane whose stream started over.
@@ -111,6 +115,8 @@ internal fun TerminalPane(
     val currentCursor = rememberUpdatedState(onCursorTop)
     val currentDrawn = rememberUpdatedState(onDrawnBottom)
     val currentShortcut = rememberUpdatedState(onShortcut)
+    val currentGrid = rememberUpdatedState(onGrid)
+    val currentCopyOutput = rememberUpdatedState(onCopyOutput)
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
 
     LaunchedEffect(blockId, attempt) {
@@ -175,6 +181,8 @@ internal fun TerminalPane(
             view.onCursorRow = { currentCursor.value(it) }
             view.onDrawnBottom = { currentDrawn.value(it) }
             view.onShortcut = { currentShortcut.value(it) }
+            view.onGrid = { columns, rows -> currentGrid.value(columns, rows) }
+            view.onCopyOutput = { currentCopyOutput.value() }
         }
     }
     // With a keyboard on the desk the pane holds the focus itself, so its keys reach the program

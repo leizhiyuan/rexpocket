@@ -55,7 +55,6 @@ class FollowInputTest {
                     state = PocketState(phase = Phase.Live, activeSessionId = SESSION, view = view),
                     fontScale = 1f,
                     terminalTypeface = Typeface.MONOSPACE,
-                    onFont = {},
                     onBack = {},
                     onOpenSession = {},
                     watchPane = { flowOf(TerminalFeed.Snapshot(snapshot()), TerminalFeed.Output(history)) },

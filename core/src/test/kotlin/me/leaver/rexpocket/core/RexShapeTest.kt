@@ -327,6 +327,17 @@ class RexShapeTest {
                 phone.call("block.method", pane(s, split).put("method", "clear"))
                 phone.call("block.method", pane(s, split).put("method", "reset"))
             }
+            step("phone lists a folder with a file, then one that is missing (Insert path)") {
+                val dir = java.nio.file.Files.createTempDirectory("rexpocket-shape").toFile()
+                try {
+                    File(dir, "sub").mkdir()
+                    File(dir, "file.txt").writeText("x")
+                    phone.call("block.method", pane(s, split).put("method", "list_dir").put("args", JSONObject().put("path", dir.path).put("files", true)))
+                    phone.call("block.method", pane(s, split).put("method", "list_dir").put("args", JSONObject().put("path", File(dir, "nope").path)))
+                } finally {
+                    dir.deleteRecursively()
+                }
+            }
             step("a program working in the split pane exits with 3") {
                 programs.report(phone, s, split, "state=working:msg=" + b64("busy"), "working", msg = "busy")
                 Thread.sleep(quiet)

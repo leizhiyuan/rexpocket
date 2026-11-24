@@ -415,8 +415,22 @@ class RexViewModel @JvmOverloads constructor(
         quickReplies.value = next
     }
 
-    /** The prompt composer's drafts, by host and pane, while the app runs. */
-    val drafts = PromptDrafts()
+    private val terminalPrefs = app.getSharedPreferences(TERMINAL_PREFS, android.content.Context.MODE_PRIVATE)
+
+    /** The prompt composer's drafts, by host and pane, while the app runs, and its Return after by host, kept. */
+    val drafts = PromptDrafts(terminalPrefs)
+
+    /** Each tab's own text size while the app runs; [fontScale] is the default. */
+    val textSizes = TabTextSizeState()
+
+    /** True until the terminal's one-time pinch hint has been dismissed, or a size changed. */
+    val pinchHint = MutableStateFlow(!terminalPrefs.getBoolean(KEY_PINCH_HINT_SEEN, false))
+
+    fun pinchHintSeen() {
+        if (!pinchHint.value) return
+        pinchHint.value = false
+        terminalPrefs.edit().putBoolean(KEY_PINCH_HINT_SEEN, true).apply()
+    }
 
     /** Drops the folds of [hostId]'s sessions that are not in [alive], so gone sessions do not pile up. */
     private fun pruneFolds(hostId: String, alive: Collection<String>) {
@@ -1316,8 +1330,9 @@ class RexViewModel @JvmOverloads constructor(
         route.value = Route.Home
     }
 
+    /** The terminal's default text size, for new tabs and every tab that has not set its own. */
     fun setFont(scale: Float) {
-        val next = scale.coerceIn(0.7f, 1.8f)
+        val next = me.leaver.rexpocket.core.TextScale.clamp(scale)
         fontScale.value = next
         store.setFontScale(next)
     }
@@ -1641,3 +1656,7 @@ internal const val CONN_TAG = "RexPocketConn"
 
 /** The saved-state key that says the terminal was on screen; see [RexViewModel.restore]. */
 internal const val KEY_TERMINAL_OPEN = "terminal_open"
+
+/** The terminal's own small preferences: the pinch hint once seen, the composer's Return after by host. */
+internal const val TERMINAL_PREFS = "terminal"
+private const val KEY_PINCH_HINT_SEEN = "pinch_hint_seen"

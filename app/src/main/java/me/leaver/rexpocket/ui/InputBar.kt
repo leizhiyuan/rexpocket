@@ -148,6 +148,8 @@ internal fun KeyBar(
     onQuickReply: (String) -> Unit = {},
     /** The Compose key: the prompt composer for the pane. */
     onCompose: () -> Unit = {},
+    /** Edit quick replies, at the foot of the Quick replies panel; null leaves it out. */
+    onEditReplies: (() -> Unit)? = null,
 ) {
     val scroll = rememberScrollState()
     val pill = RoundedCornerShape(50)
@@ -189,6 +191,7 @@ internal fun KeyBar(
                                 key,
                                 open = repliesOpen,
                                 onToggle = { pinned = if (repliesOpen) null else REPLIES_PANEL },
+                                onEdit = onEditReplies?.let { edit -> { pinned = null; edit() } },
                             ) { reply ->
                                 pinned = null
                                 onQuickReply(reply)
@@ -440,15 +443,18 @@ private fun BarKeyFace(barKey: BarKey, modifier: Modifier, plate: Color, a: KeyA
             }
         }
         BarKey.Tab -> Key(stringResource(R.string.key_tab), modifier, plate = plate, icon = R.drawable.ic_tab_key) { a.onKey(KeyPress("tab", 0), "") }
+        // Held, a new line (Shift+Return): said as the long press's label, and offered to TalkBack
+        // as an action of its own, since a held key is nothing it can find.
         BarKey.Enter -> Key(
             stringResource(R.string.action_enter),
-            modifier,
+            modifier.testTag(ENTER_KEY_TAG),
             plate = plate,
             icon = R.drawable.ic_return,
             onLongClick = {
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 a.onNewLine()
             },
+            longClickLabel = stringResource(R.string.key_enter_new_line),
         ) { a.onKey(KeyPress("enter", 0), "") }
         BarKey.Ctrl -> CtrlKey(a.mods[Mod.Ctrl], modifier, plate, onTap = { a.onMod(Mod.Ctrl) }) { letter ->
             a.onKey(KeyPress("key_$letter", letter.code, text = letter.toString()), "ctrl")
@@ -503,6 +509,8 @@ private const val REPLIES_PANEL = "@replies"
 
 internal const val REPLIES_KEY_TAG = "quick-replies-key"
 internal const val REPLIES_PANEL_TAG = "quick-replies-panel"
+internal const val REPLIES_EDIT_TAG = "quick-replies-edit"
+internal const val ENTER_KEY_TAG = "key-enter"
 
 /**
  * The Quick replies key: a tap pins a panel of the person's quick replies above the bar, as a
@@ -511,7 +519,14 @@ internal const val REPLIES_PANEL_TAG = "quick-replies-panel"
  * panel says so; they are made in Settings › Quick replies.
  */
 @Composable
-private fun RepliesKey(replies: List<String>, modifier: Modifier, open: Boolean, onToggle: () -> Unit, onPick: (String) -> Unit) {
+private fun RepliesKey(
+    replies: List<String>,
+    modifier: Modifier,
+    open: Boolean,
+    onToggle: () -> Unit,
+    onEdit: (() -> Unit)? = null,
+    onPick: (String) -> Unit,
+) {
     val label = stringResource(R.string.key_quick_replies)
     val state = stringResource(if (open) R.string.arrows_pinned else R.string.mod_off)
     val density = LocalDensity.current
@@ -576,6 +591,18 @@ private fun RepliesKey(replies: List<String>, modifier: Modifier, open: Boolean,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
+                            }
+                        }
+                        // With none the panel would only say so; with some, a way to change them.
+                        if (onEdit != null) {
+                            Box(
+                                Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.chip))
+                                    .clickable(role = Role.Button, onClick = onEdit)
+                                    .testTag(REPLIES_EDIT_TAG)
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.CenterStart,
+                            ) {
+                                Text(stringResource(R.string.quick_replies_edit_all), color = Colors.accent, fontSize = TextStyles.label, maxLines = 1)
                             }
                         }
                     }
@@ -1093,13 +1120,21 @@ internal fun Key(
     onLongClick: (() -> Unit)? = null,
     /** What TalkBack says for a key whose face is a mark rather than its name. */
     description: String? = null,
+    /** What the long press does, in words: TalkBack's label for it and a custom action of its own. */
+    longClickLabel: String? = null,
     onClick: () -> Unit,
 ) {
     val spoken = description ?: label.takeIf { icon != null }
+    val held = if (onLongClick != null && longClickLabel != null) {
+        Modifier.semantics { customActions = listOf(CustomAccessibilityAction(longClickLabel) { onLongClick(); true }) }
+    } else {
+        Modifier
+    }
     Box(
         modifier.height(KEY_HEIGHT).clip(RoundedCornerShape(Radius.chip))
             .background(plate)
-            .combinedClickable(role = Role.Button, onLongClick = onLongClick, onClick = onClick)
+            .combinedClickable(role = Role.Button, onLongClick = onLongClick, onLongClickLabel = longClickLabel, onClick = onClick)
+            .then(held)
             .then(if (spoken != null) Modifier.semantics { contentDescription = spoken } else Modifier)
             .padding(horizontal = KEY_PAD),
         contentAlignment = Alignment.Center,

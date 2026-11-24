@@ -138,6 +138,9 @@ response block.method {data:str,eof:true,id:num,total:num}
 ## phone clears the pane, then resets it
 response block.method {}
 response block.method {}
+## phone lists a folder with a file, then one that is missing (Insert path)
+response block.method {entries:[{file:true,name:str}|{name:str}],home:str,path:str,status:str,truncated:false}
+response block.method {entries:[],home:str,path:str,status:str,truncated:false}
 ## a program working in the split pane exits with 3
 response com.superlogical.terminal.write {bytes_written:num}
 event block_event program_status_changed {id:"",reason:"report",record:{msg:str,owner:{name:str,pid:num},state:"working",updated_at:<time>}}

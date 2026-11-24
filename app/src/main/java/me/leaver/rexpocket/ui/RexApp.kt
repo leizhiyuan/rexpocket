@@ -58,6 +58,7 @@ fun RexPocketApp(
     val hosts by model.hosts.collectAsState()
     val pocket by model.pocket.collectAsState()
     val font by model.fontScale.collectAsState()
+    val pinchHint by model.pinchHint.collectAsState()
     val terminalTypeface by model.terminalTypeface.collectAsState()
     val terminalFont by model.terminalFont.collectAsState()
     var fontSettingsOpen by remember { mutableStateOf(false) }
@@ -252,6 +253,8 @@ fun RexPocketApp(
                     onReopenLastTab = model::setReopenLastTab,
                     appearance = appearance,
                     onAppearance = model::setAppearance,
+                    terminalTextSize = font,
+                    onTerminalTextSize = model::setFont,
                     onImportHosts = model.hostImport::open,
                     onBackup = model.settingsBackup::open,
                     hostTester = model.hostTester,
@@ -267,7 +270,6 @@ fun RexPocketApp(
                     state = pocket,
                     fontScale = font,
                     terminalTypeface = terminalTypeface,
-                    onFont = model::setFont,
                     onBack = model::showHome,
                     onOpenSession = model::openSession,
                     onOpenTab = model::openTab,
@@ -285,6 +287,10 @@ fun RexPocketApp(
                     drafts = model.drafts,
                     draftHost = model.host?.id,
                     seenMark = { block -> model.host?.id?.let { seenMarks[HomeMarks.key(it, block)] } },
+                    textSizes = model.textSizes,
+                    pinchHint = pinchHint,
+                    onPinchHintSeen = model::pinchHintSeen,
+                    onQuickReplies = model::setQuickReplies,
                 )
             }
             when (layoutFor(window, hasHosts = hosts.isNotEmpty(), terminalOpen = route == Route.Term)) {
@@ -353,7 +359,7 @@ fun RexPocketApp(
             )
         }
         if (fontSettingsOpen) {
-            FontSettingsDialog(terminalFont, terminalTypeface, model::selectTerminalFont) { fontSettingsOpen = false }
+            FontSettingsDialog(terminalFont, terminalTypeface, model::selectTerminalFont, fontScale = font, onFontScale = model::setFont) { fontSettingsOpen = false }
         }
         if (tailnetOpen) {
             TailnetDialog(

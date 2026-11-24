@@ -6,7 +6,14 @@ import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.AppTheme
 import me.leaver.rexpocket.core.Appearance
 import me.leaver.rexpocket.core.TerminalColors
+import me.leaver.rexpocket.core.TextScale
 import me.leaver.rexpocket.core.TextSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import me.leaver.rexpocket.core.UpdateChannel
 
 // Settings › Appearance, and the choices of the other Settings rows that pick from named options.
@@ -15,13 +22,25 @@ import me.leaver.rexpocket.core.UpdateChannel
 /** The open Appearance page, for the screen tests. */
 internal const val APPEARANCE_TAG = "appearance"
 
+/** Appearance's Terminal text size row. */
+internal const val TERMINAL_TEXT_SIZE_TAG = "terminal-text-size"
+
 /**
  * Settings › Appearance: the app's theme, the terminal's colours apart from it, and the app's text
  * size. A pick shows at once, under the sheet too, since RexTheme reads the same value the rows do.
  * The text size says under its label that the terminal keeps its own size.
  */
 @Composable
-internal fun AppearanceSheet(appearance: Appearance, onAppearance: (Appearance) -> Unit, onDismiss: () -> Unit) {
+internal fun AppearanceSheet(
+    appearance: Appearance,
+    onAppearance: (Appearance) -> Unit,
+    onDismiss: () -> Unit,
+    /** The terminal's text size for new tabs; see TextSize.kt. */
+    terminalTextSize: Float = TextScale.DEFAULT,
+    onTerminalTextSize: (Float) -> Unit = {},
+) {
+    var sizeOpen by rememberSaveable { mutableStateOf(false) }
+    if (sizeOpen) DefaultTextSizeDialog(terminalTextSize, onTerminalTextSize) { sizeOpen = false }
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.appearance_title)) {
         Group {
             ChoiceRow(stringResource(R.string.appearance_app), AppTheme.entries, appearance.app, ::choice) {
@@ -40,6 +59,16 @@ internal fun AppearanceSheet(appearance: Appearance, onAppearance: (Appearance) 
             ) {
                 onAppearance(appearance.copy(text = it))
             }
+            // The terminal's own size, which the app's text size above leaves alone.
+            SheetItem(
+                stringResource(R.string.appearance_terminal_text_size),
+                detail = stringResource(R.string.text_size_percent, TextScale.percent(terminalTextSize)),
+                icon = R.drawable.ic_text_fields,
+                supporting = stringResource(R.string.appearance_terminal_text_size_short),
+                keepOpen = true,
+                opens = true,
+                modifier = Modifier.testTag(TERMINAL_TEXT_SIZE_TAG),
+            ) { sizeOpen = true }
         }
     }
 }

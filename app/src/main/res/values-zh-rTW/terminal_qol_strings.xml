@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="text_size_row">文字大小</string>
+    <string name="text_size_detail">%1$d%% · %2$d×%3$d</string>
+    <string name="text_size_percent">%1$d%%</string>
+    <string name="text_size_reset">重設</string>
+    <string name="text_size_reset_a11y">將文字大小重設為預設值</string>
+    <string name="text_size_state">百分之 %1$d，%2$d 欄 %3$d 列</string>
+    <string name="text_size_state_short">百分之 %1$d</string>
+    <string name="pinch_hint">以兩指縮放即可改變文字大小。按住 Return 可換行。</string>
+    <string name="pinch_hint_dismiss">知道了</string>
+    <string name="appearance_terminal_text_size">終端機文字大小</string>
+    <string name="appearance_terminal_text_size_hint">新分頁以這個大小開啟。縮放或 ⋮ › 文字大小只會改變一個分頁。</string>
+    <string name="appearance_terminal_text_size_short">新分頁的起始大小</string>
+    <string name="terminal_font_size">新分頁的文字大小：%1$d%%</string>
+
+    <string name="select_text">選取文字</string>
+    <string name="select_text_nothing">畫面上還沒有可選取的內容</string>
+    <string name="selection_select_screen">選取整個畫面</string>
+
+    <string name="confirm_clear_terminal">要清除終端機嗎？</string>
+    <string name="confirm_clear_terminal_body">畫面和捲動記錄都會清除，正在輸入的那一行會保留。此動作無法復原。</string>
+    <string name="confirm_reset_terminal">要重設終端機嗎？</string>
+    <string name="confirm_reset_terminal_body">終端機會重新開始並清空，如同剛開啟。其中的程式會繼續執行。</string>
+    <string name="confirm_reset_action">重設</string>
+    <string name="group_pane_more">更多</string>
+
+    <string name="quick_replies_edit_all">編輯快速回覆</string>
+    <string name="quick_reply_deleted">已刪除「%1$s」</string>
+    <string name="quick_replies_restore">還原預設值</string>
+    <string name="quick_replies_restore_hint">重新加入 yes、continue 和 /compact</string>
+
+    <string name="key_enter_new_line">換行</string>
+
+    <string name="composer_restore">還原</string>
+    <string name="composer_restore_a11y">還原剛清除的文字</string>
+
+    <string name="insert_path">插入路徑</string>
+    <string name="insert_path_here">插入此資料夾</string>
+    <string name="insert_path_up">回到上層 %1$s</string>
+    <string name="insert_path_show_hidden">顯示隱藏項目</string>
+    <string name="insert_path_hide_hidden">不顯示隱藏項目</string>
+    <string name="insert_path_loading">正在讀取資料夾…</string>
+    <string name="insert_path_missing">此資料夾不存在</string>
+    <string name="insert_path_not_dir">這不是資料夾</string>
+    <string name="insert_path_denied">Rex 無權讀取此資料夾</string>
+    <string name="insert_path_failed">無法列出此資料夾</string>
+    <string name="insert_path_empty">此資料夾是空的</string>
+    <string name="insert_path_truncated">只列出了前 %1$d 項</string>
+</resources>

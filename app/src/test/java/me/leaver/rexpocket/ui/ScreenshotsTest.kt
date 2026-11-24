@@ -79,7 +79,6 @@ class ScreenshotsTest {
                     state = PocketState(),
                     fontScale = 1f,
                     terminalTypeface = Typeface.MONOSPACE,
-                    onFont = {},
                     onBack = {},
                     onOpenSession = {},
                     watchPane = { emptyFlow() },
