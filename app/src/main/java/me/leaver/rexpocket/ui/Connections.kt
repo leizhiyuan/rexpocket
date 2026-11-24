@@ -239,6 +239,7 @@ class Connections private constructor(private val app: Application, val nodes: T
             changes = listOf(tailnet, _links, settledAway, Alerts.enabled, profiles),
             read = policyStore::read,
             write = policyStore::write,
+            networkReady = { network.awaitValidated(NETWORK_READY_MS) },
         )
     }
 
@@ -259,8 +260,20 @@ class Connections private constructor(private val app: Application, val nodes: T
     /** The pane on the terminal screen, while it is on screen: its news is seen as it comes. */
     val shown = MutableStateFlow<AlertTarget?>(null)
 
-    /** Wi-Fi to mobile data and back: every host redials at once instead of waiting for its old socket to die. */
-    private val network = NetworkWatcher(app) { scope.launch { fleet.reconnectAll() } }.also { it.start() }
+    /**
+     * Wi-Fi to mobile data and back: every host redials at once instead of waiting for its old
+     * socket to die, and a tailnet node in trouble starts again. A network Android has just
+     * validated gives such a node, or a start that failed on the network, another go.
+     */
+    private val network = NetworkWatcher(
+        app,
+        onValidated = { scope.launch { control.networkChanged() } },
+    ) {
+        scope.launch {
+            control.networkChanged()
+            fleet.reconnectAll()
+        }
+    }.also { it.start() }
 
     private val alertActions: suspend (AlertTarget, AlertAction) -> AlertOutcome = { target, action -> onAlertAction(target, action) }
 
@@ -1185,6 +1198,9 @@ private const val ACTION_CONNECT_MS = 6_000L
 
 /** How long a connection waits for the tailnet node to come up before dialing anyway. */
 internal const val NODE_READY_MS = 30_000L
+
+/** How long a watched tailnet node's start waits for a validated network when one is coming. */
+private const val NETWORK_READY_MS = 5_000L
 
 /** How long a running node may take to list the host as a peer before it is dialed anyway. */
 private const val PEER_READY_MS = 10_000L

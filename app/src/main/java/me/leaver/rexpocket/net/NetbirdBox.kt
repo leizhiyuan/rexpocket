@@ -26,6 +26,11 @@ class NetbirdBox(context: Context) : TailnetBox(context) {
 
     override val stateDirectory: File get() = File(context.filesDir, "netbird")
 
+    // On Android Netbird has no network monitor ("not supported on mobile platforms", and off under
+    // netstack): a control connection that failed on a blocked or changed network can stay down,
+    // the node "Starting" with a management DeadlineExceeded. The control restarts it.
+    override val watched: Boolean get() = true
+
     override fun open(config: TailnetConfig, hostname: String, events: NodeEvents): RunningNode {
         val netbird = config as? NetbirdConfig ?: throw IllegalArgumentException("Netbird needs a Netbird config")
         val node = Netbird.start(
@@ -52,7 +57,8 @@ class NetbirdBox(context: Context) : TailnetBox(context) {
         override fun ping(ip: String, timeoutMillis: Int): String = node.ping(ip, timeoutMillis)
         override fun dialError(host: String): String = node.dialError(host)
 
-        // Netbird's engine follows the network on its own, so there is nothing to hand it.
+        // The embedded client has no hook for a new network; a node it left stuck is restarted by
+        // the control's watchdog instead (see [watched]).
         override fun networkChanged() = Unit
 
         override fun close() = node.close()

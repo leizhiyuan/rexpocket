@@ -20,6 +20,7 @@
         <item quantity="other">%2$s 通过它连接，也会一起断开。它会保持关闭，直到你连接它或它上面的主机。</item>
     </plurals>
     <string name="tailnet_connect_item">连接 %1$s</string>
+    <string name="tailnet_restart_item">重新启动</string>
     <string name="tailnet_disconnect_item">断开 %1$s</string>
 
     <string name="conn_group_open">RexPocket 打开时</string>

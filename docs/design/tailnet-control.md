@@ -66,6 +66,35 @@ changed setting (a new name) starts it again. It acts only from the first screen
 restart without one (`begin`), and stops everything with the screen when background mode is off,
 or with the watch's Stop (`stopAll`).
 
+### Watchdog
+
+A node can get stuck: its control connection fails and does not come back on its own (a dial made
+while Android still blocks the app's network, back in the foreground; a stream that died in Doze;
+a network change the node never hears of, since some backends have no network monitor on
+Android). It then stays "Starting" with a health line such as `management: rpc error: code =
+DeadlineExceeded`, and a connection through it gets no answer. Leaving the tailnet and joining it
+again cured it by hand; the control does that itself for a node that says it needs it
+(`TailnetNode.watched`):
+
+- **Watchdog.** While a watched node runs and its plan is not down, a node in trouble (core
+  `nodeTrouble`: "Starting", with or without a failing control connection) for 20 s is stopped and
+  started again; the next restart waits a backoff (15 s, doubling, at most 5 minutes) on top of the
+  20 s. A node that runs again resets it.
+- **Never a stuck node reused.** A connect's start that would reuse the running node restarts it
+  first when it has been in trouble for the whole 20 s.
+- **Network changes.** A new default network, or one Android has just validated, restarts a watched
+  node in trouble at once; a healthy one is left alone, since a restart drops its connections. A
+  start that failed on the network (core `transientStartFailure`) is tried again then too, and
+  otherwise after the backoff while the plan is up.
+- **Validated first.** A watched node's start waits up to 5 s for a validated network.
+- **One failure, not a queue of them.** Asks that waited behind a start that failed take its
+  failure instead of each starting the node again (each such start waits out a 30 s dial).
+- **By hand.** The tailnet's sheet has Restart while the node runs or starts.
+
+Settings › Diagnostics has the lines ("tailnet …: restarting the node (still starting · management
+· DeadlineExceeded)", "… the network did not answer; starting it again in 15s") and, in the
+report, "tailnet restarts" with the count and the last reason.
+
 ### Defaults and what they keep
 
 The defaults are the app's behaviour before this change: a joined tailnet is up while the app is
@@ -80,7 +109,8 @@ kept). New is only that it now stops once its last kept host is gone, after the 
   card stays for the stages that need the person (sign in, approval, a failed start).
 - **The tailnet's sheet** (the chip, Settings › Tailnet once joined, a tailnet host's "Tailnet
   details"). Under its status, the line "Used by 2 hosts" or "No host uses it · stops in 4
-  minutes", then Connect, Cancel, Retry now and Disconnect as a host's sheet has them, then
+  minutes", then Connect, Cancel, Retry now and Disconnect as a host's sheet has them (and Restart
+  while the node runs or starts), then
   "Connection and notifications" (its page) and "Tailnet settings" (the join dialog).
 - **Home ⋮.** "Connect Tailscale" or "Disconnect Tailscale", beside Tailnet.
 - **Pages.** A host's page and a tailnet's page are one layout (`ConnectablePages.kt`): the state
@@ -202,6 +232,13 @@ That is in "Checks on a real phone" below.
   Always with no host; a following tailnet does not come up without a host and does with one; a
   tailnet let go keeps its hosts from connecting; one disconnected by hand stays off; the watch
   notification's tailnet line and action; a tile bound to the tailnet connecting and disconnecting it.
+- `core`: `TailnetWatchdogTest`: what is trouble, which start failures are retried, the backoff,
+  the bound only while needed, the backoff after a restart, health resetting it.
+- `app` (JVM): `TailnetWatchdogTest`: a connect is not handed a node stuck "Starting" with a
+  DeadlineExceeded (it is restarted), a healthy one is reused; the watchdog restarts a stuck node and
+  then backs off; a stopped node is not watched; one that recovers is not restarted; a network
+  change restarts one in trouble and not a healthy one; asks queued behind a failed start take its
+  failure; a start that failed on the network is tried again on the next one.
 - `core`: `TailnetProfilesTest`: the first account always there, add, activate, rename, remove
   (never the one in use or the last), names kept apart, a host's account or the one in use.
 - `app` (sharedTest): `TailnetAccountsTest`: an account added on the page runs at once on its own

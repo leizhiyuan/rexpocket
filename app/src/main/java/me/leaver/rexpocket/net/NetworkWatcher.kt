@@ -3,31 +3,78 @@ package me.leaver.rexpocket.net
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.NetworkCapabilities
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import me.leaver.rexpocket.diagnostics.Diagnostics
 
 /**
  * Calls [onChange] when the phone's default network becomes a different one: Wi-Fi to mobile data,
  * or back after a gap. A socket on the network that went away can take a minute of pings to notice,
  * so the connection is better redialed at once. The first network seen after [start] is not a change.
+ *
+ * It also says whether the default network is validated (Android checked it reaches the internet),
+ * and calls [onValidated] when it becomes so: back in the foreground, the app's network is
+ * "available" a moment before it is usable, and a dial in between fails.
  */
-class NetworkWatcher(context: Context, private val onChange: () -> Unit) {
+class NetworkWatcher(
+    context: Context,
+    private val onValidated: () -> Unit = {},
+    private val onChange: () -> Unit,
+) {
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
     private var current: Network? = null
     private var started = false
+
+    private val _validated = MutableStateFlow(false)
+
+    /** Whether the default network is there and validated. */
+    val validated: StateFlow<Boolean> = _validated
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             val previous = current
             current = network
             Diagnostics.event(TAG, "network available (was ${previous != null})")
+            if (previous != network) _validated.value = isValidated(network)
             if (started && previous != network) onChange()
             started = true
         }
 
+        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+            if (network != current) return
+            val now = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            val was = _validated.value
+            _validated.value = now
+            if (now && !was) {
+                Diagnostics.event(TAG, "network validated")
+                onValidated()
+            }
+        }
+
         override fun onLost(network: Network) {
-            if (current == network) current = null
+            if (current == network) {
+                current = null
+                _validated.value = false
+            }
             Diagnostics.event(TAG, "network lost")
         }
+    }
+
+    private fun isValidated(network: Network): Boolean =
+        runCatching { connectivity?.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) }
+            .getOrNull() == true
+
+    /**
+     * Waits up to [timeoutMs] for a validated default network; returns at once when there is one.
+     * With none coming in that time it returns anyway: the caller tries, and is told of the next.
+     */
+    suspend fun awaitValidated(timeoutMs: Long) {
+        if (_validated.value) return
+        val ok = withTimeoutOrNull(timeoutMs) { _validated.first { it } } != null
+        Diagnostics.event(TAG, if (ok) "waited for a validated network" else "no validated network after ${timeoutMs / 1000}s; starting anyway")
     }
 
     fun start() {
@@ -38,6 +85,7 @@ class NetworkWatcher(context: Context, private val onChange: () -> Unit) {
         runCatching { connectivity?.unregisterNetworkCallback(callback) }
         started = false
         current = null
+        _validated.value = false
     }
 
     private companion object {

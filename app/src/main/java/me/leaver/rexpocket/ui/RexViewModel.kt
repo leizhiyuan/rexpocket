@@ -720,6 +720,13 @@ class RexViewModel @JvmOverloads constructor(
         control.retry(current.backend.storageKey)
     }
 
+    /** Stops the joined tailnet's node and starts it again: the tailnet sheet's Restart. */
+    fun restartTailnetNode() {
+        val current = tailnet.value
+        if (!current.enabled) return
+        control.restartNode(current.backend.storageKey, "by hand")
+    }
+
     /** Connects the joined tailnet by hand; it stays as its choices say from then on. */
     fun connectTailnet(hosts: List<SavedHost> = emptyList()) {
         connections.connectTailnet(tailnet.value.backend.storageKey, hosts)
@@ -1243,6 +1250,9 @@ class RexViewModel @JvmOverloads constructor(
                 add(ReportedFact("tailnet stage", tailnetStage.value.javaClass.simpleName))
                 add(ReportedFact("tailnet devices", "${st.peers.size}" + if (st.peers.any { it.online != null }) " · $online online" else ""))
                 if (st.health.isNotEmpty()) add(ReportedFact("tailnet health", st.health.joinToString(" | ")))
+                control.run(node.backend.storageKey).takeIf { it.restarts > 0 }?.let { r ->
+                    add(ReportedFact("tailnet restarts", "${r.restarts} · last: ${r.lastRestart.orEmpty()}"))
+                }
             }
             connectProgress.value?.let { p -> add(ReportedFact("connect step", "${p.step} · ${p.took.joinToString { "${it.first} ${it.second}ms" }}")) }
             tailnetPath.value?.let { add(ReportedFact("tailnet path", it.toString())) }

@@ -112,6 +112,14 @@ interface TailnetNode {
     /** Stops the node off the caller's thread; closing it can talk to the control plane. */
     fun stopAsync()
 
+    /**
+     * Whether [me.leaver.rexpocket.ui.TailnetControl]'s watchdog restarts this node when it stays
+     * starting with its control connection failing ([me.leaver.rexpocket.core.nodeTrouble]): a
+     * node that does not recover from that by itself. Off for a node that follows the network on
+     * its own.
+     */
+    val watched: Boolean get() = false
+
     /** Deletes the login of account [profile], which is not running: the account was removed. */
     fun forgetProfile(profile: String) = Unit
 

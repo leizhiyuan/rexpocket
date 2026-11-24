@@ -155,6 +155,8 @@ internal fun HomeScreen(
     onSignIn: (String) -> Unit = {},
     /** Starts the joined node again after it failed to start. */
     onTailnetRetry: () -> Unit = {},
+    /** Stops the tailnet's node and starts it again: the tailnet sheet's Restart. */
+    onTailnetRestart: () -> Unit = {},
     /** The joined tailnet as its chip, sheet and page show it; see docs/design/tailnet-control.md. */
     tailnetView: TailnetView = TailnetView(id = tailnet.backend.storageKey, name = tailnet.backend.displayName, backend = tailnet.backend, joined = tailnet.enabled),
     /** Connects the tailnet by hand, and the hosts given with it (a Reconnect). */
@@ -744,6 +746,7 @@ internal fun HomeScreen(
             actions = connectionActions(
                 tailnetStage.linkState(), ConnectableKind.Tailnet,
                 onConnect = tailnetOn, onDisconnect = { tailnetOff(false) }, onRetry = onTailnetRetry,
+                onRestart = onTailnetRestart,
             ).takeIf { tailnet.enabled }.orEmpty(),
             supporting = tailnetSupporting(tailnetView, tailnetStage),
             onPage = {

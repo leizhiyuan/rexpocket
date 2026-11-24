@@ -174,6 +174,7 @@ fun RexPocketApp(
                     tailnetStage = tailnetStage,
                     onSignIn = signIn,
                     onTailnetRetry = model::restartTailnet,
+                    onTailnetRestart = model::restartTailnetNode,
                     tailnetView = tailnetView,
                     onTailnetConnect = model::connectTailnet,
                     onTailnetDisconnect = model::disconnectTailnet,

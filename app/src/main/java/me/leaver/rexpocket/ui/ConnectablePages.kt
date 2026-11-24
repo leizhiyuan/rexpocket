@@ -98,16 +98,19 @@ internal fun connectionActions(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onRetry: () -> Unit,
+    /** A tailnet's Restart, while its node runs or starts: stopped and started again. */
+    onRestart: (() -> Unit)? = null,
 ): List<RowAction> {
     val icon = if (kind == ConnectableKind.Tailnet) R.drawable.ic_tailnet else R.drawable.ic_host
     val connect = RowAction(stringResource(R.string.action_connect), icon, run = onConnect)
     val retry = RowAction(stringResource(R.string.action_retry_now), R.drawable.ic_restart, run = onRetry)
     val disconnect = RowAction(stringResource(R.string.action_disconnect), R.drawable.ic_disconnect, danger = true, run = onDisconnect)
+    val restart = onRestart?.let { RowAction(stringResource(R.string.tailnet_restart_item), R.drawable.ic_restart, run = it) }
     return when (state) {
         LinkState.Off -> listOf(connect)
-        LinkState.Connecting -> listOf(RowAction(stringResource(R.string.action_cancel), R.drawable.ic_close, run = onDisconnect))
+        LinkState.Connecting -> listOfNotNull(restart, RowAction(stringResource(R.string.action_cancel), R.drawable.ic_close, run = onDisconnect))
         LinkState.Failed -> listOf(retry, disconnect)
-        LinkState.Connected, LinkState.NeedsSignIn -> listOf(disconnect)
+        LinkState.Connected, LinkState.NeedsSignIn -> listOfNotNull(restart, disconnect)
     }
 }
 

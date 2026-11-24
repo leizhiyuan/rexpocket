@@ -8,16 +8,23 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import me.leaver.rexpocket.core.NodeWatchdog
 import me.leaver.rexpocket.core.TailnetPlan
 import me.leaver.rexpocket.core.TailnetPolicies
 import me.leaver.rexpocket.core.TailnetPolicy
 import me.leaver.rexpocket.core.TailnetSituation
+import me.leaver.rexpocket.core.nodeTrouble
 import me.leaver.rexpocket.core.planTailnet
+import me.leaver.rexpocket.core.transientStartFailure
+import me.leaver.rexpocket.core.watchdogBackoffMs
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.net.TailnetConfig
 import me.leaver.rexpocket.net.TailnetNode
@@ -45,6 +52,10 @@ data class TailnetRun(
     val error: String? = null,
     /** While it is kept up only for its linger: when it stops. */
     val lingerUntil: Long? = null,
+    /** How many times the watchdog (or a network change, or Restart) started the node again. */
+    val restarts: Int = 0,
+    /** Why it was last started again, for the diagnostics. */
+    val lastRestart: String? = null,
 )
 
 class TailnetControl(
@@ -60,6 +71,16 @@ class TailnetControl(
     private val read: () -> TailnetPolicies,
     private val write: (TailnetPolicies) -> Unit,
     private val clock: () -> Long = System::currentTimeMillis,
+    /**
+     * Waits, for a moment at most, for a network Android has validated, before a watched node
+     * starts: a start on a network that is still coming (the app back in the foreground, its
+     * network unblocked a moment later) fails its first dial and has to wait for a retry.
+     */
+    private val networkReady: suspend () -> Unit = {},
+    /** How long a watched node may stay in trouble before the watchdog restarts it. */
+    private val stuckAfterMs: Long = NodeWatchdog.STUCK_AFTER_MS,
+    /** How often the watchdog looks again at a node in trouble. */
+    private val watchTickMs: Long = WATCH_TICK_MS,
 ) {
     val policies = MutableStateFlow(read())
 
@@ -76,6 +97,22 @@ class TailnetControl(
     /** The port each node gave since it last stopped, under its lock. */
     private val ports = java.util.concurrent.ConcurrentHashMap<String, Pair<TailnetConfig, Int>>()
     private var before: Map<String, Int> = emptyMap()
+
+    // The watchdog of each watched node (TailnetNode.watched), its job while the node runs, and the
+    // retry of a start that failed on the network. See docs/design/tailnet-control.md, "Watchdog".
+    private val watchdogs = java.util.concurrent.ConcurrentHashMap<String, NodeWatchdog>()
+    private val watchJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
+    private val retryJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
+    private val retries = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    /** Each tailnet's last failed start, numbered: a start that waited behind it takes its answer. */
+    private val failures = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Exception>>()
+    private val failureCount = java.util.concurrent.atomic.AtomicLong()
+
+    /** Counts the network changes: a start that failed across one is tried again at once. */
+    private val networkChanges = java.util.concurrent.atomic.AtomicLong()
+
+    private fun watchdog(id: String) = watchdogs.getOrPut(id) { NodeWatchdog(stuckAfterMs) }
 
     init {
         scope.launch { merge(*(changes + policies).toTypedArray()).collect { evaluate() } }
@@ -176,21 +213,46 @@ class TailnetControl(
         val spec = spec(id) ?: throw me.leaver.rexpocket.net.TailnetException("no such tailnet")
         idleSince[id] = clock()
         update(id) { it.copy(running = true, error = null) }
+        val failedBefore = failureCount.get()
+        val network = networkChanges.get()
+        var inherited = false
         return try {
             withContext(Dispatchers.IO) {
                 lock(id).withLock {
                     // Two asks at once (a connection, and the plan) start the node once; a new key starts it again.
                     val config = spec.config(setupKey)
-                    ports[id]?.takeIf { (was, _) -> setupKey.isEmpty() && was.sameNode(config) }?.second
-                        ?: spec.node.start(config).also { ports[id] = config to it }
+                    // A start that failed while this one waited is its answer too: queued asks do not
+                    // each wait out the same dead dial again, one after the other.
+                    failures[id]?.takeIf { (n, _) -> setupKey.isEmpty() && n > failedBefore }?.let {
+                        inherited = true
+                        throw it.second
+                    }
+                    val reused = ports[id]?.takeIf { (was, _) -> setupKey.isEmpty() && was.sameNode(config) }?.second
+                    try {
+                        when {
+                            reused == null -> startLocked(spec, config)
+                            // A node known to be stuck is not handed to a connect as it is: it starts again.
+                            stuckNow(spec) -> restartLocked(spec, config, "reused while ${troubleOf(spec)}")
+                            else -> reused
+                        }
+                    } catch (e: Exception) {
+                        // Noted before the lock goes, so the next ask in the queue sees it.
+                        if (e !is CancellationException) failures[id] = failureCount.incrementAndGet() to e
+                        throw e
+                    }
                 }
             }
-                .also { update(id) { it.copy(running = true, error = null) } }
+                .also {
+                    update(id) { it.copy(running = true, error = null) }
+                    retries.remove(id)
+                    watch(spec)
+                }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Diagnostics.event(CONN_TAG, "tailnet $id: start failed")
-            update(id) { it.copy(running = false, error = e.message.orEmpty()) }
+            // The failure of the start this one waited behind was said, and its retry planned, already.
+            if (inherited) update(id) { it.copy(running = false, error = e.message.orEmpty()) }
+            else failedStart(spec, e, acrossNetworkChange = networkChanges.get() != network)
             throw e
         } finally {
             // A start asked for while the plan was down (a Test connection) still ends with the plan.
@@ -198,9 +260,144 @@ class TailnetControl(
         }
     }
 
+    /** Starts [spec]'s node for [config], under its lock: a watched one once the network is ready. */
+    private suspend fun startLocked(spec: TailnetSpec, config: TailnetConfig): Int {
+        if (spec.node.watched) networkReady()
+        return spec.node.start(config).also { ports[spec.id] = config to it }
+    }
+
+    /** Stops [spec]'s node and starts it again, under its lock: the watchdog's cure, or Restart. */
+    private suspend fun restartLocked(spec: TailnetSpec, config: TailnetConfig, why: String): Int {
+        Diagnostics.event(CONN_TAG, "tailnet ${spec.id}: restarting the node ($why)")
+        update(spec.id) { it.copy(restarts = it.restarts + 1, lastRestart = why) }
+        val dog = watchdog(spec.id)
+        synchronized(dog) { dog.restarted(clock()) }
+        ports.remove(spec.id)
+        runCatching { spec.node.stop() }
+        return startLocked(spec, config)
+    }
+
+    /** What is wrong with [spec]'s node now, or null. */
+    private fun troubleOf(spec: TailnetSpec): String? = spec.node.status.value.let { nodeTrouble(it.backendState, it.health) }
+
+    /** Whether [spec]'s node is watched and has been in trouble for the whole bound. */
+    private fun stuckNow(spec: TailnetSpec): Boolean {
+        if (!spec.node.watched) return false
+        val dog = watchdog(spec.id)
+        val now = clock()
+        return synchronized(dog) {
+            dog.observe(troubleOf(spec), needed = false, now = now)
+            dog.stuck(now)
+        }
+    }
+
+    /** A start of [spec] failed: said, and tried again by itself when the network was to blame. */
+    private fun failedStart(spec: TailnetSpec, e: Exception, acrossNetworkChange: Boolean) {
+        val id = spec.id
+        Diagnostics.event(CONN_TAG, "tailnet $id: start failed")
+        update(id) { it.copy(running = false, error = e.message.orEmpty()) }
+        if (!spec.node.watched || !transientStartFailure(e.message)) return
+        val attempt = (retries[id] ?: 0) + 1
+        retries[id] = attempt
+        val wait = if (acrossNetworkChange) 0L else watchdogBackoffMs(attempt)
+        Diagnostics.event(CONN_TAG, "tailnet $id: the network did not answer; starting it again in ${wait / 1000}s (try $attempt)")
+        retryJobs.remove(id)?.cancel()
+        retryJobs[id] = scope.launch {
+            delay(wait)
+            if (!run(id).running && run(id).error != null && plan(id) == TailnetPlan.Up) retry(id)
+        }
+    }
+
+    /**
+     * Watches [spec]'s node while it runs, when it is a watched one: in trouble for longer than the
+     * bound while something needs it, it is started again, with a backoff between restarts.
+     */
+    private fun watch(spec: TailnetSpec) {
+        if (!spec.node.watched || watchJobs[spec.id]?.isActive == true) return
+        val id = spec.id
+        watchJobs[id] = scope.launch {
+            // A node just (re)started has said nothing yet ("" here): that is not news either way.
+            spec.node.status.map { if (it.backendState.isBlank()) "" else nodeTrouble(it.backendState, it.health) }
+                .distinctUntilChanged()
+                .collectLatest { trouble ->
+                    if (trouble == "") return@collectLatest
+                    while (run(id).running) {
+                        val dog = watchdog(id)
+                        val needed = plan(id) != TailnetPlan.Down
+                        val now = clock()
+                        if (synchronized(dog) { dog.observe(trouble, needed, now) }) restartNode(id, trouble.orEmpty())
+                        if (trouble == null) return@collectLatest
+                        delay(watchTickMs)
+                    }
+                }
+        }
+    }
+
+    /**
+     * Stops [id]'s node and starts it again: the watchdog's restart, a network change on a node in
+     * trouble, or Restart by hand ([why] says which). One that is not running is just started.
+     */
+    fun restartNode(id: String, why: String) {
+        val spec = spec(id) ?: return
+        if (!run(id).running) {
+            Diagnostics.event(CONN_TAG, "tailnet $id: starting ($why)")
+            retry(id)
+            return
+        }
+        val network = networkChanges.get()
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    lock(id).withLock {
+                        try {
+                            restartLocked(spec, spec.config(""), why)
+                        } catch (e: Exception) {
+                            if (e !is CancellationException) failures[id] = failureCount.incrementAndGet() to e
+                            throw e
+                        }
+                    }
+                }
+                update(id) { it.copy(running = true, error = null) }
+                watch(spec)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                failedStart(spec, e, acrossNetworkChange = networkChanges.get() != network)
+            }
+        }
+    }
+
+    /**
+     * The phone's network changed, or became validated: a watched node in trouble starts again at
+     * once, and one whose start failed on the network is tried again; a healthy node is left alone,
+     * since a restart drops its connections.
+     */
+    fun networkChanged() {
+        networkChanges.incrementAndGet()
+        for (spec in specs()) {
+            if (!spec.node.watched) continue
+            val id = spec.id
+            val r = run(id)
+            val trouble = troubleOf(spec)
+            when {
+                r.running && trouble != null && ports.containsKey(id) && plan(id) != TailnetPlan.Down ->
+                    restartNode(id, "network changed while $trouble")
+                !r.running && r.error != null && transientStartFailure(r.error) && plan(id) == TailnetPlan.Up -> {
+                    Diagnostics.event(CONN_TAG, "tailnet $id: network changed; starting it again")
+                    retryJobs.remove(id)?.cancel()
+                    retry(id)
+                }
+            }
+        }
+    }
+
     private fun stop(spec: TailnetSpec, why: String) {
         Diagnostics.event(CONN_TAG, "tailnet ${spec.id}: stopping ($why)")
         update(spec.id) { it.copy(running = false, lingerUntil = null) }
+        watchJobs.remove(spec.id)?.cancel()
+        retryJobs.remove(spec.id)?.cancel()
+        retries.remove(spec.id)
+        watchdogs.remove(spec.id)
         scope.launch(Dispatchers.IO) {
             lock(spec.id).withLock {
                 ports.remove(spec.id)
@@ -253,10 +450,17 @@ class TailnetControl(
      */
     fun stopAll() {
         acting = false
+        retryJobs.values.forEach { it.cancel() }
+        retryJobs.clear()
         lingerJobs.values.forEach { it.cancel() }
         lingerJobs.clear()
         for (spec in specs()) if (run(spec.id).running) stop(spec, "everything stops")
         // A node another build or backend left running is stopped too.
         _runs.value = _runs.value.mapValues { it.value.copy(running = false, lingerUntil = null) }
+    }
+
+    private companion object {
+        /** How often the watchdog looks again at a node in trouble. */
+        const val WATCH_TICK_MS = 5_000L
     }
 }

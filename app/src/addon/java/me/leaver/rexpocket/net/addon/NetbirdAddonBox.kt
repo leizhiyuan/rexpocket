@@ -69,6 +69,10 @@ internal class NetbirdAddonBox(
     // The directory's name is the first account's id, so directoryFor knows the first account.
     override val stateDirectory: File get() = File(context.cacheDir, TailnetBackend.NetbirdAddon.storageKey)
 
+    // The add-on runs the same embedded client, with no network monitor on Android: a node stuck
+    // starting is restarted by the control's watchdog, as the built-in one is.
+    override val watched: Boolean get() = true
+
     private val _keepsAccounts = MutableStateFlow(client.keepsAccounts())
 
     /** Accounts need an add-on of the revision that has them; an older one runs the first account only. */

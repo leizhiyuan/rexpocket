@@ -28,6 +28,7 @@
         <item quantity="other">%2$s are connected through it and disconnect too. It stays off until you connect it, or a host on it.</item>
     </plurals>
     <string name="tailnet_connect_item">Connect %1$s</string>
+    <string name="tailnet_restart_item">Restart</string>
     <string name="tailnet_disconnect_item">Disconnect %1$s</string>
 
     <!-- A host's or a tailnet's page: the same groups in the same order. -->
