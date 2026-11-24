@@ -37,18 +37,30 @@ internal fun keyBarShown(hardwareKeyboard: Boolean, always: Boolean): Boolean = 
  * cells. A fresh shell near the top of the pane stays put instead of sliding off the top of the
  * screen, while a full-screen program (`pi`, `htop`, Claude Code) that hides the terminal's cursor
  * and draws down to the bottom still shifts by the full keyboard height.
+ *
+ * The keyboard is measured from the window's bottom edge, and the pane's own bottom edge is
+ * [bottomInsetPx] above it: only the part of the keyboard above that line covers the pane, and
+ * moving the pane by more than that covers would hide rows off the top of the screen for nothing.
+ *
+ * What the pane has to clear is the lowest thing floating over it, which is the dock and not the
+ * keyboard's top edge: the dock rises with the keyboard and sits on the last [bottomInsetPx] of the
+ * window, so on the terminal screen the inset is the navigation bar alone and the dock's own height
+ * is not part of it.
  */
 internal fun imeShift(
     imePx: Int,
     paneHeightPx: Int,
     contentBottomRow: Int? = null,
     cellHeightPx: Float = 0f,
+    bottomInsetPx: Int = 0,
 ): Float {
     if (imePx <= 0 || paneHeightPx <= 0) return 0f
-    val maxShift = minOf(imePx, paneHeightPx).toFloat()
+    val coveredPx = (imePx - bottomInsetPx).coerceIn(0, paneHeightPx)
+    if (coveredPx <= 0) return 0f
+    val maxShift = coveredPx.toFloat()
     if (contentBottomRow == null || cellHeightPx <= 0f) return maxShift
     if (contentBottomRow < 0) return 0f
     val contentBottomPx = (contentBottomRow + 1) * cellHeightPx
-    val visibleHeightPx = paneHeightPx - imePx
+    val visibleHeightPx = paneHeightPx - coveredPx
     return (contentBottomPx - visibleHeightPx).coerceIn(0f, maxShift)
 }
