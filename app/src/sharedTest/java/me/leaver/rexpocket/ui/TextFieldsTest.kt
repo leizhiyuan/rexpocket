@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.text.input.ImeAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -119,7 +120,7 @@ class TextFieldsTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription(string(R.string.action_more)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(string(R.string.menu_rename_tab)).performClick()
+        compose.onNodeWithText(string(R.string.menu_rename_tab)).performScrollTo().performClick()
         compose.waitForIdle()
         field(R.string.field_name).assert(ime(ImeAction.Done))
         field(R.string.field_name).performTextReplacement("deploy")
