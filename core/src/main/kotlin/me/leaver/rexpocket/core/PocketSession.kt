@@ -422,17 +422,29 @@ class PocketSession(
         focusBlock(pane.id)
     }
 
-    /** Closes a pane, the shown one by default. Closing a tab's last pane closes the tab. */
+    /** Closes a pane, the shown one by default. Closing a session's last pane destroys the session. */
     suspend fun closeBlock(blockId: String? = null) {
         val sid = requireSession()
-        val block = blockId ?: _state.value.view?.focusedBlock()?.id ?: return
+        val view = _state.value.view?.takeIf { it.sessionId == sid }
+        val block = blockId ?: view?.focusedBlock()?.id ?: return
+        val remaining = view?.allBlocks()?.filter { it.id != block }
+        if (remaining != null && remaining.isEmpty()) {
+            destroySession()
+            return
+        }
         rpc("block.close", JSONObject().put("session_id", sid).put("block_id", block))
     }
 
-    /** Closes a tab and every pane in it, the shown tab by default. */
+    /** Closes a tab and every pane in it, the shown tab by default. Closing a session's last tab destroys the session. */
     suspend fun closeWindow(windowId: String? = null) {
         val sid = requireSession()
-        val window = windowId ?: _state.value.view?.activeWindow()?.id
+        val view = _state.value.view?.takeIf { it.sessionId == sid }
+        val window = windowId ?: view?.activeWindow()?.id
+        val remaining = window?.let { id -> view?.windows?.filter { it.id != id } }
+        if (remaining != null && remaining.isEmpty()) {
+            destroySession()
+            return
+        }
         val body = JSONObject().put("session_id", sid)
         if (window != null) body.put("window_id", window)
         rpc("session.close_window", body)
@@ -768,8 +780,21 @@ class PocketSession(
             }
             "session_destroyed" -> dropSession(sid)
             "block_event" -> onBlockEvent(payload)
+            "block_closed" -> {
+                val closed = payload.optNullableString("block_id") ?: event.optNullableString("block_id")
+                if (closed != null) {
+                    ownership.withLock {
+                        if (ownedBlock == closed) {
+                            ownedBlock = null
+                            ownedSession = null
+                        }
+                    }
+                    releasedBlocks -= closed
+                }
+                refreshView(sid)
+            }
             // Which client owns a pane decides its size, so a change here redraws it as owned or not.
-            "block_owner_changed", "block_closed", "window_closed", "window_created", "active_window_changed" ->
+            "block_owner_changed", "window_closed", "window_created", "active_window_changed" ->
                 refreshView(sid)
         }
     }
@@ -845,7 +870,15 @@ class PocketSession(
     }
 
     private suspend fun refreshView(sid: String) {
-        val payload = rpc("session.view", JSONObject().put("session_id", sid))
+        val payload = try {
+            rpc("session.view", JSONObject().put("session_id", sid))
+        } catch (e: RexCallException) {
+            if (e.code == "session_not_found" || e.code == "not_found") {
+                dropSession(sid)
+                return
+            }
+            throw e
+        }
         applyView(parseView(payload))
     }
 
@@ -889,6 +922,7 @@ class PocketSession(
      * happen here too, because all three belong to watching it. Ending the collection stops it.
      */
     fun watchPane(blockId: String): Flow<TerminalFeed> = flow {
+        if (blockId.isBlank()) return@flow
         var backoff = MIN_BACKOFF_MS
         while (true) {
             // A data connection needs a ticket from the control connection: while that one is down,
@@ -933,13 +967,16 @@ class PocketSession(
             } catch (e: CancellationException) {
                 trace("pane $blockId: no longer watched")
                 throw e
+            } catch (e: DroppedStream) {
+                trace("pane $blockId: ${e.message}")
+                // A closed pane ends its stream with a fatal close (4000 / REJECT_CLOSED);
+                // that is normal when closing a pane, not a problem to warn about or retry.
+                if (e.fatal) return@flow
+                note(e.toProblem())
             } catch (e: RexCallException) {
                 trace("pane $blockId: ${e.code} ${e.message}")
                 // The pane or its session is gone; watching it again cannot help.
-                if (e.code == "not_found" || e.code == "session_not_found") {
-                    note(e.toProblem())
-                    return@flow
-                }
+                if (e.code == "not_found" || e.code == "session_not_found") return@flow
                 note(e.toProblem())
             } catch (e: Exception) {
                 trace("pane $blockId: ${e.javaClass.simpleName}: ${e.message}")
@@ -1021,10 +1058,16 @@ class PocketSession(
             val previous = ownedBlock
             val previousSession = ownedSession
             if (previous != null && previous != block) {
-                rpc(
-                    "session.disown_block",
-                    JSONObject().put("session_id", previousSession ?: sid).put("block_ids", JSONArray().put(previous)),
-                )
+                try {
+                    rpc(
+                        "session.disown_block",
+                        JSONObject().put("session_id", previousSession ?: sid).put("block_ids", JSONArray().put(previous)),
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // A closed pane has nothing left to hand back; clear it and still take the new one.
+                }
                 ownedBlock = null
                 ownedSession = null
             }

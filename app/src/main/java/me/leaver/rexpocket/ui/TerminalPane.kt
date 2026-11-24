@@ -89,6 +89,7 @@ internal fun TerminalPane(
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
 
     LaunchedEffect(blockId, attempt) {
+        if (blockId.isBlank()) return@LaunchedEffect
         // How long a picture takes to arrive is the number that says whether the tunnel under it is
         // good enough, so it is logged with the snapshot's size.
         val askedAt = SystemClock.elapsedRealtime()
