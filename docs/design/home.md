@@ -123,6 +123,18 @@ the session sheet's New tab makes one without leaving the home.
 **Not built from the spec:** the "Moved to place 2 of 7" snackbar for a row moved out of view (the
 sheet's caption says the place, in Rex's full order, which a move always uses).
 
+## Status of tabs never opened
+
+Every tab of every session has its state on the home, in Running, Needs you and Activity, without
+being opened. Each pane is read once (`program_status`, `pwd`, `process`, `title`) when its view is
+first known, and then follows Rex's status events. A session the phone has not attached on this
+connection may send none (a Mac did not, though the guide says `event_scope: all` brings them):
+its panes' `program_status` and its `session.view` are read again every 12 s while the app is on
+screen and every minute while only background alerts run, backing off to 2 min while the reads
+fail, until a status event comes from that session. Rex has no call for many panes at once, so
+one sweep is a burst of calls sent together. Details in rex-parity.md, "Status of sessions the
+phone never opened"; `UnopenedStatusTest` (scripted and real Rex).
+
 ## Seen
 
 Rex keeps no seen state and does not tell one client what another shows (rex-parity.md, "What other

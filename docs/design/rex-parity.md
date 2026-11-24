@@ -117,7 +117,9 @@ record of another program in the same pane (any child or root record summed over
 reading every record); the session's view not loaded (its first `session.view` failed or came
 late, so its tabs were unknown - now a report from a session without a view reads it at once,
 and every status sweep retries missing views; `RunningTest.aSessionWhoseViewCameLateStillReachesRunning`
-fails without it); and the desk-seen inference, which marks only `done`, `error` and `idle`
+fails without it); status events that never came for a session the phone had not opened (seen on
+a Mac; now such panes are read again on a timer, "Status of sessions the phone never opened"
+below); and the desk-seen inference, which marks only `done`, `error` and `idle`
 reports and never hides `working` (`RunningTest.nothingSeenHidesAWorkingReport`). Status details
 on the phone now shows exactly which records Rex holds for such a tab.
 
@@ -294,6 +296,25 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
   session …". The bootstrapped connection also gets every session's `block_event`s, so Activity
   keeps failed and done tabs of other sessions current without attaching them (`ActivityTest`,
   `RealRexAppTest.activityShowsWhatRealProgramsReported`).
+- **Status of sessions the phone never opened (2026-11-24).** Checked again on preview.22 Linux, at
+  API revisions 7 and 19, with a probe of two sessions: a connection that bootstrapped with
+  `event_scope: all` on session A gets B's `program_status_changed` and `title_changed` whether or
+  not any client is attached to B, after a `session.attach` of A or of another session, and after
+  a resume followed by a fresh `session.bootstrap`. A resumed connection that does *not* bootstrap
+  again gets no block events and its `program_status` calls on B are `conflict` ("stream is not
+  attached"); the app always bootstraps again. Rex's guide (llms.txt, "Events"; llms-full.txt,
+  same table) says the same, and offers nothing else for status: no subscription, no session-level
+  or batched `program_status` - one call per pane. Yet on a person's Mac (Rex.app, host m1-max)
+  the phone showed status only for the tabs of sessions it had opened, i.e. attached: an omp tab
+  Rex showed Working had no state on the phone. So the phone no longer relies on those events for a
+  session it has not attached: the panes of a session that is neither attached on this connection
+  nor known to have sent a status event on it are read again (`program_status` per pane, all at
+  once, plus that session's `session.view`) every 12 s on screen, every minute while only
+  background alerts run, doubling to at most 2 min while the reads fail. A status event from such a
+  session ends its sweep for the connection. `ScriptedRex(blockEventsOnlyWhenAttached = true)` acts
+  as that Mac did; `ScriptedUnopenedStatusTest` fails without the sweep, and
+  `RealRexUnopenedStatusTest` runs the same two-session case (an OSC 7501 loop reporting working,
+  blocked, done in the session the phone did not open) on the real Rex.
 - **A program that fails.** Rex makes no status record of an exit code: `sh -c 'exit 3'` gives only
   `child_exited` (`exit_code: 3`, `error: "exit status 3"`), `process`'s `last_exit`, and on the
   stream an APC `{"type":"child_exited","exit_code":3}`. Activity's Failed group comes only from a

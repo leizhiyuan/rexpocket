@@ -112,8 +112,7 @@ class RealRex : RexUnderTest {
     override fun close() {}
 }
 
-class FakeRexUnderTest : RexUnderTest {
-    val rex = ScriptedRex()
+class FakeRexUnderTest(val rex: ScriptedRex = ScriptedRex()) : RexUnderTest {
     override val endpoint get() = rex.endpoint
 
     override fun drop(phone: PocketSession) = rex.drop(phone.state.value.clientId!!)

@@ -69,7 +69,15 @@ import java.util.concurrent.atomic.AtomicLong
  * written against this runs unchanged against a real Rex. [refuse] makes one method fail, for the
  * errors that must still be shown.
  */
-class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : AutoCloseable {
+class ScriptedRex(
+    private val clock: () -> Long = System::currentTimeMillis,
+    /**
+     * Block events only to the clients attached to their session, whatever the `event_scope`: what
+     * the phone met on a person's Mac, where a tab never opened on the phone never reported its
+     * status. A Linux Rex (preview.22) sends them to an `all` scope as its guide says, the default here.
+     */
+    private val blockEventsOnlyWhenAttached: Boolean = false,
+) : AutoCloseable {
     private class Tab(val id: String, var label: String, val blocks: MutableList<String>, var focused: String?)
 
     private class Session(val id: String, var label: String, val tabs: MutableList<Tab>, var revision: Long = 1) {
@@ -480,7 +488,7 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
         val sid = out.session ?: return client.scope != null
         if (sid in client.attached) return true
         return when (client.scope) {
-            "all" -> true
+            "all" -> !(out.block && blockEventsOnlyWhenAttached)
             "session" -> !out.block
             else -> false
         }

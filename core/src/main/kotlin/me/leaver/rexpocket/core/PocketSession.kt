@@ -271,6 +271,16 @@ class PocketSession(
     /** Wakes the status reader when a pane it has not read yet comes into view. */
     private val statusWake = Channel<Unit>(Channel.CONFLATED)
 
+    /**
+     * Sessions whose program status this connection hears of as events: the ones it attached
+     * (`session.bootstrap`'s and each `session.attach`), and any a status event came from. Rex's
+     * guide says `event_scope` `all` brings every session's block events, and a Linux Rex does; on
+     * a person's Mac the phone heard only the sessions it had opened. The panes of every other
+     * session are read again on a timer ([sweepStatus]). Both start empty with each connection.
+     */
+    private val attachedSessions: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    private val heardStatusFrom: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     private var lastResize: TermSize? = null
     private var preferred: String? = null
     private var reconnectToken: String? = null
@@ -497,6 +507,7 @@ class PocketSession(
         // Released panes stay released across sessions; only the shown pane's state is reset here.
         updateState { it.copy(owning = false, released = false) }
         val payload = rpc("session.attach", JSONObject().put("session_id", sessionId))
+        attachedSessions += sessionId
         var view = parseView(payload.getJSONObject("view"))
         // The phone's own place: the asked-for tab, else where it was last time. Rex's focus is not
         // moved, so opening a tab here leaves the desktop on whatever it is showing.
@@ -1066,6 +1077,8 @@ class PocketSession(
             reconnectToken = welcome.reconnectToken
             // Events sent while the connection was down are lost, so every pane is read again.
             statusRead.clear()
+            attachedSessions.clear()
+            heardStatusFrom.clear()
             updateState { it.copy(clientId = welcome.clientId, resumed = welcome.resumed) }
             coroutineScope {
                 launch {
@@ -1124,6 +1137,7 @@ class PocketSession(
         val selected = payload.optJSONObject("selected_session")
         val view = selected?.optJSONObject("view")?.let { parseView(it) }?.let { it.placedAt(places[it.sessionId]) }
         val active = view?.sessionId ?: selected?.optJSONObject("session")?.optNullableString("session_id")
+        active?.let { attachedSessions += it }
         updateState {
             it.copy(
                 sessions = sessions,
@@ -1261,6 +1275,7 @@ class PocketSession(
             }
             "progress_report" -> setProgress(sid, block, parseProgressReport(body))
             "program_status_changed" -> {
+                heardStatusFrom += sid
                 changeStatus(block) { applyStatusEvent(it, body) }
                 reportedDuringRead += block
                 publishStatus()
@@ -1269,6 +1284,7 @@ class PocketSession(
             // Rex drops records on its own - working and blocked ones when the program exits or the
             // shell prompts again - and says so with this event, not with a changed record.
             "program_status_removed" -> {
+                heardStatusFrom += sid
                 changeStatus(block) { removeStatusRecords(it, body) }
                 reportedDuringRead += block
                 publishStatus()
@@ -2090,8 +2106,12 @@ class PocketSession(
      * Reads each pane's status and directory once, the first time it is in a known view; after that
      * Rex's events keep them current. Over a slow tailnet every call is a round trip, so polling
      * them used to fill the one control connection and push the user's own calls back by seconds.
+     * Only the panes of sessions no status event is known to come from are read again, a status
+     * call each on a slow timer ([sweepStatus]).
      */
     private suspend fun statusLoop() {
+        var lastSweep = System.nanoTime()
+        var failedSweeps = 0
         while (true) {
             combine(active, watching) { visible, watched -> visible || watched }.first { it }
             val state = _state.value
@@ -2115,9 +2135,100 @@ class PocketSession(
             // programs report - reach the home without the person opening it.
             val missing = _state.value.sessions.map { it.id }.filter { it !in _state.value.views }
             if (missing.isNotEmpty()) loadSessionViews(missing, skip = _state.value.activeSessionId)
+            // Panes whose news may not come as events are read again, every few seconds on screen
+            // and once a minute behind it, backing off while the reads fail.
+            val every = sweepInterval(failedSweeps)
+            var wait = STATUS_IDLE_MS
+            if (unheardPanes().isNotEmpty()) {
+                val since = (System.nanoTime() - lastSweep) / 1_000_000
+                if (since >= every) {
+                    failedSweeps = if (sweepStatus()) 0 else failedSweeps + 1
+                    lastSweep = System.nanoTime()
+                    wait = sweepInterval(failedSweeps)
+                } else {
+                    wait = every - since
+                }
+            }
             // New panes appear with a view; the wait ends early when one does.
-            withTimeoutOrNull(STATUS_IDLE_MS) { statusWake.receive() }
+            withTimeoutOrNull(wait.coerceIn(STATUS_MIN_WAIT_MS, STATUS_IDLE_MS)) { statusWake.receive() }
         }
+    }
+
+    private fun sweepInterval(failed: Int): Long {
+        val base = if (active.value) STATUS_SWEEP_MS else STATUS_SWEEP_AWAY_MS
+        return (base shl failed.coerceAtMost(4)).coerceAtMost(STATUS_SWEEP_MAX_MS)
+    }
+
+    /** Terminal panes already read once in sessions this connection may not hear status events of. */
+    private fun unheardPanes(): List<Pair<String, String>> {
+        val out = ArrayList<Pair<String, String>>()
+        for ((sid, view) in _state.value.views) {
+            if (sid in attachedSessions || sid in heardStatusFrom) continue
+            for (block in view.allBlocks()) {
+                if (block.id !in statusRead) continue
+                if (block.creator != null && block.creator != "com.superlogical.terminal") continue
+                out += sid to block.id
+            }
+        }
+        return out
+    }
+
+    /**
+     * Reads again what each unheard pane's program reports, and its session's view, so a tab never
+     * opened on the phone still has its state on the home. Rex has no call that answers for many
+     * panes, so the calls go out together, one round trip in all. True when any was answered.
+     */
+    private suspend fun sweepStatus(): Boolean = coroutineScope {
+        val panes = unheardPanes()
+        val views = panes.map { it.first }.distinct().map { sid -> async { runCatching { refreshView(sid) }.isSuccess } }
+        val reads = panes.map { (sid, block) -> async { pollStatus(sid, block) } }
+        val answered = (reads + views).map { it.await() }
+        publishStatus()
+        answered.isEmpty() || answered.any { it }
+    }
+
+    /** One pane's program status read again; an event that lands meanwhile still wins. */
+    private suspend fun pollStatus(sid: String, block: String): Boolean {
+        reportedDuringRead -= block
+        val payload = JSONObject().put("session_id", sid).put("block_id", block).put("args", JSONObject())
+        val records = try {
+            parseProgramRecords(rpc("com.superlogical.terminal.program_status", payload)).associateBy { it.id }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return false
+        }
+        storeRead(block, records)
+        return true
+    }
+
+    /**
+     * Keeps [records], a read of [block], unless a status event came while it was in flight. The
+     * check and the write are one step on the pane's entry, which a status event also changes in
+     * one step (changeStatus). True when the read was kept.
+     */
+    private fun storeRead(block: String, records: Map<String, ProgramRecord>): Boolean {
+        var wrote = false
+        var before: String? = null
+        statusRecords.compute(block) { _, old ->
+            if (block in reportedDuringRead) {
+                old
+            } else {
+                wrote = true
+                before = old?.let { summarizeStatus(it.values.toList())?.state }
+                records
+            }
+        }
+        if (wrote) {
+            // The time a state began comes with its record; from a Rex that stamps none, a
+            // state that was already there (or changed while the phone was away) has no time.
+            val now = summarizeStatus(records.values.toList())
+            when {
+                now?.updatedAt != null -> sinceOf[block] = sinceFor(now)
+                before != now?.state -> sinceOf -= block
+            }
+        }
+        return wrote
     }
 
     /**
@@ -2138,27 +2249,7 @@ class PocketSession(
                 val program = process.await()?.let { foregroundProgram(it) }
                 val named = title.await()?.let { programTitle(it) }
                 // An event that landed while this was in flight is newer than the answer; it wins.
-                // The check and the write are one step on the pane's entry, which a status event
-                // also changes in one step (changeStatus).
-                var wrote = false
-                var before: String? = null
-                statusRecords.compute(block) { _, old ->
-                    if (block in reportedDuringRead) {
-                        old
-                    } else {
-                        wrote = true
-                        before = old?.let { summarizeStatus(it.values.toList())?.state }
-                        records
-                    }
-                }
-                if (wrote) {
-                    // The time a state began comes with its record; from a Rex that stamps none, a
-                    // state that was already there (or changed while the phone was away) has no time.
-                    val now = summarizeStatus(records.values.toList())
-                    when {
-                        now?.updatedAt != null -> sinceOf[block] = sinceFor(now)
-                        before != now?.state -> sinceOf -= block
-                    }
+                if (storeRead(block, records)) {
                     if (dir != null) pwds[block] = dir
                     if (program != null) foregrounds[block] = program
                     if (named != null) titleOf[block] = named
@@ -2220,6 +2311,16 @@ private const val TAKE_BACK_MAX_MS = 30_000L
 
 /** Longest wait between the status reader's sweeps; a new pane in a view ends it sooner. */
 private const val STATUS_IDLE_MS = 30_000L
+
+/** How often panes Rex may send no status events for are read again: on screen, and behind it. */
+private const val STATUS_SWEEP_MS = 12_000L
+
+private const val STATUS_SWEEP_AWAY_MS = 60_000L
+
+/** The longest wait between those reads while they fail. */
+private const val STATUS_SWEEP_MAX_MS = 120_000L
+
+private const val STATUS_MIN_WAIT_MS = 250L
 
 /** How often a watched pane asks Rex who owns it, so it can take itself back when the desk does. */
 private const val OWNERSHIP_CHECK_MS = 3_000L
