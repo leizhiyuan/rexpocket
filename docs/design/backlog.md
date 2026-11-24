@@ -35,6 +35,12 @@ What to look for:
   background mode a host follows, the address in use).
 - **Settings coverage:** each setting is in the backup export, has a sensible default and can be
   reset.
+- **Gesture-only features:** something only a gesture reaches. Pinch-to-zoom in the terminal
+  is the known one: someone using the app didn't know it existed, and an omp table wrapped at
+  52 columns until they found it. Planned fix: a Text size row in the tab ⋮ menu (− / +, Reset,
+  showing the current columns), a one-time "Pinch to change text size" hint, and a default size
+  in Settings › Appearance that the backup carries. Check other gestures the same way: long
+  press, swipe, double tap.
 
 Areas, one per scout:
 - Home and its sheets;
