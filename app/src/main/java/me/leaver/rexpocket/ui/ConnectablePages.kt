@@ -239,6 +239,7 @@ internal fun TailnetPage(
     onBack: (() -> Unit)?,
     onDismiss: () -> Unit,
     tile: @Composable SheetScope.() -> Unit = {},
+    accounts: TailnetAccountOps? = null,
 ) {
     val policy = view.policy
     val on = stringResource(R.string.alerts_on)
@@ -249,6 +250,7 @@ internal fun TailnetPage(
             StateRow(linkState, tailnetSupporting(view, stage))
             Actions(connectionActions(linkState, ConnectableKind.Tailnet, onConnect, onDisconnect, onRetry))
         }
+        if (accounts != null && view.accounts.isNotEmpty()) AccountsGroup(view, accounts)
         Group(stringResource(R.string.conn_group_open)) {
             ChoiceRow(
                 label = stringResource(R.string.tailnet_use),
@@ -284,13 +286,9 @@ internal fun TailnetPage(
 internal fun tailnetSupporting(view: TailnetView, stage: TailnetStage): String? {
     val until = view.lingerUntil
     if (until != null && view.hosts.isEmpty()) {
-        var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-        LaunchedEffect(until) {
-            while (true) {
-                now = System.currentTimeMillis()
-                delay(15_000)
-            }
-        }
+        // Worked out when the view changes, not on a timer: a ticking effect would keep the
+        // screen from ever being idle, and the minutes only need to be right when it opens.
+        val now = remember(until) { System.currentTimeMillis() }
         val minutes = (((until - now).coerceAtLeast(0) + 59_999) / 60_000).toInt()
         return pluralStringResource(R.plurals.tailnet_stops_in, minutes, minutes)
     }

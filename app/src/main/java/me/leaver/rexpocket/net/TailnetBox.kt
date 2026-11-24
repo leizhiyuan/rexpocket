@@ -55,6 +55,22 @@ abstract class TailnetBox(protected val context: Context) : TailnetNode {
     /** Where the node keeps its login. It survives a restart, so a joined node comes straight back. */
     protected abstract val stateDirectory: File
 
+    /**
+     * Where account [profile] keeps its login: the first account (blank, or this backend's key) in
+     * [stateDirectory], as before accounts; another one beside it, under `<name>-profiles/`.
+     */
+    protected fun directoryFor(profile: String): File =
+        if (profile.isBlank() || profile == stateDirectory.name) stateDirectory
+        else File(stateDirectory.parentFile, stateDirectory.name + "-profiles/" + sanitizeHostname(profile))
+
+    override fun forgetProfile(profile: String) {
+        val dir = directoryFor(profile)
+        if (dir == stateDirectory || node != null && running?.profile == profile) return
+        // The account's login and node key go with it; nothing of it is read or logged.
+        if (dir.exists()) dir.deleteRecursively()
+        Diagnostics.event(LOG_TAG, "$name: an account's login was removed")
+    }
+
     /** Opens the node for [config], with the hostname already cleaned up. Throws when it cannot. */
     protected abstract fun open(config: TailnetConfig, hostname: String, events: NodeEvents): RunningNode
 
@@ -102,7 +118,7 @@ abstract class TailnetBox(protected val context: Context) : TailnetNode {
     override fun start(config: TailnetConfig): Int {
         val cleanName = sanitizeHostname(config.hostname).ifBlank { defaultHostname() }
         running?.let {
-            if (it.sameNode(config) && node != null) {
+            if (it.sameNode(config) && it.profile == config.profile && node != null) {
                 Diagnostics.event(LOG_TAG, "$name: reusing the node on port $port (hostname=$cleanName)")
                 return port
             }
@@ -111,7 +127,7 @@ abstract class TailnetBox(protected val context: Context) : TailnetNode {
         Diagnostics.event(LOG_TAG, "$name: starting the node (hostname=$cleanName)")
         stopLocked()
         val started = try {
-            stateDirectory.mkdirs()
+            directoryFor(config.profile).mkdirs()
             open(config, cleanName, events)
         } catch (e: Exception) {
             throw TailnetException(failureMessage(e), e)

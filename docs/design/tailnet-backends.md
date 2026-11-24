@@ -204,6 +204,16 @@ a Mac over SSH by its `.netbird.cloud` name and is in daily use.
 - **Shared addresses.** Tailscale and Netbird both use `100.64/10`, so such an address goes to
   whichever node is joined.
 
+## Accounts
+
+The embedded Netbird node takes its state directory at start, so it has accounts as Tailscale
+does (docs/design/tailnet-control.md, "Accounts"): the first in `files/netbird`, others in
+`files/netbird-profiles/<id>`, and `NetbirdConfig.profile` restarts the node on a switch. A new
+account has no registration, so it joins with its setup key in Tailnet settings. The add-on keeps
+one registration in its own app, and `INetbirdNode.start` takes no directory, so
+`TailnetBackend.NetbirdAddon` has `accounts = false` and its page shows no Accounts group; accounts
+there would take an add-on version whose `start` names the account.
+
 ## Licensing
 
 The app links only Netbird's BSD-3-Clause client code; the build pulls in no `management/`, `signal/`,

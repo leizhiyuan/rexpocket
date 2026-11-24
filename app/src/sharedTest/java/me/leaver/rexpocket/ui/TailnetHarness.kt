@@ -58,8 +58,12 @@ internal class FakeTailnetNode : TailnetNode {
     override fun probePath(host: String): TailnetPath = TailnetPath.Direct("192.168.1.20:41641", 4.0)
     override fun dialError(host: String): String? = dialErrors[host.lowercase()]
     override fun resetNetwork() = Unit
+    /** What the node was last started with: its account, among the rest. */
+    @Volatile var lastConfig: TailnetConfig? = null
+
     override fun start(config: TailnetConfig): Int {
         starts++
+        lastConfig = config
         startError?.let { throw TailnetException(it) }
         return socksPort
     }

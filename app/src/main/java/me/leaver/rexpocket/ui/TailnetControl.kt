@@ -33,6 +33,8 @@ class TailnetSpec(
     val node: TailnetNode,
     val joined: Boolean,
     val config: (setupKey: String) -> TailnetConfig,
+    /** The account the node runs, whose choices apply: each account is a tailnet of its own. */
+    val policyId: String = id,
 )
 
 /** What the app is doing with one tailnet's node. */
@@ -81,6 +83,26 @@ class TailnetControl(
 
     fun run(id: String): TailnetRun = _runs.value[id] ?: TailnetRun()
 
+    /** The id [id]'s choices are kept under: the account its node runs. */
+    private fun pid(id: String): String = spec(id)?.policyId ?: id
+
+    /** Tailnet [id]'s choices: its running account's. */
+    fun policyOf(id: String): TailnetPolicy = policies.value.of(pid(id))
+
+    /** Whether tailnet [id] (its running account) was disconnected by hand. */
+    fun isOff(id: String): Boolean = policies.value.isOff(pid(id))
+
+    /**
+     * Starts [id]'s node again on what it runs now (another account): stopped, then up as its
+     * plan says. The node's lock keeps the stop before the start.
+     */
+    fun restart(id: String) {
+        val spec = spec(id) ?: return
+        if (run(id).running) stop(spec, "account switched")
+        update(id) { it.copy(error = null) }
+        evaluate()
+    }
+
     private fun spec(id: String): TailnetSpec? = specs().firstOrNull { it.id == id }
 
     private fun lock(id: String) = locks.getOrPut(id) { Mutex() }
@@ -101,10 +123,10 @@ class TailnetControl(
         val spec = spec(id) ?: return TailnetPlan.Down
         val now = clock()
         return planTailnet(
-            policies.value.of(id),
+            policyOf(id),
             TailnetSituation(
                 joined = spec.joined,
-                off = policies.value.isOff(id),
+                off = isOff(id),
                 users = users()[id] ?: 0,
                 away = away(),
                 running = run(id).running,
@@ -198,13 +220,13 @@ class TailnetControl(
 
     /** Clears a Disconnect by hand, as a host connecting on the tailnet does. */
     fun switchOn(id: String) {
-        if (policies.value.isOff(id)) setPolicies(policies.value.switched(id, on = true))
+        if (isOff(id)) setPolicies(policies.value.switched(pid(id), on = true))
     }
 
     /** Disconnect by hand: down until connected again, by hand or by a host on it. */
     fun disconnect(id: String) {
         Diagnostics.event(CONN_TAG, "tailnet $id: disconnect")
-        setPolicies(policies.value.switched(id, on = false))
+        setPolicies(policies.value.switched(pid(id), on = false))
         update(id) { it.copy(error = null) }
         spec(id)?.let { if (run(id).running) stop(it, "by hand") }
     }
@@ -217,7 +239,7 @@ class TailnetControl(
     }
 
     fun setPolicy(id: String, next: TailnetPolicy) {
-        setPolicies(policies.value.with(id, next))
+        setPolicies(policies.value.with(pid(id), next))
     }
 
     private fun setPolicies(next: TailnetPolicies) {

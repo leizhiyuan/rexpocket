@@ -91,6 +91,54 @@ kept). New is only that it now stops once its last kept host is gone, after the 
 - **Confirm.** "Disconnect Tailscale?" — "mac is connected through it and disconnects too. It stays
   off until you connect it, or a host on it."
 
+## Accounts
+
+Several Tailscale accounts (or tailnets), each with its own sign-in, one running at a time per
+backend (`TailnetProfiles` in core,
+`TailnetProfileStore`, `TailnetAccounts.kt`).
+
+**What the nodes support.** The embedded Tailscale node is tsnet (tailscale.com v1.104.6). Its
+LocalAPI has login profiles (`ProfileStatus`, `SwitchProfile`, `SwitchToEmptyProfile`,
+`DeleteProfile` in `client/local`), all in the one state file of the server's directory. The app
+does not use them: the Go bridge exposes no LocalAPI, and tsnet sets its own prefs (the hostname,
+WantRunning) on the current profile at `Start`, so a switch under a running tsnet server is a path
+nobody tests. Instead each account has **a state directory of its own**: the first account keeps
+`files/tailscale` (so a phone that joined before keeps its login, its id is `tailscale`), others
+are `files/tailscale-profiles/<id>`. A switch stops the node and starts it on the other directory;
+nothing changes in Go or in `tailnet.aar`. Any backend whose node takes a state directory gets
+accounts the same way (`TailnetBox.directoryFor`); one that cannot says so with
+`TailnetBackend.accounts = false`, and its page shows no Accounts group. A backend that joins with
+a key (no sign-in) has a new account joined with its key in Tailnet settings, as the first one.
+
+**One at a time per backend.** Two accounts of one backend at once would be two nodes of it in one
+process. tsnet allows several servers in a process, but the bridge's platform hooks (the
+interface list, the UDP socket binding) are process-wide and read one current node, and a host's
+name or `100.x` address could then be on either; so one account runs per backend. Two backends at
+once is not done either: the app keeps one joined backend at a time, as before
+(`TailnetSettings.backend`), so in practice one account runs.
+
+**Hosts.** A host on the tailnet may name its account (the host dialog's "Tailnet account" chips,
+shown once there are two; "The one in use" by default). Connecting a host on another account by
+hand switches the tailnet to it (the hosts through the tailnet then reconnect, those on yet another
+account stay off); nothing connects such a host on its own, as with a tailnet disconnected by hand.
+
+**Screens.** The tailnet's page has an Accounts group under its state: each account, the running
+one marked "In use", and Add an account (a name; the tailnet starts on it at once and asks for a
+sign-in). An account's dialog renames it, runs it ("Use this account": says the tailnet restarts and
+names the hosts that disconnect) and removes it (not the one in use: switch first; the confirm says
+its sign-in on the phone is deleted and names the hosts that name it, which follow the one in use).
+With several accounts the tailnet is named "Tailscale · Work" on its page, tiles and notification.
+
+**Choices are per account.** Each account is a tailnet of its own: its Keep connected, Stop after,
+background choice, notifications and Disconnect by hand are kept under its id; the first account's
+id is the backend's, so the choices made before accounts carry over.
+
+**Keys.** Only names and ids are stored with the settings; logins and node keys stay in each
+account's directory, which the app's backup never reads (`allowBackup` is false and the export
+lists hosts and settings only). Removing an account deletes its directory and logs only that a
+login was removed. A host's account is not in the export: a restored host follows the account in
+use.
+
 ## Tiles and the watch notification
 
 Both are in [notifications.md](notifications.md), "The watch notification and the tiles". In
@@ -147,4 +195,10 @@ That is in "Checks on a real phone" below.
   Keep connected.
 - `app` (JVM): `BackgroundTailnetTest`: the watch restarted with no screen holds a tailnet kept
   Always with no host; a following tailnet does not come up without a host and does with one; a
-  tailnet let go keeps its hosts from connecting; one disconnected by hand stays off.
+  tailnet let go keeps its hosts from connecting; one disconnected by hand stays off; the watch
+  notification's tailnet line and action; a tile bound to the tailnet connecting and disconnecting it.
+- `core`: `TailnetProfilesTest`: the first account always there, add, activate, rename, remove
+  (never the one in use or the last), names kept apart, a host's account or the one in use.
+- `app` (sharedTest): `TailnetAccountsTest`: an account added on the page runs at once on its own
+  directory; a host on another account switches the tailnet to it; a removed account's hosts follow
+  the one in use.

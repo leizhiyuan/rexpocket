@@ -32,6 +32,12 @@ sealed interface TailnetConfig {
     val hostname: String
 
     /**
+     * The account the node runs: its login is in a directory of its own. Blank, or the backend's
+     * key, is the first account, in the directory the app always used.
+     */
+    val profile: String get() = ""
+
+    /**
      * Whether [other] is the same node: the same settings, whatever credential it was started with.
      * A credential that was used once to join is not a reason to start the node again.
      */
@@ -39,7 +45,7 @@ sealed interface TailnetConfig {
 }
 
 /** The built-in Tailscale node: an auth key is optional, the login is otherwise interactive. */
-data class TailscaleConfig(val authKey: String, override val hostname: String) : TailnetConfig
+data class TailscaleConfig(val authKey: String, override val hostname: String, override val profile: String = "") : TailnetConfig
 
 /**
  * The built-in Netbird node. [setupKey] is needed the first time a node joins; afterwards it may be
@@ -49,9 +55,10 @@ data class NetbirdConfig(
     val setupKey: String,
     override val hostname: String,
     val managementUrl: String,
+    override val profile: String = "",
 ) : TailnetConfig {
     override fun sameNode(other: TailnetConfig): Boolean =
-        other is NetbirdConfig && other.hostname == hostname && other.managementUrl == managementUrl
+        other is NetbirdConfig && other.hostname == hostname && other.managementUrl == managementUrl && other.profile == profile
 }
 
 class TailnetException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -101,6 +108,9 @@ interface TailnetNode {
 
     /** Stops the node off the caller's thread; closing it can talk to the control plane. */
     fun stopAsync()
+
+    /** Deletes the login of account [profile], which is not running: the account was removed. */
+    fun forgetProfile(profile: String) = Unit
 
     /**
      * How the host dialog's Test connection goes through this node, once [start] gave [port]: the
