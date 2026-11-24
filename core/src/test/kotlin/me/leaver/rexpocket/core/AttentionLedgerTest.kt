@@ -1,6 +1,8 @@
 package me.leaver.rexpocket.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AttentionLedgerTest {
@@ -58,23 +60,31 @@ class AttentionLedgerTest {
     }
 
     @Test
-    fun anAlertTokenOpensItsTargetOnce() {
-        val tokens = AlertTokens<String>(limit = 2)
-        val first = tokens.issue("pane a")
-        assertEquals("pane a", tokens.consume(first))
-        assertEquals(null, tokens.consume(first))
-        assertEquals(null, tokens.consume("made-up"))
-        assertEquals(null, tokens.consume(null))
+    fun anAlertsSignatureOpensExactlyItsTarget() {
+        val key = AlertSigner.newKey()
+        val signer = AlertSigner(key)
+        val sig = signer.sign("open", "host", "session", "block")
+        assertTrue(signer.verify(sig, "open", "host", "session", "block"))
+        // Another pane, another kind of link, or the fields run together: refused.
+        assertFalse(signer.verify(sig, "open", "host", "session", "other"))
+        assertFalse(signer.verify(sig, "group", "host", "session", "block"))
+        assertFalse(signer.verify(signer.sign("open", "ab", "c"), "open", "a", "bc"))
+        assertFalse(signer.verify(null, "open"))
+        assertFalse(signer.verify("", "open"))
+        assertFalse(signer.verify("not base64!", "open"))
+        val tampered = (if (sig.first() == 'A') "B" else "A") + sig.drop(1)
+        assertFalse(signer.verify(tampered, "open", "host", "session", "block"))
     }
 
+    /** A signature outlives the process (the same key, read again) and any number of later alerts; another install's key refuses it. */
     @Test
-    fun theOldestTokensGoFirst() {
-        val tokens = AlertTokens<String>(limit = 2)
-        val a = tokens.issue("a")
-        val b = tokens.issue("b")
-        val c = tokens.issue("c")
-        assertEquals(null, tokens.consume(a))
-        assertEquals("b", tokens.consume(b))
-        assertEquals("c", tokens.consume(c))
+    fun aSignatureStillOpensAfterARestartButNotWithAnotherKey() {
+        val key = AlertSigner.newKey()
+        val sig = AlertSigner(key).sign("open", "h", "s", "b")
+        val again = AlertSigner(key.copyOf())
+        repeat(100) { again.sign("open", "h", "s", "b$it") }
+        assertTrue(again.verify(sig, "open", "h", "s", "b"))
+        assertFalse(AlertSigner(AlertSigner.newKey()).verify(sig, "open", "h", "s", "b"))
+        assertEquals("AlertSigner", again.toString())
     }
 }

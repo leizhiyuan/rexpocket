@@ -41,14 +41,23 @@ fun AlertPrefs.with(event: AlertEvent, on: Boolean): AlertPrefs = when (event) {
  * is let go a while after the app leaves the screen and comes back with it. [always]: it connects
  * at every launch and every restart, even after a Disconnect, and stays (it implies [stay]).
  * [notify] off silences the host; otherwise each event in [overrides] replaces the page's default,
- * and the events not in it follow the default as it changes.
+ * and the events not in it follow the default as it changes. [muted] are the tabs (Rex's window
+ * ids) the person muted ("Mute this tab", or Mute on an alert): none of their panes alerts.
  */
 data class HostBackground(
     val stay: Boolean = true,
     val always: Boolean = false,
     val notify: Boolean = true,
     val overrides: Map<AlertEvent, Boolean> = emptyMap(),
+    val muted: Set<String> = emptySet(),
 ) {
+    /** Whether the panes of tab [windowId] stay quiet. */
+    fun mutes(windowId: String?): Boolean = windowId != null && windowId in muted
+
+    /** Tab [windowId] muted or not; the oldest mutes go past [MAX_MUTED]. */
+    fun withMuted(windowId: String, on: Boolean): HostBackground =
+        copy(muted = if (on) (muted - windowId + windowId).toList().takeLast(MAX_MUTED).toSet() else muted - windowId)
+
     /** Whether this host is kept connected while the app is away. */
     val kept: Boolean get() = stay || always
 
@@ -81,6 +90,11 @@ data class HostBackground(
         copy(overrides = if (base.on(event) == on) overrides - event else overrides + (event to on))
 
     val isDefault: Boolean get() = this == HostBackground()
+
+    companion object {
+        /** The most tabs one host keeps muted: a closed tab's mute stays, so the oldest go. */
+        const val MAX_MUTED = 100
+    }
 }
 
 /** Every host's [HostBackground], by host id; a host not in it has the defaults. */

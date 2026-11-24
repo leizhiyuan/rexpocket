@@ -278,11 +278,15 @@ class Connections private constructor(private val app: Application, val nodes: T
 
     private val alertActions: suspend (AlertTarget, AlertAction) -> AlertOutcome = { target, action -> onAlertAction(target, action) }
 
+    /** An alert's Mute, which may come on any thread: the choice changes on the main one. */
+    private val muteFromAlert: (String, String) -> Unit = { hostId, windowId -> scope.launch { muteTab(hostId, windowId, true) } }
+
     /** The person's quick replies, offered as a notification's Reply choices. */
     private val quickReplies = QuickReplyStore(app)
 
     init {
         Alerts.actions = alertActions
+        Alerts.mute = muteFromAlert
         // Background mode is the process's, not a screen's: the watch reads it when Android starts
         // the app again without one, and its Stop turns it off with no screen to save that.
         Alerts.enabled.value = store.alerts()
@@ -325,7 +329,7 @@ class Connections private constructor(private val app: Application, val nodes: T
                     emptyMap()
                 } else {
                     all.filter { (hostId, live) -> bg.of(hostId).notify && live.state.phase == Phase.Live }
-                        .flatMap { (hostId, live) -> progressNotes(hostId, live) }
+                        .flatMap { (hostId, live) -> progressNotes(hostId, live).filter { !bg.of(hostId).mutes(it.windowId) } }
                         .associateBy { Alerts.progressTag(it.target.hostId, it.windowId) }
                 }
             }.distinctUntilChanged().conflate().collect { want ->
@@ -496,6 +500,18 @@ class Connections private constructor(private val app: Application, val nodes: T
         control.begin()
         control.evaluate()
         return _links.value.size + control.wantedUp()
+    }
+
+    /**
+     * Mutes or unmutes tab [windowId] of [hostId] (the tab's ⋮ menu, an alert's Mute): a muted
+     * tab's panes alert no more, and what they have up goes now.
+     */
+    fun muteTab(hostId: String, windowId: String, muted: Boolean) {
+        setBackground(hostId, background.value.of(hostId).withMuted(windowId, muted))
+        if (!muted) return
+        val st = this[hostId]?.pocket?.value ?: return
+        st.views.values.flatMap { it.windows }.filter { it.id == windowId }.flatMap { it.blocks }.forEach { Alerts.settle(app, hostId, it.id) }
+        Alerts.clearProgress(app, hostId, windowId)
     }
 
     /** Changes [hostId]'s background choices, and acts on them now. */
@@ -1144,6 +1160,9 @@ class Connections private constructor(private val app: Application, val nodes: T
         val record = st.blockStatus[block]
         val view = st.views.values.firstOrNull { v -> v.allBlocks().any { it.id == block } } ?: return null
         val info = view.allBlocks().first { it.id == block }
+        // A muted tab's panes say nothing (the tab's ⋮ menu, an alert's Mute).
+        val windowId = view.windows.firstOrNull { w -> w.blocks.any { it.id == block } }?.id
+        if (background.value.of(hostId).mutes(windowId)) return null
         val name = paneTitle(info, record, st.programs[block])
         val text = message ?: run {
             record ?: return null
@@ -1171,6 +1190,7 @@ class Connections private constructor(private val app: Application, val nodes: T
             interrupt = block in st.busy,
             answer = answer,
             choices = quickReplies.get().choices(),
+            windowId = windowId,
         )
     }
 
@@ -1202,6 +1222,7 @@ class Connections private constructor(private val app: Application, val nodes: T
         disconnectAll(forget = false)
         network.stop()
         if (Alerts.actions === alertActions) Alerts.actions = null
+        if (Alerts.mute === muteFromAlert) Alerts.mute = null
         scope.cancel()
     }
 

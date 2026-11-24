@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="alerts_channel_failed">出錯</string>
+    <string name="alerts_channel_failed_body">程式出錯了，或者 tailnet 停止運作。</string>
+    <string name="alerts_expired">這則提醒已過期</string>
+    <string name="alerts_host_gone">這台主機已不再儲存</string>
+    <string name="alerts_approved">已核准</string>
+    <string name="alerts_denied">已拒絕</string>
+    <string name="alerts_sent">已傳送：%1$s</string>
+    <string name="alerts_interrupted">已中斷</string>
+    <string name="alerts_mute">靜音</string>
+    <string name="alerts_muted">分頁已靜音。可在分頁的 ⋮ 選單中取消靜音。</string>
+    <string name="alerts_blocked_settings">RexPocket 的通知已關閉。請在 Android 設定中允許通知，然後開啟背景提醒。</string>
+    <string name="alerts_muted_host">通知已關閉</string>
+    <string name="menu_mute_tab">將此分頁靜音</string>
+    <string name="menu_unmute_tab">取消此分頁靜音</string>
+    <string name="menu_tab_muted">此分頁中的程式不會傳送通知。</string>
+    <plurals name="bg_tabs_muted">
+        <item quantity="other">%d 個分頁已靜音</item>
+    </plurals>
+    <string name="bg_unmute_tabs">取消所有分頁靜音</string>
+    <string name="bg_manage">管理</string>
+    <string name="bg_connect_host">連線 %1$s</string>
+    <string name="bg_off_title">背景模式已關閉</string>
+    <string name="bg_off_body">RexPocket 不在前景時不會提醒，離開螢幕一分鐘後主機會中斷連線。</string>
+    <string name="bg_android_stopped">Android 停止了背景模式</string>
+    <string name="bg_android_stopped_body">%1$s 時它無法重新啟動。請允許不受限制的電池用量，然後開啟 RexPocket 重新連線。</string>
+    <string name="bg_alerts_off_line">背景提醒已關閉</string>
+    <string name="bg_alerts_off_line_body">開啟背景模式後，這些開關才會生效。</string>
+    <string name="tile_background_label">背景模式</string>
+    <string name="tile_background_allow">允許通知</string>
+    <plurals name="tile_background_hosts">
+        <item quantity="other">%d 台主機</item>
+    </plurals>
+    <string name="widget_name">RexPocket 動態</string>
+    <string name="widget_description">每台主機上需要你處理、已完成和正在運作的程式。</string>
+    <string name="widget_counts">%1$d 需要你 · %2$d 已完成 · %3$d 運作中</string>
+    <string name="widget_updated">更新於 %1$s</string>
+    <string name="widget_stale">背景已關閉 · 數字可能已過時 · %1$s</string>
+    <string name="widget_never">開啟 RexPocket 即可在這裡看到你的主機</string>
+    <string name="widget_no_hosts">沒有已連線的主機</string>
+</resources>

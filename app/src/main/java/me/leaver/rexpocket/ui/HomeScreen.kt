@@ -271,8 +271,14 @@ internal fun HomeScreen(
     val context = LocalContext.current
     // Android 13 asks for notifications at run time; alerts come on once the person allows them.
     // The request lives here, not in the settings sheet: the sheet is gone before the answer comes.
+    // Refused, or refused for good (Android then asks no more): Android's page where they are
+    // allowed, rather than a message with nowhere to go.
+    val blocked: () -> Unit = {
+        toast(context, context.getString(R.string.alerts_blocked_settings))
+        runCatching { context.startActivity(Alerts.systemSettings(context)) }
+    }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) onAlerts(true) else toast(context, context.getString(R.string.alerts_blocked))
+        if (granted) onAlerts(true) else blocked()
     }
     val toggleAlerts = {
         when {
@@ -280,7 +286,7 @@ internal fun HomeScreen(
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED ->
                 ask.launch(Manifest.permission.POST_NOTIFICATIONS)
-            !Alerts.allowed(context) -> toast(context, context.getString(R.string.alerts_blocked))
+            !Alerts.allowed(context) -> blocked()
             else -> onAlerts(true)
         }
     }
@@ -346,6 +352,11 @@ internal fun HomeScreen(
                 page = request.key
             }
             HomeRequest.ConfirmTailnetOff -> if (tailnetView.hosts.isNotEmpty()) confirmTailnetOff = true
+            HomeRequest.Notifications -> {
+                settings = false
+                page = null
+                notifications = true
+            }
             null -> return@LaunchedEffect
         }
         onRequestHandled()
@@ -461,6 +472,7 @@ internal fun HomeScreen(
             onDevices = { tailnetDetails = true },
             onTailnet = onTailnet,
             parked = { hostParked(it, tailnetView) },
+            silenced = { !background.of(it).notify },
         )
         val treeRows = tree.rows()
         // The filters cover every connected host; a host the phone is not connected to has nothing

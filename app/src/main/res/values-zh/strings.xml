@@ -357,7 +357,7 @@
     <string name="alerts_channel_watch">后台监听</string>
     <string name="alerts_channel_watch_body">RexPocket 在后台保持连接时显示的静默通知。</string>
     <string name="alerts_channel_attention">需要你处理</string>
-    <string name="alerts_channel_attention_body">程序在等你批准、回答或登录，或者出错了。</string>
+    <string name="alerts_channel_attention_body">程序在等你批准、回答或登录，或者 tailnet 需要登录。</string>
     <string name="alerts_watching">正在监听 %1$s 上需要你处理的程序</string>
     <string name="alerts_stop">停止</string>
     <string name="alerts_failed">出错了</string>

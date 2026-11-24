@@ -172,6 +172,11 @@ class LaunchTest {
         assertFalse(m.alertPrefs.value.done)
         assertFalse(HostStore(compose.activity).alertPrefs().done)
         assertTrue(HostStore(compose.activity).alertPrefs().waiting)
+        // Every channel has its Android page here, failures and progress bars too.
+        for (channel in listOf(R.string.alerts_channel_failed, R.string.alerts_channel_progress)) {
+            compose.onNode(hasText(string(channel)) and hasClickAction()).performScrollTo()
+            assertTrue(compose.rowHasChevron(string(channel)))
+        }
         compose.assertStaysHome(m, ms = 500)
     }
 

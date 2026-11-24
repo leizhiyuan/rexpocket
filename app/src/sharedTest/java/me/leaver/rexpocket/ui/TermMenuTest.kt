@@ -106,6 +106,7 @@ class TermMenuTest {
         string(R.string.menu_new_tab),
         string(R.string.menu_rename_tab),
         string(R.string.status_details),
+        string(R.string.menu_mute_tab),
         string(R.string.menu_close_tab),
         "# " + string(R.string.level_session),
         string(R.string.header_sessions),

@@ -294,6 +294,8 @@ fun RexPocketApp(
                     pinchHint = pinchHint,
                     onPinchHintSeen = model::pinchHintSeen,
                     onQuickReplies = model::setQuickReplies,
+                    tabMuted = { window -> model.host?.id?.let { background.of(it).mutes(window) } == true },
+                    onMuteTab = { window, muted -> model.host?.id?.let { model.muteTab(it, window, muted) } },
                 )
             }
             when (layoutFor(window, hasHosts = hosts.isNotEmpty(), terminalOpen = route == Route.Term)) {

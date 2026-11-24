@@ -1,6 +1,11 @@
 package me.leaver.rexpocket.core
 
-import java.util.UUID
+import java.nio.ByteBuffer
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.util.Base64
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 // Which panes need the person: the news an alert is made of. See docs/design/notifications.md.
 
@@ -234,21 +239,54 @@ fun plainText(text: String?, max: Int = 300): String? {
 }
 
 /**
- * One-use tokens for what an alert opens. The activity an alert starts is exported, so it accepts
- * only a token this process issued, not a pane named by whoever sent the intent: opening a pane
- * takes it, and that resizes it on the desktop.
+ * Signs what an alert's tap opens. The activity an alert starts is exported, so it opens only what
+ * an intent carries together with a signature made with the app's own key - kept in app-private
+ * storage, never in a backup or the diagnostics - not a pane named by whoever sent the intent:
+ * opening a pane takes it, and that resizes it on the desktop. Unlike a token held in memory, a
+ * signature still opens its pane after Android killed and restarted the process, and after any
+ * number of later alerts.
+ *
+ * The first field names what is signed (an alert's pane, a host's group), so one kind of link
+ * cannot be passed off as another.
  */
-class AlertTokens<T>(private val limit: Int = 64) {
-    private val issued = LinkedHashMap<String, T>()
+class AlertSigner(key: ByteArray) {
+    private val key = key.copyOf()
 
-    @Synchronized
-    fun issue(target: T): String {
-        while (issued.size >= limit) issued.remove(issued.keys.first())
-        val token = UUID.randomUUID().toString()
-        issued[token] = target
-        return token
+    init {
+        require(key.size >= MIN_KEY_BYTES) { "the key is too short" }
     }
 
-    @Synchronized
-    fun consume(token: String?): T? = token?.let { issued.remove(it) }
+    /** The signature of [fields], URL-safe. */
+    fun sign(vararg fields: String): String = B64.encodeToString(mac(fields))
+
+    /** Whether [signature] is this key's for exactly [fields], compared in constant time. */
+    fun verify(signature: String?, vararg fields: String): Boolean {
+        if (signature.isNullOrEmpty()) return false
+        val given = runCatching { Base64.getUrlDecoder().decode(signature) }.getOrNull() ?: return false
+        return MessageDigest.isEqual(given, mac(fields))
+    }
+
+    private fun mac(fields: Array<out String>): ByteArray {
+        val mac = Mac.getInstance(ALGORITHM)
+        mac.init(SecretKeySpec(key, ALGORITHM))
+        // Each field with its length first, so ("ab", "c") and ("a", "bc") differ.
+        for (f in fields) {
+            val bytes = f.toByteArray(Charsets.UTF_8)
+            mac.update(ByteBuffer.allocate(4).putInt(bytes.size).array())
+            mac.update(bytes)
+        }
+        return mac.doFinal()
+    }
+
+    /** Names no key. */
+    override fun toString(): String = "AlertSigner"
+
+    companion object {
+        const val MIN_KEY_BYTES = 32
+        private const val ALGORITHM = "HmacSHA256"
+        private val B64 = Base64.getUrlEncoder().withoutPadding()
+
+        /** A new random key, for a new install. */
+        fun newKey(): ByteArray = ByteArray(MIN_KEY_BYTES).also { SecureRandom().nextBytes(it) }
+    }
 }

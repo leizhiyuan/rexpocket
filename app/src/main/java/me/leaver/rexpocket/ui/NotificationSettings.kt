@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -68,6 +69,8 @@ internal fun NotificationsSheet(
     }
     val checks = remember(resumed, alerts) { BackgroundChecks.read(context) }
     val blocked = remember(resumed) { AlertKind.entries.associateWith { Alerts.channelBlocked(context, it) } }
+    val progressOff = remember(resumed) { Alerts.channelOff(context, Alerts.CHANNEL_PROGRESS) }
+    val androidStop = remember(resumed, alerts) { Alerts.androidStop(context) }
     val on = stringResource(R.string.alerts_on)
     val off = stringResource(R.string.alerts_off)
     val fix = stringResource(R.string.bg_fix)
@@ -86,6 +89,27 @@ internal fun NotificationsSheet(
         }
         // What Android lets background mode do, and a Fix for each that is not as it should be.
         Group(stringResource(R.string.bg_group_checks)) {
+            // Android stopped background mode and would not let it start again: said here even
+            // when notifications are off and its notification could not show. Gone once it runs again.
+            if (androidStop != null) {
+                SheetItem(
+                    label = stringResource(R.string.bg_android_stopped),
+                    color = Colors.danger,
+                    icon = R.drawable.ic_block,
+                    supporting = stringResource(
+                        R.string.bg_android_stopped_body,
+                        android.text.format.DateUtils.formatDateTime(
+                            context, androidStop,
+                            android.text.format.DateUtils.FORMAT_SHOW_DATE or android.text.format.DateUtils.FORMAT_SHOW_TIME,
+                        ),
+                    ),
+                    detail = fix,
+                    keepOpen = true,
+                    opens = true,
+                    modifier = androidx.compose.ui.Modifier.testTag(ANDROID_STOP_TAG),
+                    onClick = { if (checks.battery) BackgroundChecks.open(context, BackgroundChecks.appDetails(context)) else BackgroundChecks.askBattery(context) },
+                )
+            }
             // The watch notification: only with background mode on, and hidden when Android hides
             // it - the service still runs then, without its Stop and Connect or Disconnect buttons.
             val watch = watchCheck(alerts, checks)
@@ -213,6 +237,7 @@ internal fun NotificationsSheet(
         Group(stringResource(R.string.notifications_group_channels), icons = false) {
             for ((kind, label) in listOf(
                 AlertKind.Waiting to R.string.alerts_channel_attention,
+                AlertKind.Failed to R.string.alerts_channel_failed,
                 AlertKind.Done to R.string.alerts_channel_done,
                 AlertKind.Message to R.string.alerts_channel_messages,
             )) {
@@ -223,11 +248,19 @@ internal fun NotificationsSheet(
                     opens = true,
                 ) { context.startActivity(Alerts.systemSettings(context, kind)) }
             }
+            // Progress bars have their channel too, quiet by default.
+            SheetItem(
+                label = stringResource(R.string.alerts_channel_progress),
+                detail = if (progressOff) stringResource(R.string.notifications_channel_off) else null,
+                keepOpen = true,
+                opens = true,
+            ) { context.startActivity(Alerts.channelSettings(context, Alerts.CHANNEL_PROGRESS)) }
         }
     }
 }
 
 internal const val WATCH_CHECK_TAG = "watch-check"
+internal const val ANDROID_STOP_TAG = "android-stop"
 
 /** Whether the watch notification shows: not while background mode is off; hidden when Android hides it. */
 internal enum class WatchCheck { ModeOff, Hidden, Shown }
@@ -248,7 +281,9 @@ internal fun hostSummary(choices: HostBackground): String {
             else -> R.string.bg_host_not_kept
         },
     )
-    return if (choices.notify) stays else stays + " · " + stringResource(R.string.bg_host_silent)
+    val silent = if (choices.notify) stays else stays + " · " + stringResource(R.string.bg_host_silent)
+    val n = choices.muted.size
+    return if (n == 0) silent else silent + " · " + pluralStringResource(R.plurals.bg_tabs_muted, n, n)
 }
 
 /** A tailnet's background choice in a word, for its row. */

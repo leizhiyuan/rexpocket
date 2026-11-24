@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="alerts_channel_failed">出错</string>
+    <string name="alerts_channel_failed_body">程序出错了，或者 tailnet 停止工作。</string>
+    <string name="alerts_expired">这条提醒已过期</string>
+    <string name="alerts_host_gone">这台主机已不再保存</string>
+    <string name="alerts_approved">已批准</string>
+    <string name="alerts_denied">已拒绝</string>
+    <string name="alerts_sent">已发送：%1$s</string>
+    <string name="alerts_interrupted">已中断</string>
+    <string name="alerts_mute">静音</string>
+    <string name="alerts_muted">标签页已静音。可在标签页的 ⋮ 菜单中取消静音。</string>
+    <string name="alerts_blocked_settings">RexPocket 的通知已被关闭。请在 Android 设置中允许通知，然后开启后台提醒。</string>
+    <string name="alerts_muted_host">通知已关闭</string>
+    <string name="menu_mute_tab">将此标签页静音</string>
+    <string name="menu_unmute_tab">取消此标签页静音</string>
+    <string name="menu_tab_muted">此标签页中的程序不会发送通知。</string>
+    <plurals name="bg_tabs_muted">
+        <item quantity="other">%d 个标签页已静音</item>
+    </plurals>
+    <string name="bg_unmute_tabs">取消所有标签页静音</string>
+    <string name="bg_manage">管理</string>
+    <string name="bg_connect_host">连接 %1$s</string>
+    <string name="bg_off_title">后台模式已关闭</string>
+    <string name="bg_off_body">RexPocket 不在前台时不会提醒，离开屏幕一分钟后主机会断开。</string>
+    <string name="bg_android_stopped">Android 停止了后台模式</string>
+    <string name="bg_android_stopped_body">%1$s 时它无法重新启动。请允许不受限制的电池用量，然后打开 RexPocket 重新连接。</string>
+    <string name="bg_alerts_off_line">后台提醒已关闭</string>
+    <string name="bg_alerts_off_line_body">开启后台模式后，这些开关才会生效。</string>
+    <string name="tile_background_label">后台模式</string>
+    <string name="tile_background_allow">允许通知</string>
+    <plurals name="tile_background_hosts">
+        <item quantity="other">%d 台主机</item>
+    </plurals>
+    <string name="widget_name">RexPocket 动态</string>
+    <string name="widget_description">每台主机上需要你处理、已完成和正在工作的程序。</string>
+    <string name="widget_counts">%1$d 需要你 · %2$d 已完成 · %3$d 工作中</string>
+    <string name="widget_updated">更新于 %1$s</string>
+    <string name="widget_stale">后台已关闭 · 数字可能已过时 · %1$s</string>
+    <string name="widget_never">打开 RexPocket 即可在这里看到你的主机</string>
+    <string name="widget_no_hosts">没有已连接的主机</string>
+</resources>

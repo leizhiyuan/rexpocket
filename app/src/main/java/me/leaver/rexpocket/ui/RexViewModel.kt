@@ -687,6 +687,8 @@ class RexViewModel @JvmOverloads constructor(
     /** Background alerts on or off; [Connections] starts the watch for every connected host. */
     fun setAlerts(on: Boolean) {
         Alerts.enabled.value = on
+        if (on) Alerts.backOn(getApplication())
+        me.leaver.rexpocket.alerts.BackgroundTile.refresh(getApplication())
     }
 
     /**
@@ -1017,11 +1019,51 @@ class RexViewModel @JvmOverloads constructor(
 
     /** Opens the pane an alert names, connecting its host first when it is not connected. */
     fun openAlert(target: AlertTarget) {
-        val saved = store.find(target.hostId) ?: return
+        val saved = store.find(target.hostId) ?: return hostGone(target.hostId)
         openedFromAlert = true
         val link = connections.ensure(saved)
         enterSession(link, Opening.Existing(target.sessionId, saved.id)) { openSession(target.sessionId, target.blockId) }
     }
+
+    /**
+     * A host's group summary was tapped: the home, on Activity, which lists what that host's
+     * programs say. A host no longer saved says so instead.
+     */
+    fun openHostAlerts(hostId: String) {
+        if (store.find(hostId) == null) return hostGone(hostId)
+        openedFromAlert = true
+        route.value = Route.Home
+        setHomeFilter(HomeFilter.Activity)
+    }
+
+    /** An alert of a host that was removed since: it says so and its notifications go. */
+    private fun hostGone(hostId: String) {
+        Alerts.settleHost(getApplication(), hostId)
+        route.value = Route.Home
+        toast(getApplication(), getApplication<Application>().getString(R.string.alerts_host_gone))
+    }
+
+    /** An alert link this install cannot check: the home, which the activity's toast explains. */
+    fun alertExpired() {
+        openedFromAlert = true
+        route.value = Route.Home
+    }
+
+    /** The home on Activity: the widget's tap. */
+    fun openActivity() {
+        openedFromAlert = true
+        route.value = Route.Home
+        setHomeFilter(HomeFilter.Activity)
+    }
+
+    /** Settings › Background and notifications, from a notification or the background tile. */
+    fun openNotifications() {
+        route.value = Route.Home
+        homeRequest.value = HomeRequest.Notifications
+    }
+
+    /** Mutes or unmutes tab [windowId] of [hostId]: its panes alert no more, and what they have up goes. */
+    fun muteTab(hostId: String, windowId: String, muted: Boolean) = connections.muteTab(hostId, windowId, muted)
 
     private fun shownPane(st: PocketState): Pair<String, String>? {
         val sid = st.activeSessionId ?: return null
@@ -1703,6 +1745,9 @@ sealed interface HomeRequest {
     data class Page(val key: String) : HomeRequest
 
     data object ConfirmTailnetOff : HomeRequest
+
+    /** Settings › Background and notifications. */
+    data object Notifications : HomeRequest
 }
 
 /** Why the tailnet node did not start: what the node said, when it said anything ([tailnetFailureText]). */

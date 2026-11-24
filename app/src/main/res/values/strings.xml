@@ -363,7 +363,7 @@
     <string name="alerts_channel_watch">Watching in the background</string>
     <string name="alerts_channel_watch_body">The quiet notification that keeps RexPocket connected while it is in the background.</string>
     <string name="alerts_channel_attention">Needs you</string>
-    <string name="alerts_channel_attention_body">A program is waiting for approval, an answer or a login, or has failed.</string>
+    <string name="alerts_channel_attention_body">A program is waiting for approval, an answer or a login, or a tailnet needs a sign-in.</string>
     <string name="alerts_watching">Watching %1$s for programs that need you</string>
     <string name="alerts_stop">Stop</string>
     <string name="alerts_failed">failed</string>

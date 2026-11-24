@@ -227,8 +227,11 @@ internal fun HostHeader(
     action: Pair<String, () -> Unit>? = null,
     onMenu: () -> Unit,
     actions: List<CustomAccessibilityAction> = emptyList(),
+    /** The host's notifications are off: a crossed-out bell beside its name, which TalkBack reads. */
+    silenced: Boolean = false,
 ) {
     val folded = stringResource(R.string.state_folded)
+    val silencedWords = stringResource(R.string.alerts_muted_host)
     val clickLabel = stringResource(if (expanded) R.string.home_action_collapse else R.string.home_action_expand)
     Row(
         Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(Radius.card))
@@ -263,6 +266,10 @@ internal fun HostHeader(
                 if (live) {
                     Spacer(Modifier.width(8.dp))
                     Dot(phaseTint(phase ?: Phase.Idle), 8.dp)
+                }
+                if (silenced) {
+                    Spacer(Modifier.width(6.dp))
+                    Glyph(R.drawable.ic_notifications_off, Colors.muted, Modifier.semantics { contentDescription = silencedWords }, size = 16.dp)
                 }
             }
             // Wrapping rather than cut: with large text the counts take a second line.
@@ -756,6 +763,8 @@ internal class TreeEnv(
     val onTailnet: () -> Unit,
     /** Why a host's tailnet keeps it off: disconnected by hand, or on another account. */
     val parked: (SavedHost) -> HostParked? = { null },
+    /** Whether a host's notifications are off (its page's Notifications from this host): its row says so. */
+    val silenced: (hostId: String) -> Boolean = { false },
 ) {
     fun ref(host: SavedHost) = HostRef(host, lives[host.id])
 
@@ -893,6 +902,7 @@ internal fun HostItem(env: TreeEnv, ref: HostRef, rows: List<HomeSession>, expan
         action = action,
         onMenu = { env.sheets.sheet = ManageTarget.Host(host.id) },
         actions = groups.talkBack(),
+        silenced = env.silenced(host.id),
     )
     if (live != null) {
         HostStatus(

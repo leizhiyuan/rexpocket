@@ -94,6 +94,11 @@ class BackgroundModeTest {
         val block = connections.lives.value.getValue(desk.host.id).state.views.getValue(desk.ids[0]).allBlocks().first().id
         desk.rex.report(block, "blocked", kind = "question", app = "claude", msg = "Restarted?")
         await(what = "the alert") { manager.activeNotifications.any { it.tag == Alerts.tagOf(desk.host.id, block) && it.id == Alerts.PANE_ID } }
+        // The watch keeps the home screen widget's counts: the host, with one tab that needs the person.
+        await(what = "the widget's counts") {
+            val snap = me.leaver.rexpocket.alerts.WidgetSnapshot.parse(app.getSharedPreferences("rexpocket", 0).getString("widget.snapshot", null))
+            snap?.live == true && snap.hosts.singleOrNull()?.let { it.name == "desk" && it.needs == 1 } == true
+        }
     }
 
     @Test
@@ -162,6 +167,60 @@ class BackgroundModeTest {
         await(what = "closed") { connections.links.value.isEmpty() }
         // Still connected at exit, so the next start connects it again.
         assertEquals(listOf(desk.host.id), HostStore(app).connectedHosts())
+    }
+
+    /**
+     * Stop leaves a quiet note that background mode is off, with Turn on: the way back is where
+     * the Stop was. Turn on starts the watch again, which connects the hosts kept in the
+     * background, and the note goes.
+     */
+    @Test
+    fun stopLeavesANoteWhoseTurnOnBringsBackgroundModeBack() {
+        storedState(desk.host)
+        restartedByAndroid()
+        await(what = "connected") { live(desk.host.id) }
+        service!!.get().onStartCommand(Intent(app, WatchService::class.java).setAction("me.leaver.rexpocket.alerts.STOP"), 0, 2)
+        val note = manager.activeNotifications.single { it.id == Alerts.STOPPED_ID }.notification
+        assertEquals(app.getString(R.string.bg_off_title), note.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
+        val turnOn = note.actions.single { it.title.toString() == app.getString(R.string.bg_turn_on_short) }
+        assertTrue("Turn on starts the watch as a foreground service", shadowOf(turnOn.actionIntent).isForegroundService)
+        await(what = "closed") { connections.links.value.isEmpty() }
+        service!!.get().onStartCommand(shadowOf(turnOn.actionIntent).savedIntent, 0, 3)
+        assertTrue(Alerts.enabled.value)
+        await(what = "the kept host back") { live(desk.host.id) }
+        assertTrue(manager.activeNotifications.none { it.id == Alerts.STOPPED_ID })
+    }
+
+    /** Android stopping background mode is kept for the page, which shows it until the watch runs again. */
+    @Test
+    fun androidsStopIsRecordedUntilTheWatchRunsAgain() {
+        storedState(desk.host)
+        Alerts.recordAndroidStop(app, at = 1_000L)
+        assertEquals(1_000L, Alerts.androidStop(app))
+        restartedByAndroid()
+        await(what = "connected") { live(desk.host.id) }
+        assertNull(Alerts.androidStop(app))
+    }
+
+    /**
+     * A host that goes while the watch runs stays in its notification as off, with Connect, as a
+     * tailnet that is off does; one item leaves room for Manage, which opens the page that has them all.
+     */
+    @Test
+    fun aHostThatWentStaysAsOffWithConnect() {
+        secondUsed = true
+        storedState(desk.host, second.host)
+        restartedByAndroid()
+        await(what = "both connected") { live(desk.host.id) && live(second.host.id) }
+        fun watch() = manager.activeNotifications.firstOrNull { it.id == WatchService.WATCH_ID }?.notification
+        fun titles() = watch()?.actions.orEmpty().map { it.title.toString() }
+        await(what = "two Disconnects") { titles().contains(app.getString(R.string.bg_disconnect_host, "second")) }
+        connections.disconnect(second.host.id)
+        await(what = "second kept as off with Connect: ${titles()}") { titles().contains(app.getString(R.string.bg_connect_host, "second")) }
+        assertTrue(titles().contains(app.getString(R.string.bg_disconnect_host, "desk")))
+        val connect = watch()!!.actions.single { it.title.toString() == app.getString(R.string.bg_connect_host, "second") }
+        service!!.get().onStartCommand(shadowOf(connect.actionIntent).savedIntent, 0, 2)
+        await(what = "second connected again") { live(second.host.id) }
     }
 
     @Test

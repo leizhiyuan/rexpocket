@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notifications and their actions, background mode's way back, its Quick Settings tile and the
+     home screen widget. See docs/design/notifications.md. -->
+<resources>
+    <string name="alerts_channel_failed">Failures</string>
+    <string name="alerts_channel_failed_body">A program failed, or a tailnet stopped working.</string>
+    <string name="alerts_expired">That alert has expired</string>
+    <string name="alerts_host_gone">That host is no longer saved</string>
+    <string name="alerts_approved">Approved</string>
+    <string name="alerts_denied">Denied</string>
+    <string name="alerts_sent">Sent: %1$s</string>
+    <string name="alerts_interrupted">Interrupted</string>
+    <string name="alerts_mute">Mute</string>
+    <string name="alerts_muted">Tab muted. Unmute it from the tab\'s ⋮ menu.</string>
+    <string name="alerts_blocked_settings">Notifications are off for RexPocket. Allow them in Android\'s settings, then turn background alerts on.</string>
+    <string name="alerts_muted_host">Notifications off</string>
+    <string name="menu_mute_tab">Mute this tab</string>
+    <string name="menu_unmute_tab">Unmute this tab</string>
+    <string name="menu_tab_muted">This tab\'s programs send no notifications.</string>
+    <plurals name="bg_tabs_muted">
+        <item quantity="one">%d tab muted</item>
+        <item quantity="other">%d tabs muted</item>
+    </plurals>
+    <string name="bg_unmute_tabs">Unmute every tab</string>
+    <string name="bg_manage">Manage</string>
+    <string name="bg_connect_host">Connect %1$s</string>
+    <string name="bg_off_title">Background mode is off</string>
+    <string name="bg_off_body">No alerts while RexPocket is away, and the hosts disconnect a minute after it leaves the screen.</string>
+    <string name="bg_android_stopped">Android stopped background mode</string>
+    <string name="bg_android_stopped_body">On %1$s it could not start again. Allow unrestricted battery use, then open RexPocket to reconnect.</string>
+    <string name="bg_alerts_off_line">Background alerts are off</string>
+    <string name="bg_alerts_off_line_body">These switches apply once background mode is on.</string>
+    <string name="tile_background_label">Background mode</string>
+    <string name="tile_background_allow">Allow notifications</string>
+    <plurals name="tile_background_hosts">
+        <item quantity="one">%d host</item>
+        <item quantity="other">%d hosts</item>
+    </plurals>
+    <string name="widget_name">RexPocket activity</string>
+    <string name="widget_description">What needs you, what is done and what is working, per host.</string>
+    <string name="widget_counts">%1$d needs you · %2$d done · %3$d working</string>
+    <string name="widget_updated">Updated %1$s</string>
+    <string name="widget_stale">Background off · counts may be stale · %1$s</string>
+    <string name="widget_never">Open RexPocket to see your hosts here</string>
+    <string name="widget_no_hosts">No host connected</string>
+</resources>

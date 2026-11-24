@@ -149,7 +149,7 @@ class BackgroundTailnetTest {
         }
         // Stop, then the tailnet's own action: one each while every host and tailnet fits.
         val titles = watch!!.actions.map { it.title.toString() }
-        assertEquals(listOf(app.getString(R.string.alerts_stop), app.getString(R.string.tailnet_disconnect_item, "Tailscale")), titles)
+        assertEquals(listOf(app.getString(R.string.alerts_stop), app.getString(R.string.tailnet_disconnect_item, "Tailscale"), app.getString(R.string.bg_manage)), titles)
         val stops = node.stops
         service!!.get().onStartCommand(shadowOf(watch!!.actions[1].actionIntent).savedIntent, 0, 2)
         await(what = "the tailnet disconnected by hand") { connections.control.policies.value.isOff("tailscale") && node.stops > stops }

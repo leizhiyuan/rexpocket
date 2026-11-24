@@ -231,6 +231,9 @@ internal fun TermScreen(
     onPinchHintSeen: () -> Unit = {},
     /** Changes the quick replies, for Edit quick replies on the key bar's panel and in the composer; null leaves it out. */
     onQuickReplies: ((QuickReplies) -> Unit)? = null,
+    /** Whether tab (window) [windowId] of this host is muted, and muting or unmuting it: the tab's ⋮ menu. */
+    tabMuted: (windowId: String) -> Boolean = { false },
+    onMuteTab: (windowId: String, muted: Boolean) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val ime = LocalSoftwareKeyboardController.current
@@ -856,6 +859,13 @@ internal fun TermScreen(
                     val title = tabTitle(view, tab, state)
                     SheetItem(stringResource(R.string.menu_rename_tab), icon = R.drawable.ic_edit) { rename = Rename(Level.Tab, tab.id, tab.label) }
                     SheetItem(stringResource(R.string.status_details), icon = R.drawable.ic_eye) { sheet = Sheet.StatusDetails(tab.id) }
+                    // Its panes' notifications off, or on again: the host's page lists the muted tabs.
+                    val muted = tabMuted(tab.id)
+                    SheetItem(
+                        stringResource(if (muted) R.string.menu_unmute_tab else R.string.menu_mute_tab),
+                        icon = if (muted) R.drawable.ic_notifications else R.drawable.ic_notifications_off,
+                        supporting = if (muted) stringResource(R.string.menu_tab_muted) else null,
+                    ) { onMuteTab(tab.id, !muted) }
                     SheetItem(stringResource(R.string.menu_close_tab), Colors.danger, icon = R.drawable.ic_close) { confirm = Confirm(Level.Tab, tab.id, title) }
                 }
             }

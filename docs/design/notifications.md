@@ -26,13 +26,33 @@ screen already shows it (Activity, tab dots).
 | `blocked` `permission` from an agent in the key table | Waiting | on | Needs you (high) | Approve, Deny, Reply |
 | `blocked` (`permission` from any other program, `question`, none) | Waiting | on | Needs you (high) | Reply, Interrupt |
 | `blocked` `auth` | Waiting | on | Needs you (high) | Interrupt; never Reply |
-| `error` | Failed | on | Needs you (high) | none |
-| `done` | Done | **on** | Finished (default) | Reply |
-| `desktop_notification` (OSC 9, OSC 777) | Message | on | Program messages (default) | Reply; Interrupt while busy |
+| `error` | Failed | on | Failures (high) | Mute |
+| `done` | Done | **on** | Finished (default) | Reply, Mute |
+| `desktop_notification` (OSC 9, OSC 777) | Message | on | Program messages (default) | Reply; Interrupt while busy; Mute |
 | `bell`, pane not on screen | Message | **off** | Program messages (default) | as above |
 | `bell`, pane on screen | - | vibrate on | - | - |
 
-Tapping any of them opens exactly that pane (`openAlert`, a one-use token per notification).
+Mute takes the slot the other actions leave (a notification shows three), so an approval prompt has
+none; the tab's ⋮ menu always has it (below, "Muted tabs").
+
+Tapping any of them opens exactly that pane (`openAlert`), also after Android killed and restarted
+the process and after any number of later alerts. The activity is exported, so the tap's intent
+names the pane (host, session, block) with an HMAC-SHA256 over them (`AlertSigner`, core) made with
+a per-install key: 32 random bytes in `noBackupFilesDir`, never in a settings backup, the diagnostics
+or a log (the app also has no Android backup at all). The first signed field names the kind of
+link, so a host's link cannot be passed off as a pane's. An intent of the alert scheme whose
+signature does not check - one from before a reinstall or a data clear, or anyone else's - opens
+the home with "That alert has expired". An alert of a host removed since says "That host is no
+longer saved" and its notifications go. Before, a tap carried a one-use token held in memory: a
+restart or more than 64 alerts left it opening the home.
+
+- **Failures have their own channel**, apart from Needs you: a person can keep waits loud and make
+  failures quiet, or the other way round. The Failures channel is made once, from what the person
+  set on Needs you, which failures went on before (`Alerts.failedChannel`): its importance (off stays
+  off), sound, vibration, lights, badge and lock-screen visibility. Do Not Disturb's override is not
+  the app's to set on a new channel, so it starts unset; a person who let Needs you through Do Not
+  Disturb sets it once for Failures. A tailnet that stopped working, and Android stopping background
+  mode, go on Failures too; a tailnet's sign-in stays on Needs you.
 
 - **Done is on by default.** The protocol defines it as "finished a piece of work; the result is
   ready to look at and the user has not seen it yet", and Rex's own Activity ranks it above working.
@@ -70,13 +90,31 @@ The watch notification and the Quick Settings tiles treat a host and a tailnet t
   stays up for a quick connect".
 - **Actions, three at most.** Stop always comes first. Then one action per item, tailnets first
   ("Connect Tailscale" when it is off, "Disconnect Tailscale" otherwise; "Disconnect mac"), while
-  every item fits in the two slots left. With three or more items there are none beyond Stop, so no
-  host or tailnet has an action another lacks; the tiles and the app have them all. A tailnet that
-  hosts are connected through does not go from the notification: its action opens the app on the
-  confirm that names them.
-- **Tailnet trouble.** While away, a tailnet that needs a sign-in or stopped working posts one
-  notification on Needs you ("Tailscale needs a sign-in"), which opens the app; it goes once that is
-  over or the app is on screen. Its page's "Sign-in and failures" turns it off.
+  every item fits in the two slots left; one item leaves a slot for **Manage**. With three or more
+  items there is Manage alone beyond Stop, so no host or tailnet has an action another lacks: Manage
+  opens Settings › Background and notifications, which has them all, as do the tiles. A tailnet
+  that hosts are connected through does not go from the notification: its action opens the app on
+  the confirm that names them.
+- **A host that went stays, as Off.** A host that was connected while the watch ran and is not now
+  (disconnected from the notification, the app or a tile) stays as an Off line with **Connect mac**,
+  as a tailnet that is off does, until it connects again or is removed; the newest three are kept.
+- **Tailnet trouble.** While away, a tailnet that needs a sign-in (on Needs you, "Tailscale needs a
+  sign-in") or stopped working (on Failures) posts one notification, which opens the tailnet's page;
+  it goes once that is over or the app is on screen. Its page's "Sign-in and failures" turns it off.
+- **Stop has a way back.** The watch's Stop leaves a quiet note on the watch's channel, "Background
+  mode is off", with **Turn on** (it starts the watch again, which connects the hosts kept in the
+  background) and a tap that opens Settings › Background and notifications. It goes once background
+  mode is on again, from anywhere.
+- **Android stopped it.** When Android will not let the watch go to the foreground again (battery use
+  restricted, Android 12 and later), a notification on Failures says so and opens Settings ›
+  Background and notifications; the stop is also recorded, so the page shows a red row, "Android
+  stopped background mode", with when and Fix (the battery exemption), even where notifications are
+  not allowed and the notification could not show. The row goes once the watch runs again.
+- **Background mode's own tile** (`BackgroundTile`), apart from the pool below: a tap turns
+  background mode on or off, as the page's switch does (on, it connects the hosts kept in the
+  background as a restart would); the tile is active while it is on, its subtitle "On · 2 hosts",
+  "Off", or "Allow notifications" where Android does not allow them, in which case the tap opens the
+  page, which asks. A long press opens the page.
 - **Only with background mode.** The watch notification is the foreground service's, so it and its
   Stop, Connect and Disconnect buttons exist only while background mode is on. With it off, a host's
   and a tailnet's page say so under In the background, with **Turn on background mode** (the same
@@ -111,12 +149,19 @@ the record turns into a state that is not news (working, idle), when its kind is
 the person opens the pane, or when a Reply, Interrupt, Approve or Deny from it was taken by Rex. A
 message stays until the pane is opened, since nothing says it is over.
 
+An action that went through does not just vanish: the pane's notification becomes a quiet note of
+what happened ("Approved", "Denied", "Interrupted", "Sent: yes", "Tab muted…") with no actions, which
+Android takes away after 4 s (`setTimeoutAfter`, `Alerts.confirm`). Replacing the notification is
+also what stops Reply's spinner. The pane going back to work, as it does once answered, leaves the
+note to go by itself.
+
 ## Grouping
 
 Each notification is in the group of its host (`host/hostId`), whatever its session: with many
 hosts the shade shows one entry per host, which opens to its panes. The group's summary is silent,
 titled by the host, says how many programs have something ("3 programs"), lists the latest six
-(`InboxStyle`, pane and tab: text), and goes with the last one. The channels stay one per kind for
+(`InboxStyle`, pane and tab: text), and goes with the last one. Its tap opens the home on Activity,
+where that host's programs are listed (a signed link, as a pane's). The channels stay one per kind for
 the whole app, not per host: Android's channel pages are where sound and Do Not Disturb are set,
 and a set of four per host would grow with every host saved and never shrink (a deleted channel
 still counts). What differs per host is chosen in the app, on the host's page (below).
@@ -136,10 +181,14 @@ for a redialing connection, then:
 Both name the pane, which need not be the one on screen or even in the attached session: a
 bootstrapped connection may send keys to any session's panes (verified on preview.22). Rex answers
 `client.key` with `{handled: false}` when no Lua binding took the key, which is the normal case.
-On success the notification goes; otherwise it comes back, silently, saying "Not sent". No Reply for
+On success the notification says so for a moment (Clearing, above); otherwise it comes back saying
+"Not sent", with a sound this once, as the person is waiting to hear. No Reply for
 `auth`: a password does not belong in a notification's reply history or on a lock screen. The connections
 are the process's, not the activity's, so a Reply still goes after the activity was destroyed; once
-the process is gone there is none, and the action says Not sent.
+the process is gone there is none, and the action says Not sent. A process Android started again has
+no record of the notification an action came from, so each action's intent carries the alert's
+title, host and kind, and Not sent, Prompt changed and the confirmation are made from those: the
+spinner always stops.
 
 Reply offers the person's quick replies (below) as its choices (`RemoteInput.setChoices`): the
 first five that are one line of at most 40 characters, since Android sends a choice's text as shown.
@@ -238,12 +287,17 @@ phone's and sends the same paste.
 ## Permission and settings
 
 Android 13+ asks for `POST_NOTIFICATIONS` when the person turns Background alerts on - the one moment
-the question explains itself. Settings › Background and notifications (a chevron row in the
-Connection group) shows:
+the question explains itself. Refused, or refused before for good (Android then no longer asks), or
+with notifications off for the app: a toast says where and Android's notification page for the app
+opens, rather than a message with nowhere to go. Settings › Background and notifications (a chevron
+row in the Connection group, and what Manage, the stopped notes and the background tile's long
+press open) shows:
 
 - **Background alerts**, with what it does.
 - **Let it run in the background**, a checklist (`BackgroundChecks`), each row saying it is fine or
   **Fix**, which opens the place to fix it:
+  - *Android stopped background mode* (red, only after it happened): when, and Fix (above, "Android
+    stopped it").
   - *Background notification*: with background mode off, that there is no notification and no
     buttons, and **Turn on**; with it on and the notification hidden (`Alerts.watchHidden`: not
     allowed, or its channel off), that the service runs with its notification and buttons hidden,
@@ -264,13 +318,37 @@ Connection group) shows:
 - **Hosts**: each saved host, with what it does in the background, opening its page: Stay connected
   in the background, Always connected, Notifications from this host (off silences it), and the five
   switches below for this host, each saying "(default)" while it follows the page's, until set
-  here; Use the defaults forgets the host's own (`HostBackground`, kept by `BackgroundStore`).
+  here; Use the defaults forgets the host's own (`HostBackground`, kept by `BackgroundStore`). With
+  background mode off the page says so above them, "Background alerts are off", with **Turn on**:
+  the switches are kept but say nothing until it is on. **Unmute every tab** when some are muted.
+  The host's row here, and on the home (a crossed-out bell beside its name, read as "Notifications
+  off"), says when its notifications are off and how many tabs are muted.
 - **Tell me when**: a switch per kind, every host's default.
 - **Quick Settings tiles**: the three, each with Change… and Clear (above).
 - Vibrate on a bell, and each channel's Android page (sound, vibration, lock screen, Do Not
-  Disturb), marked "Off in Android" when the person switched it off there.
+  Disturb): Needs you, Failures, Finished, Program messages and Progress, marked "Off in Android"
+  when the person switched it off there.
 
 The page reads Android's side again whenever the app comes back.
+
+## Muted tabs
+
+A tab's ⋮ menu has **Mute this tab** (then **Unmute this tab**, saying its programs send no
+notifications), and an alert has **Mute** where a slot is free. A muted tab's panes post no alert
+and no progress bar, and what they had up goes. Mutes are the host's (`HostBackground.muted`, by
+Rex's window id, the newest 100), kept with its other background choices, in the settings backup
+(`background.hosts[].mutedTabs`), counted on the host's row, and undone one by one from the tab or
+all at once from the host's page. A whole host is silenced on its page, as before.
+
+## Widget
+
+A home screen widget (`HomeWidget`, Glance) lists each connected host with how many tabs need the
+person (waiting or failed), are done and not yet seen, and are working, in the home's words
+(`activitySections`, `runningItems`), four hosts at most. A tap opens the home on Activity. Only a
+live connection hears a host's programs, so the counts are as fresh as the background watch keeps
+them: it writes them as they change, at most every 3 s, and the widget says "Updated 14:05". Without
+the watch (background mode off, or stopped) they are the ones from when the app last left the
+screen, and it says "Background off · counts may be stale · 14:05". Nothing redraws it on a timer.
 
 ## Real Rex (preview.22 / api 19)
 
@@ -328,8 +406,16 @@ pane's alert: a bar is news of work under way, not a call for the person.
   taken, the picker rebinding (moving an item from another tile) and clearing, Settings' three
   tiles, and the background-mode line and its Turn on; `WatchHiddenTest` (JVM): the checklist's
   hidden notification without the permission and with the channel off, each Fix's page.
-- `LaunchTest.notificationsHasASwitchForEachKindThatTheStoreKeeps` (shared: JVM and emulator) and the
-  `notifications-*` screenshots.
+- `LaunchTest.notificationsHasASwitchForEachKindThatTheStoreKeeps` (shared: JVM and emulator: also
+  the Failures and Progress channel rows) and the `notifications-*` screenshots.
+- Alert links and actions: `AttentionLedgerTest` (core: a signature opens exactly its target, after
+  a restart with the same key, never with another), `NotificationsTest` (a tap's link after the key
+  is read again, a forged or old link expired, the summary's host link, a removed host, a Reply the
+  app has no record of saying Not sent, the confirmations, Mute, the Failures channel made from
+  Needs you).
+- `BackgroundModeTest`: Stop's note and its Turn on, Android's stop recorded until the watch runs, a
+  host that went kept as Off with Connect, the widget's counts written by the watch;
+  `HomeWidgetTest` (the stored counts, the footer, the background tile's words).
 
 ## Left out
 
@@ -340,5 +426,5 @@ pane's alert: a bar is news of work under way, not a call for the person.
 - Notifications with the app's process dead and not restarted (force stop, or a maker's killer that
   also blocks restarts): Rex has no push; Background alerts are the way, and the checklist says what
   to allow.
-- A per-session mute. A host's mute is on its page. Rex shares no seen state; a done or failed
+- A per-session mute: a host's mute is on its page, a tab's in its ⋮ menu. Rex shares no seen state; a done or failed
   pane a desk app looked at is inferred seen and its notification goes (home.md, "Seen").

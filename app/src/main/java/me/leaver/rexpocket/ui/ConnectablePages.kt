@@ -237,6 +237,16 @@ internal fun HostPage(
         }
         BackgroundGroup(ConnectableKind.Host, choices.keep, backgroundMode, onBackgroundMode) { onChoices(choices.withKeep(it)) }
         Group(stringResource(R.string.conn_group_notifications), icons = false) {
+            // The switches below are kept while background mode is off, but say nothing until it is on.
+            if (!backgroundMode) {
+                SheetItem(
+                    label = stringResource(R.string.bg_alerts_off_line),
+                    supporting = stringResource(R.string.bg_alerts_off_line_body),
+                    detail = if (onBackgroundMode != null) stringResource(R.string.bg_turn_on_short) else null,
+                    keepOpen = true,
+                    enabled = onBackgroundMode != null,
+                ) { onBackgroundMode?.invoke() }
+            }
             SheetItem(
                 label = stringResource(R.string.bg_notify),
                 detail = state(choices.notify),
@@ -257,6 +267,14 @@ internal fun HostPage(
                 SheetItem(stringResource(R.string.bg_reset), enabled = choices.notify, keepOpen = true) {
                     onChoices(choices.copy(overrides = emptyMap()))
                 }
+            }
+            // Tabs muted from their ⋮ menu or an alert, closed ones too: all back at once.
+            if (choices.muted.isNotEmpty()) {
+                SheetItem(
+                    stringResource(R.string.bg_unmute_tabs),
+                    detail = pluralStringResource(R.plurals.bg_tabs_muted, choices.muted.size, choices.muted.size),
+                    keepOpen = true,
+                ) { onChoices(choices.copy(muted = emptySet())) }
             }
         }
         tile()

@@ -27,7 +27,8 @@ class BackgroundStore(context: Context) {
                         put(event, events.optBoolean(name))
                     }
                 }
-                put(id, HostBackground(h.optBoolean("stay", true), h.optBoolean("always", false), h.optBoolean("notify", true), overrides))
+                val muted = h.optJSONArray("muted")?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf(String::isNotEmpty) }.toSet() }.orEmpty()
+                put(id, HostBackground(h.optBoolean("stay", true), h.optBoolean("always", false), h.optBoolean("notify", true), overrides, muted))
             }
         }
         return BackgroundHosts(hosts)
@@ -42,7 +43,8 @@ class BackgroundStore(context: Context) {
                     .put("stay", h.stay)
                     .put("always", h.always)
                     .put("notify", h.notify)
-                    .put("events", JSONObject().apply { h.overrides.forEach { (e, on) -> put(e.name, on) } }),
+                    .put("events", JSONObject().apply { h.overrides.forEach { (e, on) -> put(e.name, on) } })
+                    .apply { if (h.muted.isNotEmpty()) put("muted", org.json.JSONArray(h.muted.toList())) },
             )
         }
         // Committed, not applied: Android may start the app again without a screen at any moment,

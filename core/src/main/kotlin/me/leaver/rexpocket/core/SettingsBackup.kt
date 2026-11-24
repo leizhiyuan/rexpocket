@@ -26,6 +26,9 @@ object SettingsFormat {
     const val MAX_PRIVATE_KEY = 16 * 1024
     const val MIN_FONT_SCALE = 0.7f
     const val MAX_FONT_SCALE = 1.8f
+
+    /** The longest tab (window) id a muted tab may have in a file. */
+    const val MAX_TAB_ID = 128
     val HOME_FILTERS = listOf("All", "Activity", "NeedsYou", "Running")
 
     fun mentionsFormat(text: String): Boolean =
@@ -130,11 +133,23 @@ object SettingsFormat {
                             overrides[event] = e.opt(key) as? Boolean ?: refuse(SettingsProblem.Kind.BadValue, "$field.events.$key")
                         }
                     }
+                    // The tabs muted on this host, by Rex's window id: added later, so a file may have none.
+                    val muted = h.opt("mutedTabs").let { v ->
+                        if (v == null || v == JSONObject.NULL) emptySet() else {
+                            val arr = v as? JSONArray ?: refuse(SettingsProblem.Kind.BadValue, "$field.mutedTabs")
+                            if (arr.length() > HostBackground.MAX_MUTED) refuse(SettingsProblem.Kind.BadValue, "$field.mutedTabs", arr.length().toString())
+                            List(arr.length()) { j ->
+                                (arr.opt(j) as? String)?.takeIf { it.isNotEmpty() && it.length <= MAX_TAB_ID }
+                                    ?: refuse(SettingsProblem.Kind.BadValue, "$field.mutedTabs[${j + 1}]")
+                            }.toSet()
+                        }
+                    }
                     hostBackground[name] = HostBackground(
                         stay = bool(h, "stay", field) ?: d.stay,
                         always = bool(h, "always", field) ?: d.always,
                         notify = bool(h, "notify", field) ?: d.notify,
                         overrides = overrides,
+                        muted = muted,
                     )
                 }
             }
@@ -269,7 +284,8 @@ object SettingsFormat {
             if (name !in written || b.isDefault) continue
             perHost.put(
                 JSONObject().put("name", name).put("stay", b.stay).put("always", b.always).put("notify", b.notify)
-                    .put("events", JSONObject().apply { b.overrides.forEach { (e, on) -> put(e.name, on) } }),
+                    .put("events", JSONObject().apply { b.overrides.forEach { (e, on) -> put(e.name, on) } })
+                    .apply { if (b.muted.isNotEmpty()) put("mutedTabs", JSONArray(b.muted.toList())) },
             )
         }
         if (perHost.length() > 0) background.put("hosts", perHost)

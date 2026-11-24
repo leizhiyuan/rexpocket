@@ -143,6 +143,152 @@ class NotificationsTest {
         throw AssertionError("still up: " + manager.activeNotifications.filter { it.tag == tag(block) }.map { it.notification.text() }, e)
     }
 
+    /**
+     * An action went through: the pane's notification says [what], quietly, with no actions, and
+     * goes by itself after a few seconds (Android's setTimeoutAfter, which Robolectric does not run).
+     */
+    private fun confirmed(block: String, what: String) {
+        val n = paneNotification(block) { it.text() == what }
+        assertTrue("no actions on a confirmation", n.actions.isNullOrEmpty())
+        assertEquals(Alerts.CONFIRM_MS, n.timeoutAfter)
+        // The pane going back to work, as it does once answered, leaves the confirmation to go by itself.
+        desk.rex.report(block, null)
+        pause(300)
+        assertEquals(what, paneNotification(block).text())
+    }
+
+    /** The intent a notification's tap delivers to the app. */
+    private fun tapped(n: Notification): Intent = shadowOf(n.contentIntent).savedIntent
+
+    /**
+     * After Android killed and restarted the process, the app has no record of a notification it
+     * posted: a Reply that cannot be sent still comes back saying so, from the action's own words,
+     * so its spinner stops; and with a sound this once, as the person is waiting for it.
+     */
+    @Test
+    fun aReplyTheAppHasNoRecordOfStillSaysItWasNotSent() {
+        val block = start().first()
+        away()
+        desk.rex.report(block, "blocked", kind = "question", app = "claude", msg = "Which branch?")
+        val n = paneNotification(block)
+        val reply = n.actionNamed(label(R.string.alerts_reply))!!
+        val input = reply.remoteInputs.single()
+        val filled = Intent(sent(reply.actionIntent))
+        RemoteInput.addResultsToIntent(arrayOf(input), filled, Bundle().apply { putCharSequence(input.resultKey, "main") })
+        // As after a restart: no record of the alert, and nothing to send with.
+        Alerts.settle(app, desk.host.id, block)
+        gone(block)
+        val handler = Alerts.actions
+        Alerts.actions = null
+        try {
+            AlertActionReceiver().onReceive(app, filled)
+            val back = paneNotification(block) { it.text() == label(R.string.alerts_not_sent) }
+            assertEquals(n.title(), back.title())
+            assertEquals("desk", back.extras.getCharSequence(Notification.EXTRA_SUB_TEXT).toString())
+        } finally {
+            Alerts.actions = handler
+        }
+    }
+
+    /**
+     * A notification's tap names its pane with the install's signature over it, so it still opens
+     * the pane after a restart (the key read again from app-private storage), and any other link
+     * of the app's scheme - an old one, a forged one - is an expired alert, never a pane.
+     */
+    @Test
+    fun aTapOpensItsPaneAfterARestartAndAForgedOneDoesNot() {
+        val block = start().first()
+        away()
+        desk.rex.report(block, "blocked", kind = "question", app = "claude", msg = "Which branch?")
+        val intent = tapped(paneNotification(block))
+        val target = AlertTarget(desk.host.id, sid, block)
+        assertEquals(me.leaver.rexpocket.alerts.AlertLink.Pane(target), Alerts.linkOf(app, intent))
+        Alerts.forgetKey()
+        assertEquals("after a restart", me.leaver.rexpocket.alerts.AlertLink.Pane(target), Alerts.linkOf(app, intent))
+        assertTrue("the key is in storage no backup holds", java.io.File(app.noBackupFilesDir, "alert-link.key").length() >= 32)
+
+        val forged = Intent(intent).setData(intent.data!!.buildUpon().clearQuery()
+            .appendQueryParameter("h", desk.host.id).appendQueryParameter("s", sid).appendQueryParameter("b", "other-block")
+            .appendQueryParameter("sig", intent.data!!.getQueryParameter("sig")).build())
+        assertEquals(me.leaver.rexpocket.alerts.AlertLink.Expired, Alerts.linkOf(app, forged))
+        val old = Intent().setData(android.net.Uri.parse("rexpocket-alert://open/0f8e2c1a-5d1b-4c4e-9a52-1a2b3c4d5e6f"))
+        assertEquals(me.leaver.rexpocket.alerts.AlertLink.Expired, Alerts.linkOf(app, old))
+        assertEquals(null, Alerts.linkOf(app, Intent().setData(android.net.Uri.parse("https://example.com/"))))
+
+        // The host's group summary opens the app at that host.
+        val summary = manager.activeNotifications.first { it.tag == "host/${desk.host.id}" }.notification
+        assertEquals(me.leaver.rexpocket.alerts.AlertLink.Host(desk.host.id), Alerts.linkOf(app, tapped(summary)))
+        compose.runOnUiThread { model.openHostAlerts(desk.host.id) }
+        assertEquals(Route.Home, model.route.value)
+        assertEquals(HomeFilter.Activity, model.homeFilter.value)
+    }
+
+    /** An alert of a host removed since says so and goes, rather than doing nothing. */
+    @Test
+    fun anAlertOfARemovedHostSaysSoAndGoes() {
+        val block = start().first()
+        away()
+        desk.rex.report(block, "blocked", kind = "question", app = "claude", msg = "Which branch?")
+        paneNotification(block)
+        compose.runOnUiThread {
+            model.disconnectAll()
+            HostStore(app).delete(desk.host.id)
+            model.openAlert(AlertTarget(desk.host.id, sid, block))
+        }
+        gone(block)
+        assertEquals(app.getString(R.string.alerts_host_gone), org.robolectric.shadows.ShadowToast.getTextOfLatestToast())
+        assertEquals(Route.Home, model.route.value)
+    }
+
+    /**
+     * Mute on an alert, in the slot its other actions leave: the tab's panes alert no more, the
+     * choice is kept with the host's, and the notification says where to undo it.
+     */
+    @Test
+    fun muteOnAnAlertSilencesItsTab() {
+        val (block, other) = start()
+        away()
+        desk.rex.report(block, "done", app = "cargo", msg = "built")
+        val n = paneNotification(block)
+        val mute = n.actionNamed(label(R.string.alerts_mute))!!
+        AlertActionReceiver().onReceive(app, sent(mute.actionIntent))
+        val window = model.pocket.value.views.getValue(sid).windows.first { w -> w.blocks.any { it.id == block } }.id
+        await(5_000) { me.leaver.rexpocket.data.BackgroundStore(app).hosts().of(desk.host.id).mutes(window) }
+        assertEquals(label(R.string.alerts_muted), paneNotification(block).text())
+        desk.rex.report(block, "error", msg = "crashed")
+        pause(500)
+        assertEquals(label(R.string.alerts_muted), paneNotification(block).text())
+        // Another tab still alerts, and the tab's ⋮ menu unmutes it.
+        val otherWindow = model.pocket.value.views.getValue(sid).windows.first { w -> w.blocks.any { it.id == other } }.id
+        if (otherWindow != window) {
+            desk.rex.report(other, "error", msg = "also crashed")
+            assertEquals(Alerts.CHANNEL_FAILED, paneNotification(other).channelId)
+        }
+        compose.runOnUiThread { model.muteTab(desk.host.id, window, false) }
+        desk.rex.report(block, "blocked", kind = "question", msg = "Again?")
+        paneNotification(block) { it.text().endsWith("Again?") }
+    }
+
+    /**
+     * Failures have their own channel since waits and failures were split; made once from what the
+     * person set on Needs you, so a quieted Needs you stays quiet for failures too.
+     */
+    @Test
+    fun theFailuresChannelStartsFromWhatNeedsYouWasSetTo() {
+        app = freshApp()
+        Alerts.channels(app)
+        manager.deleteNotificationChannel(Alerts.CHANNEL_FAILED)
+        manager.deleteNotificationChannel(Alerts.CHANNEL_ATTENTION)
+        manager.createNotificationChannel(
+            android.app.NotificationChannel(Alerts.CHANNEL_ATTENTION, "Needs you", NotificationManager.IMPORTANCE_LOW).apply { enableVibration(false) },
+        )
+        Alerts.channels(app)
+        val failed = manager.getNotificationChannel(Alerts.CHANNEL_FAILED)
+        assertEquals(NotificationManager.IMPORTANCE_LOW, failed.importance)
+        assertEquals(false, failed.shouldVibrate())
+        assertEquals(app.getString(R.string.alerts_channel_failed), failed.name.toString())
+    }
+
     @Test
     fun aQuestionWhileAwayOffersReplyThatAnswersThePane() {
         val block = start().first()
@@ -162,7 +308,7 @@ class NotificationsTest {
         RemoteInput.addResultsToIntent(arrayOf(input), filled, Bundle().apply { putCharSequence(input.resultKey, "main") })
         AlertActionReceiver().onReceive(app, filled)
         awaitInputs(listOf("paste $block main", "key $block +enter"))
-        gone(block)
+        confirmed(block, app.getString(R.string.alerts_sent, "main"))
     }
 
     private fun progressOf(windowId: String) =
@@ -244,7 +390,7 @@ class NotificationsTest {
         await(5_000) { second.rex.inputs.toList() == listOf("paste $otherBlock yes", "key $otherBlock +enter") }
         assertTrue("the first host got input meant for the second: ${desk.rex.inputs}", desk.rex.inputs.isEmpty())
         // The first host's notification is still up; only the answered one went.
-        await(5_000) { manager.activeNotifications.none { it.tag == Alerts.tagOf(second.host.id, otherBlock) } }
+        await(5_000) { manager.activeNotifications.any { it.tag == Alerts.tagOf(second.host.id, otherBlock) && it.notification.text() == app.getString(R.string.alerts_sent, "yes") } }
         assertEquals(1, manager.activeNotifications.count { it.tag == tag(block) && it.id == Alerts.PANE_ID })
     }
 
@@ -256,7 +402,7 @@ class NotificationsTest {
         val n = paneNotification(block)
         AlertActionReceiver().onReceive(app, sent(n.actionNamed(app.getString(me.leaver.rexpocket.R.string.alerts_interrupt))!!.actionIntent))
         awaitInputs(listOf("key $block ctrl+key_c"))
-        gone(block)
+        confirmed(block, app.getString(R.string.alerts_interrupted))
     }
 
     @Test
@@ -294,7 +440,7 @@ class NotificationsTest {
 
         AlertActionReceiver().onReceive(app, sent(approve.actionIntent))
         awaitInputs(listOf("key $block +enter"))
-        gone(block)
+        confirmed(block, label(R.string.alerts_approved))
     }
 
     @Test
@@ -305,7 +451,7 @@ class NotificationsTest {
         val deny = paneNotification(block).actionNamed(label(R.string.alerts_deny))!!
         AlertActionReceiver().onReceive(app, sent(deny.actionIntent))
         awaitInputs(listOf("key $block +escape"))
-        gone(block)
+        confirmed(block, label(R.string.alerts_denied))
     }
 
     /**
@@ -384,7 +530,7 @@ class NotificationsTest {
         away()
         desk.rex.report(block, "done", msg = "built")
         desk.rex.report(other, "error", msg = "crashed")
-        assertEquals(Alerts.CHANNEL_ATTENTION, paneNotification(other).channelId)
+        assertEquals(Alerts.CHANNEL_FAILED, paneNotification(other).channelId)
         assertEquals(0, manager.activeNotifications.count { it.tag == tag(block) })
     }
 
