@@ -946,6 +946,12 @@ class PocketSession(
             } catch (e: CancellationException) {
                 trace("pane $blockId: no longer watched")
                 throw e
+            } catch (e: DroppedStream) {
+                trace("pane $blockId: ${e.message}")
+                // A closed pane ends its stream with a fatal close (4000 / REJECT_CLOSED);
+                // that is normal when closing a pane, not a problem to warn about or retry.
+                if (e.fatal) return@flow
+                note(e.toProblem())
             } catch (e: RexCallException) {
                 trace("pane $blockId: ${e.code} ${e.message}")
                 // The pane or its session is gone; watching it again cannot help.

@@ -47,11 +47,13 @@ class CloseOwnedPaneTest {
                     session.watchPane("block:1").collect { }
                 }
                 withTimeout(5_000) {
-                    while (rex.ownerOf("block:1") != "client:test") delay(20)
+                    while (rex.ownerOf("block:1") != "client:test" || !rex.hasOpenDataStream()) delay(20)
                 }
 
                 session.closeBlock("block:1")
-                watchFirst.cancel()
+                // Rex closes the pane's data stream with 4000; watchPane must finish quietly.
+                withTimeout(5_000) { watchFirst.join() }
+                assertNull("closing a pane should not note a problem", session.state.value.notice)
 
                 // Wait for block_closed -> refreshView to update the focused pane to block:2.
                 withTimeout(5_000) {
@@ -94,7 +96,7 @@ class CloseOwnedPaneTest {
                     session.watchPane("block:1").collect { }
                 }
                 withTimeout(5_000) {
-                    while (rex.ownerOf("block:1") != "client:test") delay(20)
+                    while (rex.ownerOf("block:1") != "client:test" || !rex.hasOpenDataStream()) delay(20)
                 }
 
                 session.closeBlock("block:1")
@@ -128,6 +130,7 @@ private class FakeRexForClose(private val sendBlockClosedEvent: Boolean) : AutoC
     private val liveBlocks = CopyOnWriteArrayList(listOf("block:1", "block:2"))
     private val owners = ConcurrentHashMap<String, String>()
     private val revision = AtomicLong(1)
+    private val dataSockets = CopyOnWriteArrayList<WebSocket>()
     val disownCalls = CopyOnWriteArrayList<String>()
 
     private val ticket = ByteArray(16) { (it + 1).toByte() }
@@ -137,6 +140,8 @@ private class FakeRexForClose(private val sendBlockClosedEvent: Boolean) : AutoC
         get() = Endpoint(server.hostName, server.port, plaintext = true)
 
     fun ownerOf(blockId: String): String? = owners[blockId]
+
+    fun hasOpenDataStream(): Boolean = dataSockets.isNotEmpty()
 
     init {
         server.dispatcher = object : Dispatcher() {
@@ -221,6 +226,9 @@ private class FakeRexForClose(private val sendBlockClosedEvent: Boolean) : AutoC
                 liveBlocks.remove(blockId)
                 owners.remove(blockId)
                 revision.incrementAndGet()
+                // Match real Rex: closing a block closes its terminal data stream with 4000.
+                dataSockets.forEach { it.close(4000, "block closed") }
+                dataSockets.clear()
                 webSocket.send(response(id, JSONObject()))
                 if (sendBlockClosedEvent) {
                     webSocket.send(
@@ -287,7 +295,12 @@ private class FakeRexForClose(private val sendBlockClosedEvent: Boolean) : AutoC
     private fun data() = object : WebSocketListener() {
         private var greeted = false
 
+        override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
+            dataSockets += webSocket
+        }
+
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            dataSockets -= webSocket
             webSocket.close(code, reason)
         }
 
