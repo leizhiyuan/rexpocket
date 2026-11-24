@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A host's other addresses and its SSH key, in the host dialog. -->
+<resources>
+    <string name="other_addresses_title">Other addresses</string>
+    <string name="other_addresses_try">Try other addresses</string>
+    <string name="other_addresses_hint">When this address cannot be reached, these are tried in order. A host on Rex\'s port is tried only on Rex\'s ports, and a TLS host only over TLS.</string>
+    <string name="other_addresses_hint_ssh">When this address cannot be reached, these are tried in order, with the same account and key. Every one must show the host key trusted for this host.</string>
+    <string name="other_address_unreadable">Not an address: never tried</string>
+    <string name="other_address_other_kind">Another kind of address than this host\'s: never tried</string>
+    <string name="other_address_weaker">Plain text for a TLS host: never tried</string>
+    <string name="other_address_same">The host\'s own address again</string>
+    <string name="other_address_up">Move up</string>
+    <string name="other_address_down">Move down</string>
+    <string name="other_address_remove">Remove</string>
+    <string name="other_address_field">Add an address</string>
+    <string name="other_address_placeholder">ws://192.168.1.20:7297</string>
+    <string name="other_address_placeholder_ssh">ssh://192.168.1.20</string>
+    <string name="other_address_add">Add</string>
+    <string name="host_via_other">via %1$s</string>
+    <string name="host_trying_other">trying %1$s</string>
+    <string name="ssh_key_generate">Generate key</string>
+    <string name="ssh_key_show_public">Show public key</string>
+    <string name="ssh_key_public_unreadable">The public key could not be read from this key. An encrypted key needs its passphrase.</string>
+    <string name="ssh_key_replace_title">Replace this host\'s key?</string>
+    <string name="ssh_key_replace_body">The new key signs in only once its public key is in the host\'s authorized_keys. The old key is gone after Save.</string>
+    <string name="ssh_key_replace">Replace</string>
+    <string name="ssh_key_public_title">Public key for %1$s</string>
+    <string name="ssh_key_public_hint">Add this to ~/.ssh/authorized_keys on the host. It is the public half only; the private key stays on this phone.</string>
+    <string name="check_other_addresses">Other addresses</string>
+    <string name="check_other_waiting">waiting</string>
+    <string name="check_other_works">works</string>
+    <string name="check_other_other_key">shows another host key (%1$s): a connection never takes it</string>
+    <string name="check_other_same_key">the same host key as above; trust it there</string>
+</resources>

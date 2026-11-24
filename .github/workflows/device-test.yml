@@ -129,6 +129,7 @@ jobs:
               me.leaver.rexpocket.ui.HostImportScreenTest \
               me.leaver.rexpocket.ui.SettingsBackupScreenTest \
               me.leaver.rexpocket.ui.HostCheckScreenTest \
+              me.leaver.rexpocket.ui.OtherAddressesTest \
               me.leaver.rexpocket.ui.ShareTest \
               me.leaver.rexpocket.ui.QuickRepliesScreenTest \
               me.leaver.rexpocket.ui.TermAgentTest \

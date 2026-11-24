@@ -878,10 +878,12 @@ internal fun HostItem(env: TreeEnv, ref: HostRef, rows: List<HomeSession>, expan
             if (sessions.isNotEmpty()) " · " + pluralStringResource(R.plurals.session_count, sessions.size, sessions.size) else ""
     }
     val groups = hostActions(ref, expanded, sessions, env.folds, env.ops, env.hosts.indexOfFirst { it.id == host.id }, env.hosts.size, env.sheets)
+    // Connected, or trying, at one of the host's other addresses: which one.
+    val other = otherAddressInUse(host, state).takeIf { live != null }
     HostHeader(
         host = host,
         live = live != null,
-        summary = summary,
+        summary = if (other == null) summary else summary + " · " + stringResource(if (ref.isLive) R.string.host_via_other else R.string.host_trying_other, other),
         phase = live?.state?.phase,
         expanded = expanded,
         foldable = foldable,
@@ -939,3 +941,7 @@ private fun SessionBody(env: TreeEnv, ref: HostRef, row: HomeSession, opening: B
         else -> NoteRow(stringResource(R.string.home_connect_to_see, host.label), stringResource(R.string.action_connect) to { env.ops.connect(host) })
     }
 }
+
+/** The address [state] uses when it is not [host]'s own, as the person reads it; null on its own address. */
+internal fun otherAddressInUse(host: SavedHost, state: PocketState): String? =
+    state.endpointLabel.takeIf { it.isNotBlank() && host.fallbacks.isNotEmpty() && it != host.endpoint().label() }

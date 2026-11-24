@@ -84,6 +84,29 @@ class MultiHostTest {
         assertEquals(linux.host.id, HostStore(compose.activity).lastHost())
     }
 
+    /**
+     * A host whose own address is down (a closed port) and whose other address is the linux Rex:
+     * it connects there, its row says through which address, and that address is remembered.
+     */
+    @Test
+    fun aHostWhoseOwnAddressIsDownConnectsAtItsOtherAddress() {
+        val closed = java.net.ServerSocket(0).use { it.localPort }
+        val other = "ws://127.0.0.1:${linux.rex.endpoint.port}"
+        val app = freshApp()
+        val store = HostStore(app)
+        store.upsert(linux.host.copy(port = closed, fallbacks = listOf(other)))
+        store.setConnectedHosts(listOf(linux.host.id))
+        app.getSharedPreferences("rexpocket", android.content.Context.MODE_PRIVATE).edit()
+            .putLong("update.checkedAt", System.currentTimeMillis()).commit()
+        val m = launchedModel(compose, app)
+        model = m
+        compose.setContent { RexPocketApp(m) }
+        compose.awaitThat { live(m, linux) }
+        assertEquals("127.0.0.1:${linux.rex.endpoint.port}", m.lives.value.getValue(linux.host.id).state.endpointLabel)
+        compose.awaitThat { compose.onAllNodes(hasText(compose.activity.getString(R.string.host_via_other, "127.0.0.1:${linux.rex.endpoint.port}"), substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(other, store.lastRoute(linux.host.id)?.first)
+    }
+
     @Test
     fun disconnectDropsOnlyThatHostAndConnectIsItsOwnButton() {
         val m = start()

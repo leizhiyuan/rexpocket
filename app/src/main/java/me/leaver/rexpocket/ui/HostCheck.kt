@@ -54,21 +54,36 @@ class HostTester(
 ) {
     private val _report = MutableStateFlow<CheckReport?>(null)
     val report: StateFlow<CheckReport?> = _report
+
+    /** The host's other addresses, each with its own check once the main one has run (null: not yet). */
+    private val _others = MutableStateFlow<List<Pair<String, CheckReport?>>>(emptyList())
+    val others: StateFlow<List<Pair<String, CheckReport?>>> = _others
     private var job: Job? = null
 
     /** The target the report is for, so the dialog can tell when what is typed moved on. */
     @Volatile var tested: CheckTarget? = null
         private set
 
-    fun start(target: CheckTarget) {
+    /**
+     * Checks [target], then each of [others] (an address's key and its target) in the order a
+     * connection tries them, one at a time. An SSH address is checked against the same host key.
+     */
+    fun start(target: CheckTarget, others: List<Pair<String, CheckTarget>> = emptyList()) {
         job?.cancel()
         tested = target
         _report.value = null
-        Diagnostics.event(TAG, "test ${if (target.viaSsh) "ssh" else if (target.plaintext) "ws" else "wss"} tailnet=${target.viaTailnet}")
+        _others.value = others.map { it.first to null }
+        Diagnostics.event(TAG, "test ${if (target.viaSsh) "ssh" else if (target.plaintext) "ws" else "wss"} tailnet=${target.viaTailnet} others=${others.size}")
         job = scope.launch {
             val report = ConnectionCheck(target, route = { route(target.host) }).run { _report.value = it }
             // Steps and their outcome only: never an address's credentials.
             Diagnostics.event(TAG, "test: " + report.steps.joinToString { (s, r) -> "$s ${outcome(r)}" })
+            others.forEachIndexed { i, (key, other) ->
+                val checked = ConnectionCheck(other, route = { route(other.host) }).run { r ->
+                    _others.value = _others.value.toMutableList().also { it[i] = key to r }
+                }
+                Diagnostics.event(TAG, "test other ${i + 1}: " + checked.steps.joinToString { (s, r) -> "$s ${outcome(r)}" })
+            }
         }
     }
 
@@ -83,6 +98,7 @@ class HostTester(
         job = null
         tested = null
         _report.value = null
+        _others.value = emptyList()
     }
 
     companion object {
@@ -113,7 +129,50 @@ internal fun SavedHost.checkTarget(): CheckTarget = CheckTarget(
     viaTailnet = viaTailscale,
 )
 
+/**
+ * The other addresses a connection would try, as checks: each with the host's credentials and its
+ * one trusted key; addresses a connection skips are left out, as they are never dialed.
+ */
+internal fun SavedHost.otherCheckTargets(): List<Pair<String, CheckTarget>> {
+    val main = checkTarget()
+    return copy(tryOthers = true).routes().filter { !it.main }.map { r ->
+        r.key to main.copy(host = r.endpoint.host, port = r.endpoint.port, plaintext = r.endpoint.plaintext, sshUser = r.endpoint.sshUser, viaTailnet = r.viaTailnet)
+    }
+}
+
 internal const val HOST_CHECK_TAG = "host-check"
+internal const val OTHER_CHECKS_TAG = "other-checks"
+
+/**
+ * Each other address's check, one line each: it works, why it does not, or that it shows another
+ * host key than the main address did ([mainKey]), which a connection would never take.
+ */
+@Composable
+internal fun OtherChecks(others: List<Pair<String, CheckReport?>>, mainKey: String?) {
+    if (others.isEmpty()) return
+    Column(Modifier.fillMaxWidth().testTag(OTHER_CHECKS_TAG), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(stringResource(R.string.check_other_addresses), color = Colors.ink, fontSize = TextStyles.label, fontWeight = FontWeight.Medium)
+        for ((key, report) in others) {
+            val failed = report?.steps?.map { it.second }?.filterIsInstance<StepResult.Failed>()?.firstOrNull()
+            val seen = report?.seenHostKey
+            val (text, color) = when {
+                report == null -> stringResource(R.string.check_other_waiting) to Colors.muted
+                !report.finished -> stringResource(R.string.check_state_running) to Colors.accent
+                report.passed -> stringResource(R.string.check_other_works) to Colors.ok
+                seen != null && mainKey != null && seen != mainKey -> stringResource(R.string.check_other_other_key, seen) to Colors.danger
+                failed != null && failed.failure == CheckFailure.HostKeyUnknown && seen != null && seen == mainKey -> stringResource(R.string.check_other_same_key) to Colors.muted
+                failed != null -> failureReason(failed, report) to Colors.danger
+                else -> stringResource(R.string.check_state_failed) to Colors.danger
+            }
+            Text(
+                "$key: $text",
+                color = color,
+                fontSize = TextStyles.label,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
+    }
+}
 
 /**
  * The Test connection part of the host dialog: the button (Stop while it runs), each step with

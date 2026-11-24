@@ -1360,6 +1360,8 @@ internal fun HostDialog(
     var privateKey by remember { mutableStateOf(initial?.sshPrivateKey.orEmpty()) }
     var passphrase by remember { mutableStateOf(initial?.sshPassphrase.orEmpty()) }
     var useKey by remember { mutableStateOf(!initial?.sshPrivateKey.isNullOrEmpty()) }
+    var fallbacks by remember { mutableStateOf(initial?.fallbacks.orEmpty()) }
+    var tryOthers by remember { mutableStateOf(initial?.tryOthers ?: true) }
     val parsed = remember(address) { HostAddressParser.parse(address) }
     val ssh = parsed?.viaSsh == true
     // The account can be in the address or in its own field; the address wins when it names one.
@@ -1390,7 +1392,11 @@ internal fun HostDialog(
             sshPrivateKey = if (useKey) privateKey else "",
             sshPassphrase = if (useKey) passphrase else "",
             sshHostKey = pinned,
-        ).copy(tailnetProfile = if (viaTailscale && accounts.size > 1) account else initial?.tailnetProfile.orEmpty().takeIf { viaTailscale }.orEmpty())
+        ).copy(
+            tailnetProfile = if (viaTailscale && accounts.size > 1) account else initial?.tailnetProfile.orEmpty().takeIf { viaTailscale }.orEmpty(),
+            fallbacks = fallbacks,
+            tryOthers = tryOthers,
+        )
     }
 
     val passwordField = remember { FocusRequester() }
@@ -1510,6 +1516,16 @@ internal fun HostDialog(
                                 Text(stringResource(R.string.ssh_key_loaded), color = Colors.ok, fontSize = TextStyles.label, modifier = Modifier.align(Alignment.CenterVertically))
                             }
                         }
+                        SshKeyActions(
+                            hostName = label.trim().ifBlank { parsed?.host.orEmpty() },
+                            privateKey = privateKey,
+                            passphrase = passphrase,
+                            onGenerated = { key ->
+                                privateKey = key
+                                passphrase = ""
+                                useKey = true
+                            },
+                        )
                         Field(stringResource(R.string.ssh_passphrase), passphrase, password = true, imeAction = ImeAction.Done, onDone = { save() }) { passphrase = it }
                     } else {
                         Field(
@@ -1532,13 +1548,15 @@ internal fun HostDialog(
                         Text(stringResource(R.string.ssh_host_key_trusted, pinned), color = Colors.muted, fontSize = TextStyles.label)
                     }
                 }
-                // An imported host's other addresses: for the person to see, and to copy into the address.
-                if (!initial?.fallbacks.isNullOrEmpty()) {
-                    Text(
-                        stringResource(R.string.host_fallbacks, initial!!.fallbacks.joinToString(", ")),
-                        color = Colors.muted,
-                        fontSize = TextStyles.label,
-                        lineHeight = labelLeading,
+                // The host's other addresses, tried in turn when this one cannot be reached.
+                if (parsed != null) {
+                    OtherAddressesEditor(
+                        fallbacks = fallbacks,
+                        tryOthers = tryOthers,
+                        main = savedHost(parsed.viaTailscale)?.mainRoute(),
+                        sshUser = user,
+                        onChange = { fallbacks = it },
+                        onTryOthers = { tryOthers = it },
                     )
                 }
                 if (parsed != null && parsed.viaTailscale && accounts.size > 1) {
@@ -1572,7 +1590,9 @@ internal fun HostDialog(
                     val report by tester.report.collectAsState()
                     DisposableEffect(tester) { onDispose { tester.clear() } }
                     // A report is for what was typed when it ran: an edit since makes it stale.
-                    val target = parsed?.let { savedHost(viaTailscale = it.viaTailscale)?.checkTarget() }
+                    val typed = parsed?.let { savedHost(viaTailscale = it.viaTailscale) }
+                    val target = typed?.checkTarget()
+                    val others = typed?.otherCheckTargets().orEmpty()
                     LaunchedEffect(target) { if (tester.tested != null && tester.tested != target) tester.clear() }
                     HostCheckPanel(
                         report = report,
@@ -1580,13 +1600,15 @@ internal fun HostDialog(
                         enabled = canSave && target != null,
                         pinned = (if (sameSshHost) initial?.sshHostKey else null)?.ifBlank { null },
                         trusted = trusted,
-                        onRun = { target?.let(tester::start) },
+                        onRun = { target?.let { tester.start(it, others) } },
                         onCancel = tester::cancel,
                         onTrust = { key ->
                             trusted = key
-                            target?.let { tester.start(it.copy(hostKey = key)) }
+                            target?.let { tester.start(it.copy(hostKey = key), others.map { (k, t) -> k to t.copy(hostKey = key.takeIf { t.viaSsh }) }) }
                         },
                     )
+                    val otherReports by tester.others.collectAsState()
+                    OtherChecks(otherReports, mainKey = report?.seenHostKey ?: pinned.ifBlank { null })
                 }
             }
         },

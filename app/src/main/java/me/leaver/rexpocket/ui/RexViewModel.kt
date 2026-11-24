@@ -1208,6 +1208,15 @@ class RexViewModel @JvmOverloads constructor(
                             if (!known.viaSsh) append(if (known.plaintext) " · plaintext" else " · tls")
                             append(if (known.viaTailscale) " · tailnet" else " · local")
                             append(if (connections[known.id] != null) " · connected" else "")
+                            if (known.fallbacks.isNotEmpty()) {
+                                append(" · ").append(known.fallbacks.size).append(" other addresses")
+                                if (!known.tryOthers) append(" (not tried)")
+                                val route = connections[known.id]?.route?.value
+                                if (route != null) {
+                                    val n = known.routes().indexOfFirst { it.key == route.key }
+                                    append(if (route.main) " · on its own address" else " · on other address ${if (n > 0) n else "?"}")
+                                }
+                            }
                             append(if (known.id == open?.id) " · focused" else "")
                         },
                     ),
@@ -1246,6 +1255,10 @@ class RexViewModel @JvmOverloads constructor(
                 add(known.label)
                 add(known.host)
                 if (known.sshUser.isNotBlank()) add(known.sshUser)
+                for (other in known.fallbacks) {
+                    add(other)
+                    me.leaver.rexpocket.core.HostAddressParser.parse(other)?.let { add(it.host); it.sshUser?.let(::add) }
+                }
             }
             open?.let {
                 add(it.label)

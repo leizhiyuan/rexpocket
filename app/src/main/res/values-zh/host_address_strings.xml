@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A host's other addresses and its SSH key, in the host dialog. -->
+<resources>
+    <string name="other_addresses_title">其他地址</string>
+    <string name="other_addresses_try">尝试其他地址</string>
+    <string name="other_addresses_hint">此地址无法连接时，按顺序尝试这些地址。经 Rex 端口连接的主机只尝试 Rex 端口，TLS 主机只经 TLS 尝试。</string>
+    <string name="other_addresses_hint_ssh">此地址无法连接时，按顺序尝试这些地址，使用相同的账号和密钥。每个地址都必须出示为此主机信任的主机密钥。</string>
+    <string name="other_address_unreadable">不是地址：不会尝试</string>
+    <string name="other_address_other_kind">与此主机地址类型不同：不会尝试</string>
+    <string name="other_address_weaker">TLS 主机的明文地址：不会尝试</string>
+    <string name="other_address_same">与主机本身的地址相同</string>
+    <string name="other_address_up">上移</string>
+    <string name="other_address_down">下移</string>
+    <string name="other_address_remove">移除</string>
+    <string name="other_address_field">添加地址</string>
+    <string name="other_address_placeholder">ws://192.168.1.20:7297</string>
+    <string name="other_address_placeholder_ssh">ssh://192.168.1.20</string>
+    <string name="other_address_add">添加</string>
+    <string name="host_via_other">经 %1$s</string>
+    <string name="host_trying_other">正在尝试 %1$s</string>
+    <string name="ssh_key_generate">生成密钥</string>
+    <string name="ssh_key_show_public">显示公钥</string>
+    <string name="ssh_key_public_unreadable">无法从此密钥读取公钥。加密的密钥需要其密码。</string>
+    <string name="ssh_key_replace_title">替换此主机的密钥？</string>
+    <string name="ssh_key_replace_body">新密钥的公钥加入主机的 authorized_keys 后才能登录。保存后旧密钥将被删除。</string>
+    <string name="ssh_key_replace">替换</string>
+    <string name="ssh_key_public_title">%1$s 的公钥</string>
+    <string name="ssh_key_public_hint">将其添加到主机的 ~/.ssh/authorized_keys。这只是公钥部分，私钥留在此手机上。</string>
+    <string name="check_other_addresses">其他地址</string>
+    <string name="check_other_waiting">等待中</string>
+    <string name="check_other_works">可用</string>
+    <string name="check_other_other_key">出示了另一个主机密钥（%1$s）：连接绝不会接受</string>
+    <string name="check_other_same_key">与上面的主机密钥相同；请在上面信任它</string>
+</resources>
