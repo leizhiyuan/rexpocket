@@ -427,8 +427,8 @@ class PocketSession(
         val sid = requireSession()
         val view = _state.value.view?.takeIf { it.sessionId == sid }
         val block = blockId ?: view?.focusedBlock()?.id ?: return
-        val remaining = view?.allBlocks()?.filter { it.id != block }
-        if (remaining != null && remaining.isEmpty()) {
+        val blocks = view?.allBlocks()
+        if (blocks != null && blocks.size == 1 && blocks[0].id == block) {
             destroySession()
             return
         }
@@ -440,8 +440,8 @@ class PocketSession(
         val sid = requireSession()
         val view = _state.value.view?.takeIf { it.sessionId == sid }
         val window = windowId ?: view?.activeWindow()?.id
-        val remaining = window?.let { id -> view?.windows?.filter { it.id != id } }
-        if (remaining != null && remaining.isEmpty()) {
+        val windows = view?.windows
+        if (window != null && windows != null && windows.size == 1 && windows[0].id == window) {
             destroySession()
             return
         }
@@ -874,6 +874,7 @@ class PocketSession(
             rpc("session.view", JSONObject().put("session_id", sid))
         } catch (e: RexCallException) {
             if (e.code == "session_not_found" || e.code == "not_found") {
+                trace("session $sid: ${e.code} during refreshView; dropping")
                 dropSession(sid)
                 return
             }
@@ -1063,10 +1064,10 @@ class PocketSession(
                         "session.disown_block",
                         JSONObject().put("session_id", previousSession ?: sid).put("block_ids", JSONArray().put(previous)),
                     )
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                    // A closed pane has nothing left to hand back; clear it and still take the new one.
+                } catch (e: RexCallException) {
+                    // A closed pane or destroyed session has nothing left to hand back; clear it and still take the new one.
+                    if (e.code != "bad_request" && e.code != "not_found" && e.code != "session_not_found") throw e
+                    trace("pane $previous: disown skipped (${e.code}: ${e.message})")
                 }
                 ownedBlock = null
                 ownedSession = null
