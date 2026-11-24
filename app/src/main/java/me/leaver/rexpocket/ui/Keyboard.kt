@@ -37,14 +37,27 @@ internal fun imeHeight(): Int = WindowInsets.ime.getBottom(LocalDensity.current)
 /**
  * How far the pane slides up while the keyboard covers it. The terminal is not resized for the
  * keyboard - the program would take that as a window change and redraw everything - so the pane is
- * moved instead: up by what the keyboard covers, which puts the bottom of the terminal - the
- * prompt, the composer, the status line - back where it was, above the dock.
+ * moved instead: only as far as needed to keep the lowest row with content above the keyboard,
+ * capped at what the keyboard covers.
  *
- * What has to stay visible is the bottom of the grid, not the cursor: a full-screen program draws
- * its own cursor and hides the terminal's (`pi`, `htop`, Claude Code all do), and the rows it draws
- * below the cursor are part of what is being typed into.
+ * Content is the lowest of the cursor row and the last non-blank visible row. A fresh shell near
+ * the top of the pane stays put instead of sliding off the top of the screen, while a full-screen
+ * program (`pi`, `htop`, Claude Code) that hides the terminal's cursor and draws rows down to the
+ * bottom still shifts by the full keyboard height. While scrolled back in history ([atBottom] is
+ * false), the full shift is kept.
  */
-internal fun imeShift(imePx: Int, paneHeightPx: Int): Float {
+internal fun imeShift(
+    imePx: Int,
+    paneHeightPx: Int,
+    contentBottomRow: Int? = null,
+    cellHeightPx: Float = 0f,
+    atBottom: Boolean = true,
+): Float {
     if (imePx <= 0 || paneHeightPx <= 0) return 0f
-    return minOf(imePx, paneHeightPx).toFloat()
+    val maxShift = minOf(imePx, paneHeightPx).toFloat()
+    if (!atBottom || contentBottomRow == null || cellHeightPx <= 0f) return maxShift
+    if (contentBottomRow < 0) return 0f
+    val contentBottomPx = (contentBottomRow + 1) * cellHeightPx
+    val visibleHeightPx = paneHeightPx - imePx
+    return (contentBottomPx - visibleHeightPx).coerceIn(0f, maxShift)
 }

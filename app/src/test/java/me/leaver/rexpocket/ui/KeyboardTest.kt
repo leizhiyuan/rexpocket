@@ -34,6 +34,55 @@ class KeyboardTest {
     }
 
     @Test
+    fun `a prompt near the top does not slide off screen`() {
+        // 50 rows at 20px = 1000px pane; keyboard covers the bottom 400px (rows 30..49).
+        // Content ending at row 2 (60px) is already well above the keyboard.
+        assertEquals(
+            0f,
+            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = 2, cellHeightPx = 20f, atBottom = true),
+            0.01f,
+        )
+    }
+
+    @Test
+    fun `content reaching the bottom shifts by the full keyboard height`() {
+        // Row 49 ends at 1000px, so keeping it above the 400px keyboard takes the full 400px shift.
+        assertEquals(
+            400f,
+            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = 49, cellHeightPx = 20f, atBottom = true),
+            0.01f,
+        )
+    }
+
+    @Test
+    fun `content partly covered by the keyboard shifts only as far as needed`() {
+        // Row 34 ends at 700px; visible height above keyboard is 600px, so only a 100px shift is needed.
+        assertEquals(
+            100f,
+            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = 34, cellHeightPx = 20f, atBottom = true),
+            0.01f,
+        )
+    }
+
+    @Test
+    fun `scrolling back in history keeps the full keyboard shift`() {
+        assertEquals(
+            400f,
+            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = 2, cellHeightPx = 20f, atBottom = false),
+            0.01f,
+        )
+    }
+
+    @Test
+    fun `an empty viewport with no cursor does not shift`() {
+        assertEquals(
+            0f,
+            imeShift(imePx = 400, paneHeightPx = 1000, contentBottomRow = -1, cellHeightPx = 20f, atBottom = true),
+            0.01f,
+        )
+    }
+
+    @Test
     fun `the key bar goes with a keyboard on the desk, unless it was asked for`() {
         assertFalse(keyBarShown(hardwareKeyboard = true, always = false))
         assertTrue(keyBarShown(hardwareKeyboard = true, always = true))
