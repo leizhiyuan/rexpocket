@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -37,6 +38,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -251,16 +253,9 @@ internal fun TermScreen(
     var panePx by remember { mutableIntStateOf(0) }
     val shown = focused?.id
     var contentBottomRow by remember(shown) { mutableStateOf<Int?>(null) }
-    var cellHeightPx by remember(shown) { mutableStateOf(0f) }
-    var atBottom by remember(shown) { mutableStateOf(true) }
+    var cellHeightPx by remember(shown) { mutableFloatStateOf(0f) }
     val density = LocalDensity.current
-    val slide = imeShift(
-        imePx = imeHeight(),
-        paneHeightPx = panePx,
-        contentBottomRow = contentBottomRow,
-        cellHeightPx = cellHeightPx,
-        atBottom = atBottom,
-    )
+    val imeInsets = WindowInsets.ime
 
     Box(Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.fillMaxSize().padding(bottom = with(density) { bottomPx.toDp() })) {
@@ -302,16 +297,24 @@ internal fun TermScreen(
                                 if (next != index) onAct { focusBlock(panes[next].id) }
                             }
                         },
-                        onContentBounds = { bottomRow, cellHeight, bottom ->
+                        onContentBounds = { bottomRow, cellHeight ->
                             contentBottomRow = bottomRow
                             cellHeightPx = cellHeight
-                            atBottom = bottom
                         },
                         onError = { onAct { note(it.toProblem()) } },
                         modifier = Modifier.fillMaxSize()
                             // Moved, not resized: see imeShift. An offset keeps the pane's measured size
-                            // - and so the grid the program was given - exactly as it was.
-                            .offset { IntOffset(0, -slide.roundToInt()) }
+                            // - and so the grid the program was given - exactly as it was, and reading the
+                            // IME inset and bounds here avoids recomposing the screen on every output line.
+                            .offset {
+                                val slide = imeShift(
+                                    imePx = imeInsets.getBottom(this),
+                                    paneHeightPx = panePx,
+                                    contentBottomRow = contentBottomRow,
+                                    cellHeightPx = cellHeightPx,
+                                )
+                                IntOffset(0, -slide.roundToInt())
+                            }
                             .padding(horizontal = 3.dp, vertical = 2.dp)
                             .onSizeChanged { panePx = it.height },
                     )

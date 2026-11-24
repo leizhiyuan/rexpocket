@@ -152,12 +152,13 @@ The whole screen is the terminal's paper; nothing sits on a band of a second gre
    dock says what it is doing, how far it got and the one control that fits - Cancel while it runs,
    Retry after a failure, Dismiss when it is done or unconfirmed. A sent file turns green and goes
    by itself; an unconfirmed one stays until dismissed, because Rex may already have the file.
-4. **The keyboard.** It takes no room from the terminal. Opening it slides the pane up by what it
-   covers - never more than the keyboard's own height, and nothing at all while it is closed - so
-   the bottom of the terminal, where the line being typed into is drawn, stays where it was; and it
-   lifts the dock, the pane strip and the upload pill over the pane. The measure is the bottom of
-   the grid, not the cursor: a full-screen program draws its own cursor and hides the terminal's
-   (`pi`, `htop`), and the rows it draws below the cursor are part of what is being typed into.
+4. **The keyboard.** It takes no room from the terminal. Opening it slides the pane up only as
+   far as needed to keep its lowest row of content above the keyboard - never more than the
+   keyboard's own height, and nothing at all while it is closed - and lifts the dock, the pane
+   strip and the upload pill over the pane. Content is the lowest of the cursor row, visible Kitty
+   images and the last row with visible cells, so a fresh shell near the top stays put instead of
+   sliding off screen while a full-screen program (`pi`, `htop`) that hides the terminal's cursor
+   and draws down to the bottom still shifts by the full keyboard height.
    The grid the program was given does not change, so nothing redraws or reflows for a keyboard
    coming and going, and no resize is sent. A keyboard on the desk - a tablet's cover, one
    over Bluetooth or USB - takes the dock away, since it has every key the bar offers, and the pane

@@ -1,11 +1,8 @@
 package me.leaver.rexpocket.ui
 
 import android.content.res.Configuration
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.ime
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 
 // The two keyboards a terminal has to live with: the screen's, which comes and goes over the pane,
 // and a real one on the desk, which needs the screen's bar out of the way.
@@ -30,32 +27,26 @@ internal fun rememberHardwareKeyboard(): Boolean {
  */
 internal fun keyBarShown(hardwareKeyboard: Boolean, always: Boolean): Boolean = always || !hardwareKeyboard
 
-/** How tall the keyboard covering the window is right now, in pixels; 0 while it is closed. */
-@Composable
-internal fun imeHeight(): Int = WindowInsets.ime.getBottom(LocalDensity.current)
-
 /**
  * How far the pane slides up while the keyboard covers it. The terminal is not resized for the
  * keyboard - the program would take that as a window change and redraw everything - so the pane is
  * moved instead: only as far as needed to keep the lowest row with content above the keyboard,
  * capped at what the keyboard covers.
  *
- * Content is the lowest of the cursor row and the last non-blank visible row. A fresh shell near
- * the top of the pane stays put instead of sliding off the top of the screen, while a full-screen
- * program (`pi`, `htop`, Claude Code) that hides the terminal's cursor and draws rows down to the
- * bottom still shifts by the full keyboard height. While scrolled back in history ([atBottom] is
- * false), the full shift is kept.
+ * Content is the lowest of the cursor row, visible Kitty images, and the last row with visible
+ * cells. A fresh shell near the top of the pane stays put instead of sliding off the top of the
+ * screen, while a full-screen program (`pi`, `htop`, Claude Code) that hides the terminal's cursor
+ * and draws down to the bottom still shifts by the full keyboard height.
  */
 internal fun imeShift(
     imePx: Int,
     paneHeightPx: Int,
     contentBottomRow: Int? = null,
     cellHeightPx: Float = 0f,
-    atBottom: Boolean = true,
 ): Float {
     if (imePx <= 0 || paneHeightPx <= 0) return 0f
     val maxShift = minOf(imePx, paneHeightPx).toFloat()
-    if (!atBottom || contentBottomRow == null || cellHeightPx <= 0f) return maxShift
+    if (contentBottomRow == null || cellHeightPx <= 0f) return maxShift
     if (contentBottomRow < 0) return 0f
     val contentBottomPx = (contentBottomRow + 1) * cellHeightPx
     val visibleHeightPx = paneHeightPx - imePx

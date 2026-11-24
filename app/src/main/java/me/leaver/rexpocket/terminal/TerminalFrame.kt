@@ -49,18 +49,43 @@ internal class TerminalFrame(
 
     fun isBlank(index: Int): Boolean = textLength[index] == 0 || (textLength[index] == 1 && text[textStart[index]] == ' '.code)
 
+    /** Whether a cell draws anything visible on top of the terminal's default background. */
+    private fun hasVisibleCell(index: Int): Boolean {
+        if (!isBlank(index)) return true
+        val f = flags[index]
+        if (f and (FLAG_UNDERLINE or FLAG_STRIKETHROUGH) != 0) return true
+        if (f and FLAG_INVERSE != 0 && fg[index] != background) return true
+        if (f and FLAG_BG_DEFAULT == 0 && bg[index] != background) return true
+        return false
+    }
+
     /**
-     * The lowest visible row that has content: the maximum of [cursorY] (when in view) and the
-     * last row with a non-blank cell, or -1 if the viewport is completely empty with no cursor.
+     * The lowest visible row that has content: the maximum of [cursorY] (when the cursor is in
+     * view), the lowest row covered by a visible Kitty image, and the last row with a visible
+     * cell, or -1 if the viewport is completely empty with no cursor.
      */
     fun contentBottomRow(): Int {
-        val cursor = if (cursorY in 0 until rows) cursorY else -1
-        for (row in (rows - 1) downTo (cursor + 1)) {
-            for (column in 0 until columns) {
-                if (!isBlank(index(column, row))) return row
+        var lowest = if (cursorX in 0 until columns && cursorY in 0 until rows) cursorY else -1
+        if (images.isNotEmpty() && cellWidthPx > 0 && cellHeightPx > 0) {
+            val viewWidth = columns.toLong() * cellWidthPx
+            val viewHeight = rows.toLong() * cellHeightPx
+            for (image in images) {
+                if (image.width <= 0 || image.height <= 0) continue
+                val left = image.column.toLong() * cellWidthPx + image.offsetX
+                if (left >= viewWidth || left + image.width <= 0L) continue
+                val top = image.row.toLong() * cellHeightPx + image.offsetY
+                val bottom = top + image.height
+                if (top >= viewHeight || bottom <= 0L) continue
+                val imageBottomRow = ((bottom - 1L) / cellHeightPx).coerceAtMost((rows - 1).toLong()).toInt()
+                if (imageBottomRow > lowest) lowest = imageBottomRow
             }
         }
-        return cursor
+        for (row in (rows - 1) downTo (lowest + 1)) {
+            for (column in 0 until columns) {
+                if (hasVisibleCell(index(column, row))) return row
+            }
+        }
+        return lowest
     }
 
     /** The text of a cell as UTF-16, empty for a cell nothing was written to. */
