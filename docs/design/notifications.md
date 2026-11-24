@@ -77,6 +77,14 @@ The watch notification and the Quick Settings tiles treat a host and a tailnet t
 - **Tailnet trouble.** While away, a tailnet that needs a sign-in or stopped working posts one
   notification on Needs you ("Tailscale needs a sign-in"), which opens the app; it goes once that is
   over or the app is on screen. Its page's "Sign-in and failures" turns it off.
+- **Only with background mode.** The watch notification is the foreground service's, so it and its
+  Stop, Connect and Disconnect buttons exist only while background mode is on. With it off, a host's
+  and a tailnet's page say so under In the background, with **Turn on background mode** (the same
+  switch, and on Android 13 and later the same permission question, as Settings'); a tile still
+  connects, opening the app, which then holds the connection. With background mode on and Android
+  hiding the notification (notifications not allowed - Android 13 and later run the service without
+  the permission - or the Background connection channel switched off), the service still runs and
+  the checklist says its notification and buttons are hidden, with Fix (below).
 - **Tiles.** A pool of three (`RexTile1` to `RexTile3`): tile services are declared in the manifest,
   so there cannot be one per host. Each is bound to a host or a tailnet: the first tap of an
   unbound tile opens a picker, and a page's **Add a tile** binds the first free one (or the one it
@@ -87,6 +95,14 @@ The watch notification and the Quick Settings tiles treat a host and a tailnet t
   opens the app when it is off, since the app is then what keeps the connection.
   Why a pool and not one tile with a picker: a tap should act, not ask; three cover the tailnet and
   the two hosts a person most uses, and a tile whose item was removed says so and asks again.
+- **Changing a tile.** A page on a tile shows **On tile N** (Change…: the picker for that tile) and
+  **Remove from tile**; a page on none has Add a tile, and when all three are taken, **Replace tile
+  N (what it shows)** for each. The picker lists the three tiles with their items, so any can be
+  chosen and changed, marks the item on the chosen one, says when an item moves from another tile
+  (an item is on one tile at most), and has **Clear tile**. Settings › Background and notifications
+  › **Quick Settings tiles** lists the three, each with Change… and Clear. Every change asks Android
+  to redraw the tiles it touched (`TileStore.assign`, `requestListeningState`). The same words for a
+  host and a tailnet.
 
 ## Clearing
 
@@ -218,6 +234,10 @@ Connection group) shows:
 - **Background alerts**, with what it does.
 - **Let it run in the background**, a checklist (`BackgroundChecks`), each row saying it is fine or
   **Fix**, which opens the place to fix it:
+  - *Background notification*: with background mode off, that there is no notification and no
+    buttons, and **Turn on**; with it on and the notification hidden (`Alerts.watchHidden`: not
+    allowed, or its channel off), that the service runs with its notification and buttons hidden,
+    and Fix, which opens the app's notification page or the channel's; otherwise Yes.
   - *Allowed by Android*: notifications on (and permitted on 13+); the app's notification page.
   - *Battery use*: Unrestricted when exempt from battery optimization
     (`PowerManager.isIgnoringBatteryOptimizations`). Fix asks with
@@ -236,6 +256,7 @@ Connection group) shows:
   switches below for this host, each saying "(default)" while it follows the page's, until set
   here; Use the defaults forgets the host's own (`HostBackground`, kept by `BackgroundStore`).
 - **Tell me when**: a switch per kind, every host's default.
+- **Quick Settings tiles**: the three, each with Change… and Clear (above).
 - Vibrate on a bell, and each channel's Android page (sound, vibration, lock screen, Do Not
   Disturb), marked "Off in Android" when the person switched it off there.
 
@@ -293,6 +314,10 @@ pane's alert: a bar is news of work under way, not a call for the person.
   ScriptedRex); screenshots `quick-replies-*`, `composer-*`, `activity-approval-*`.
 - `BackgroundModeTest` (JVM) and `BackgroundServiceTest` (emulator): background mode without a
   screen; see multi-host.md, "Tests".
+- `TilesScreenTest` (shared): a page's On tile N and Remove from tile, Replace with all three
+  taken, the picker rebinding (moving an item from another tile) and clearing, Settings' three
+  tiles, and the background-mode line and its Turn on; `WatchHiddenTest` (JVM): the checklist's
+  hidden notification without the permission and with the channel off, each Fix's page.
 - `LaunchTest.notificationsHasASwitchForEachKindThatTheStoreKeeps` (shared: JVM and emulator) and the
   `notifications-*` screenshots.
 

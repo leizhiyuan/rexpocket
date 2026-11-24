@@ -29,6 +29,14 @@ not the pinned one shows both, in red, with **Trust the new key and test again**
 key trusted here is held by the dialog for that account, machine and port only (changing any of
 them forgets it) and pinned when the person taps Save; the test itself writes nothing.
 
+## Other addresses
+
+With other addresses (multi-host.md, "Other addresses"), the test goes on after the main address to
+each other address a connection would try, in order, with the same account, credentials and pinned
+key, and lists one line each under the steps: works, the failure in the same words, "the same host
+key as above" for an untrusted host that shows the same key, or, in red, that it shows another host
+key, which a connection never takes. Addresses a connection never dials are not tested.
+
 ## Tailnet hosts
 
 The test uses the tailnet node's own seam (`TailnetNode.checkRoute`): the SOCKS port `start` gives,
@@ -46,5 +54,7 @@ takes, so a test passes exactly when a connection would get through. No tailnet 
   answers; cancelling; a tailnet route given and missing; and on a real SSH server (Apache MINA,
   whose exec channel pipes to ScriptedRex): a key to trust then every step passing, a key that is
   not the pinned one, a wrong password, a machine without Rex.
+- `OtherAddressesTest.testConnectionChecksEveryAddressInTurn` (app): a closed main port, then the
+  other address that works.
 - `HostCheckScreenTest` (app, JVM and emulator): every step said and passed, a refused port's reason
   and fix, one TalkBack stop per step, a key to trust, and the dialog's test saving nothing.

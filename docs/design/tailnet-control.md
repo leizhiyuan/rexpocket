@@ -145,7 +145,11 @@ Both are in [notifications.md](notifications.md), "The watch notification and th
 short: three Quick Settings tiles, each bound to a host or a tailnet (a picker on the first tap, or
 a page's Add a tile), a tap to connect or disconnect, its state as the subtitle, a long press to
 its page; and in the watch notification one line per host and tailnet, Stop, and one action each
-while all of them fit in the two slots left.
+while all of them fit in the two slots left. A tile's binding is changed and freed from the page
+(On tile N, Change…, Remove from tile; Replace tile N when all three are taken), the picker (every
+tile's item, Clear tile) and Settings › Background and notifications › Quick Settings tiles. The
+watch notification, and so its buttons, exists only while background mode is on: a page says so
+with Turn on background mode while it is off.
 
 ## Battery
 

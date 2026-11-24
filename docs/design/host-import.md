@@ -109,8 +109,10 @@ the whole import.
 ## Other addresses
 
 `SavedHost.fallbacks` keeps a host's other addresses (`ssh://user@host:port`, `ws://` or `wss://`)
-in order. The app connects by the main address; the others are shown in the host's dialog, to copy
-into the address when the main one does not resolve. Dialling them in turn is left for later.
+in order: a file's `uri` beside its `dnsUri`, Rex's other endpoints. When the main address cannot be
+reached, a connection tries them in turn; the host dialog edits the list and its order, and Test
+connection checks each. See [multi-host.md](multi-host.md), "Other addresses". Export hosts and the
+settings backup write them back as `uri` (the first SSH one) and in the backup's host list.
 
 ## Code
 

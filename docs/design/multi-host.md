@@ -112,6 +112,52 @@ person wants them, not as long as the screen. Code: `WatchService` (the anchor),
   three actions); see notifications.md, "The watch notification and the tiles". Stop with no screen left turns the mode off
   and closes the connections (`connected_hosts` kept for the next start).
 
+## Other addresses
+
+A host keeps its other addresses (`SavedHost.fallbacks`: an import's `uri`, Rex's other endpoints,
+or typed in the host dialog), in the order to try them. Core: `HostRoutes.kt`; app: `Connections.
+startRoutes`, `HostDialogParts.kt`.
+
+- **When.** A dial that fails because the address could not be reached moves on to the next one at
+  once: an unknown name, refused, no route, no answer in time, the tailnet not joined, down, waiting
+  for a sign-in, the device unknown or offline on it, nothing on Rex's port
+  (`HostRoutes.fallsThrough`). Not a refused password or key, a host key that is not the trusted one,
+  Rex missing or refusing, or a connection that was up and dropped: those are the machine's own
+  answer, which another address of the same machine would give too, so the connection stays on that
+  address and says so. When every address failed, the connection waits its usual backoff and starts
+  the next round from the first.
+- **Sequential, not raced.** One address at a time, in order, with an 8 s limit on Rex's hello while
+  others remain in the first round (`ROUTE_CONNECT_MS`); the last address of a round and every
+  address after a round with no answer get the usual 12 s, so a slow but working one (SSH over a
+  relayed tailnet) still connects. A refused or unknown address fails in milliseconds, so the usual
+  case (the LAN address at home, the tailnet away) costs nothing; only an address that drops packets
+  costs its 8 s. Racing would open SSH sessions, and sign-ins, to several addresses of one machine
+  at once, and a happy-eyeballs stagger brings back that cost for a gain only in the rare silent
+  case.
+- **Which addresses.** A host reached over SSH tries only `ssh://` addresses, with its own account
+  when the address names none, its password or key; a host on Rex's port tries only Rex ports, and a
+  TLS host only TLS ones. So the credentials and the checks that go with them (the host key, TLS)
+  stay those the person set up, and no address is a downgrade. The dialog marks the others "never
+  tried" and why (`RouteSkip`). Each address is dialed through the tailnet node when it is a tailnet
+  address (`.ts.net`, `100.64/10`, ...), which is started only when that address is tried.
+- **One host key per host.** Every SSH address must show the key pinned for the host. Another key at
+  another address is "host key changed", which stops there, as it does at the main address: the
+  addresses of one host are one machine, and a different key means a different machine or someone
+  in the way. Never taken silently, and no per-address trust: a machine that really has several keys
+  is several hosts. A host not yet trusted asks on whichever address answers first, and that key is
+  then the host's.
+- **Remembered.** The address a connection went live on is kept (`HostStore.lastRoute`) and tried
+  first for 30 minutes (`PREFER_LAST_MS`); after that the main address is first again. So a phone
+  that left home goes straight to the address that works, and one back home returns to the main
+  address at its next connection, without moving a connection that is up.
+- **Try other addresses**, in the host dialog, on by default: off connects by the main address
+  alone. Not in the settings backup: a restored host tries its other addresses.
+- **Shown.** The host's row says "via 192.168.1.20:7297" while live on another address, "trying ..."
+  while it dials one; the diagnostics report says how many other addresses a host has and which one
+  is in use ("on other address 2"), every address and user name hidden like the main ones.
+- **Test connection** checks the main address, then each other address in order, with the same
+  credentials and key, and lists each: works, why not, or that it shows another host key.
+
 ## Limits
 
 - One terminal at a time: the focused host's. The others are live on the home, not on screen, so
@@ -126,6 +172,15 @@ person wants them, not as long as the screen. Code: `WatchService` (the anchor),
   (home.md, "Seen").
 
 ## Tests
+
+- Other addresses: `HostRoutesTest` (core: the order, the last that worked first and for how long,
+  Try other addresses off, which addresses are never dialed, which failures move on, the cursor's
+  rounds and time limits; and connections whose own address is a closed port reaching ScriptedRex
+  at the next, directly and through a real SSH server (MINA) with the trusted key, another address
+  with another host key never taken, a refused password not moving on), `MultiHostTest.
+  aHostWhoseOwnAddressIsDownConnectsAtItsOtherAddress` (app: live on the other address, the row
+  says so, the address remembered), `OtherAddressesTest` (app, JVM and emulator: add, move, remove,
+  the switch, an address never dialed, Test connection on each).
 
 - `FleetTest` (core, two ScriptedRex): each host connects and disconnects on its own, both raise
   alerts and keep their own ledger, signals carry their host, a reply reaches the host it names, one
