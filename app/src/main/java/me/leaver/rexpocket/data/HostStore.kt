@@ -247,6 +247,7 @@ class HostStore(context: Context) {
             messages = prefs.getBoolean(KEY_ALERT_MESSAGES, d.messages),
             bells = prefs.getBoolean(KEY_ALERT_BELLS, d.bells),
             vibrate = prefs.getBoolean(KEY_ALERT_VIBRATE, d.vibrate),
+            progress = prefs.getBoolean(KEY_ALERT_PROGRESS, d.progress),
         )
     }
 
@@ -258,6 +259,7 @@ class HostStore(context: Context) {
             .putBoolean(KEY_ALERT_MESSAGES, p.messages)
             .putBoolean(KEY_ALERT_BELLS, p.bells)
             .putBoolean(KEY_ALERT_VIBRATE, p.vibrate)
+            .putBoolean(KEY_ALERT_PROGRESS, p.progress)
             .apply()
     }
 
@@ -446,6 +448,7 @@ class HostStore(context: Context) {
         private const val KEY_ALERT_MESSAGES = "alerts.messages"
         private const val KEY_ALERT_BELLS = "alerts.bells"
         private const val KEY_ALERT_VIBRATE = "alerts.vibrate"
+        private const val KEY_ALERT_PROGRESS = "alerts.progress"
         private const val KEY_KEY_BAR = "key_bar_always"
         private const val KEY_KEY_BAR_SHIFT = "keybar_shift"
         private const val KEY_KEY_BAR_ALT = "keybar_alt"

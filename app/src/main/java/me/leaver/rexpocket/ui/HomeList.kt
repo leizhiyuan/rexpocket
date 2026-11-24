@@ -57,6 +57,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.ActivityGroup
+import me.leaver.rexpocket.core.PaneProgress
+import me.leaver.rexpocket.core.tabProgress
 import me.leaver.rexpocket.core.ConnectProgress
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.Phase
@@ -447,6 +449,7 @@ internal fun TabCard(
                 onOpenPane = hidden?.let { h -> { onOpenPane(window.id, h.block.id) } },
                 onManage = { onManage(window.id) },
                 actions = actionsOf(window.id),
+                progress = tabProgress(window, state.progress),
             )
         }
         if (onNewTab != null) {
@@ -512,6 +515,8 @@ internal fun TabRow(
     onOpenPane: (() -> Unit)? = null,
     onManage: () -> Unit,
     actions: List<CustomAccessibilityAction> = emptyList(),
+    /** The tab's progress bar, under what it is doing. */
+    progress: PaneProgress? = null,
 ) {
     val selected = stringResource(R.string.state_selected)
     val manageLabel = stringResource(R.string.manage_actions_for, title)
@@ -551,6 +556,7 @@ internal fun TabRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(tabDetail(panes, attention, seen), color = Colors.muted, fontSize = TextStyles.label)
+                if (progress != null) ProgressLine(progress, Modifier.padding(top = 6.dp, end = 8.dp))
                 if (message != null) {
                     Text(
                         message,

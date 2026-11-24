@@ -104,6 +104,7 @@ object SettingsFormat {
                 messages = bool(n, "messages", "notifications") ?: d.messages,
                 bells = bool(n, "bells", "notifications") ?: d.bells,
                 vibrate = bool(n, "vibrate", "notifications") ?: d.vibrate,
+                progress = bool(n, "progress", "notifications") ?: d.progress,
             )
         }
         var backgroundMode: Boolean? = null
@@ -251,7 +252,8 @@ object SettingsFormat {
             root.put(
                 "notifications",
                 JSONObject().put("waiting", n.waiting).put("failed", n.failed).put("done", n.done)
-                    .put("messages", n.messages).put("bells", n.bells).put("vibrate", n.vibrate),
+                    .put("messages", n.messages).put("bells", n.bells).put("vibrate", n.vibrate)
+                    .put("progress", n.progress),
             )
         }
         val background = JSONObject()
@@ -444,7 +446,7 @@ data class CurrentSettings(
 
 enum class SettingKey {
     Theme, TerminalColors, TextSize, TerminalFontScale,
-    AlertWaiting, AlertFailed, AlertDone, AlertMessages, AlertBells, AlertVibrate,
+    AlertWaiting, AlertFailed, AlertDone, AlertMessages, AlertBells, AlertVibrate, AlertProgress,
     BackgroundMode, HomeFilter, ReopenLastTab, HostOrder, HostFolds, HostBackground, QuickReplies,
 }
 
@@ -474,6 +476,7 @@ fun settingChanges(backup: SettingsBackup, current: CurrentSettings, plan: Impor
         change(SettingKey.AlertMessages, c.messages, n.messages)
         change(SettingKey.AlertBells, c.bells, n.bells)
         change(SettingKey.AlertVibrate, c.vibrate, n.vibrate)
+        change(SettingKey.AlertProgress, c.progress, n.progress)
     }
     change(SettingKey.BackgroundMode, current.backgroundMode, backup.backgroundMode)
     change(SettingKey.QuickReplies, current.quickReplies, backup.quickReplies)

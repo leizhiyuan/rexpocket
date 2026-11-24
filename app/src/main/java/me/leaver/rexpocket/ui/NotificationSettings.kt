@@ -164,6 +164,16 @@ internal fun NotificationsSheet(
                 onPrefs(prefs.copy(vibrate = !prefs.vibrate))
             }
         }
+        // A program's progress bar as a notification of its own while away: off by default, as it
+        // is a notification that stays while the work goes on.
+        Group(stringResource(R.string.notifications_group_progress), icons = false) {
+            SheetItem(
+                stringResource(R.string.notifications_progress),
+                supporting = stringResource(R.string.notifications_progress_body),
+                detail = state(prefs.progress),
+                keepOpen = true,
+            ) { onPrefs(prefs.copy(progress = !prefs.progress)) }
+        }
         // Sound, vibration, the lock screen and Do Not Disturb are Android's, per channel.
         Group(stringResource(R.string.notifications_group_channels), icons = false) {
             for ((kind, label) in listOf(

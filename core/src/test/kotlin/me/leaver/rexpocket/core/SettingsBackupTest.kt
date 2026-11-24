@@ -34,7 +34,7 @@ class SettingsBackupTest {
     private val snapshot = SettingsSnapshot(
         appearance = Appearance(AppTheme.Dark, TerminalColors.Light, TextSize.Larger),
         terminalFontScale = 1.25f,
-        notifications = AlertPrefs(waiting = true, failed = false, done = true, messages = false, bells = true, vibrate = false),
+        notifications = AlertPrefs(waiting = true, failed = false, done = true, messages = false, bells = true, vibrate = false, progress = true),
         backgroundMode = true,
         home = HomePrefs("NeedsYou", reopenLastTab = true, hostOrder = listOf("studio", "agents", "Desk mac"), folded = setOf("Desk mac"), unfolded = setOf("agents")),
         hosts = listOf(ssh, rexPort, tls),

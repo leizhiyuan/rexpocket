@@ -29,7 +29,7 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 ## Where the tests run
 
 - `app/src/sharedTest` holds the screen tests (`ArrangeKeysTest`, `TerminalControlsTest`, `TermMenuTest`,
-  `TermFullScreenTest`, `CommandPaletteTest`, `ActivityViewTest`, `EmptyHomeTest`, `LargeFontTest`, `AppearanceTest`, `HomeManageTest`, `MultiHostTest`, `ShareTest`, `HostImportScreenTest`, `QuickRepliesScreenTest`, `TermAgentTest`). They are
+  `TermFullScreenTest`, `CommandPaletteTest`, `ActivityViewTest`, `EmptyHomeTest`, `LargeFontTest`, `AppearanceTest`, `HomeManageTest`, `MultiHostTest`, `ShareTest`, `HostImportScreenTest`, `QuickRepliesScreenTest`, `TermAgentTest`, `TermShortcutsTest`, `ProgressViewTest`). They are
   compiled into both the JVM unit tests and the instrumented tests:
   - on the JVM with Robolectric, in seconds on any computer:
     `./gradlew -x :app:buildGhostty -x :app:buildGhosttyHost :app:testDebugUnitTest --tests 'me.leaver.rexpocket.ui.*'`
@@ -45,7 +45,7 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
 Settings and Diagnostics (on ScriptedRex), the terminal's ⋮ menu, the command palette, the home screen's Needs you filter (on
 ScriptedRex, its programs reporting statuses) and full screen right after entering it, in portrait and
 landscape on a Pixel 6-sized screen, the tailnet's states on the home screen and its details sheet
-(`tailnet-*`, on a stand-in node: see tailnet-status.md), the first run with no hosts (`empty-home-*`), the share sheet and its pane picker (`share-*`) the home's tab sheet (`home-tab-sheet-*`) and Import hosts' preview and keys (`host-import-*`, host-import.md), (the JVM tests' default too, in `robolectric.properties`), and Arrange keys before and
+(`tailnet-*`, on a stand-in node: see tailnet-status.md), the first run with no hosts (`empty-home-*`), the share sheet and its pane picker (`share-*`), Find open over a terminal whose tab and panes show progress bars (`terminal-find-progress-*`), the keyboard shortcuts sheet (`terminal-shortcuts-*`), the home's tab sheet (`home-tab-sheet-*`) and Import hosts' preview and keys (`host-import-*`, host-import.md), (the JVM tests' default too, in `robolectric.properties`), and Arrange keys before and
 after a move. They land in `app/build/outputs/roborazzi/`; `device-test` uploads them as the
 **screenshots** artifact of each run, with the JVM test report. They are for review: look at them
 when a change touches a screen. Nothing is compared against stored images yet, as fonts render
@@ -112,7 +112,7 @@ comment.
   (`core/src/test/resources/rex-shapes/preview.22.txt`), and in `rex-real` against the real Rex
   too. `refuse(method)` makes a method fail, for the errors that must still show; `report(block,
   state, …)` is a program reporting its status (OSC 7501), `report(block, null)` a clear, and
-  `exit(block, code)` its program ending; `bell(block)` and `notify(block, title, body)` its bell and desktop notifications; `uploads` and `pastes` are what reached a pane by the native upload and by `paste` events; `hold(method)` keeps its answers back until `release`, a
+  `exit(block, code)` its program ending; `bell(block)` and `notify(block, title, body)` its bell and desktop notifications; `progress(block, state, value)` its OSC 9;4 progress bar, as Rex's `progress_report`; `uploads` and `pastes` are what reached a pane by the native upload and by `paste` events; `hold(method)` keeps its answers back until `release`, a
   slow network for a test to act in; `drop(client)` is a network outage; `pictures = false` sends no
   snapshot.
 - **`Desk`** is a second client that changes sessions only through the protocol - new session,
@@ -165,6 +165,8 @@ Several hosts at once are tested as multi-host.md, "Tests", says: `FleetTest` on
 `MultiHostTest` on two with the app's view model.
 
 Notifications are tested as notifications.md, "Tests", says: `PaneSignalsTest` on both servers, `NotificationsTest` on ScriptedRex with the app's view model.
+
+Find, a desk keyboard's keys and progress bars are tested as terminal-controls.md, "Testing", lists. What needs libghostty - reading the scrollback, the bytes a key sends - is `TerminalSessionTest`, on CI only; OSC 9;4 against a real Rex is `RealRexPaneSignalsTest` in `rex-real`.
 
 `ScriptedRexLifecycleTest` runs them on every push, in the `rex-integration` workflow with the rest
 of `:core:test`. `RealRexLifecycleTest` runs the same scenarios against a real Rex: in the `rex-real`

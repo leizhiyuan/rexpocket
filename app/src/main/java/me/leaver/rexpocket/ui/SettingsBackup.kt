@@ -707,6 +707,7 @@ private fun settingName(key: SettingKey): String = stringResource(
         SettingKey.AlertMessages -> R.string.notifications_messages
         SettingKey.AlertBells -> R.string.notifications_bells
         SettingKey.AlertVibrate -> R.string.notifications_vibrate
+        SettingKey.AlertProgress -> R.string.notifications_progress
         SettingKey.BackgroundMode -> R.string.alerts_title
         SettingKey.HomeFilter -> R.string.backup_setting_filter
         SettingKey.ReopenLastTab -> R.string.reopen_last_tab

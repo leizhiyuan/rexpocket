@@ -119,6 +119,8 @@ jobs:
               me.leaver.rexpocket.ui.EmptyHomeTest \
               me.leaver.rexpocket.ui.LargeFontTest \
               me.leaver.rexpocket.ui.CommandPaletteTest \
+              me.leaver.rexpocket.ui.TermShortcutsTest \
+              me.leaver.rexpocket.ui.ProgressViewTest \
               me.leaver.rexpocket.ui.TextFieldsTest \
               me.leaver.rexpocket.ui.HomeManageTest \
               me.leaver.rexpocket.ui.MultiHostTest \

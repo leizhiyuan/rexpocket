@@ -339,6 +339,20 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
         }
     }
 
+    /**
+     * The program in [block] reports progress with OSC 9;4 [state] (0 removes, 1 sets [value], 2
+     * error, 3 indeterminate, 4 paused), which Rex forwards as `progress_report` with its own word for
+     * the state and the value, left out when the program gave none.
+     */
+    fun progress(block: String, state: Int, value: Int? = null) {
+        synchronized(this) {
+            val session = sessions.values.firstOrNull { it.tabOf(block) != null } ?: return
+            val payload = JSONObject().put("state", rexProgressState(state))
+            if (value != null && state != 0) payload.put("progress", value)
+            blockEvent(session.id, block, "progress_report", payload)
+        }
+    }
+
     /** The program in [block] prints [text]: it is on the pane's screen, for `format`. */
     fun print(block: String, text: String) {
         synchronized(this) { screens.getOrPut(block) { StringBuilder() }.append(text) }

@@ -31,6 +31,8 @@ import me.leaver.rexpocket.MainActivity
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.AlertKind
 import me.leaver.rexpocket.core.AlertTokens
+import me.leaver.rexpocket.core.PaneProgress
+import me.leaver.rexpocket.core.ProgressState
 
 // Background alerts: a quiet notification that keeps the app connected while it is away, and one
 // notification per pane whose program needs the person, finished, or asked to tell them something.
@@ -59,6 +61,9 @@ data class Alert(
     val answer: String? = null,
     val choices: List<String> = emptyList(),
 )
+
+/** A tab's progress bar, for its notification: the pane it is from, the tab, its name and host. */
+data class ProgressNote(val target: AlertTarget, val windowId: String, val title: String, val host: String, val progress: PaneProgress)
 
 /** What a notification's action asks of the pane. */
 sealed interface AlertAction {
@@ -287,6 +292,60 @@ object Alerts {
         NotificationManagerCompat.from(context).notify(group, SUMMARY_ID, summary)
     }
 
+    /**
+     * A tab's progress bar as a notification of its own, on the quiet progress channel: the tab's
+     * name, the host, and the bar (Android's own, indeterminate for work with no percent). Changing
+     * it says nothing new aloud; a tap opens the pane the bar is from.
+     */
+    @android.annotation.SuppressLint("MissingPermission")
+    fun progress(context: Context, note: ProgressNote) {
+        if (!allowed(context)) return
+        channels(context)
+        val target = note.target
+        val tag = progressTag(target.hostId, note.windowId)
+        // One token for the bar while it is from the same pane: a bar that moves every second must
+        // not use up the tokens the panes' alerts hold.
+        val token = progressTokens[tag]?.takeIf { it.first == target }?.second ?: tokens.issue(target).also { progressTokens[tag] = target to it }
+        val open = Intent(context, MainActivity::class.java)
+            .setData(Uri.Builder().scheme(SCHEME).authority("open").appendPath(token).build())
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val tap = PendingIntent.getActivity(context, tag.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val p = note.progress
+        val percent = p.percent
+        val busy = p.state == ProgressState.Indeterminate || percent == null
+        val text = when (p.state) {
+            ProgressState.Normal -> context.getString(R.string.progress_normal, percent ?: 0)
+            ProgressState.Indeterminate -> context.getString(R.string.progress_busy)
+            ProgressState.Error -> if (percent != null) context.getString(R.string.progress_error, percent) else context.getString(R.string.progress_error_plain)
+            ProgressState.Paused -> if (percent != null) context.getString(R.string.progress_paused, percent) else context.getString(R.string.progress_paused_plain)
+        }
+        val notification = NotificationCompat.Builder(context, CHANNEL_PROGRESS)
+            .setSmallIcon(R.drawable.ic_notifications)
+            .setContentTitle(note.title)
+            .setContentText(text)
+            .setSubText(note.host)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setProgress(100, if (busy) 0 else percent ?: 0, busy && p.state == ProgressState.Indeterminate)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setContentIntent(tap)
+            .setAutoCancel(true)
+            .build()
+        NotificationManagerCompat.from(context).notify(tag, PROGRESS_ID, notification)
+    }
+
+    /** The tab's bar went, or the person is back: its progress notification goes. */
+    fun clearProgress(context: Context, hostId: String, windowId: String) {
+        progressTokens.remove(progressTag(hostId, windowId))
+        NotificationManagerCompat.from(context).cancel(progressTag(hostId, windowId), PROGRESS_ID)
+    }
+
+    private val progressTokens = java.util.concurrent.ConcurrentHashMap<String, Pair<AlertTarget, String>>()
+
+    /** A tab's progress notification tag: its host and its id. */
+    fun progressTag(hostId: String, windowId: String) = "progress/$hostId/$windowId"
+
     /** A host's group: every pane of that host that has something to say, in any session. */
     internal fun groupOf(target: AlertTarget) = "host/${target.hostId}"
 
@@ -332,6 +391,7 @@ object Alerts {
         channel(CHANNEL_ATTENTION, R.string.alerts_channel_attention, R.string.alerts_channel_attention_body, NotificationManager.IMPORTANCE_HIGH)
         channel(CHANNEL_DONE, R.string.alerts_channel_done, R.string.alerts_channel_done_body, NotificationManager.IMPORTANCE_DEFAULT)
         channel(CHANNEL_MESSAGES, R.string.alerts_channel_messages, R.string.alerts_channel_messages_body, NotificationManager.IMPORTANCE_DEFAULT)
+        channel(CHANNEL_PROGRESS, R.string.alerts_channel_progress, R.string.alerts_channel_progress_body, NotificationManager.IMPORTANCE_LOW)
     }
 
     /**
@@ -361,6 +421,7 @@ object Alerts {
     internal const val CHANNEL_ATTENTION = "attention"
     internal const val CHANNEL_DONE = "done"
     internal const val CHANNEL_MESSAGES = "messages"
+    internal const val CHANNEL_PROGRESS = "progress"
     internal const val EXTRA_HOST = "host"
     internal const val EXTRA_HOST_ID = "host_id"
     internal const val EXTRA_SESSION = "session"
@@ -375,6 +436,7 @@ object Alerts {
     internal const val ACTION_APPROVE = "me.leaver.rexpocket.alerts.APPROVE"
     internal const val ACTION_DENY = "me.leaver.rexpocket.alerts.DENY"
     internal const val PANE_ID = 2
+    internal const val PROGRESS_ID = 4
     private const val SUMMARY_ID = 3
     private const val SUMMARY_LINES = 6
     private const val BUZZ_MS = 60L

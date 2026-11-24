@@ -30,6 +30,9 @@ abstract class PaneSignalsTest {
     /** The program in [block] asks for a desktop notification; OSC 9 when [title] is null. */
     abstract suspend fun notify(world: World, title: String?, body: String)
 
+    /** The program in [World.other] reports progress with OSC 9;4 [state] and [value]. */
+    abstract suspend fun progress(world: World, state: Int, value: Int?)
+
     /** Waits until [block] received [reply] and Enter. */
     abstract suspend fun awaitReplied(world: World, reply: String)
 
@@ -38,10 +41,10 @@ abstract class PaneSignalsTest {
 
     class World(val rex: RexUnderTest, val desk: Desk, val phone: PocketSession, val sid: String, val other: String, val signals: List<PaneSignal>)
 
-    private fun withPhone(body: suspend World.() -> Unit) = runBlocking {
+    private fun withPhone(staleMs: Long = PROGRESS_STALE_MS, body: suspend World.() -> Unit) = runBlocking {
         val rex = rex()
         val desk = Desk(rex.endpoint)
-        val phone = PocketSession(rex.endpoint)
+        val phone = PocketSession(rex.endpoint, progressStaleMs = staleMs)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val signals = CopyOnWriteArrayList<PaneSignal>()
         var sid: String? = null
@@ -94,6 +97,41 @@ abstract class PaneSignalsTest {
         awaitSignal(PaneSignal.Note(sid, other, "Agent", "needs input"))
     }
 
+    private suspend fun World.awaitProgress(want: PaneProgress?) {
+        withTimeoutOrNull(10_000) { while (phone.state.value.progress[other] != want) delay(20) }
+            ?: throw AssertionError("expected $want, got ${phone.state.value.progress}")
+    }
+
+    /**
+     * OSC 9;4 in a pane not on screen: each of its states reaches the phone as that pane's bar, and
+     * state 0 takes it down. None of it is an OSC 9 notification, though it shares OSC 9's number.
+     */
+    @Test
+    fun progressBarsReachThePhoneInEveryStateAndGo() = withPhone {
+        progress(this, 1, 42)
+        awaitProgress(PaneProgress(ProgressState.Normal, 42))
+        progress(this, 4, 50)
+        awaitProgress(PaneProgress(ProgressState.Paused, 50))
+        progress(this, 2, 10)
+        awaitProgress(PaneProgress(ProgressState.Error, 10))
+        progress(this, 3, null)
+        awaitProgress(PaneProgress(ProgressState.Indeterminate))
+        progress(this, 1, 100)
+        awaitProgress(PaneProgress(ProgressState.Normal, 100))
+        progress(this, 0, null)
+        awaitProgress(null)
+        delay(300)
+        assertTrue("no notification: $signals", signals.none { it is PaneSignal.Note })
+    }
+
+    /** A bar no report keeps up goes by itself, as Ghostty's does: its program may have died. */
+    @Test
+    fun aProgressBarWithNoNewReportGoes() = withPhone(staleMs = 1_500) {
+        progress(this, 1, 30)
+        awaitProgress(PaneProgress(ProgressState.Normal, 30))
+        awaitProgress(null)
+    }
+
     @Test
     fun aReplyIsPastedIntoThePaneItNamesThenEntered() = withPhone {
         assertTrue(phone.replyTo(sid, other, "echo reply-$((6*7))-ok"))
@@ -120,6 +158,36 @@ class ScriptedPaneSignalsTest : PaneSignalsTest() {
 
     override suspend fun notify(world: World, title: String?, body: String) = world.fake.notify(world.other, title.orEmpty(), body)
 
+    override suspend fun progress(world: World, state: Int, value: Int?) = world.fake.progress(world.other, state, value)
+
+    /** Should Rex ever pass OSC 9;4 on as an OSC 9 notification too, it is a bar, not a message. */
+    @Test
+    fun anOsc9ThatIsAProgressReportIsNoNotification() = runBlocking {
+        val rex = FakeRexUnderTest()
+        val desk = Desk(rex.endpoint)
+        val phone = PocketSession(rex.endpoint)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val signals = CopyOnWriteArrayList<PaneSignal>()
+        try {
+            desk.connect()
+            val (sid, tabs) = desk.newSession(tabs = 1)
+            scope.launch(start = CoroutineStart.UNDISPATCHED) { phone.signals.collect { signals += it } }
+            phone.start(scope, preferredSessionId = sid)
+            withTimeout(15_000) { phone.awaitReady() }
+            val block = tabs.first().second
+            rex.rex.notify(block, "", "4;1;42")
+            rex.rex.notify(block, "", "build 4;1 done")
+            withTimeout(5_000) { while (signals.isEmpty()) delay(20) }
+            delay(200)
+            assertEquals(listOf(PaneSignal.Note(sid, block, "", "build 4;1 done")), signals.toList())
+        } finally {
+            phone.stop()
+            scope.cancel()
+            desk.close()
+            rex.close()
+        }
+    }
+
     override suspend fun awaitReplied(world: World, reply: String) {
         val want = listOf("paste ${world.other} $reply", "key ${world.other} +enter")
         withTimeoutOrNull(5_000) { while (world.fake.inputs.toList() != want) delay(20) }
@@ -143,6 +211,11 @@ class RealRexPaneSignalsTest : PaneSignalsTest() {
 
     override suspend fun notify(world: World, title: String?, body: String) {
         val osc = if (title == null) "9;$body" else "777;notify;$title;$body"
+        world.desk.type(world.sid, world.other, "printf '\\033]$osc\\a'\n")
+    }
+
+    override suspend fun progress(world: World, state: Int, value: Int?) {
+        val osc = "9;4;$state" + (value?.let { ";$it" } ?: "")
         world.desk.type(world.sid, world.other, "printf '\\033]$osc\\a'\n")
     }
 

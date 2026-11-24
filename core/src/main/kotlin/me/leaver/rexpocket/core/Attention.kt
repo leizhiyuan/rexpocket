@@ -79,6 +79,8 @@ data class AlertPrefs(
     val bells: Boolean = false,
     /** A bell in the pane on screen vibrates, as the system's own vibration settings allow. */
     val vibrate: Boolean = true,
+    /** A tab's progress bar (OSC 9;4) as a progress notification while the app is away; off by default. */
+    val progress: Boolean = false,
 ) {
     fun allows(kind: AlertKind): Boolean = when (kind) {
         AlertKind.Waiting -> waiting

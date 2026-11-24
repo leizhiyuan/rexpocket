@@ -28,8 +28,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The terminal's ⋮ menu as the person reads it, top to bottom: the command palette and the key bar's
- * phone actions with no caption, then Pane, Tab and Session, each with its destructive row last. Which rows show follows
+ * The terminal's ⋮ menu as the person reads it, top to bottom: the command palette, Find, the
+ * keyboard shortcuts and the key bar's phone actions with no caption, then Pane, Tab and Session, each with its destructive row last. Which rows show follows
  * the screen - a pane on screen, who holds it, how many panes the tab has, the keyboard, an upload -
  * and never the key bar: Arrange keys and a desk keyboard leave the menu as it is.
  * See terminal-controls.md, 4.
@@ -79,6 +79,8 @@ class TermMenuTest {
     /** The rows of a live pane held by the phone, alone in its tab. */
     private fun onePane(holder: Int = R.string.action_release, keyboard: Int = keyboardNow()) = listOf(
         string(R.string.palette_title),
+        string(R.string.find_title),
+        string(R.string.shortcuts_title),
         string(R.string.key_paste),
         string(R.string.upload_attach),
         string(keyboard),
@@ -167,6 +169,7 @@ class TermMenuTest {
         assertEquals(
             listOf(
                 string(R.string.palette_title),
+                string(R.string.shortcuts_title),
                 string(R.string.action_full_screen),
                 "# " + string(R.string.level_pane),
                 string(R.string.menu_split_right),

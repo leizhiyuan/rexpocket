@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -95,6 +96,10 @@ import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.PaletteEntry
+import me.leaver.rexpocket.core.AppShortcut
+import me.leaver.rexpocket.core.PaneProgress
+import me.leaver.rexpocket.core.repeats
+import me.leaver.rexpocket.core.tabProgress
 import me.leaver.rexpocket.core.QuickReplies
 import me.leaver.rexpocket.core.ProgramMark
 import me.leaver.rexpocket.core.programMark
@@ -154,6 +159,9 @@ internal sealed interface Sheet {
     data object Actions : Sheet
     data object Navigator : Sheet
     data object Palette : Sheet
+
+    /** What a keyboard on the desk can do here: the screen's own keys. */
+    data object Shortcuts : Sheet
     data class TabActions(val windowId: String) : Sheet
     data class PaneActions(val blockId: String) : Sheet
 
@@ -326,6 +334,78 @@ internal fun TermScreen(
         if (state.holder == Holder.Phone) onAct { releasePane() } else onAct { takeOver() }
     }
 
+    val shownTabTitle = if (view != null && tab != null) tabTitle(view, tab, state) else ""
+
+    // Find in the pane's scrollback: a bar over the pane, its matches drawn on it.
+    var findOpen by rememberSaveable { mutableStateOf(false) }
+    var findAgain by remember { mutableIntStateOf(0) }
+    val find = remember { FindModel() }
+    FindEffects(find, findOpen && focused != null, termSession)
+
+    /** Opens Find, or puts the keys in its field again; a selection of one line is what it looks for. */
+    fun openFind() {
+        if (focused == null) return
+        val picked = termSession?.selectionText().orEmpty()
+        if (picked.isNotBlank() && '\n' !in picked) find.query = androidx.compose.ui.text.input.TextFieldValue(picked.trim())
+        findOpen = true
+        findAgain++
+    }
+
+    fun closeFind() {
+        findOpen = false
+        // The keys of a desk keyboard go back to the pane.
+        keyboard?.pane?.takeIf { it.hardwareKeys }?.requestFocus()
+    }
+
+    /** Next or previous tab of the session on screen, round the ends. */
+    fun stepTab(forward: Boolean) {
+        val windows = view?.windows ?: return
+        val at = windows.indexOfFirst { it.id == tab?.id }
+        if (windows.size < 2 || at < 0) return
+        val next = windows[(at + (if (forward) 1 else -1) + windows.size) % windows.size]
+        onAct { focusWindow(next.id) }
+    }
+
+    /** What the screen does for one of its own keys on a desk keyboard (terminal-controls.md, "A desk keyboard"). */
+    fun runShortcut(shortcut: AppShortcut) {
+        when (shortcut) {
+            AppShortcut.Find -> openFind()
+            AppShortcut.Copy -> {
+                val text = termSession?.selectionText().orEmpty()
+                if (text.isEmpty()) {
+                    toast(context, context.getString(R.string.toast_nothing_selected))
+                } else {
+                    clipboardSet(context, text)
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) toast(context, context.getString(R.string.toast_copied))
+                }
+            }
+            AppShortcut.Paste -> if (focused != null) pasteClipboard()
+            AppShortcut.NewTab -> if (view != null) onAct { newWindow() }
+            AppShortcut.NextTab -> stepTab(forward = true)
+            AppShortcut.PreviousTab -> stepTab(forward = false)
+            AppShortcut.CloseTab -> if (view != null && tab != null) confirm = Confirm(Level.Tab, tab.id, shownTabTitle)
+            AppShortcut.FontBigger -> onFont(fontScale + FONT_STEP)
+            AppShortcut.FontSmaller -> onFont(fontScale - FONT_STEP)
+            AppShortcut.FontReset -> onFont(1f)
+            AppShortcut.Palette -> sheet = Sheet.Palette
+            AppShortcut.Home -> onBack()
+            AppShortcut.Help -> sheet = Sheet.Shortcuts
+        }
+    }
+
+    /** A key from a desk keyboard, offered before the program gets it: true when it was the screen's. */
+    fun onShortcutKey(event: android.view.KeyEvent, fromFind: Boolean = false): Boolean {
+        if (event.action != android.view.KeyEvent.ACTION_DOWN) return false
+        val shortcut = shortcutOf(event) ?: return false
+        // Copy and paste in Find's field are the field's own.
+        if (fromFind && (shortcut == AppShortcut.Copy || shortcut == AppShortcut.Paste)) return false
+        // A held key does not open tab after tab; only the font steps on.
+        if (event.repeatCount > 0 && !shortcut.repeats) return true
+        runShortcut(shortcut)
+        return true
+    }
+    TerminalShortcutsShown()
+
     /** Who holds the pane shows while there is one on screen to hold: the chip, and the menu's row. */
     val showHolder = holderShown(state, tab)
     val imeUp = imeShown()
@@ -409,11 +489,13 @@ internal fun TermScreen(
                                 programs = state.programs,
                                 onSelect = { block -> onAct { focusBlock(block.id) } },
                                 modifier = Modifier.widthIn(max = 420.dp),
+                                progress = state.progress,
                             )
                         }
                     } else {
                         null
                     },
+                    progress = tab?.let { tabProgress(it, state.progress) },
                 )
             } else if (chrome.cornerMenu) {
                 // The bar steps aside for the key bar, but its room is kept: the pane keeps its
@@ -473,10 +555,9 @@ internal fun TermScreen(
                         fullScreen = chrome.fullScreen,
                         onFullScreen = toggleFullScreen,
                         onError = { onAct { note(it.toProblem()) } },
-                        // Ctrl+Shift+P (or Cmd+Shift+P on a Mac keyboard) opens the palette, as on the Mac.
-                        onShortcut = { event ->
-                            opensPalette(event).also { if (it) sheet = Sheet.Palette }
-                        },
+                        // The screen's own keys: Ctrl+Shift+P for the palette (Cmd+Shift+P on a Mac
+                        // keyboard), Ctrl+Shift+F for Find and the rest of the shortcut table.
+                        onShortcut = { event -> onShortcutKey(event) },
                         modifier = Modifier.fillMaxSize()
                             // Moved, not resized: see imeShift. An offset keeps the pane's measured size
                             // - and so the grid the program was given - exactly as it was.
@@ -484,6 +565,18 @@ internal fun TermScreen(
                             .padding(horizontal = 3.dp, vertical = 2.dp)
                             .onSizeChanged { panePx = it.height },
                     )
+                }
+                // Find, over the pane's top rows rather than taking a row from it: the program keeps
+                // its size while the person looks through what it printed.
+                if (findOpen && focused != null) {
+                    key(findAgain) {
+                        FindBar(
+                            find,
+                            onClose = ::closeFind,
+                            onShortcut = { onShortcutKey(it, fromFind = true) },
+                            modifier = Modifier.align(Alignment.TopCenter).padding(end = if (chrome.fullScreen) 44.dp else 0.dp),
+                        )
+                    }
                 }
                 // The way back out of full screen, always on screen while it is on: small, in the
                 // corner a video player uses, and over the pane rather than taking a row from it.
@@ -513,6 +606,7 @@ internal fun TermScreen(
                             busyPanes = state.busy,
                             programs = state.programs,
                             onSelect = { block -> onAct { focusBlock(block.id) } },
+                            progress = state.progress,
                         )
                     }
                 }
@@ -584,6 +678,8 @@ internal fun TermScreen(
             Group {
                 // Everything below, and every tab and session, searchable: see command-palette.md.
                 SheetItem(stringResource(R.string.palette_title), icon = R.drawable.ic_command) { sheet = Sheet.Palette }
+                if (focused != null) SheetItem(stringResource(R.string.find_title), icon = R.drawable.ic_search) { openFind() }
+                SheetItem(stringResource(R.string.shortcuts_title), icon = R.drawable.ic_keyboard, opens = true) { sheet = Sheet.Shortcuts }
                 for (key in PHONE_ACTIONS) {
                     when (key) {
                         // Paste, Send a file and the keyboard act on the pane on screen.
@@ -718,6 +814,7 @@ internal fun TermScreen(
                             if (out.text.isBlank()) toast(context, context.getString(R.string.toast_output_empty)) else shareText(context, out.text)
                         }
                     }
+                    action(stringResource(R.string.find_title), paneGroup, "Find client.find.show search scrollback ctrl+shift+f") { openFind() }
                     action(stringResource(R.string.palette_copy_pane_id), paneGroup, "Copy Block ID pane.copy_id") {
                         clipboardSet(context, focused.id)
                         toast(context, copied)
@@ -760,6 +857,7 @@ internal fun TermScreen(
                 action(stringResource(R.string.palette_font_smaller), phoneGroup, "Decrease Font Size client.font.decrease") { onFont(fontScale - FONT_STEP) }
                 action(stringResource(R.string.palette_font_reset), phoneGroup, "Reset Font Size client.font.reset") { onFont(1f) }
                 action(stringResource(R.string.palette_back_home), phoneGroup) { onBack() }
+                action(stringResource(R.string.shortcuts_title), phoneGroup, "Keyboard Shortcuts keys help ctrl+shift+/") { sheet = Sheet.Shortcuts }
                 if (focused != null) {
                     // Rex's own Compose Input… opens its composer; the phone's sends one paste.
                     action(stringResource(R.string.composer_title), phoneGroup, "Compose Input client.composer.open prompt message") { openComposer() }
@@ -800,6 +898,7 @@ internal fun TermScreen(
             }
             CommandPalette(entries, onDismiss = { sheet = null })
         }
+        Sheet.Shortcuts -> ShortcutsSheet(onDismiss = { sheet = null }, onRun = ::runShortcut)
         Sheet.Navigator -> if (view != null) {
             ActionSheet(onDismiss = { sheet = null }, title = view.label) {
                 Group {
@@ -992,6 +1091,8 @@ private fun SessionTopBar(
     onMore: () -> Unit,
     /** The pane switcher, where a short window puts it: in this row rather than over the pane. */
     panes: (@Composable () -> Unit)? = null,
+    /** The tab's progress bar, drawn along the bar's foot without taking a row from the pane. */
+    progress: PaneProgress? = null,
 ) {
     val title = when {
         view == null -> state.endpointLabel.ifBlank { stringResource(R.string.app_name) }
@@ -999,64 +1100,69 @@ private fun SessionTopBar(
         else -> view.label
     }
     val path = state.pwd?.takeIf { it.isNotBlank() }?.let { shortPath(it) }
-    Row(
-        Modifier.fillMaxWidth().height(TOP_BAR_HEIGHT).padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (showBack) {
-            RoundButton(R.drawable.ic_back, stringResource(R.string.action_back), onBack, plate = Colors.key, size = 40.dp)
-        } else {
-            Spacer(Modifier.width(4.dp))
-        }
+    Box(Modifier.fillMaxWidth().height(TOP_BAR_HEIGHT)) {
         Row(
-            Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(Radius.card))
-                .clickable(enabled = view != null, role = Role.Button, onClickLabel = stringResource(R.string.menu_navigate), onClick = onNavigate)
-                .padding(horizontal = 8.dp),
+            Modifier.fillMaxSize().padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ProgramTile(tab?.focusedBlock()?.id?.let { state.programs[it] }, size = 36.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        title,
-                        color = Colors.ink,
-                        fontSize = TextStyles.body,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    if (path != null) {
+            if (showBack) {
+                RoundButton(R.drawable.ic_back, stringResource(R.string.action_back), onBack, plate = Colors.key, size = 40.dp)
+            } else {
+                Spacer(Modifier.width(4.dp))
+            }
+            Row(
+                Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(Radius.card))
+                    .clickable(enabled = view != null, role = Role.Button, onClickLabel = stringResource(R.string.menu_navigate), onClick = onNavigate)
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ProgramTile(tab?.focusedBlock()?.id?.let { state.programs[it] }, size = 36.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            title,
+                            color = Colors.ink,
+                            fontSize = TextStyles.body,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (path != null) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(path, color = Colors.muted, fontSize = TextStyles.subhead, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Dot(status?.let { statusTint(it) } ?: phaseTint(state.phase), 6.dp)
                         Spacer(Modifier.width(6.dp))
-                        Text(path, color = Colors.muted, fontSize = TextStyles.subhead, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            view?.label ?: phaseText(state),
+                            color = Colors.muted,
+                            fontSize = TextStyles.label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Glyph(R.drawable.ic_expand, Colors.muted, size = 18.dp)
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Dot(status?.let { statusTint(it) } ?: phaseTint(state.phase), 6.dp)
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        view?.label ?: phaseText(state),
-                        color = Colors.muted,
-                        fontSize = TextStyles.label,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    Glyph(R.drawable.ic_expand, Colors.muted, size = 18.dp)
-                }
             }
+            if (panes != null) {
+                panes()
+                Spacer(Modifier.width(8.dp))
+            }
+            // Who holds the pane, while there is one on screen to hold.
+            if (holderShown(state, tab)) {
+                HolderChip(state.holder == Holder.Phone, onHolder)
+                Spacer(Modifier.width(4.dp))
+            }
+            RoundButton(R.drawable.ic_more, stringResource(R.string.action_more), onMore, plate = Colors.key, size = 40.dp)
         }
-        if (panes != null) {
-            panes()
-            Spacer(Modifier.width(8.dp))
+        if (progress != null) {
+            ProgressLine(progress, Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = 2.dp))
         }
-        // Who holds the pane, while there is one on screen to hold.
-        if (holderShown(state, tab)) {
-            HolderChip(state.holder == Holder.Phone, onHolder)
-            Spacer(Modifier.width(4.dp))
-        }
-        RoundButton(R.drawable.ic_more, stringResource(R.string.action_more), onMore, plate = Colors.key, size = 40.dp)
     }
 }
 
@@ -1218,6 +1324,8 @@ private fun PaneBar(
     programs: Map<String, String>,
     onSelect: (BlockInfo) -> Unit,
     modifier: Modifier = Modifier,
+    /** Each pane's progress bar, under its segment. */
+    progress: Map<String, PaneProgress> = emptyMap(),
 ) {
     val blocks = tab?.blocks.orEmpty()
     val scroll = rememberScrollState()
@@ -1230,10 +1338,12 @@ private fun PaneBar(
             val on = block.id == focused?.id
             val record = status[block.id]
             val busy = block.id in busyPanes
+            val bar = progress[block.id]
+            val barWords = bar?.let { progressWords(it) }
             Box(
                 Modifier.height(48.dp)
                     .clickable(role = Role.Tab) { if (!on) onSelect(block) }
-                    .semantics { if (on) stateDescription = selected }
+                    .semantics { listOfNotNull(selected.takeIf { on }, barWords).takeIf { it.isNotEmpty() }?.let { stateDescription = it.joinToString(", ") } }
                     .padding(vertical = 4.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -1258,6 +1368,15 @@ private fun PaneBar(
                         Spacer(Modifier.width(6.dp))
                         Dot(statusTint(record), 6.dp)
                     }
+                }
+                // Over the segment's plate, along its foot, as wide as the segment.
+                if (bar != null) {
+                    ProgressLine(
+                        bar,
+                        Modifier.matchParentSize().wrapContentHeight(Alignment.Bottom).padding(horizontal = 12.dp),
+                        height = 2.dp,
+                        merged = true,
+                    )
                 }
             }
         }

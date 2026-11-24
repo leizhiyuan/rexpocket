@@ -439,7 +439,8 @@ class ScreenshotsTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_more)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(compose.activity.getString(R.string.composer_title)).performClick()
+        // Below the fold of the menu on a phone on its side.
+        compose.onNodeWithText(compose.activity.getString(R.string.composer_title)).performScrollTo().performClick()
         compose.waitForIdle()
         compose.onNode(androidx.compose.ui.test.hasSetTextAction() and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(COMPOSER_FIELD_TAG)))
             .performTextInput("Look at the failing test in core.\nFix it, then run the whole suite.")
@@ -453,6 +454,33 @@ class ScreenshotsTest {
     @Test fun activityPortrait() = activity("activity-portrait")
     @Test fun activityLandscape() { landscape(); activity("activity-landscape") }
 
+    /**
+     * A terminal of two panes with progress bars - the tab's along the top bar, the other pane's
+     * under its segment - and Find open over the pane, or the keyboard shortcuts sheet.
+     */
+    private fun findAndProgress(name: String, sheet: Boolean = false) {
+        val model = termModel()
+        val state = liveState(tabOf(testPane("left"), testPane("right"))).copy(
+            progress = mapOf(
+                "block:left" to me.leaver.rexpocket.core.PaneProgress(me.leaver.rexpocket.core.ProgressState.Normal, 62),
+                "block:right" to me.leaver.rexpocket.core.PaneProgress(me.leaver.rexpocket.core.ProgressState.Error, 30),
+            ),
+        )
+        compose.setContent { TermOnModel(model, state) }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_more)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(compose.activity.getString(if (sheet) R.string.shortcuts_title else R.string.find_title)).performClick()
+        compose.waitForIdle()
+        if (!sheet) compose.onNodeWithTag(FIND_FIELD_TAG).performTextInput("error")
+        compose.waitForIdle()
+        captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    @Test fun findPortrait() = findAndProgress("terminal-find-progress-portrait")
+    @Test fun findLandscape() { landscape(); findAndProgress("terminal-find-progress-landscape") }
+    @Test fun shortcutsPortrait() = findAndProgress("terminal-shortcuts-portrait", sheet = true)
+    @Test fun shortcutsLandscape() { landscape(); findAndProgress("terminal-shortcuts-landscape", sheet = true) }
     @Test fun menuPortrait() = menu("terminal-menu-portrait")
     @Test fun menuLandscape() { landscape(); menu("terminal-menu-landscape") }
     @Test fun fullScreenPortrait() = fullScreen("terminal-full-screen-portrait")

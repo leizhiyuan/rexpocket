@@ -141,13 +141,14 @@ default, so a key added to the bar has to be put on one side.
 
 The menu, top to bottom; each section's destructive row last, in red:
 
-1. No caption, in the bar's order: Paste; Send a file; Show / Hide keyboard; Full screen.
+1. No caption: Command palette; Find (9); Keyboard shortcuts › (10); then, in the bar's order:
+   Paste; Send a file; Show / Hide keyboard; Full screen.
 2. Pane: Release / Take over (while the session is live and a tab is open, as the top bar's chip);
    New pane on the right; New pane below; Rename pane; Close pane.
 3. Tab: New tab; Rename tab; Close tab.
 4. Session: Sessions; Rename session; End session.
 
-What changes it: Paste, Send a file, the keyboard, Rename pane and Close pane need a pane on screen,
+What changes it: Find, Paste, Send a file, the keyboard, Rename pane and Close pane need a pane on screen,
 so the closed-pane note leaves them out. Send a file is greyed out, not removed, while a file is on
 its way, so the rows do not jump. Close pane shows only with two or more panes: Rex closes a tab
 with its last pane, which is Close tab. The keyboard row says what a tap does, by whether the
@@ -447,7 +448,126 @@ Migration: `gesture_double_tap` missing and the old `double_tap_full_screen` fal
 `nothing`; otherwise `full_screen`. The old key is left in place, so going back to an older build
 keeps its own setting. Values out of range are clamped; unknown strings fall back to the default.
 
-## 9. Testing
+## 9. Find
+
+Find looks through the pane's scrollback - the screen and every row of history the pane's terminal
+holds - for what is typed, and shows where.
+
+**Opening it.** The ⋮ menu's Find, the palette's Find (Rex's `client.find.*` words find it too),
+and Ctrl+Shift+F (Meta+F on a Mac keyboard) on a desk keyboard. A one-line selection is taken as
+the query. Ctrl+Shift+F again puts the keys back in the field with the query selected.
+
+**The bar** floats over the pane's top rows rather than taking a row from it, so the program keeps
+its size: the query (focused, its text selected so typing replaces it), the count ("3 of 12", "No
+matches", "1000 of 1000+"), a case switch (Aa, off by default; TalkBack reads it as a switch, "Match
+case"), previous, next and close, each 48 dp. Return goes to the next match and Shift+Return to the
+previous (F3 and Shift+F3 too), the keyboard's Search key goes to the next, Escape closes. The
+screen's other shortcuts (10) work from the field; Copy and Paste there are the field's own. The
+count is a polite live region, so TalkBack says it as it changes. Closing gives a desk keyboard's
+keys back to the pane.
+
+**What is searched.** The pane's own libghostty terminal: the `GHOSTSNP` snapshot Rex sends when a
+pane opens carries the scrollback Rex's terminal has, and every byte of output since is fed to the
+same terminal, so the phone holds what Rex holds. libghostty-vt 1.0.1's C API, as the app binds it,
+offers no search and hands out only the viewport (its render state), so
+`TerminalSession.scrollbackRows` walks the viewport from the top a screen at a time under the
+session's lock - no output lands in between, nothing draws half-way - and puts it back where it
+was. At most the newest 50 000 rows are read. Rex's `format` (the screen and scrollback as text, as
+Copy output uses) was not used: it holds no more history than the snapshot gave the phone, costs a
+round trip of up to megabytes per search, and its lines cannot be mapped to the rows the pane draws,
+which highlighting and scrolling need.
+
+**Matching** (`searchScrollback`, core): lines the terminal wrapped are searched whole, so a word
+broken at the right edge is found; the spaces padding a line the program ended match nothing; case
+is ignored unless the switch is on; matches do not overlap; at most 1000 are kept. A wide character
+covers its two columns. The search runs 150 ms after typing rests, off the main thread.
+
+**Showing them.** Every match on screen gets a soft amber under its text, the current one a deep
+orange with an edge (told apart without colour too). A new query starts on the newest match, at the
+bottom where the person is, and the pane scrolls to put the current match a third of the way down.
+New output searches again 400 ms after it rests and keeps Find on the match it was on
+(`nextCurrent`), even when the oldest rows fell out of the scrollback, without moving the pane.
+
+## 10. A desk keyboard
+
+With a keyboard attached the pane holds the focus (3) and every key goes to the program, encoded by
+libghostty in the modes the program set - except the screen's own few, below. The key bar hides by
+default with a desk keyboard (Terminal controls › With a desk keyboard).
+
+**What the program gets** (`TerminalSessionTest`): Esc, Tab and Shift+Tab, the arrows, Home, End,
+PgUp, PgDn, Insert, Delete, F1-F12, each with Ctrl, Alt and Shift in xterm's form (`ESC[1;5D` is
+Ctrl+Left, `ESC[5;5~` Ctrl+PgUp); Ctrl+letter as its control character, Ctrl+Space as NUL, Alt as
+the ESC prefix (Alt+Backspace is `ESC DEL`), Ctrl+Shift+- as C-_ (a shell's undo); Meta (the
+Command or Windows key) reaches a program that turned on the Kitty keyboard protocol as Super.
+Shift+PgUp and Shift+PgDn scroll the history, as before. Numpad digits type as text; the numpad's
+other keys with Ctrl are not encoded (the JNI key table has no numpad keys yet).
+
+**The screen's keys** (`appShortcut`, core). The rule: Ctrl+Shift with a letter or symbol, which no
+terminal program tells from Ctrl alone unless it speaks the Kitty protocol (C-S-c is C-c); Ctrl with
+`=`, `-`, `0` and Tab, which have no byte of their own and are what Ghostty and browsers use; and
+Meta with the keys a Mac uses for the same. Nothing with Alt. Ctrl+Shift+- stays the program's.
+
+| Action | Keys |
+| --- | --- |
+| Command palette | Ctrl+Shift+P · Meta+Shift+P |
+| Find | Ctrl+Shift+F · Meta+F |
+| Copy selection | Ctrl+Shift+C · Meta+C (nothing selected: a toast says to select first; nothing goes to the program, which would read C-c) |
+| Paste | Ctrl+Shift+V · Meta+V |
+| New tab | Ctrl+Shift+T · Meta+T |
+| Next tab | Ctrl+Tab · Ctrl+Shift+] · Meta+Shift+] |
+| Previous tab | Ctrl+Shift+Tab · Ctrl+Shift+[ · Meta+Shift+[ |
+| Close tab (asks first, as the menu does) | Ctrl+Shift+W · Meta+W |
+| Bigger text | Ctrl+= (or +, Ctrl+Shift+=, numpad +) · Meta+= |
+| Smaller text | Ctrl+- (numpad - too) · Meta+- |
+| Reset text size | Ctrl+0 · Meta+0 |
+| Back to hosts | Ctrl+Shift+H |
+| Keyboard shortcuts | Ctrl+Shift+/ |
+
+A held shortcut acts once, but for the text size, which steps on. The tab keys go round the
+session's tabs, as the palette's Next and Previous tab do.
+
+**Where they are listed.** The Keyboard shortcuts sheet (Ctrl+Shift+/, the ⋮ menu, the palette): a
+row per action with its keys, and a tap runs it. Android's own keyboard shortcuts helper (Meta+/)
+gets the same list from `MainActivity.onProvideKeyboardShortcuts` while the terminal screen is up.
+
+Not done: the keys cannot be rebound; a key the system takes first (Meta+Tab, Alt+Tab, Meta+/) never
+reaches the app.
+
+## 11. Progress
+
+Programs report a progress bar with OSC 9;4 (ConEmu's sequence, which Ghostty and Windows Terminal
+show): state 0 removes it, 1 sets a percent, 2 is an error, 3 busy with no percent, 4 paused (or a
+warning). Rex reads the sequence in its own terminal and forwards it to every client that may see
+the pane as the block event `progress_report` `{state: set|error|indeterminate|pause|remove,
+progress}` (rex-parity.md), skipping reports that come in quick succession but always sending the
+newest. The phone takes that (`PocketState.progress`, by pane) rather than its own libghostty, whose
+C API as bound here does not surface OSC 9;4; and Rex's event comes for panes not on screen and in
+other sessions too, which a local terminal never sees.
+
+Rex keeps no bar to read back, so a pane shows one only from the first report the connection hears.
+A bar goes when the program removes it (state 0), its program exits (`child_exited`), the pane
+closes, or no report has come for 15 s - as Ghostty's desktop app does, so a program that died
+mid-way leaves no bar for good.
+
+**Where it shows**, as a line 3 dp tall (2 dp under a pane's segment) in the action colour, red for
+an error, amber paused, with a moving piece for work with no percent:
+
+- along the foot of the terminal's top bar, for the tab (its focused pane's bar, else the most
+  pressing of its panes': error, paused, a percent, busy), drawn over the bar so the pane never
+  changes size for it; full screen hides it with the bar;
+- under each pane's segment of the pane switcher, its own;
+- on the home, under the tab's row, for the tab.
+
+TalkBack reads a bar as a progress bar with its words ("Progress 42%", "Working, progress
+unknown", "Failed at 10%", "Paused at 50%"); in a pane segment and a tab row, as part of the row.
+
+**As a notification** (Settings › Background and notifications › Progress, off by default, stored
+as `alerts.progress`): while the app is away and background alerts are on, each tab with a bar has a
+quiet notification on its own channel (Progress, low importance) with Android's own progress bar,
+the tab's name and host; it follows the bar at most once a second and goes with it, or when the
+app comes back. A host whose notifications are off has none. A tap opens the pane.
+
+## 12. Testing
 
 - `GesturesTest` (core, JVM): every gesture under every combination of double taps on or off and
   waiting on or off, custom times, drags, far second taps, held second presses, late timers, and
@@ -463,6 +583,22 @@ keeps its own setting. Values out of range are clamped; unknown strings fall bac
 - `KeyBarLayoutTest` (app, JVM): the widths at 360, 393, 411, 426 and 891 dp, a sweep of every
   width from 300 to 1400 dp for 8 to 40 keys, a group's panel rows (Fn's as before), small pills of one and two keys, no wide-pill keys.
 - `ClosedPaneTest` / size test (core): a size set while a resize is out is still sent.
+- Find: `ScrollbackSearchTest` (core: wrapped lines, padding, case, wide characters, the limit,
+  which match stays current), `FindModelTest` (app, JVM: newest first, stepping round, output that
+  pushes rows out), `TerminalSessionTest` (real libghostty: the whole scrollback read and the
+  viewport put back, the newest rows only, a wrapped word, scrolling to a match), and
+  `TermShortcutsTest` (shared: Ctrl+Shift+F, the menu and the palette open it; focus, Escape, the
+  case switch, shortcuts from its field). Screenshots `terminal-find-progress-*`.
+- Desk keyboard: `ShortcutsTest` (core: every listed key, and the program keeping Ctrl, Alt,
+  Ctrl+Shift+-, the desk keys), `TerminalSessionTest` (the bytes each desk key and chord sends),
+  `TermShortcutsTest` (tabs, close asking first, Home, a held key, the help sheet listing and
+  running them, the program's keys not taken, Android's helper group). Screenshots
+  `terminal-shortcuts-*`.
+- Progress: `ProgressTest` (core: Rex's states, percents past 100, tabs), `PaneSignalsTest` (on
+  ScriptedRex and on real Rex: OSC 9;4 in every state reaches the phone and goes; a bar with no new
+  report goes; an OSC 9 that is a progress report is no notification), `ProgressViewTest` (shared:
+  the top bar, a pane's segment, the home's tab row, TalkBack's words), `NotificationsTest`
+  (the progress notification when asked for, following the bar and going; none by default).
 - `ScreenSpeechTest` (core, JVM): lines from rows and wraps, which lines are new, the throttle and
   the cap; `TerminalAccessibilityTest` (emulator): the pane's node tree.
 - `TerminalControlsTest` and `AppearanceTest` (shared): each choice row's picker - every option

@@ -165,6 +165,51 @@ class NotificationsTest {
         gone(block)
     }
 
+    private fun progressOf(windowId: String) =
+        manager.activeNotifications.firstOrNull { it.tag == Alerts.progressTag(desk.host.id, windowId) && it.id == Alerts.PROGRESS_ID }?.notification
+
+    /**
+     * With progress bars on (Notifications › Progress), a tab's OSC 9;4 bar while the app is away is
+     * a quiet progress notification for the tab that follows the bar and goes with it, and when the
+     * person is back. Off, the default, there is none.
+     */
+    @Test
+    fun aProgressBarWhileAwayIsANotificationForItsTabWhenAskedFor() {
+        val block = start(AlertPrefs(progress = true)).first()
+        val window = model.pocket.value.views.getValue(sid).windows.first { w -> w.blocks.any { it.id == block } }.id
+        away()
+        desk.rex.progress(block, 1, 30)
+        var n: Notification? = null
+        await(5_000) { n = progressOf(window); n != null }
+        assertEquals(Alerts.CHANNEL_PROGRESS, n!!.channelId)
+        assertEquals(30, n!!.extras.getInt(Notification.EXTRA_PROGRESS))
+        assertEquals(100, n!!.extras.getInt(Notification.EXTRA_PROGRESS_MAX))
+        assertEquals(app.getString(R.string.progress_normal, 30), n!!.text())
+        assertEquals("desk", n!!.extras.getCharSequence(Notification.EXTRA_SUB_TEXT).toString())
+
+        desk.rex.progress(block, 3)
+        await(5_000) { progressOf(window)?.extras?.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE) == true }
+        desk.rex.progress(block, 0)
+        await(5_000) { progressOf(window) == null }
+
+        // Back on screen, the bar is the screen's: no notification for it.
+        desk.rex.progress(block, 1, 50)
+        await(5_000) { progressOf(window) != null }
+        compose.runOnUiThread { model.setForeground(true) }
+        await(5_000) { progressOf(window) == null }
+    }
+
+    @Test
+    fun progressBarsMakeNoNotificationByDefault() {
+        val block = start().first()
+        val window = model.pocket.value.views.getValue(sid).windows.first { w -> w.blocks.any { it.id == block } }.id
+        away()
+        desk.rex.progress(block, 1, 30)
+        await(5_000) { model.pocket.value.progress[block] != null }
+        pause(1_500)
+        assertEquals(null, progressOf(window))
+    }
+
     /**
      * Two hosts connected while the app is away: each one's program raises its own notification,
      * which names its host, and a Reply goes to the host it came from and to no other.

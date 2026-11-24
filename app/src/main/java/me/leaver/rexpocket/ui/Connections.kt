@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -32,6 +33,8 @@ import me.leaver.rexpocket.R
 import me.leaver.rexpocket.alerts.Alert
 import me.leaver.rexpocket.alerts.AlertAction
 import me.leaver.rexpocket.alerts.AlertOutcome
+import me.leaver.rexpocket.alerts.ProgressNote
+import me.leaver.rexpocket.core.tabsWithProgress
 import me.leaver.rexpocket.core.PromptAnswer
 import me.leaver.rexpocket.core.approvalKeys
 import me.leaver.rexpocket.core.promptStamp
@@ -219,6 +222,36 @@ class Connections private constructor(private val app: Application, val nodes: T
                         is AlertMove.Post -> alertFor(st, hostId, move)?.let { Alerts.raise(app, it) }
                     }
                 }
+            }
+        }
+        // Progress bars as notifications while away, when asked for (off by default): one per tab
+        // with a bar, changed as the bar moves - at most once a second, as Android drops updates
+        // that come faster - and gone with the bar or when the app is back. Off the main thread, so
+        // the wait between two changes is the clock's and holds up nothing.
+        scope.launch(Dispatchers.Default) {
+            val posted = HashMap<String, ProgressNote>()
+            combine(lives, foreground, Alerts.enabled, alertPrefs, background) { all, visible, on, prefs, bg ->
+                if (visible || !on || !prefs.progress) {
+                    emptyMap()
+                } else {
+                    all.filter { (hostId, live) -> bg.of(hostId).notify && live.state.phase == Phase.Live }
+                        .flatMap { (hostId, live) -> progressNotes(hostId, live) }
+                        .associateBy { Alerts.progressTag(it.target.hostId, it.windowId) }
+                }
+            }.distinctUntilChanged().conflate().collect { want ->
+                for ((tag, note) in posted.entries.toList()) {
+                    if (tag !in want) {
+                        Alerts.clearProgress(app, note.target.hostId, note.windowId)
+                        posted.remove(tag)
+                    }
+                }
+                for ((tag, note) in want) {
+                    if (posted[tag] != note) {
+                        Alerts.progress(app, note)
+                        posted[tag] = note
+                    }
+                }
+                delay(PROGRESS_NOTE_MS)
             }
         }
         // What is on screen is seen: its notification goes, and the news it had is not told later.
@@ -621,6 +654,21 @@ class Connections private constructor(private val app: Application, val nodes: T
         }
     }
 
+    /** The progress notifications [live]'s tabs with a bar want, named as the home names a tab. */
+    private fun progressNotes(hostId: String, live: HostLive): List<ProgressNote> {
+        val st = live.state
+        return tabsWithProgress(st.views.values, st.progress).mapNotNull { tab ->
+            val view = st.views[tab.sessionId] ?: return@mapNotNull null
+            val window = view.windows.firstOrNull { it.id == tab.windowId } ?: return@mapNotNull null
+            val name = if (!GENERATED_WINDOW_LABEL.matches(window.label)) {
+                window.label
+            } else {
+                st.titles[tab.blockId] ?: st.programs[tab.blockId] ?: app.getString(R.string.tab_number, view.windows.indexOf(window) + 1)
+            }
+            ProgressNote(AlertTarget(hostId, tab.sessionId, tab.blockId), tab.windowId, "$name · ${view.label}", live.target.label, tab.progress)
+        }
+    }
+
     /** The person is looking at [block] of [hostId]: whatever its notification said, they see it now. */
     private fun seen(hostId: String, block: String) {
         fleet.member(hostId)?.planner?.seen(block)
@@ -756,6 +804,9 @@ private val teardown = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
 /** How long after a connection goes live the path is measured: Tailscale needs a moment to go direct. */
 private const val PATH_SETTLE_MS = 3_000L
+
+/** The least time between two changes to the progress notifications. */
+private const val PROGRESS_NOTE_MS = 1_000L
 
 /** How long the app is away before the hosts not kept in the background are let go. */
 private const val PARK_MS = 60_000L

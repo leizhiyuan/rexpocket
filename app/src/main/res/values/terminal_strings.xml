@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Find in the pane's scrollback. -->
+    <string name="find_title">Find</string>
+    <string name="find_hint">Find in scrollback</string>
+    <string name="find_count">%1$d of %2$d</string>
+    <string name="find_count_many">%1$d of %2$d+</string>
+    <string name="find_none">No matches</string>
+    <string name="find_next">Next match</string>
+    <string name="find_previous">Previous match</string>
+    <string name="find_case">Match case</string>
+    <string name="find_close">Close find</string>
+
+    <!-- A keyboard on the desk. -->
+    <string name="shortcuts_title">Keyboard shortcuts</string>
+    <string name="shortcuts_group">These keys are the app\'s; every other key goes to the program</string>
+    <string name="shortcut_copy">Copy selection</string>
+    <string name="shortcut_or">%1$s or %2$s</string>
+    <string name="key_meta">Meta</string>
+    <string name="toast_nothing_selected">Select text to copy first</string>
+
+    <!-- A program's progress bar (OSC 9;4). -->
+    <string name="progress_normal">Progress %1$d%%</string>
+    <string name="progress_busy">Working, progress unknown</string>
+    <string name="progress_error">Failed at %1$d%%</string>
+    <string name="progress_error_plain">Failed</string>
+    <string name="progress_paused">Paused at %1$d%%</string>
+    <string name="progress_paused_plain">Paused</string>
+    <string name="notifications_group_progress">Progress</string>
+    <string name="notifications_progress">Progress bars while away</string>
+    <string name="notifications_progress_body">A program\'s progress bar shows as a notification for its tab until it is done</string>
+    <string name="alerts_channel_progress">Progress</string>
+    <string name="alerts_channel_progress_body">Progress bars of programs in your terminals, while RexPocket is away.</string>
+</resources>

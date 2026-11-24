@@ -13,7 +13,7 @@ the way to move a phone's setup instead: one file the person makes, keeps and op
 | --- | --- | --- |
 | `appearance` | Settings › Appearance | `app` (`system`, `light`, `dark`), `terminal` (`app`, `dark`, `light`), `text` (`system`, `85`, `115`, `130`, `150`) |
 | `terminal.fontScale` | the terminal's text size (pinch, Terminal font) | 0.7 to 1.8 |
-| `notifications` | Background and notifications | `waiting`, `failed`, `done`, `messages`, `bells`, `vibrate` |
+| `notifications` | Background and notifications | `waiting`, `failed`, `done`, `messages`, `bells`, `vibrate`, `progress` (progress bars while away; missing is off) |
 | `background.enabled` | Background alerts | turned on only where notifications are allowed (below) |
 | `background.hosts[]` | each host's page | `name`, `stay`, `always`, `notify`, `events` (`Waiting`, `Failed`, `Done`, `Message`, `Bell` → on or off) |
 | `home` | the Home | `filter` (`All`, `NeedsYou`, `Running`), `reopenLastTab`, `hostOrder`, `folded` and `unfolded` (host names) |
@@ -31,7 +31,7 @@ means nothing on a phone that has not connected yet.
   "format": "rexpocket-settings/1",
   "appearance": { "app": "dark", "terminal": "app", "text": "115" },
   "terminal": { "fontScale": 1.2 },
-  "notifications": { "waiting": true, "failed": true, "done": true, "messages": true, "bells": false, "vibrate": true },
+  "notifications": { "waiting": true, "failed": true, "done": true, "messages": true, "bells": false, "vibrate": true, "progress": false },
   "background": { "enabled": true, "hosts": [ { "name": "agents", "stay": true, "always": true, "notify": true, "events": { "Bell": true } } ] },
   "home": { "filter": "NeedsYou", "reopenLastTab": false, "hostOrder": ["agents", "Desk mac"], "folded": ["Desk mac"], "unfolded": [] },
   "hosts": {

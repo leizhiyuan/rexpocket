@@ -207,7 +207,21 @@ Recorded in `RexShapeTest` (`rex-shapes/preview.22.txt`), run against real Rex i
   from a pane not on screen, a reply that the shell runs, Ctrl+C that stops `sleep 60`, and a reply
   to a closed pane that reports false.
 
+## Progress bars
+
+A program's OSC 9;4 progress bar, which Rex forwards as `progress_report`, is drawn on the terminal
+and the home (terminal-controls.md, "Progress"). Behind a switch of its own (Progress › Progress
+bars while away, off by default, `alerts.progress`, in the settings backup as `progress`), it is
+also a notification while the app is away and background alerts are on: one per tab with a bar, on
+the low-importance Progress channel, silent, with Android's progress bar (indeterminate for work
+with no percent), the tab's name, the host as subtext; changed at most once a second, gone with the
+bar or when the app comes back, none for a host whose notifications are off. It is apart from the
+pane's alert: a bar is news of work under way, not a call for the person.
+
 ## Tests
+- Progress: `NotificationsTest.aProgressBarWhileAwayIsANotificationForItsTabWhenAskedFor`
+  (channel, percent, indeterminate, gone with the bar and when back on screen) and
+  `progressBarsMakeNoNotificationByDefault`.
 
 - `AlertPlannerTest`, `AttentionLedgerTest` (core): every decision above.
 - `PaneSignalsTest` (core): ScriptedRex and real Rex.

@@ -71,7 +71,7 @@ own connection) and keeps the welcome's client id, reconnect token, `resumed`, `
 | `terminal.child_exited` (`exit_code`, `error`) | used: the closed note says the program exited, with its code, when the pane closes within 5 s of it; otherwise that it was closed on another device |
 | `terminal.clipboard_written` (`text`, `id`, `bytes`) | used: an OSC 52 copy goes on the phone's clipboard, from the pane on screen while the app is in front (`PocketSession.copies`); when `text` is left out the copy is read with `clipboard_read` |
 | `terminal.bell` (`{}`), `terminal.desktop_notification` (`title`, `body`; `title` is `""` for OSC 9) | **used** (verified on preview.22 / api 19): a buzz on the pane on screen, notifications while away; see [notifications.md](notifications.md) |
-| `terminal.progress_report` (`state`, `progress`) | ignored |
+| `terminal.progress_report` (`state`, `progress`) | **used** (this change): a pane's OSC 9;4 progress bar, on the top bar, the pane switcher and the home's tab row, and as a progress notification when asked for (terminal-controls.md, "Progress"). `state` is `set`, `error`, `indeterminate`, `pause` or `remove`; `progress` (0-255 in the schema, the program's number) is left out when the program gave none. Rex skips reports that come in quick succession but always sends the newest, and has no method to read a bar back. Held by `PaneSignalsTest` on ScriptedRex and on real Rex |
 
 ### A status record (docs:program-status, "Keys")
 
@@ -170,13 +170,14 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 | Insert Photo… (docs:ios-actions) | Adapt, 0.5 day | Send a file already uploads any file; a photo picker entry point |
 | Compose Input… (`client.composer.open`, docs:ios-actions) | Adapted (this change) | the phone's own composer, not the desk's: a multi-line sheet that sends one `block.event` paste, then Return or not, with a draft per pane (notifications.md, "The prompt composer"); typing still goes straight into the pane |
 | Jump to Previous/Next Prompt, Scroll Page Up/Down (docs:ios-actions) | Adapt, 1 day | needs OSC 133 marks from the terminal library |
-| Find (`client.find.*`, docs:mac-actions) | Adapt, 2 days | search the pane's scrollback (terminal `format`, docs:lua) |
+| Find (`client.find.*`, docs:mac-actions) | Built (this change) | the pane's own libghostty terminal is searched - the snapshot's scrollback and all output since, which is what Rex's terminal holds - with highlights and scrolling to a match; terminal `format` was not used: no more history, a round trip per search, and no rows to highlight (terminal-controls.md, "Find") |
 | Copy mode (docs:mac-actions) | Skip | long-press selection is the phone's way |
 | `terminal.child_exited` exit code and error (docs:events) | Adapt, 0.5 day | say why a pane closed on the closed-pane note |
 | `terminal.desktop_notification`, `terminal.bell` (docs:events) | Done | Background alerts, one notification per pane, rate-limited and folded with the status alert (notifications.md) |
 | Alerts for `done` (docs:program-status, States) | Done | on by default on a quieter channel: Rex's "result ready, not seen yet" |
 | Answering an agent from its notification (`block.event` paste, `client.key`) | Done | Reply (paste + Enter) and Interrupt (Ctrl+C) to the named pane; no Reply for `auth`. Approve and Deny (this change) for the agents whose keys are known, below |
-| `terminal.progress_report` (OSC 9;4) | Adapt, 0.5 day | a terminal MAY map OSC 9;4 to the root record (docs:program-status); whether Rex does is unconfirmed. If not, a progress pie for programs that only send OSC 9;4 |
+| `terminal.progress_report` (OSC 9;4) | Built (this change) | Rex forwards OSC 9;4 as its own event and does not map it to a status record (the record's `progress` is OSC 7501's); the phone shows the event's bar (terminal-controls.md, "Progress") |
+| Keyboard shortcuts (docs:mac-actions, docs:ios-actions) | Built (this change) | a desk keyboard's own keys on the terminal screen (Ctrl+Shift+..., and Meta for a Mac keyboard), a help sheet and Android's shortcut helper; everything else goes to the program (terminal-controls.md, "A desk keyboard") |
 | Rex's host list (`hosts.list`, `hosts_changed`) | Done | Import hosts › From Rex (host-import.md): label to name, endpoints to the address and other addresses, a Unix socket left out, no host key (asked on first SSH connection). `hosts_changed` is not followed: an import is a one-off. Shape held by RexShapeTest and `RealRexHostListTest` |
 | Switch Host, Add/Remove Remote Host, Forward Port (docs:ios-actions Host) | Done / Skip | the home list is the hosts; port forwarding is Rex's client feature, not the server's |
 | Settings, themes, cursor, appearance (docs:ios-settings) | Done in part | font, key bar, gestures and Settings › Appearance (app theme; terminal colours: match app, always dark, always light) are the app's. "Match the desk": adapt, 1 day - the stream's `theme` message (docs:llms "The Terminal Stream") carries the desk's default colours, but `StreamDecoder` drops it today and the app paints its own over the snapshot's; it needs the message decoded into a feed, kept per pane and applied instead of the app's, which no emulator here can check (libghostty runs on CI only). `set_theme` is not for this: it changes the desk's colours too |
@@ -263,6 +264,11 @@ workflow runs that, the scenarios and `RealRexAppTest` against this Rex on every
   `{content}`; with `max_bytes` set and more left, `{content, id, total}` (no `eof`, though the docs
   say it is sent with `max_bytes`), and `blob_read` with that `id` and `offset` then answers `{id,
   data, total, eof}`.
+- **OSC 9;4.** `printf '\e]9;4;1;42\a'` in a pane gives every client that may see it `block_event`
+  `progress_report` `{state: "set", progress: 42}`; states 2, 3 and 4 give `error`, `indeterminate`
+  and `pause`, and `9;4;0` gives `remove`. No `desktop_notification` comes of it, though it shares
+  OSC 9's number (`PaneSignalsTest.progressBarsReachThePhoneInEveryStateAndGo`, run against this Rex
+  in `rex-real`).
 - **`client.keymap`.** On a server with no configuration file: `bindings: []`, `diagnostics: []`,
   `config` (path, exists, generation, hash) and 22 `actions`, all `kind: block`, each with `name`,
   `description` and `args` (a JSON Schema); only `com.superlogical.terminal.clear` ("Clear Terminal")

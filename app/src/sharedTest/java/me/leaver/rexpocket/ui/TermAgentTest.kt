@@ -106,7 +106,7 @@ class TermAgentTest {
         show()
         compose.onNodeWithContentDescription(string(R.string.action_more)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(string(R.string.composer_title)).performClick()
+        compose.onNodeWithText(string(R.string.composer_title)).performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals("Look at the failing test continue", fieldText())
 

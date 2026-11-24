@@ -94,6 +94,13 @@ data class PocketState(
      * `noteDeskLooks` and docs/design/home.md, "Seen".
      */
     val deskSeen: Map<String, String> = emptyMap(),
+    /**
+     * Each pane's progress bar, as its program reported it with OSC 9;4 and Rex forwarded it
+     * (`progress_report`). Rex has no way to read it back, so a pane shows one only from the first
+     * report this connection hears; a bar goes when the program removes it, its program exits, the
+     * pane closes, or no report has come for [PROGRESS_STALE_MS].
+     */
+    val progress: Map<String, PaneProgress> = emptyMap(),
 ) {
     /**
      * Who the screen says holds the shown pane. A pane is taken on sight, so it is the phone's from
@@ -164,6 +171,8 @@ class PocketSession(
     private val uploadClientFactory: () -> RexClient = { RexClient(httpFactory(), apiRevision = FileUpload.API_REVISION) },
     /** The time a state change is stamped with; a test's own clock in tests. */
     private val clock: () -> Long = System::currentTimeMillis,
+    /** How long a progress bar stays without a new report; see [PocketState.progress]. */
+    private val progressStaleMs: Long = PROGRESS_STALE_MS,
     private val clientFactory: () -> RexClient = { RexClient(httpFactory()) },
 ) {
     private val _state = MutableStateFlow(PocketState(sessions = cachedSessions))
@@ -226,6 +235,10 @@ class PocketSession(
      * `block_closed` (and its tab's `window_closed`), so the closed note can say the program exited.
      */
     private val exits = java.util.concurrent.ConcurrentHashMap<String, Pair<PaneExit, Long>>()
+
+    /** Each pane's progress bar and its session, with the report's count, which a stale timer checks. */
+    private val progressOf = java.util.concurrent.ConcurrentHashMap<String, Triple<String, PaneProgress, Long>>()
+    private val progressReports = java.util.concurrent.atomic.AtomicLong()
 
     /** Panes Rex reported on while a read of them was in flight; that read is older and must not win. */
     private val reportedDuringRead: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
@@ -1194,8 +1207,12 @@ class PocketSession(
         }
         val body = event.optJSONObject("payload") ?: return
         when (event.optString("name")) {
-            "desktop_notification" ->
+            "desktop_notification" -> {
+                // OSC 9;4 is a progress bar, which shares OSC 9's number: never a notification.
+                if (body.optString("title").isEmpty() && OSC_PROGRESS.matches(body.optString("body"))) return
                 _signals.tryEmit(PaneSignal.Note(sid, block, body.optString("title"), body.optString("body")))
+            }
+            "progress_report" -> setProgress(sid, block, parseProgressReport(body))
             "program_status_changed" -> {
                 changeStatus(block) { applyStatusEvent(it, body) }
                 reportedDuringRead += block
@@ -1232,6 +1249,8 @@ class PocketSession(
                 exits.values.removeIf { now - it.second > EXIT_CLOSES_MS }
                 val exit = PaneExit(body.optInt("exit_code", -1), body.optNullableString("error"))
                 exits[block] = exit to now
+                // A program that ended has no work left to show.
+                setProgress(sid, block, null)
                 // The pane's stream can end before this event arrives, and the note go up first.
                 updateState { st ->
                     val closed = st.closed
@@ -1239,6 +1258,37 @@ class PocketSession(
                 }
             }
         }
+    }
+
+    /**
+     * Puts [block]'s progress bar up, changes it, or takes it down ([progress] null). A bar that
+     * hears nothing for [progressStaleMs] goes, as Ghostty's does: Rex keeps no bar to read back,
+     * and a program that died mid-way would otherwise leave its bar for good.
+     */
+    private fun setProgress(sid: String, block: String, progress: PaneProgress?) {
+        val count = progressReports.incrementAndGet()
+        if (progress == null) {
+            if (progressOf.remove(block) == null) return
+        } else {
+            progressOf[block] = Triple(sid, progress, count)
+            runnerScope?.launch {
+                delay(progressStaleMs)
+                if (progressOf[block]?.third == count && progressOf.remove(block) != null) publishProgress()
+            }
+        }
+        publishProgress()
+    }
+
+    private fun publishProgress() {
+        val now = progressOf.mapValues { it.value.second }
+        updateState { if (it.progress == now) it else it.copy(progress = now) }
+    }
+
+    /** Drops the bars of panes no longer in [view]'s session. */
+    private fun forgetGoneProgress(view: SessionView) {
+        if (progressOf.isEmpty()) return
+        val present = view.allBlocks().mapTo(HashSet()) { it.id }
+        if (progressOf.entries.removeIf { (block, v) -> v.first == view.sessionId && block !in present }) publishProgress()
     }
 
     /**
@@ -1515,6 +1565,7 @@ class PocketSession(
      * belongs to its pane and goes with it.
      */
     private fun forgetGonePanes(view: SessionView) {
+        forgetGoneProgress(view)
         val present = view.allBlocks().mapTo(HashSet()) { it.id }
         val owned = ownedBlock
         if (owned != null && ownedSession == view.sessionId && owned !in present) {
@@ -2130,6 +2181,9 @@ private const val LIVENESS_MS = 4_000L
 
 /** How soon after its program's exit a pane closing is taken to be closed by that exit. */
 private const val EXIT_CLOSES_MS = 5_000L
+
+/** An OSC 9;4 progress report's body, as an OSC 9 notification would carry it: `4;state[;value]`. */
+private val OSC_PROGRESS = Regex("4;[0-4](;\\d*)?")
 
 /** The largest copy put on the phone's clipboard: Android hands a clip to other apps through Binder, which takes about 1 MB. */
 private const val MAX_COPY_BYTES = 512 * 1024L

@@ -2,6 +2,8 @@ package me.leaver.rexpocket.terminal
 
 import android.os.Handler
 import android.os.Looper
+import me.leaver.rexpocket.core.SearchMatch
+import me.leaver.rexpocket.core.SearchRow
 
 /**
  * One pane's terminal: a libghostty-vt emulator that Rex's output is fed into, and the bytes a
@@ -22,6 +24,27 @@ internal class TerminalSession private constructor(private var handle: Long) {
     /** Called, on any thread, whenever the picture may have changed. */
     @Volatile
     var onChanged: (() -> Unit)? = null
+
+    /** Called, on the thread that fed it, after the program's output has changed the screen; Find follows it. */
+    @Volatile
+    var onOutput: (() -> Unit)? = null
+
+    /**
+     * Find's matches, drawn over the text, and the one it is on; rows count from the oldest one
+     * [scrollbackRows] read, as its [Scrollback.firstRow] says. Null while Find is closed.
+     */
+    @Volatile
+    var highlights: Highlights? = null
+        set(value) {
+            field = value
+            onChanged?.invoke()
+        }
+
+    /** What Find has found, for the view to draw: rows from the top of the scrollback. */
+    class Highlights(val matches: List<SearchMatch>, val current: Int, val firstRow: Int)
+
+    /** The terminal's rows as text, oldest first, from [firstRow] of the scrollback: what Find searches. */
+    class Scrollback(val rows: List<SearchRow>, val firstRow: Int, val totalRows: Int)
 
     /** Called on the main thread for what the view has selected, when something asks for it as text. */
     @Volatile
@@ -59,7 +82,10 @@ internal class TerminalSession private constructor(private var handle: Long) {
     fun feedOutput(bytes: ByteArray) {
         val result = withHandle { GhosttyVt.nativeWrite(it, bytes, 0, bytes.size).also { version++ } }
         // A refused write leaves the emulator where it was, and there is no better picture to show.
-        if (result != null) onChanged?.invoke()
+        if (result != null) {
+            onChanged?.invoke()
+            onOutput?.invoke()
+        }
     }
 
     /** The viewport right now; the one before it if nothing has changed since. Null once closed. */
@@ -95,6 +121,72 @@ internal class TerminalSession private constructor(private var handle: Long) {
         }
         pendingResize = send
         main.postDelayed(send, RESIZE_DEBOUNCE_MS)
+    }
+
+    /**
+     * The screen and its scrollback as rows of text, the newest [maxRows] of them, for Find. The
+     * terminal hands out its viewport only, so the viewport is walked from the top a screen at a
+     * time and put back where it was; it all happens under the lock, so no output lands in between
+     * and nothing is drawn half-way. Null once closed.
+     */
+    fun scrollbackRows(maxRows: Int = MAX_SEARCH_ROWS): Scrollback? = synchronized(lock) {
+        val h = handle
+        if (h == 0L) return null
+        val start = GhosttyVt.nativeFrame(h)?.let(TerminalFrame::parse) ?: return null
+        val total = start.scrollTotal
+        val first = (total - maxRows).coerceAtLeast(0)
+        val rows = ArrayList<SearchRow>(minOf(total, maxRows))
+        try {
+            GhosttyVt.nativeScroll(h, -total)
+            GhosttyVt.nativeScroll(h, first)
+            var guard = 0
+            while (guard++ < total + 2) {
+                val frame = GhosttyVt.nativeFrame(h)?.let(TerminalFrame::parse) ?: break
+                for (r in 0 until frame.rows) {
+                    val at = frame.scrollOffset + r
+                    if (at == first + rows.size && at < total) rows += searchRow(frame, r)
+                }
+                if (frame.atBottom || first + rows.size >= total) break
+                val before = frame.scrollOffset
+                GhosttyVt.nativeScroll(h, frame.rows)
+                val after = GhosttyVt.nativeFrame(h)?.let(TerminalFrame::parse)?.scrollOffset ?: break
+                if (after == before) break
+            }
+        } finally {
+            if (start.atBottom) {
+                GhosttyVt.nativeScrollToBottom(h)
+            } else {
+                GhosttyVt.nativeScroll(h, -total)
+                GhosttyVt.nativeScroll(h, start.scrollOffset)
+            }
+            version++
+        }
+        Scrollback(rows, first, total)
+    }
+
+    private fun searchRow(frame: TerminalFrame, row: Int): SearchRow {
+        val cells = ArrayList<String>(frame.columns)
+        for (column in 0 until frame.columns) {
+            val i = frame.index(column, row)
+            cells += when {
+                frame.width(i) == 0 -> ""
+                frame.isBlank(i) -> " "
+                else -> frame.cellText(i)
+            }
+        }
+        return SearchRow(cells, frame.wrapped(row))
+    }
+
+    /** Scrolls so that [row] of the scrollback (0 the oldest) is in view, a third of the way down. */
+    fun scrollToRow(row: Int) {
+        withHandle { h ->
+            val frame = GhosttyVt.nativeFrame(h)?.let(TerminalFrame::parse) ?: return@withHandle
+            if (row >= frame.scrollOffset && row < frame.scrollOffset + frame.scrollVisible) return@withHandle
+            val target = (row - frame.scrollVisible / 3).coerceAtLeast(0)
+            GhosttyVt.nativeScroll(h, target - frame.scrollOffset)
+            version++
+        }
+        onChanged?.invoke()
     }
 
     fun scroll(lines: Int) {
@@ -159,7 +251,9 @@ internal class TerminalSession private constructor(private var handle: Long) {
         pendingResize = null
         transport = null
         onChanged = null
+        onOutput = null
         selection = null
+        highlights = null
         synchronized(lock) {
             if (handle != 0L) GhosttyVt.nativeFree(handle)
             handle = 0L
@@ -169,6 +263,9 @@ internal class TerminalSession private constructor(private var handle: Long) {
 
     companion object {
         private const val RESIZE_DEBOUNCE_MS = 80L
+
+        /** The most rows Find reads: the newest of a longer scrollback are searched, and Find says so. */
+        const val MAX_SEARCH_ROWS = 50_000
         private val EMPTY = ByteArray(0)
 
         /** An empty terminal, for a pane that has no snapshot to start from. */

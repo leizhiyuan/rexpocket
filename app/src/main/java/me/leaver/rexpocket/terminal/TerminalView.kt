@@ -427,6 +427,7 @@ internal class TerminalView(context: Context) : View(context) {
         keepBitmaps(images)
         drawImages(canvas, frame, images, TerminalImage.LAYER_BELOW_BACKGROUND)
         for (row in 0 until rows) drawBackgrounds(canvas, frame, row, columns)
+        drawMatches(canvas, frame, rows)
         drawImages(canvas, frame, images, TerminalImage.LAYER_BELOW_TEXT)
         for (row in 0 until rows) drawText(canvas, frame, row, columns)
         drawImages(canvas, frame, images, TerminalImage.LAYER_ABOVE_TEXT)
@@ -531,6 +532,34 @@ internal class TerminalView(context: Context) : View(context) {
             }
         }
         flush()
+    }
+
+    /**
+     * Find's matches on the rows in view, under the text: each in a soft amber, the one Find is on
+     * in a strong one with an outline, so it can be told apart without colour too.
+     */
+    private fun drawMatches(canvas: Canvas, frame: TerminalFrame, rows: Int) {
+        val found = session?.highlights ?: return
+        if (found.matches.isEmpty()) return
+        val top = frame.scrollOffset - found.firstRow
+        val bottom = top + rows
+        for ((index, match) in found.matches.withIndex()) {
+            if (match.endRow < top || match.row >= bottom) continue
+            val current = index == found.current
+            for (r in maxOf(match.row, top)..minOf(match.endRow, bottom - 1)) {
+                val span = match.columnsOn(r, frame.columns) ?: continue
+                val y = (r - top) * cellHeight
+                fill.color = if (current) MATCH_CURRENT else MATCH
+                canvas.drawRect(x(span.first), y, x(span.last + 1), y + cellHeight, fill)
+                if (current) {
+                    stroke.color = MATCH_CURRENT_EDGE
+                    stroke.strokeWidth = density.coerceAtLeast(1f)
+                    stroke.style = Paint.Style.STROKE
+                    canvas.drawRect(x(span.first), y, x(span.last + 1), y + cellHeight, stroke)
+                    stroke.style = Paint.Style.FILL
+                }
+            }
+        }
     }
 
     private fun paintFor(flags: Int): Paint = when {
@@ -1027,6 +1056,10 @@ internal class TerminalView(context: Context) : View(context) {
         /** How long the cursor must stay hidden before the pane counts it as gone. */
         const val CURSOR_GONE_MS = 250L
         const val COMBINING_ACCENT = Int.MIN_VALUE
+        /** Find's highlights: amber for every match, a deep orange with an edge for the current one. */
+        const val MATCH = 0x66FFC107
+        const val MATCH_CURRENT = 0xB3FF6D00.toInt()
+        const val MATCH_CURRENT_EDGE = 0xFFE65100.toInt()
         const val DELETE = 0x7f
     }
 }
