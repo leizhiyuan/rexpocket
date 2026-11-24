@@ -27,6 +27,7 @@ import org.junit.Test
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -111,9 +112,51 @@ class CloseOwnedPaneTest {
                     withTimeout(5_000) {
                         while (rex.ownerOf("block:2") != "client:test" || !session.state.value.owning) delay(20)
                     }
+                    assertTrue("disown fallback path should have been exercised", "block:1" in rex.disownCalls)
                     assertTrue("new pane should be reported as owned", session.state.value.owning)
                     assertNull("no problem should be noted", session.state.value.notice)
                     assertEquals("client:test", rex.ownerOf("block:2"))
+                } finally {
+                    watchSecond.cancel()
+                }
+            } finally {
+                session.stop()
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun transientDisownFailureRetriesDisownBeforeTakingNextPane() = runBlocking {
+        FakeRexForClose(sendBlockClosedEvent = true, transientDisownErrors = 1).use { rex ->
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(rex.endpoint)
+            try {
+                session.start(scope)
+                withTimeout(5_000) { session.awaitReady() }
+
+                val watchFirst = scope.launch(Dispatchers.Default) {
+                    session.watchPane("block:1").collect { }
+                }
+                withTimeout(5_000) {
+                    while (rex.ownerOf("block:1") != "client:test" || !rex.hasOpenDataStream()) delay(20)
+                }
+                watchFirst.cancel()
+                watchFirst.join()
+
+                val watchSecond = scope.launch(Dispatchers.Default) {
+                    session.watchPane("block:2").collect { }
+                }
+                try {
+                    withTimeout(5_000) {
+                        while (rex.ownerOf("block:2") != "client:test" || !session.state.value.owning) delay(20)
+                    }
+                    assertEquals(
+                        "transient disown failure must keep ownership tracking and retry disowning block:1",
+                        2,
+                        rex.disownCalls.count { it == "block:1" },
+                    )
+                    assertNull("block:1 should be disowned once the retry succeeds", rex.ownerOf("block:1"))
                 } finally {
                     watchSecond.cancel()
                 }
@@ -137,6 +180,8 @@ class CloseOwnedPaneTest {
                     session.watchPane("").collect { }
                 }
                 assertNull("blank blockId should not note a problem", session.state.value.notice)
+                assertTrue("blank blockId should not request a data ticket", rex.dataConnectCalls.isEmpty())
+                assertTrue("blank blockId should not own a block", rex.ownCalls.isEmpty())
             } finally {
                 session.stop()
                 scope.cancel()
@@ -146,7 +191,10 @@ class CloseOwnedPaneTest {
 
     @Test
     fun closingLastPaneDestroysTheSession() = runBlocking {
-        FakeRexForClose(sendBlockClosedEvent = true, initialBlocks = listOf("block:1")).use { rex ->
+        FakeRexForClose(
+            sendBlockClosedEvent = true,
+            initialSessions = mapOf("session:1" to listOf("block:1")),
+        ).use { rex ->
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val session = PocketSession(rex.endpoint)
             try {
@@ -157,9 +205,95 @@ class CloseOwnedPaneTest {
                 assertEquals(listOf("session:1"), rex.destroyedSessions)
                 assertTrue("session should be removed after closing its last pane", session.state.value.sessions.isEmpty())
                 assertNull("activeSessionId should be cleared", session.state.value.activeSessionId)
-                // Give any trailing block_closed/session.view events time to settle.
-                delay(150)
+                // Wait for the trailing block_closed -> session.view -> session_not_found round trip.
+                withTimeout(5_000) {
+                    while ("session:1" !in rex.sessionNotFoundViews) delay(20)
+                }
+                // Let the control event collector finish handling the session_not_found reply.
+                delay(50)
                 assertNull("destroying the session should not note session_not_found", session.state.value.notice)
+            } finally {
+                session.stop()
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun closingLastTabDestroysTheSession() = runBlocking {
+        FakeRexForClose(
+            sendBlockClosedEvent = true,
+            initialSessions = mapOf("session:1" to listOf("block:1", "block:2")),
+        ).use { rex ->
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(rex.endpoint)
+            try {
+                session.start(scope)
+                withTimeout(5_000) { session.awaitReady() }
+
+                session.closeWindow("win:1")
+                assertEquals(listOf("session:1"), rex.destroyedSessions)
+                assertTrue("session should be removed after closing its last tab", session.state.value.sessions.isEmpty())
+                assertNull("activeSessionId should be cleared", session.state.value.activeSessionId)
+                withTimeout(5_000) {
+                    while ("session:1" !in rex.sessionNotFoundViews) delay(20)
+                }
+                delay(50)
+                assertNull("destroying the session should not note session_not_found", session.state.value.notice)
+            } finally {
+                session.stop()
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun closingUnknownBlockDoesNotDestroySession() = runBlocking {
+        FakeRexForClose(
+            sendBlockClosedEvent = true,
+            initialSessions = mapOf("session:1" to listOf("block:1")),
+        ).use { rex ->
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(rex.endpoint)
+            try {
+                session.start(scope)
+                withTimeout(5_000) { session.awaitReady() }
+
+                session.closeBlock("block:stale")
+                assertTrue("unknown blockId must not destroy the session", rex.destroyedSessions.isEmpty())
+                assertEquals(listOf("block:stale"), rex.closeBlockCalls)
+            } finally {
+                session.stop()
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun closingLastPaneInMultiSessionSwitchesToNextSessionQuietly() = runBlocking {
+        FakeRexForClose(
+            sendBlockClosedEvent = true,
+            initialSessions = linkedMapOf(
+                "session:1" to listOf("block:1"),
+                "session:2" to listOf("block:2"),
+            ),
+        ).use { rex ->
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val session = PocketSession(rex.endpoint)
+            try {
+                session.start(scope)
+                withTimeout(5_000) { session.awaitReady() }
+
+                session.closeBlock("block:1")
+                assertEquals(listOf("session:1"), rex.destroyedSessions)
+                assertEquals("session:2", session.state.value.activeSessionId)
+                assertEquals("session:2", session.state.value.view?.sessionId)
+                assertEquals("block:2", session.state.value.view?.focusedBlock()?.id)
+                withTimeout(5_000) {
+                    while ("session:1" !in rex.sessionNotFoundViews) delay(20)
+                }
+                delay(50)
+                assertNull("trailing block_closed from destroyed session must not surface a notice", session.state.value.notice)
             } finally {
                 session.stop()
                 scope.cancel()
@@ -170,15 +304,24 @@ class CloseOwnedPaneTest {
 
 private class FakeRexForClose(
     private val sendBlockClosedEvent: Boolean,
-    initialBlocks: List<String> = listOf("block:1", "block:2"),
+    initialSessions: Map<String, List<String>> = mapOf("session:1" to listOf("block:1", "block:2")),
+    transientDisownErrors: Int = 0,
 ) : AutoCloseable {
     private val server = MockWebServer()
-    private val liveBlocks = CopyOnWriteArrayList(initialBlocks)
+    private val sessionOrder = CopyOnWriteArrayList(initialSessions.keys)
+    private val liveBlocks = ConcurrentHashMap<String, CopyOnWriteArrayList<String>>().apply {
+        for ((sid, blocks) in initialSessions) put(sid, CopyOnWriteArrayList(blocks))
+    }
     private val owners = ConcurrentHashMap<String, String>()
     private val revision = AtomicLong(1)
     private val dataSockets = CopyOnWriteArrayList<WebSocket>()
+    private val remainingTransientDisowns = AtomicInteger(transientDisownErrors)
     val disownCalls = CopyOnWriteArrayList<String>()
+    val ownCalls = CopyOnWriteArrayList<String>()
+    val dataConnectCalls = CopyOnWriteArrayList<String>()
+    val closeBlockCalls = CopyOnWriteArrayList<String>()
     val destroyedSessions = CopyOnWriteArrayList<String>()
+    val sessionNotFoundViews = CopyOnWriteArrayList<String>()
 
     private val ticket = ByteArray(16) { (it + 1).toByte() }
     private val ticketText = Base64.getUrlEncoder().withoutPadding().encodeToString(ticket)
@@ -228,33 +371,47 @@ private class FakeRexForClose(
         val method = message.getString("method")
         val payload = message.optJSONObject("payload") ?: JSONObject()
         when (method) {
-            "session.bootstrap" -> webSocket.send(
-                response(
-                    id,
-                    JSONObject()
-                        .put(
-                            "attach_all",
-                            JSONObject().put(
-                                "sessions",
-                                JSONArray().put(JSONObject().put("session_id", "session:1").put("label", "main")),
-                            ),
-                        )
-                        .put("selected_session", JSONObject().put("view", viewJson())),
-                ),
-            )
-            "session.view" -> {
-                val sid = payload.optString("session_id")
-                if (sid in destroyedSessions) {
+            "session.bootstrap" -> {
+                val sessions = JSONArray()
+                for (sid in sessionOrder) {
+                    if (sid !in destroyedSessions) {
+                        sessions.put(JSONObject().put("session_id", sid).put("label", sid))
+                    }
+                }
+                val first = sessionOrder.first { it !in destroyedSessions }
+                webSocket.send(
+                    response(
+                        id,
+                        JSONObject()
+                            .put("attach_all", JSONObject().put("sessions", sessions))
+                            .put("selected_session", JSONObject().put("view", viewJson(first))),
+                    ),
+                )
+            }
+            "session.attach" -> {
+                val sid = payload.getString("session_id")
+                if (sid in destroyedSessions || !liveBlocks.containsKey(sid)) {
                     webSocket.send(error(id, "session_not_found", 404, "session $sid not found"))
                 } else {
-                    webSocket.send(response(id, viewJson()))
+                    webSocket.send(response(id, JSONObject().put("view", viewJson(sid))))
+                }
+            }
+            "session.view" -> {
+                val sid = payload.optString("session_id")
+                if (sid in destroyedSessions || !liveBlocks.containsKey(sid)) {
+                    sessionNotFoundViews += sid
+                    webSocket.send(error(id, "session_not_found", 404, "session $sid not found"))
+                } else {
+                    webSocket.send(response(id, viewJson(sid)))
                 }
             }
             "session.destroy" -> {
                 val sid = payload.getString("session_id")
+                val blocks = liveBlocks[sid]
+                val trailingBlock = blocks?.firstOrNull() ?: "block:1"
                 destroyedSessions += sid
-                liveBlocks.clear()
-                owners.clear()
+                blocks?.forEach { owners.remove(it) }
+                blocks?.clear()
                 dataSockets.forEach { it.close(4000, "session destroyed") }
                 dataSockets.clear()
                 webSocket.send(response(id, JSONObject()))
@@ -274,7 +431,7 @@ private class FakeRexForClose(
                                             "event",
                                             JSONObject()
                                                 .put("type", "block_closed")
-                                                .put("payload", JSONObject().put("block_id", "block:1")),
+                                                .put("payload", JSONObject().put("block_id", trailingBlock)),
                                         ),
                                 ),
                         )
@@ -282,10 +439,13 @@ private class FakeRexForClose(
                 )
             }
             "session.own_block" -> {
+                val sid = payload.getString("session_id")
+                val blocks = liveBlocks[sid].orEmpty()
                 val ids = payload.optJSONArray("block_ids") ?: JSONArray()
                 for (i in 0 until ids.length()) {
                     val blockId = ids.getString(i)
-                    if (blockId !in liveBlocks) {
+                    ownCalls += blockId
+                    if (blockId !in blocks) {
                         webSocket.send(error(id, "bad_request", 400, "block $blockId is not in the session"))
                         return
                     }
@@ -294,11 +454,17 @@ private class FakeRexForClose(
                 webSocket.send(response(id, JSONObject()))
             }
             "session.disown_block" -> {
+                val sid = payload.getString("session_id")
+                val blocks = liveBlocks[sid].orEmpty()
                 val ids = payload.optJSONArray("block_ids") ?: JSONArray()
                 for (i in 0 until ids.length()) {
                     val blockId = ids.getString(i)
                     disownCalls += blockId
-                    if (blockId !in liveBlocks) {
+                    if (remainingTransientDisowns.getAndUpdate { if (it > 0) it - 1 else 0 } > 0) {
+                        webSocket.send(error(id, "internal", 500, "temporary error"))
+                        return
+                    }
+                    if (blockId !in blocks) {
                         webSocket.send(error(id, "bad_request", 400, "block $blockId is not in the session"))
                         return
                     }
@@ -307,15 +473,20 @@ private class FakeRexForClose(
                 webSocket.send(response(id, JSONObject()))
             }
             "block.close" -> {
+                val sid = payload.getString("session_id")
                 val blockId = payload.getString("block_id")
-                liveBlocks.remove(blockId)
-                owners.remove(blockId)
-                revision.incrementAndGet()
-                // Match real Rex: closing a block closes its terminal data stream with 4000.
-                dataSockets.forEach { it.close(4000, "block closed") }
-                dataSockets.clear()
+                closeBlockCalls += blockId
+                val blocks = liveBlocks[sid]
+                val removed = blocks?.remove(blockId) == true
+                if (removed) {
+                    owners.remove(blockId)
+                    revision.incrementAndGet()
+                    // Match real Rex: closing a block closes its terminal data stream with 4000.
+                    dataSockets.forEach { it.close(4000, "block closed") }
+                    dataSockets.clear()
+                }
                 webSocket.send(response(id, JSONObject()))
-                if (sendBlockClosedEvent) {
+                if (removed && sendBlockClosedEvent) {
                     webSocket.send(
                         JSONObject()
                             .put("type", "event")
@@ -326,7 +497,7 @@ private class FakeRexForClose(
                                     .put(
                                         "payload",
                                         JSONObject()
-                                            .put("session_id", "session:1")
+                                            .put("session_id", sid)
                                             .put(
                                                 "event",
                                                 JSONObject()
@@ -339,7 +510,10 @@ private class FakeRexForClose(
                     )
                 }
             }
-            "data.connect" -> webSocket.send(response(id, JSONObject().put("ticket", ticketText)))
+            "data.connect" -> {
+                dataConnectCalls += payload.optString("block_id")
+                webSocket.send(response(id, JSONObject().put("ticket", ticketText)))
+            }
             "com.superlogical.terminal.resize" -> webSocket.send(response(id, JSONObject()))
             "com.superlogical.terminal.size" -> {
                 val blockId = payload.optString("block_id")
@@ -354,9 +528,10 @@ private class FakeRexForClose(
         }
     }
 
-    private fun viewJson(): JSONObject {
+    private fun viewJson(sid: String): JSONObject {
+        val sessionBlocks = liveBlocks[sid].orEmpty()
         val blocks = JSONArray()
-        for (blockId in liveBlocks) {
+        for (blockId in sessionBlocks) {
             val block = JSONObject()
                 .put("block_id", blockId)
                 .put("label", blockId)
@@ -367,12 +542,12 @@ private class FakeRexForClose(
         val window = JSONObject()
             .put("window_id", "win:1")
             .put("label", "tab")
-            .put("focused_block_id", liveBlocks.firstOrNull())
+            .put("focused_block_id", sessionBlocks.firstOrNull())
             .put("layers", JSONArray().put(JSONObject().put("blocks", blocks)))
         return JSONObject()
             .put("revision", revision.get())
-            .put("session_id", "session:1")
-            .put("label", "main")
+            .put("session_id", sid)
+            .put("label", sid)
             .put("active_window_id", "win:1")
             .put("windows", JSONArray().put(window))
     }

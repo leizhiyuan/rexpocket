@@ -488,10 +488,10 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
         // leaves nothing to show: back to the list rather than an empty terminal.
         launch {
             s.state
-                .map { it.phase to (it.activeSessionId != null && it.view?.focusedBlock() != null) }
+                .map(::shouldLeaveTerminal)
                 .distinctUntilChanged()
-                .collect { (phase, hasPane) ->
-                    if (phase == Phase.Live && !hasPane && route.value == Route.Term) route.value = Route.Home
+                .collect { leave ->
+                    if (leave && route.value == Route.Term) route.value = Route.Home
                 }
         }
         // Measured once the connection is up, which is when Tailscale has had a chance to find a
@@ -1006,6 +1006,18 @@ private const val PEER_READY_MS = 10_000L
 
 /** What a failure says in the report: its kind, then whatever the exception carried. */
 private fun Problem.describe(): String = trouble.toString() + (detail?.let { ": $it" } ?: "")
+
+/**
+ * True when the terminal screen has nothing left to show and should return to the session list.
+ * A live session whose view is momentarily null (such as while switching to the next session after
+ * destroying one) keeps the terminal open until that session's view arrives.
+ */
+internal fun shouldLeaveTerminal(state: PocketState): Boolean {
+    if (state.phase != Phase.Live) return false
+    val active = state.activeSessionId ?: return true
+    val view = state.view ?: return false
+    return view.sessionId == active && view.focusedBlock() == null
+}
 
 /** Connection diagnostics: `adb logcat -s RexPocketConn`. */
 internal const val CONN_TAG = "RexPocketConn"
