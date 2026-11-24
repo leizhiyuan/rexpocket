@@ -150,7 +150,7 @@ class HostRoutesTest {
         val sshd = TestSshd(rexPort = rex.endpoint.port).closed()
         val m = main("127.0.0.1", closedPort(), user = "me")
         val cursor = RouteCursor(HostRoutes.plan(m, listOf("ssh://127.0.0.1:${sshd.port}"), "me", true, null, 0, 0))
-        val dialer = HostDialer(cursor, { r, v -> SshSettings(r.endpoint.host, r.endpoint.port, r.endpoint.sshUser!!, SshCredentials(password = "pw"), sshd.fingerprint, v.socksPort, v.dialer) }).closed()
+        val dialer = HostDialer(cursor, { r, v -> SshSettings(r.endpoint.host, r.endpoint.port, r.endpoint.sshUser!!, SshCredentials(password = "pw"), sshd.fingerprint, socksPort = v.socksPort) }).closed()
         val st = live(PocketSession(m.endpoint, httpFactory = dialer::http, clientFactory = { dialer.client() }, routes = cursor))
         assertEquals(Phase.Live, st.phase)
         assertEquals("ssh://me@127.0.0.1:${sshd.port}", cursor.current.key)
