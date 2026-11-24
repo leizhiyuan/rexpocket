@@ -285,6 +285,22 @@ class ScriptedRex(private val clock: () -> Long = System::currentTimeMillis) : A
      * `child_exited`), `child_exited` is told, and the pane closes, as a shell pane does by default
      * when its program ends. A failure leaves no status record behind: only `child_exited` says it.
      */
+    /**
+     * Rex drops exactly the records [ids] of [block] on its own ("" is the root record), as it does
+     * with a program's working and blocked records when the program exits or the shell prompts
+     * again (docs:program-status, Lifetime): `program_status_removed` with those ids and [reason].
+     */
+    fun dropRecords(block: String, ids: List<String>, reason: String = "prompt") {
+        synchronized(this) {
+            val session = sessions.values.firstOrNull { it.tabOf(block) != null } ?: return
+            val records = statuses[block] ?: return
+            val gone = ids.filter { it in records }
+            if (gone.isEmpty()) return
+            gone.forEach(records::remove)
+            blockEvent(session.id, block, "program_status_removed", JSONObject().put("ids", JSONArray(gone)).put("reason", reason))
+        }
+    }
+
     fun exit(block: String, code: Int) {
         synchronized(this) {
             val session = sessions.values.firstOrNull { it.tabOf(block) != null } ?: return

@@ -1203,6 +1203,26 @@ class PocketSession(
         }
     }
 
+    /** Sessions whose view is being read because one of their panes reported before it was known. */
+    private val viewsAsked: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /**
+     * A pane of [sid] reported a status while the phone has no view of that session - its first
+     * read failed, or has not come back yet - so its tab could not be on the home, in Running or
+     * anywhere: the view is read now, once at a time.
+     */
+    private fun viewFor(sid: String) {
+        if (_state.value.views.containsKey(sid) || _state.value.sessions.none { it.id == sid }) return
+        if (!viewsAsked.add(sid)) return
+        runnerScope?.launch {
+            try {
+                runCatching { refreshView(sid) }
+            } finally {
+                viewsAsked -= sid
+            }
+        }
+    }
+
     /** A pane's own news: a program's status, or the directory its shell moved to. */
     private fun onBlockEvent(sid: String, event: JSONObject) {
         val block = event.optNullableString("block_id") ?: return
@@ -1223,6 +1243,7 @@ class PocketSession(
                 changeStatus(block) { applyStatusEvent(it, body) }
                 reportedDuringRead += block
                 publishStatus()
+                viewFor(sid)
             }
             // Rex drops records on its own - working and blocked ones when the program exits or the
             // shell prompts again - and says so with this event, not with a changed record.
@@ -2069,6 +2090,10 @@ class PocketSession(
                 }
             }
             if (read) publishStatus()
+            // A session whose view could not be read is read again, so its tabs - and what their
+            // programs report - reach the home without the person opening it.
+            val missing = _state.value.sessions.map { it.id }.filter { it !in _state.value.views }
+            if (missing.isNotEmpty()) loadSessionViews(missing, skip = _state.value.activeSessionId)
             // New panes appear with a view; the wait ends early when one does.
             withTimeoutOrNull(STATUS_IDLE_MS) { statusWake.receive() }
         }

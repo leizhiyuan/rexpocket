@@ -1,0 +1,30 @@
+# Codex (0.163 and later): what its TUI writes. Source: openai/codex,
+# codex-rs/tui/src/terminal_program_status.rs (read 2026-11-24): the root record only, app=codex,
+# no msg or title, kind with blocked (permission, question, auth); idle, working, blocked, done,
+# error; state=clear when it stops reporting. Turn by turn as its states go; the order of a real
+# session should be confirmed with tools/agent-status-capture.
+
+report state=idle:app=codex
+expect none
+report state=working:app=codex
+expect running
+report state=blocked:app=codex:kind=permission
+expect needs-you
+report state=working:app=codex
+expect running
+report state=done:app=codex
+expect needs-you
+see
+expect none
+report state=working:app=codex
+expect running
+report state=blocked:app=codex:kind=auth
+expect needs-you
+report state=working:app=codex
+expect running
+report state=error:app=codex
+expect needs-you
+report state=idle:app=codex
+expect none
+report state=clear
+expect none

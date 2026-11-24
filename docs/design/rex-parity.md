@@ -102,6 +102,33 @@ Running. Now the phone keeps every record (`PocketState.records`), seen is per r
 (home.md, "Seen"), and the home reads all of them: Running is every tab with a working record,
 Needs you every tab whose most pressing unseen report needs the person, and a tab can be in both.
 
+### How the agents report (read 2026-11-24)
+
+| Agent | Source | Records | `app` | States and when |
+| --- | --- | --- | --- | --- |
+| omp (oh-my-pi) | can1357/oh-my-pi, `packages/coding-agent/src/utils/run-status.ts`, event controller | root only | `omp` | `idle` at startup and after an interrupt; `working` from each run's start; `blocked` (`permission`: tool approvals, plan review; `question`: `ask`, an interactive console) while a dialog is open, with `msg`; `working` again when it is answered; `done` after a turn with a result, `error` (with `msg`) after a failed one; `clear` at exit. Re-sends `working` after Ctrl-Z/`fg`, since the shell's prompt dropped it. Never repeats a report |
+| Codex (0.163+) | openai/codex, `codex-rs/tui/src/terminal_program_status.rs` | root only | `codex` | `idle`, `working`, `blocked` (`permission`, `question`, `auth`), `done`, `error`; no `msg`; `clear` when it stops |
+| Claude Code (2.1.295+) | closed; Kaku's docs list its states | root (assumed) | **unconfirmed** | `working`, `blocked`, `done`, `error`, `idle` |
+| pi (upstream) | badlogic/pi-mono | none | - | does not report OSC 7501: its tab shows its program, never a state |
+
+So for omp, the user's agent, a working run is a single root `working` record; the phone always
+put that in Running when it had it. What could keep it out, all fixed or ruled out here: a `done`
+record of another program in the same pane (any child or root record summed over it - fixed by
+reading every record); the session's view not loaded (its first `session.view` failed or came
+late, so its tabs were unknown - now a report from a session without a view reads it at once,
+and every status sweep retries missing views; `RunningTest.aSessionWhoseViewCameLateStillReachesRunning`
+fails without it); and the desk-seen inference, which marks only `done`, `error` and `idle`
+reports and never hides `working` (`RunningTest.nothingSeenHidesAWorkingReport`). Status details
+on the phone now shows exactly which records Rex holds for such a tab.
+
+**Replays.** `AgentReplayTest` replays each agent's sequence over several turns - working, blocked,
+working, done, seen, the next turn, an error, a suspend, idle, clear - from `agent-replays/`
+(omp, Codex, Claude Code as documented, and an agent with child records), on ScriptedRex
+(rex-integration) and on a real Rex (rex-real, a shell loop in the pane writing each report).
+After every step the phone holds Rex's records, and its lists are what Rex's records imply.
+`tools/agent-status-capture` records a real session on a desk as such a fixture, titles and
+messages redacted; any `.replay` added there is replayed.
+
 ### How Rex decides a tab is Working
 
 Rex's docs do not spell out the sidebar's rule, so this is an inference from them, documented as

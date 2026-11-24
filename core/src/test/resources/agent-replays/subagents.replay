@@ -1,0 +1,28 @@
+# An agent with child records: the root works while its tasks report under ids of their own, as
+# the protocol's "Several records" example does (docs:program-status, Examples) and as an agent
+# with subagents may. The tab is running for as long as anything in it works - also once a
+# task's result was seen, which is the user's report: Rex.app showed it Working while the phone's
+# Running did not.
+
+report state=working:app=deploy | msg=Deploying v2.4.1
+expect running
+report id=us-east:state=working:progress=40 | title=US East | msg=Pushing image
+expect running
+report id=eu-west:state=blocked:kind=permission | title=EU West | msg=Approve deploy to eu-west (production)?
+expect both
+report id=us-east:state=done | title=US East | msg=Healthy
+expect both
+report state=clear:id=eu-west
+expect both
+see
+expect running
+report id=us-west:state=done | title=US West | msg=Healthy
+expect both
+report state=clear:id=us-east
+expect both
+report state=clear:id=us-west
+expect running
+report state=done:app=deploy | msg=Deployed to 3 regions
+expect needs-you
+see
+expect none

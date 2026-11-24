@@ -1,0 +1,45 @@
+# omp (oh-my-pi, the pi fork): what its interactive mode writes to the terminal, in order, over a
+# few turns. Source: can1357/oh-my-pi, packages/coding-agent/src/utils/run-status.ts and the
+# event controller (read 2026-11-24): omp writes only the root record, with app=omp on every
+# report and msg only on blocked and error; idle at startup and after an interrupt, working from
+# agent_start, blocked while a dialog (tool approval, ask) is open, done after a turn with a result,
+# error after a failed turn, and state=clear at teardown. It repeats nothing it already reported.
+#
+# Lines: `report <pairs>` is one OSC 7501 report (`| msg=` and `| title=` are plain text, encoded
+# by the harness); `see` is the person looking at the pane (on the phone or at a desk); `expect`
+# says which of the home's lists the tab is in now: running, needs-you, both or none.
+
+report state=idle:app=omp
+expect none
+report state=working:app=omp
+expect running
+report state=blocked:kind=permission:app=omp | msg=Allow bash: npm test?
+expect needs-you
+report state=working:app=omp
+expect running
+report state=done:app=omp
+expect needs-you
+see
+expect none
+# The next turn: working again, even though its last result was seen.
+report state=working:app=omp
+expect running
+report state=blocked:kind=question:app=omp | msg=Which branch?
+expect needs-you
+report state=working:app=omp
+expect running
+report state=error:app=omp | msg=Rate limited, try later
+expect needs-you
+report state=working:app=omp
+expect running
+# Suspended with Ctrl-Z: the shell's prompt makes Rex drop the working record; after `fg`, omp
+# reports it again (resendProgramStatus).
+drop (root)
+expect none
+report state=working:app=omp
+expect running
+# The person interrupts the run.
+report state=idle:app=omp
+expect none
+report state=clear
+expect none
