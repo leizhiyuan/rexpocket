@@ -109,17 +109,34 @@ kept). New is only that it now stops once its last kept host is gone, after the 
   card stays for the stages that need the person (sign in, approval, a failed start).
 - **The tailnet's sheet** (the chip, Settings › Tailnet once joined, a tailnet host's "Tailnet
   details"). Under its status, the line "Used by 2 hosts" or "No host uses it · stops in 4
-  minutes", then Connect, Cancel, Retry now and Disconnect as a host's sheet has them (and Restart
-  while the node runs or starts), then
+  minutes", with why it is kept up after it (below), then Connect, Cancel, Retry now and
+  Disconnect as a host's sheet has them (and Restart while the node runs or starts), then
   "Connection and notifications" (its page) and "Tailnet settings" (the join dialog).
+- **Why it is up.** The line under a running tailnet's state, on its sheet and page, says why it
+  stays up beside who uses it: "Kept up while the app is open" (While the app is open), "Stops 5
+  minutes after the last host" (Only when needed, with hosts on it), "Kept up: Stop after is
+  Never", and "Kept up: Always in the background" while background mode is on and its choice is
+  Always. A tailnet lingering says when it stops instead.
+- **Why a host is off.** A host on the tailnet that is off because of it says so on its row (in
+  place of "Not connected") and on its page, beside its address: "Tailscale is off" (disconnected
+  by hand) or "On account Work" (it names an account the tailnet does not run). Its page adds the
+  fix, "Connect Tailscale" or "Use Work"; the row's Connect does both, as connecting a host by hand
+  always did.
 - **Home ⋮.** "Connect Tailscale" or "Disconnect Tailscale", beside Tailnet.
 - **Pages.** A host's page and a tailnet's page are one layout (`ConnectablePages.kt`): the state
-  row and its action; While RexPocket is open (a tailnet's Keep connected and Stop after); In the
+  row and its action (a tailnet's also has Sign in with its link while it asks for one, Restart as
+  its sheet has it, and Tailnet settings); While RexPocket is open (a tailnet's Keep connected and Stop after); In the
   background (While you are away: the three choices in each one's words, with a line when
   background mode is off); Notifications; Quick Settings. Reached from Settings › Background and
   notifications (Tailnets, then Hosts) and from each one's sheet.
 - **Confirm.** "Disconnect Tailscale?" — "mac is connected through it and disconnects too. It stays
   off until you connect it, or a host on it."
+- **Leave tailnet** (the Tailnet dialog's Leave) asks first, as Disconnect does: "Leave
+  Tailscale?", naming the hosts connected through it, which disconnect, and a box "Forget the
+  sign-in on this phone" (the confirm then reads "Leave and forget sign-in"). Forgetting deletes
+  the login of the account in use once its node has stopped (`TailnetControl.forget`), so joining
+  again asks for a sign-in: the way to sign out of the only account. The home's snackbar says
+  "Left Tailscale" with Rejoin, which joins again with the same settings and reconnects the hosts.
 
 ## Accounts
 
@@ -151,13 +168,19 @@ once is not done either: the app keeps one joined backend at a time, as before
 **Hosts.** A host on the tailnet may name its account (the host dialog's "Tailnet account" chips,
 shown once there are two; "The one in use" by default). Connecting a host on another account by
 hand switches the tailnet to it (the hosts through the tailnet then reconnect, those on yet another
-account stay off); nothing connects such a host on its own, as with a tailnet disconnected by hand.
+account stay off), and the home says so: "Switched Tailscale to Work · 2 hosts disconnected",
+with Undo, which runs the account it ran before and reconnects those hosts. Nothing connects such
+a host on its own, as with a tailnet disconnected by hand.
 
 **Screens.** The tailnet's page has an Accounts group under its state: each account, the running
 one marked "In use", and Add an account (a name; the tailnet starts on it at once and asks for a
 sign-in). An account's dialog renames it, runs it ("Use this account": says the tailnet restarts and
-names the hosts that disconnect) and removes it (not the one in use: switch first; the confirm says
-its sign-in on the phone is deleted and names the hosts that name it, which follow the one in use).
+names the hosts that disconnect) and removes it (not the one in use: its Remove is shown disabled,
+with "switch to another account first", or for the only account, add another or leave and forget
+its sign-in; the confirm says its sign-in on the phone is deleted and names the hosts that name it,
+which follow the one in use). The first account can be removed too once another runs: it has no
+entry of its own (a phone that joined before accounts has none), so its removal is kept as a
+marker (`TailnetProfiles.removedFirst`) and its old directory, `files/tailscale`, is deleted.
 With several accounts the tailnet is named "Tailscale · Work" on its page, tiles and notification.
 
 **Choices are per account.** Each account is a tailnet of its own: its Keep connected, Stop after,
@@ -166,9 +189,10 @@ id is the backend's, so the choices made before accounts carry over.
 
 **Keys.** Only names and ids are stored with the settings; logins and node keys stay in each
 account's directory, which the app's backup never reads (`allowBackup` is false and the export
-lists hosts and settings only). Removing an account deletes its directory and logs only that a
-login was removed. A host's account is not in the export: a restored host follows the account in
-use.
+lists hosts and settings only; each account's name and choices are in it, never its sign-in).
+Removing an account, or Leave and forget sign-in, deletes its directory, under the node's lock
+and only once no node runs on it, and logs only that a login was removed. A host's account is not
+in the export: a restored host follows the account in use.
 
 ## Tiles and the watch notification
 
@@ -181,6 +205,25 @@ while all of them fit in the two slots left. A tile's binding is changed and fre
 tile's item, Clear tile) and Settings › Background and notifications › Quick Settings tiles. The
 watch notification, and so its buttons, exists only while background mode is on: a page says so
 with Turn on background mode while it is off.
+
+A tile's tap follows its state: Off connects; Needs sign-in opens the tailnet's page in the app
+(which has Sign in) instead of disconnecting; Not connected tries again, as Retry now does;
+Connecting and Connected disconnect (a tailnet with hosts on it asks first, in the app). Add a
+tile binds a tile and, on Android 13 and later, asks Android to put it in Quick Settings; the page
+says "Bound to tile 2" until Android's answer, or the tile itself (added, removed, listening),
+says it is there, then "On tile 2". Dismissed, it says "Not added to Quick Settings" and how to
+drag it in. The picker with nothing to bind says "Add a host or join a tailnet first" with Open
+RexPocket.
+
+## Launcher shortcuts
+
+A long press on the app's icon lists the panes opened last (`LauncherShortcuts`): one per tab,
+pushed when a pane is shown on the terminal screen, named by the tab ("claude", and where there is
+room "claude · work · mac"); the launcher keeps the few newest, and any can be dragged to the home
+screen, where it stays pinned. A tap opens that tab straight away, connecting its host first. A
+host removed since says "That host was removed from RexPocket" in a toast and its shortcuts leave
+the list; a session that ended says so and stays on the list of hosts; a tab that closed opens its
+session where it is, with a toast.
 
 ## Battery
 
@@ -244,3 +287,14 @@ That is in "Checks on a real phone" below.
 - `app` (sharedTest): `TailnetAccountsTest`: an account added on the page runs at once on its own
   directory; a host on another account switches the tailnet to it; a removed account's hosts follow
   the one in use.
+- `core`: `TailnetProfilesTest` also: the first account removed for good once another runs, an
+  account found by name.
+- `app` (sharedTest): `TailnetLeaveTest`: the Leave confirm names its hosts and can forget the
+  sign-in; leaving disconnects them, forgets the login once the node stopped, and Rejoin brings
+  both back; leaving without forgetting keeps it; the first account removed with its login; a host
+  on another account says what it switched and Undo switches back; the page's Sign in, Restart and
+  Tailnet settings; a host its tailnet keeps off says why and clears it. `TilesScreenTest`: a tile
+  only bound until Android says it is in Quick Settings; the empty picker.
+- `app` (JVM): `TileTapTest`: a tap on Needs sign-in does not disconnect, one on Not connected tries
+  again. `LauncherShortcutsTest`: one shortcut per tab, gone with its host, a removed host's tap
+  says so.

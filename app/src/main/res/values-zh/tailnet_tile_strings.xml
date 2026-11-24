@@ -35,6 +35,11 @@
     <string name="tile_picker_empty">先添加一台主机或加入 tailnet。</string>
     <string name="tile_picker_open_app">打开 RexPocket</string>
 
+    <string name="backup_setting_tailnet">Tailnet %1$s</string>
+    <string name="backup_setting_tailnets">Tailnet</string>
+    <string name="backup_setting_tile">快捷设置磁贴 %1$s</string>
+    <string name="backup_tailnet_new_account">新账户，尚未登录 · %1$s</string>
+
     <string name="shortcut_host_gone">这台主机已从 RexPocket 移除。</string>
     <string name="shortcut_session_gone">%1$s 上已经没有这个会话了。</string>
     <string name="shortcut_tab_gone">这个标签页已关闭，显示它所在的会话。</string>

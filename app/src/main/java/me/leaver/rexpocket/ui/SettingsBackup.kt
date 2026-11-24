@@ -200,6 +200,8 @@ class SettingsBackupper(
             },
             hostBackground = now.background.hosts.mapNotNull { (id, b) -> label[id]?.let { it to b } }.toMap(),
             quickReplies = now.quickReplies,
+            tailnets = tailnetChoicesOf(Connections.of(app)),
+            tiles = tileBindingsOf(app, hosts),
             secrets = if (!withSecrets) emptyList() else hosts.filter { it.viaSsh }.map { h ->
                 HostSecret(h.label, h.sshPassword.ifEmpty { null }, h.sshPrivateKey.ifBlank { null }, h.sshPassphrase.ifEmpty { null })
             },
@@ -342,6 +344,8 @@ class SettingsBackupper(
             folded = now.folds.hosts,
             unfolded = now.folds.openHosts,
             quickReplies = now.quickReplies,
+            tailnets = tailnetChoicesOf(Connections.of(app), all = true),
+            tiles = tileBindingsOf(app, hosts),
         )
     }
 
@@ -435,6 +439,8 @@ class SettingsBackupper(
                     quickReplies = b.quickReplies,
                 ),
             )
+            b.tailnets?.let { applyTailnetChoices(Connections.of(app), it) }
+            b.tiles?.let { tiles -> applyTiles(app, tiles, ::id) }
             Diagnostics.event(TAG, "import: " + result.summary() + ", ${preview.changes.size} settings, ${secrets.size} sign-ins")
             val saved = store.list().associateBy { it.label }
             val unsaved = keys.keys.filter { saved[it]?.sshPrivateKey.isNullOrEmpty() }
@@ -685,9 +691,12 @@ private fun PassphraseDialog(title: String, body: String, confirm: Boolean, onDi
 private fun ChangeRow(c: SettingChange) {
     val name = when (c.key) {
         SettingKey.HostBackground -> stringResource(R.string.backup_setting_host_background, c.host.orEmpty())
+        SettingKey.TailnetChoices -> stringResource(R.string.backup_setting_tailnet, c.host.orEmpty())
+        SettingKey.Tile -> stringResource(R.string.backup_setting_tile, c.host.orEmpty())
         else -> settingName(c.key)
     }
     val text = when (c.key) {
+        SettingKey.TailnetChoices, SettingKey.Tile -> tailnetChangeText(c)
         SettingKey.HostFolds -> stringResource(R.string.backup_setting_folds_value, (c.new as? List<*>).orEmpty().joinToString(", "))
         SettingKey.HostOrder -> stringResource(R.string.import_change_short, (c.old as? List<*>).orEmpty().joinToString(", "), (c.new as? List<*>).orEmpty().joinToString(", "))
         SettingKey.QuickReplies -> stringResource(
@@ -726,6 +735,8 @@ private fun settingName(key: SettingKey): String = stringResource(
         SettingKey.HostFolds -> R.string.backup_setting_folds
         SettingKey.HostBackground -> R.string.backup_setting_host_background
         SettingKey.QuickReplies -> R.string.quick_replies_title
+        SettingKey.TailnetChoices -> R.string.backup_setting_tailnets
+        SettingKey.Tile -> R.string.tile_group_all
     },
 )
 

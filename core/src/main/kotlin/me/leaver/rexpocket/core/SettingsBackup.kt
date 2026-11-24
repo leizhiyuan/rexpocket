@@ -169,6 +169,8 @@ object SettingsFormat {
             }
         }
         val secrets = section(root, "secrets")?.let { s -> readSealed(s) }
+        val tailnets = TailnetBackupFormat.readTailnets(root) { kind, field, detail -> refuse(kind, field, detail) }
+        val tiles = TailnetBackupFormat.readTiles(root, { kind, field, detail -> refuse(kind, field, detail) }, ::host)
         return SettingsBackup(
             appearance = appearance,
             terminalFontScale = fontScale,
@@ -179,6 +181,8 @@ object SettingsFormat {
             hostBackground = hostBackground,
             quickReplies = quickReplies,
             secrets = secrets,
+            tailnets = tailnets,
+            tiles = tiles,
         )
     }
 
@@ -283,6 +287,8 @@ object SettingsFormat {
         }
         root.put("hosts", hostList)
         snapshot.quickReplies?.let { root.put("quickReplies", JSONArray(it.take(QuickReplies.MAX_ITEMS))) }
+        TailnetBackupFormat.writeTailnets(root, snapshot.tailnets)
+        TailnetBackupFormat.writeTiles(root, snapshot.tiles, written)
         var sealedCount = 0
         if (passphrase != null) {
             // Only an SSH host signs in: a Rex port has nothing to carry.
@@ -369,6 +375,10 @@ data class SettingsBackup(
     /** Settings › Quick replies, in order: the replies and prompts the person sends often. */
     val quickReplies: List<String>? = null,
     val secrets: SealedSecrets? = null,
+    /** Each tailnet account's choices, by backend and account name; optional, added later. */
+    val tailnets: List<TailnetChoices>? = null,
+    /** The Quick Settings tiles' bindings, by slot; optional, added later. */
+    val tiles: List<TileBinding>? = null,
 )
 
 /** The sealed credentials of a file, and how many hosts it says they are for (shown before it is opened). */
@@ -406,6 +416,9 @@ data class SettingsSnapshot(
     val quickReplies: List<String>? = null,
     /** Written only when a passphrase is given. */
     val secrets: List<HostSecret> = emptyList(),
+    val tailnets: List<TailnetChoices>? = null,
+    /** By host name (as in [hosts]) or tailnet; a tile whose host is not written is left out. */
+    val tiles: List<TileBinding>? = null,
 )
 
 /** A written settings file: its text, the hosts in it and those left out, and how many hosts' credentials went in sealed. */
@@ -452,12 +465,22 @@ data class CurrentSettings(
     val folded: Set<String> = emptySet(),
     val unfolded: Set<String> = emptySet(),
     val quickReplies: List<String> = QuickReplies.DEFAULTS,
+    /** The phone's tailnet accounts and their choices. */
+    val tailnets: List<TailnetChoices> = emptyList(),
+    /** The phone's tiles, a host's by its name. */
+    val tiles: List<TileBinding> = emptyList(),
 )
 
 enum class SettingKey {
     Theme, TerminalColors, TextSize, TerminalFontScale,
     AlertWaiting, AlertFailed, AlertDone, AlertMessages, AlertBells, AlertVibrate, AlertProgress,
     BackgroundMode, HomeFilter, ReopenLastTab, ActivityBySession, IncludeIdle, HostOrder, HostFolds, HostBackground, QuickReplies,
+
+    /** One tailnet account's choices: [SettingChange.host] names the account, old and new are [TailnetPolicy] (old null for a new account). */
+    TailnetChoices,
+
+    /** One tile's binding: [SettingChange.host] is its slot, old and new are [TileBinding] (old null for a free tile). */
+    Tile,
 }
 
 /** One preference an import changes: [old] → [new], for [host] when it is one host's. */
@@ -495,6 +518,14 @@ fun settingChanges(backup: SettingsBackup, current: CurrentSettings, plan: Impor
         change(SettingKey.ReopenLastTab, current.reopenLastTab, h.reopenLastTab)
         change(SettingKey.ActivityBySession, current.activityBySession, h.activityBySession)
         change(SettingKey.IncludeIdle, current.includeIdle, h.includeIdle)
+    }
+    backup.tailnets?.forEach { t ->
+        val now = current.tailnets.firstOrNull { it.sameAccount(t) }
+        if (now?.policy != t.policy || now == null) add(SettingChange(SettingKey.TailnetChoices, now?.policy, t.policy, host = t.label(backendName(t.backend))))
+    }
+    backup.tiles?.forEach { t ->
+        val now = current.tiles.firstOrNull { it.slot == t.slot }
+        if (now == null || !now.same(t)) add(SettingChange(SettingKey.Tile, now, t, host = t.slot.toString()))
     }
     val planned = plan.hosts.associateBy { it.imported.name }
     for ((name, next) in backup.hostBackground) {
@@ -554,3 +585,6 @@ fun credentialsFor(host: PlannedHost, secrets: Map<String, HostSecret>): HostSec
     if (existing != null && existing.hasCredentials && existing.address.ssh) return null
     return secrets[host.imported.name]?.takeIf { it.usable }
 }
+
+/** A backend's name as the screens show it, from its storage key. */
+internal fun backendName(key: String): String = TailnetBackend.entries.firstOrNull { it.storageKey == key }?.displayName ?: key

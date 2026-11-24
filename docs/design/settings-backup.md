@@ -19,9 +19,12 @@ the way to move a phone's setup instead: one file the person makes, keeps and op
 | `home` | the Home | `filter` (`All`, `Activity`, `NeedsYou`, `Running`), `reopenLastTab`, `activityBySession` and `includeIdle` (the Activity view's arrangement and Include idle; optional, added without a new format: a file without them leaves the phone's as they are), `hostOrder`, `folded` and `unfolded` (host names) |
 | `hosts` | the saved hosts | a `rexpocket-hosts/1` list, below |
 | `quickReplies` | Settings › Quick replies | the replies and prompts in order, at most 20 of at most 2,000 characters; an import replaces the list |
+| `tailnets.accounts[]` | each tailnet account's page | `backend` (`tailscale`), `name`, `first` (the backend's first account, matched whatever its name), `use` (`open`, `needed`), `stopAfterMs` (60000, 300000, 900000, or null for Never), `keep` (`follow`, `always`, `off`), `notify`; optional, added without a new format |
+| `tiles[]` | the Quick Settings tiles | `slot` (1 to 3) and either `host` (a host's name in this file) or `tailnet` (its backend); optional, added without a new format |
 | `secrets` | SSH passwords and keys | only with **Include SSH keys**, sealed |
 
-Never in it: the tailnet's state, its node key, its login or setup key, the management server; the
+Never in it: the tailnet's state (joined, disconnected by hand), its node key, its login or setup
+key, the management server; the
 session and pane a host had open; seen marks; the update channel; key bar and gestures (a later
 version can add them as new parts). Session folds are left out: a session's id is the Rex's, so it
 means nothing on a phone that has not connected yet.
@@ -43,6 +46,11 @@ means nothing on a phone that has not connected yet.
     ]
   },
   "quickReplies": ["yes", "continue", "/compact"],
+  "tailnets": { "accounts": [
+    { "backend": "tailscale", "name": "Tailscale", "first": true, "use": "open", "stopAfterMs": 300000, "keep": "follow", "notify": true },
+    { "backend": "tailscale", "name": "Work", "first": false, "use": "needed", "stopAfterMs": null, "keep": "always", "notify": false }
+  ] },
+  "tiles": [ { "slot": 1, "tailnet": "tailscale" }, { "slot": 3, "host": "agents" } ],
   "secrets": { "kdf": "PBKDF2-HMAC-SHA256", "iterations": 600000, "salt": "…", "cipher": "AES-256-GCM", "nonce": "…", "hosts": 1, "data": "…" }
 }
 ```
@@ -50,6 +58,20 @@ means nothing on a phone that has not connected yet.
 Every part is optional: a part that is missing leaves the phone's as it is. Unknown fields are
 ignored at every level (a newer app's part, an event this version does not know); a known field
 with a value this version does not know is refused. A file is at most 1 MiB.
+
+### Tailnet accounts and tiles
+
+Each tailnet account's choices go by its backend and name; the first account of a backend is
+matched as the first whatever it is called, since every phone has one. An account the phone does
+not have is added on import by its name, not run, and with no sign-in: it asks for one when it is
+used. An account of a backend this build does not have, or a tile on one, is left out, as an
+unknown field is. Two accounts of one name, a choice this version does not know, a tile slot
+outside 1 to 3, a slot or an item twice, or a tile naming a host the file does not have, refuse
+the file. A tile names its host through the import plan, as the background choices do: a host held
+back by the plan leaves its tile as it is. Tiles the file does not name are left as they are. The
+preview lists each account whose choices change ("Tailnet Tailscale · Work": old and new, or "New
+account, no sign-in yet") and each tile that changes ("Quick Settings tile 3": free, then agents).
+A file without these parts changes none of them.
 
 ### The hosts
 
@@ -137,6 +159,8 @@ second host of one name).
 - `core/…/SettingsBackup.kt`: `SettingsFormat` (read, check, write, `open` the box), `settingChanges`
   (the preview's settings), `inFileOrder`, `credentialsFor`. `BackupCrypto.kt`: PBKDF2 and AES-GCM.
   `HostImport.kt`: `HostListFormat.read`/`writeList` with `HostListRules` (the backup's widenings).
+- `core/…/TailnetBackup.kt`: the `tailnets` and `tiles` parts (`TailnetChoices`, `TileBinding`);
+  `app/…/ui/TailnetBackup.kt` reads and writes them on the phone.
 - `app/…/ui/SettingsBackup.kt`: `SettingsBackupper` (export, the sources, the plan, unlock, apply)
   and the sheet; `RexViewModel.writeSettings` writes each setting through its own setter.
   `MainActivity` routes "Open with" and shares to it before Import hosts.
@@ -149,6 +173,11 @@ second host of one name).
   and NFC; PBKDF2 against RFC 7914 and the JVM; unknown fields ignored; each kind of bad file refused
   with where; a box outside the rules refused; the preview's changes; the file's order; who gets the
   backup's sign-in.
+- `TailnetBackupTest` (core): accounts and tiles round-trip with no sign-in in the file; an older
+  file without them loads and changes none of them; a backend this build lacks is left out; each
+  kind of bad value refused with where; the preview's changed choices, new accounts and tiles.
+- `TailnetBackupScreenTest` (app, JVM and emulator): the tiles and each account's choices written
+  out and put back through the preview, an account the phone lacks added by name and not run.
 - `SettingsBackupScreenTest` (app, JVM and emulator): a backup read back puts every setting back and
   removes no host; a bad file imports nothing and says where, and never opens Import hosts; a plain
   host list still goes to Import hosts; sealed keys come in only with their passphrase.

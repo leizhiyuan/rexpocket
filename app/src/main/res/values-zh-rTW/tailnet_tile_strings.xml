@@ -35,6 +35,11 @@
     <string name="tile_picker_empty">先新增一台主機或加入 tailnet。</string>
     <string name="tile_picker_open_app">開啟 RexPocket</string>
 
+    <string name="backup_setting_tailnet">Tailnet %1$s</string>
+    <string name="backup_setting_tailnets">Tailnet</string>
+    <string name="backup_setting_tile">快速設定圖塊 %1$s</string>
+    <string name="backup_tailnet_new_account">新帳號，尚未登入 · %1$s</string>
+
     <string name="shortcut_host_gone">這台主機已從 RexPocket 移除。</string>
     <string name="shortcut_session_gone">%1$s 上已經沒有這個工作階段了。</string>
     <string name="shortcut_tab_gone">這個分頁已關閉，顯示它所在的工作階段。</string>

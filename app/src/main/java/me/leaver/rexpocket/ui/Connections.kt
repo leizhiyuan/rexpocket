@@ -610,6 +610,19 @@ class Connections private constructor(private val app: Application, val nodes: T
 
     fun renameAccount(id: String, name: String) = setProfiles(profiles.value.rename(id, name))
 
+    /**
+     * The id of [backend]'s account named [name] ([first]: its first account, whatever its name),
+     * added, not run, when the phone has none: a settings import. Its sign-in comes when it is used.
+     */
+    fun accountFor(backend: TailnetBackend, name: String, first: Boolean): String {
+        val all = profiles.value
+        if (first) all.of(backend).firstOrNull { it.isFirst }?.let { return it.id }
+        all.named(backend, name)?.let { return it.id }
+        val id = me.leaver.rexpocket.core.TailnetProfiles.newId(backend, java.util.UUID.randomUUID().toString())
+        setProfiles(all.add(me.leaver.rexpocket.core.TailnetProfile(id, backend, name)))
+        return id
+    }
+
     /** Switches made by connecting a host on another account, for the home's snackbar and its Undo. */
     val accountSwitches = MutableSharedFlow<AccountSwitch>(extraBufferCapacity = 4)
 

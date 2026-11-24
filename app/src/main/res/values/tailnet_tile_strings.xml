@@ -39,6 +39,11 @@
     <string name="tile_picker_empty">Add a host or join a tailnet first.</string>
     <string name="tile_picker_open_app">Open RexPocket</string>
 
+    <string name="backup_setting_tailnet">Tailnet %1$s</string>
+    <string name="backup_setting_tailnets">Tailnets</string>
+    <string name="backup_setting_tile">Quick Settings tile %1$s</string>
+    <string name="backup_tailnet_new_account">New account, no sign-in yet · %1$s</string>
+
     <string name="shortcut_host_gone">That host was removed from RexPocket.</string>
     <string name="shortcut_session_gone">That session is no longer on %1$s.</string>
     <string name="shortcut_tab_gone">That tab was closed; showing the session.</string>

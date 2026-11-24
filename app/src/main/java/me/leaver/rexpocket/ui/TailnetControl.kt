@@ -459,6 +459,11 @@ class TailnetControl(
         setPolicies(policies.value.with(pid(id), next))
     }
 
+    /** Sets account [accountId]'s choices, whether or not its tailnet runs it now: a settings import. */
+    fun setAccountPolicy(accountId: String, next: TailnetPolicy) {
+        setPolicies(policies.value.with(accountId, next))
+    }
+
     private fun setPolicies(next: TailnetPolicies) {
         write(next)
         policies.value = next

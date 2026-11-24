@@ -85,7 +85,16 @@ internal fun TailnetBackendNote(backend: TailnetBackend) {
                 Text(stringResource(R.string.netbird_addon_get), color = Colors.accent)
             }
         }
-        !pkg.trusted -> Text(stringResource(R.string.netbird_addon_not_allowed), color = Colors.danger, fontSize = TextStyles.label, lineHeight = labelLeading)
+        !pkg.trusted -> {
+            Text(stringResource(R.string.netbird_addon_not_allowed), color = Colors.danger, fontSize = TextStyles.label, lineHeight = labelLeading)
+            // The way out: uninstall this one from its App info, then get the matching one.
+            TextButton(onClick = { openAddonInfo(context) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.netbird_addon_app_info), color = Colors.accent)
+            }
+            TextButton(onClick = { openLink(context, NETBIRD_ADDON_URL) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.netbird_addon_get), color = Colors.accent)
+            }
+        }
         pkg.olderThan(BuildConfig.VERSION_NAME) -> {
             Text(outdatedText(pkg), color = Colors.amber, fontSize = TextStyles.label, lineHeight = labelLeading)
             updateProgress()?.let { Text(it, color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading) }
@@ -120,6 +129,13 @@ internal fun TailnetBackendRow(scope: SheetScope, backend: TailnetBackend) = wit
         }
         !pkg.trusted -> Group {
             SheetItem(stringResource(R.string.netbird_addon_not_allowed), color = Colors.danger, enabled = false) {}
+            SheetItem(
+                stringResource(R.string.netbird_addon_app_info),
+                color = Colors.accent,
+                supporting = stringResource(R.string.netbird_addon_app_info_body),
+                keepOpen = true,
+            ) { openAddonInfo(context) }
+            SheetItem(stringResource(R.string.netbird_addon_get), color = Colors.accent, keepOpen = true) { openLink(context, NETBIRD_ADDON_URL) }
         }
         pkg.olderThan(BuildConfig.VERSION_NAME) -> Group {
             SheetItem(
@@ -131,4 +147,13 @@ internal fun TailnetBackendRow(scope: SheetScope, backend: TailnetBackend) = wit
         }
         else -> Unit
     }
+}
+
+/** The add-on's App info, where it is uninstalled before the matching one goes in. */
+private fun openAddonInfo(context: android.content.Context) {
+    val intent = android.content.Intent(
+        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        android.net.Uri.fromParts("package", NetbirdAddon.PACKAGE, null),
+    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
 }
