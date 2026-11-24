@@ -167,8 +167,13 @@ class ActivityViewTest {
         compose.onNode(hasTestTag(statusDetailsPaneTag(0)) and hasText("record task-1", substring = true)).assertExists()
         compose.onNode(hasTestTag(statusDetailsPaneTag(0)) and hasText("seen: phone yes", substring = true)).assertExists()
         inSheet(string(R.string.status_details_copy)).performScrollTo().performClick()
-        val clip = compose.activity.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.getItemAt(0)?.text.toString()
-        assertTrue(clip, clip.contains("msg: Found 3 files") && clip.contains("home lists: Running"))
+        // What Copy put there. On a device, Android 10+ lets only the window with focus read the
+        // clipboard, and the sheet has it, so this is read on the JVM; the text itself is
+        // TabDetails.text's, which RealRexAppTest reads on a real Rex.
+        if (onRobolectric) {
+            val clip = compose.activity.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.getItemAt(0)?.text.toString()
+            assertTrue(clip, clip.contains("msg: Found 3 files") && clip.contains("home lists: Running"))
+        }
     }
 
     private fun scrollTo(tag: String) {
