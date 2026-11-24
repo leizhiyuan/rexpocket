@@ -105,6 +105,8 @@ internal class HomeOps(
     val moveHost: (hostId: String, to: Int) -> Unit = { _, _ -> },
     /** Removes a host, once confirmed, with an Undo. */
     val removeHost: (hostId: String) -> Unit = {},
+    /** Opens a host's page: the background and its notifications, as a tailnet's page. */
+    val page: (hostId: String) -> Unit = {},
 )
 
 /** The panes of [windows] with a done, failed or idle report not seen yet. */
@@ -228,6 +230,7 @@ internal fun hostActions(
         ActionGroup(
             listOfNotNull(
                 RowAction(stringResource(R.string.action_edit_host), R.drawable.ic_edit) { ops.editHost(id) },
+                RowAction(stringResource(R.string.conn_settings), R.drawable.ic_notifications) { ops.page(id) },
                 RowAction(stringResource(R.string.home_copy_address), R.drawable.ic_copy) { ops.copyAddress(ref.host) },
                 RowAction(stringResource(R.string.home_tailnet_details), R.drawable.ic_tailnet) { ops.tailnetDetails() }.takeIf { ref.host.viaTailscale },
             ),

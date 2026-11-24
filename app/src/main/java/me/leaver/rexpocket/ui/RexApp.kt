@@ -67,6 +67,8 @@ fun RexPocketApp(
     val opening by model.opening.collectAsState()
     val tailnetPath by model.tailnetPath.collectAsState()
     val tailnetStage by model.tailnetStage.collectAsState()
+    val tailnetView by model.tailnetView.collectAsState()
+    val homeRequest by model.homeRequest.collectAsState()
     val connectProgress by model.connectProgress.collectAsState()
     val lives by model.lives.collectAsState()
     val sshKeyQuestion by model.sshKeyQuestion.collectAsState()
@@ -172,6 +174,12 @@ fun RexPocketApp(
                     tailnetStage = tailnetStage,
                     onSignIn = signIn,
                     onTailnetRetry = model::restartTailnet,
+                    tailnetView = tailnetView,
+                    onTailnetConnect = model::connectTailnet,
+                    onTailnetDisconnect = model::disconnectTailnet,
+                    onTailnetPolicy = model::setTailnetPolicy,
+                    request = homeRequest,
+                    onRequestHandled = { model.homeRequest.value = null },
                     opening = opening,
                     cachedSessions = model::cachedSessions,
                     folds = folds,

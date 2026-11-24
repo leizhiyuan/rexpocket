@@ -182,3 +182,13 @@ the phone and on a desk, Reply hidden for `auth`, Interrupt, the not-connected l
 kept; Approve's Return for Claude and Deny's Esc for Codex, none for Terraform, a changed prompt
 opening the pane and typing nothing, Reply's Compose on the emulator), `DeskSeenTest` (core, ScriptedRex: the desk inference), `ClientViewProbeTest` (rex-real:
 `client.inspect`'s shape).
+
+## Tailnet controls
+
+The tailnet chip, its sheet and the home's ⋮ carry the tailnet's Connect and Disconnect in the
+places and words a host's row and sheet have them: Connect, Cancel, Retry now, Disconnect; a
+Disconnect with hosts on the tailnet confirms and names them; the snackbar "Disconnected
+Tailscale" has Reconnect, which brings the hosts back too. The chip stays (grey) while the
+tailnet is disconnected by hand or waits for a host; the card is for stages that need the person.
+Each host's sheet and the tailnet's sheet open its page, "Connection and notifications", one layout
+for both. See [tailnet-control.md](tailnet-control.md).

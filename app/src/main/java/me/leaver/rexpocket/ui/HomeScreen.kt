@@ -104,6 +104,10 @@ import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.ProgramRecord
 import me.leaver.rexpocket.core.SessionView
 import me.leaver.rexpocket.core.TailnetBackend
+import me.leaver.rexpocket.core.Connectable
+import me.leaver.rexpocket.core.ConnectableKind
+import me.leaver.rexpocket.core.TailnetPolicy
+import me.leaver.rexpocket.core.linkState
 import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.TailnetStage
 import me.leaver.rexpocket.core.ConnectProgress
@@ -150,6 +154,16 @@ internal fun HomeScreen(
     onSignIn: (String) -> Unit = {},
     /** Starts the joined node again after it failed to start. */
     onTailnetRetry: () -> Unit = {},
+    /** The joined tailnet as its chip, sheet and page show it; see docs/design/tailnet-control.md. */
+    tailnetView: TailnetView = TailnetView(id = tailnet.backend.storageKey, name = tailnet.backend.displayName, backend = tailnet.backend, joined = tailnet.enabled),
+    /** Connects the tailnet by hand, and the hosts given with it (a Reconnect). */
+    onTailnetConnect: (List<SavedHost>) -> Unit = {},
+    /** Disconnects the tailnet by hand; gives back the hosts that went with it. */
+    onTailnetDisconnect: () -> List<SavedHost> = { emptyList() },
+    onTailnetPolicy: (String, TailnetPolicy) -> Unit = { _, _ -> },
+    /** A page or a confirm asked for from outside the home (a tile, a notification), once. */
+    request: HomeRequest? = null,
+    onRequestHandled: () -> Unit = {},
     opening: Opening?,
     cachedSessions: (String) -> List<ListedSession>,
     /** Which hosts and sessions are folded: the view model's, so they outlive this screen. */
@@ -271,6 +285,10 @@ internal fun HomeScreen(
     var prefillLabel by rememberSaveable { mutableStateOf<String?>(null) }
     var prefillAddress by rememberSaveable { mutableStateOf<String?>(null) }
     var tailnetDetails by rememberSaveable { mutableStateOf(false) }
+    // A host's or a tailnet's page (Connectable.key), and whether Back goes to Notifications.
+    var page by rememberSaveable { mutableStateOf<String?>(null) }
+    var pageFromNotifications by rememberSaveable { mutableStateOf(false) }
+    var confirmTailnetOff by rememberSaveable { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
     var notifications by rememberSaveable { mutableStateOf(false) }
     var controlsPage by rememberSaveable { mutableStateOf<ControlsPage?>(null) }
@@ -296,6 +314,29 @@ internal fun HomeScreen(
             snackbar.currentSnackbarData?.dismiss()
             if (snackbar.showSnackbar(message, action, duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) onAction()
         }
+    }
+    // A tailnet's Disconnect, as a host's: at once with nothing on it, with a confirm naming the
+    // hosts that go with it otherwise, and a snackbar with Reconnect that brings them back too.
+    val tailnetOff: (confirmed: Boolean) -> Unit = { confirmed ->
+        if (!confirmed && tailnetView.hosts.isNotEmpty()) {
+            confirmTailnetOff = true
+        } else {
+            confirmTailnetOff = false
+            val dropped = onTailnetDisconnect()
+            snack(context.getString(R.string.home_disconnected, tailnetView.name), context.getString(R.string.action_reconnect)) { onTailnetConnect(dropped) }
+        }
+    }
+    val tailnetOn: () -> Unit = { onTailnetConnect(emptyList()) }
+    LaunchedEffect(request) {
+        when (request) {
+            is HomeRequest.Page -> {
+                pageFromNotifications = false
+                page = request.key
+            }
+            HomeRequest.ConfirmTailnetOff -> if (tailnetView.hosts.isNotEmpty()) confirmTailnetOff = true
+            null -> return@LaunchedEffect
+        }
+        onRequestHandled()
     }
     val ops = HomeOps(
         connect = onConnect,
@@ -337,6 +378,10 @@ internal fun HomeScreen(
             toast(context, context.getString(R.string.home_address_copied))
         },
         tailnetDetails = { tailnetDetails = true },
+        page = { hostId ->
+            pageFromNotifications = false
+            page = Connectable.host(hostId).key
+        },
         seen = { hostId, block, record -> markCovers(seenMarks[HomeMarks.key(hostId, block)], record) },
         markOf = { hostId, block -> seenMarks[HomeMarks.key(hostId, block)] },
         moveHost = onMoveHost,
@@ -423,7 +468,8 @@ internal fun HomeScreen(
             // The tailnet's card while it is on its way or needs the person; a chip once it is on.
             val tailnetHosts = hosts.count { it.viaTailscale }
             val tailnetShown = tailnet.enabled || tailnetHosts > 0
-            val tailnetQuiet = tailnetShown && tailnetStage is TailnetStage.Connected
+            // Quiet too once disconnected by hand or waiting for a host: nothing is wrong then.
+            val tailnetQuiet = tailnetShown && (tailnetStage is TailnetStage.Connected || tailnetStage is TailnetStage.Disconnected)
             Row(Modifier.fillMaxWidth().padding(start = PAGE, end = PAGE - 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 FilterChips(filter, needsYou, running, onHomeFilter, Modifier.weight(1f))
                 if (tailnetQuiet) {
@@ -432,6 +478,7 @@ internal fun HomeScreen(
                         network = network,
                         said = network + " · " + tailnetStageText(tailnetStage, tailnet.backend),
                         healthy = tailnetStatus.health.isEmpty(),
+                        on = tailnetStage is TailnetStage.Connected,
                         onClick = { tailnetDetails = true },
                     )
                 }
@@ -606,6 +653,16 @@ internal fun HomeScreen(
                         RowAction(stringResource(R.string.tailnet_title), R.drawable.ic_tailnet) { onTailnet() },
                     ),
                 ),
+                // The tailnet by hand, as a host's sheet has its host: Connect or Disconnect.
+                ActionGroup(
+                    listOfNotNull(
+                        if (tailnetStage is TailnetStage.Disconnected) {
+                            RowAction(stringResource(R.string.tailnet_connect_item, tailnetView.name), R.drawable.ic_tailnet, run = tailnetOn)
+                        } else {
+                            RowAction(stringResource(R.string.tailnet_disconnect_item, tailnetView.name), R.drawable.ic_disconnect, danger = true) { tailnetOff(false) }
+                        }.takeIf { tailnet.enabled },
+                    ),
+                ),
             ),
         ) { homeMenu = false }
     }
@@ -670,10 +727,23 @@ internal fun HomeScreen(
         )
     }
 
+    if (confirmTailnetOff) {
+        TailnetDisconnectDialog(tailnetView, onDismiss = { confirmTailnetOff = false }) { tailnetOff(true) }
+    }
+
     if (tailnetDetails) {
         TailnetSheet(
             backend = tailnet.backend,
             stage = tailnetStage,
+            actions = connectionActions(
+                tailnetStage.linkState(), ConnectableKind.Tailnet,
+                onConnect = tailnetOn, onDisconnect = { tailnetOff(false) }, onRetry = onTailnetRetry,
+            ).takeIf { tailnet.enabled }.orEmpty(),
+            supporting = tailnetSupporting(tailnetView, tailnetStage),
+            onPage = {
+                pageFromNotifications = false
+                page = Connectable.tailnet(tailnetView.id).key
+            },
             status = tailnetStatus,
             hosts = hosts,
             openHost = connected,
@@ -727,7 +797,8 @@ internal fun HomeScreen(
             onDismiss = { settings = false },
             onTailnet = {
                 settings = false
-                onTailnet()
+                // A joined tailnet opens its sheet: its state, Connect or Disconnect, its page.
+                if (tailnet.enabled) tailnetDetails = true else onTailnet()
             },
             alerts = alerts,
             onNotifications = {
@@ -779,8 +850,52 @@ internal fun HomeScreen(
             onPrefs = onAlertPrefs,
             hosts = hosts,
             background = background,
-            onHostBackground = onHostBackground,
+            tailnets = listOf(tailnetView).filter { it.joined },
+            onPage = {
+                notifications = false
+                pageFromNotifications = true
+                page = it.key
+            },
         )
+    }
+
+    val pageOf = Connectable.parse(page)
+    val closePage = { page = null }
+    val pageBack: (() -> Unit)? = if (pageFromNotifications) ({
+        page = null
+        notifications = true
+    }) else null
+    when (pageOf?.kind) {
+        ConnectableKind.Host -> hosts.firstOrNull { it.id == pageOf.id }?.let { host ->
+            val live = lives[host.id]
+            HostPage(
+                host = host,
+                live = live,
+                choices = background.of(host.id),
+                defaults = alertPrefs,
+                backgroundMode = alerts,
+                onChoices = { onHostBackground(host.id, it) },
+                onConnect = { onConnect(host) },
+                onDisconnect = { ops.disconnect(host.id) },
+                onRetry = { onRetry(host.id) },
+                onBack = pageBack,
+                onDismiss = closePage,
+                tile = { TileGroup(Connectable.host(host.id), host.label.ifBlank { host.host }) },
+            )
+        } ?: LaunchedEffect(page) { page = null }
+        ConnectableKind.Tailnet -> TailnetPage(
+            view = tailnetView,
+            stage = tailnetStage,
+            backgroundMode = alerts,
+            onPolicy = { onTailnetPolicy(tailnetView.id, it) },
+            onConnect = tailnetOn,
+            onDisconnect = { tailnetOff(false) },
+            onRetry = onTailnetRetry,
+            onBack = pageBack,
+            onDismiss = closePage,
+            tile = { TileGroup(Connectable.tailnet(tailnetView.id), tailnetView.name) },
+        )
+        null -> Unit
     }
 
     TerminalControlsPages(

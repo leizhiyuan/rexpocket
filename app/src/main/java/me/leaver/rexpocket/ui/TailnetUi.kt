@@ -82,6 +82,8 @@ internal fun tailnetStageText(stage: TailnetStage, backend: TailnetBackend): Str
         is TailnetStage.Connected ->
             if (stage.network.isBlank()) stringResource(R.string.tailnet_stage_connected, stage.device)
             else stringResource(R.string.tailnet_stage_connected_on, stage.device, stage.network)
+        is TailnetStage.Disconnected ->
+            stringResource(if (stage.byYou) R.string.tailnet_stage_disconnected else R.string.tailnet_stage_standby, network)
         TailnetStage.Stopped -> stringResource(R.string.tailnet_stage_stopped, network)
         is TailnetStage.Failed -> stringResource(R.string.tailnet_stage_failed, network)
     }
@@ -345,6 +347,12 @@ internal fun TailnetSheet(
     onRetry: () -> Unit,
     onProbe: () -> Unit,
     onPeer: (TailnetPeer, SavedHost?) -> Unit,
+    /** Connect, Disconnect or Retry now, in the place a host's sheet has them. */
+    actions: List<RowAction> = emptyList(),
+    /** The line under the status: how many hosts use it, or when it stops. */
+    supporting: String? = null,
+    /** Opens the tailnet's page: when it runs, the background, notifications. */
+    onPage: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val network = tailnetName(backend)
@@ -361,11 +369,15 @@ internal fun TailnetSheet(
                 stage.needsAttention -> Colors.amber to stepText(stage, backend)
                 else -> Colors.muted to stepText(stage, backend)
             }
-            InfoRow(stringResource(R.string.tailnet_field_status), tailnetStageText(stage, backend), supporting = detail, dot = dot)
+            InfoRow(stringResource(R.string.tailnet_field_status), tailnetStageText(stage, backend), supporting = detail ?: supporting, dot = dot)
+            for (a in actions) {
+                // This group's rows have no icons; the words are the host sheet's.
+                SheetItem(a.label, color = if (a.danger) Colors.danger else Colors.accent, onClick = a.run)
+            }
             if (stage is TailnetStage.SigningIn && stage.authUrl.isNotBlank()) {
                 SheetItem(stringResource(R.string.action_sign_in), Colors.accent) { onSignIn(stage.authUrl) }
             }
-            if (stage is TailnetStage.Failed) SheetItem(stringResource(R.string.action_try_again), Colors.accent, onClick = onRetry)
+            if (stage is TailnetStage.Failed && actions.isEmpty()) SheetItem(stringResource(R.string.action_try_again), Colors.accent, onClick = onRetry)
             status.networkName.takeIf { it.isNotBlank() }?.let { InfoRow(stringResource(R.string.tailnet_field_network), it, onClick = { copy(it) }) }
             status.self?.let { self ->
                 InfoRow(stringResource(R.string.tailnet_field_device), self.name, supporting = self.dnsName.takeIf { it.isNotBlank() }, onClick = { copy(self.dnsName.ifBlank { self.name }) })
@@ -383,6 +395,7 @@ internal fun TailnetSheet(
             if (status.health.isNotEmpty()) {
                 InfoRow(stringResource(R.string.tailnet_field_health), status.health.joinToString("\n"), valueColor = Colors.amber)
             }
+            if (onPage != null) SheetItem(stringResource(R.string.conn_settings), opens = true, onClick = onPage)
             SheetItem(stringResource(R.string.action_tailnet_settings), onClick = onSettings)
         }
         val peers = status.peers.sortedWith(

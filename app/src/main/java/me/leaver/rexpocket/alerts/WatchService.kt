@@ -20,7 +20,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.leaver.rexpocket.MainActivity
 import me.leaver.rexpocket.R
-import me.leaver.rexpocket.core.Phase
+import me.leaver.rexpocket.core.Connectable
+import me.leaver.rexpocket.core.ConnectableKind
+import me.leaver.rexpocket.core.LinkState
+import me.leaver.rexpocket.core.hostLinkState
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.ui.Connections
 
@@ -37,10 +40,12 @@ class WatchService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var follow: Job? = null
     private lateinit var connections: Connections
-    private var lines: List<HostLine> = emptyList()
+    private var lines: List<ItemLine> = emptyList()
 
-    /** One host as the watch notification shows it. */
-    private data class HostLine(val id: String, val label: String, val live: Boolean, val trying: Boolean)
+    /** One host or tailnet as the watch notification shows it: its name and its state. */
+    private data class ItemLine(val item: Connectable, val label: String, val state: LinkState) {
+        val host: Boolean get() = item.kind == ConnectableKind.Host
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -64,6 +69,9 @@ class WatchService : Service() {
                 return START_NOT_STICKY
             }
             Alerts.ACTION_DISCONNECT -> intent.getStringExtra(Alerts.EXTRA_HOST_ID)?.let { connections.disconnect(it) }
+            Alerts.ACTION_TAILNET -> Connectable.parse(intent.getStringExtra(TileStore.EXTRA_ITEM))?.let { item ->
+                if (intent.getBooleanExtra(EXTRA_CONNECT, false)) connections.connectItem(item) else connections.disconnectItem(item)
+            }
         }
         // Every start asked for with startForegroundService must be answered with startForeground.
         if (!foreground()) {
@@ -78,14 +86,19 @@ class WatchService : Service() {
             }
         }
         if (follow == null) follow = scope.launch {
-            connections.lives
-                .map { lives ->
-                    lives.values.map { HostLine(it.target.id, it.target.label, it.state.phase == Phase.Live, it.state.phase != Phase.Failed) }
+            connections.changes
+                .map {
+                    // The joined tailnet first, as on the home, then each connected host.
+                    val tailnets = connections.connectables().filter { it.kind == ConnectableKind.Tailnet }
+                        .mapNotNull { t -> connections.nameOf(t)?.let { ItemLine(t, it, connections.stateOf(t)) } }
+                    tailnets + connections.lives.value.values.map {
+                        ItemLine(Connectable.host(it.target.id), it.target.label, hostLinkState(it.state.phase, it.state.problem))
+                    }
                 }
                 .distinctUntilChanged()
                 .collect { next ->
                     lines = next
-                    if (next.isNotEmpty()) repost()
+                    if (next.any { it.host || it.state != LinkState.Off }) repost()
                 }
         }
         return START_STICKY
@@ -145,14 +158,25 @@ class WatchService : Service() {
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE,
         )
-        val names = lines.joinToString(", ") { it.label }
+        val hosts = lines.filter { it.host }
+        val up = lines.filter { !it.host && it.state != LinkState.Off }
+        val names = hosts.joinToString(", ") { it.label }
         val builder = NotificationCompat.Builder(this, Alerts.CHANNEL_WATCH)
             .setSmallIcon(R.drawable.ic_notifications)
             .setContentTitle(
-                if (lines.isEmpty()) getString(R.string.alerts_title)
-                else resources.getQuantityString(R.plurals.bg_watch_title, lines.size, lines.size),
+                when {
+                    hosts.isNotEmpty() -> resources.getQuantityString(R.plurals.bg_watch_title, hosts.size, hosts.size)
+                    up.isNotEmpty() -> getString(R.string.bg_watch_tailnet_title, up.first().label)
+                    else -> getString(R.string.alerts_title)
+                },
             )
-            .setContentText(if (names.isEmpty()) getString(R.string.bg_watch_starting) else getString(R.string.alerts_watching, names))
+            .setContentText(
+                when {
+                    names.isNotEmpty() -> getString(R.string.alerts_watching, names)
+                    up.isNotEmpty() -> getString(R.string.bg_watch_tailnet_body)
+                    else -> getString(R.string.bg_watch_starting)
+                },
+            )
             .setOngoing(true)
             .setSilent(true)
             .setShowWhen(false)
@@ -160,29 +184,48 @@ class WatchService : Service() {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(open)
             .addAction(0, getString(R.string.alerts_stop), stop)
+        // One line per host and tailnet, in the state words the tiles and pages use, once there
+        // is more than one: the same treatment for both.
         if (lines.size > 1) {
             val inbox = NotificationCompat.InboxStyle()
-            for (line in lines) {
-                val state = getString(
-                    when {
-                        line.live -> R.string.bg_host_live
-                        line.trying -> R.string.bg_host_trying
-                        else -> R.string.bg_host_failed
-                    },
-                )
-                inbox.addLine("${line.label} · $state")
-            }
+            for (line in lines) inbox.addLine(getString(R.string.bg_watch_line, line.label, getString(stateWord(line.state)).lowercase()))
             builder.setStyle(inbox)
         }
-        // A notification has room for three actions: Stop and one Disconnect per host, up to two.
+        // Three actions at most. Stop always; then one each for the tailnets and hosts, tailnets
+        // first, while all of them fit in the two left; with more, none, so no host or tailnet
+        // gets an action another lacks (the tiles and the app have them all).
         if (lines.size <= 2) {
-            for (line in lines) {
-                val intent = Intent(this, WatchService::class.java).setAction(Alerts.ACTION_DISCONNECT).putExtra(Alerts.EXTRA_HOST_ID, line.id)
-                val pending = PendingIntent.getService(this, line.id.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-                builder.addAction(0, getString(R.string.bg_disconnect_host, line.label), pending)
-            }
+            for (line in lines) builder.addAction(0, actionLabel(line), actionIntent(line))
         }
         return builder.build()
+    }
+
+    /** "Connect Tailscale" for a tailnet that is off, "Disconnect mac" otherwise. */
+    private fun actionLabel(line: ItemLine): String = when {
+        line.host -> getString(R.string.bg_disconnect_host, line.label)
+        line.state == LinkState.Off -> getString(R.string.tailnet_connect_item, line.label)
+        else -> getString(R.string.tailnet_disconnect_item, line.label)
+    }
+
+    /**
+     * What an item's action does. A host disconnects; a tailnet connects or disconnects, and one
+     * that hosts are connected through asks first, in the app, naming them, as everywhere else.
+     */
+    private fun actionIntent(line: ItemLine): PendingIntent {
+        val item = line.item
+        if (line.host) {
+            val intent = Intent(this, WatchService::class.java).setAction(Alerts.ACTION_DISCONNECT).putExtra(Alerts.EXTRA_HOST_ID, item.id)
+            return PendingIntent.getService(this, item.id.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        }
+        val connect = line.state == LinkState.Off
+        if (!connect && connections.hostsOn(item.id).isNotEmpty()) {
+            val ask = Intent(this, MainActivity::class.java).setAction(TileStore.ACTION_CONFIRM_OFF).putExtra(TileStore.EXTRA_ITEM, item.key)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            return PendingIntent.getActivity(this, item.key.hashCode(), ask, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        }
+        val intent = Intent(this, WatchService::class.java).setAction(Alerts.ACTION_TAILNET)
+            .putExtra(TileStore.EXTRA_ITEM, item.key).putExtra(EXTRA_CONNECT, connect)
+        return PendingIntent.getService(this, item.key.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
     // Keeping a remote terminal connection open fits none of the platform's named types; the app is
@@ -196,6 +239,7 @@ class WatchService : Service() {
             private set
 
         internal const val WATCH_ID = 1
+        private const val EXTRA_CONNECT = "connect"
         private const val STOPPED_ID = 4
         private const val TAG = "RexPocketWatch"
     }

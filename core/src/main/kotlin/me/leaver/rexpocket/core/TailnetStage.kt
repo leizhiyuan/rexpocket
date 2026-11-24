@@ -25,6 +25,12 @@ sealed interface TailnetStage {
     /** On the network as [device], on [network] (blank when the node does not say). */
     data class Connected(val device: String, val network: String) : TailnetStage
 
+    /**
+     * Joined, and not running: the person disconnected it ([byYou]), or it is on only when needed
+     * and no host needs it now. Quiet, as a disconnected host is: nothing is wrong.
+     */
+    data class Disconnected(val byYou: Boolean) : TailnetStage
+
     /** The node is up but switched off. */
     data object Stopped : TailnetStage
 
@@ -44,8 +50,14 @@ fun tailnetStage(
     device: String = "",
     network: String = "",
     error: String? = null,
+    /** Whether the app runs the node now (or is starting it); see TailnetPlan. */
+    running: Boolean = true,
+    /** Whether the person disconnected it by hand. */
+    off: Boolean = false,
 ): TailnetStage = when {
     !joined -> TailnetStage.Off
+    off -> TailnetStage.Disconnected(byYou = true)
+    error == null && !running -> TailnetStage.Disconnected(byYou = false)
     error != null -> TailnetStage.Failed(error)
     else -> when (backendState) {
         "", "NoState" -> if (authUrl.isNotBlank()) TailnetStage.SigningIn(authUrl) else TailnetStage.Starting

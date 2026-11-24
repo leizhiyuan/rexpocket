@@ -46,6 +46,25 @@ class MainActivity : ComponentActivity() {
      * its sheet for a tap.
      */
     private fun received(intent: Intent) {
+        // A tile's long press, a tile whose tailnet hosts use, or a page asked for.
+        when (intent.action) {
+            android.service.quicksettings.TileService.ACTION_QS_TILE_PREFERENCES -> {
+                @Suppress("DEPRECATION")
+                val component = intent.getParcelableExtra<android.content.ComponentName>(Intent.EXTRA_COMPONENT_NAME)
+                val slot = me.leaver.rexpocket.alerts.TileStore.slotOf(component) ?: return
+                val item = me.leaver.rexpocket.alerts.TileStore(this).of(slot)
+                if (item == null) startActivity(me.leaver.rexpocket.alerts.TileStore.pageIntent(this, null, slot)) else model.openPage(item.key)
+                return
+            }
+            me.leaver.rexpocket.alerts.TileStore.ACTION_OPEN_PAGE -> {
+                intent.getStringExtra(me.leaver.rexpocket.alerts.TileStore.EXTRA_ITEM)?.let(model::openPage)
+                return
+            }
+            me.leaver.rexpocket.alerts.TileStore.ACTION_CONFIRM_OFF -> {
+                model.askTailnetOff()
+                return
+            }
+        }
         // A settings backup names its own format; anything else opened is a host list, as before.
         hostListToOpen(this, intent)?.let { uri ->
             model.settingsBackup.readUri(uri) { model.hostImport.readUri(uri) }

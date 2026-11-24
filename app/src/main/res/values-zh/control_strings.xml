@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="conn_state_off">已关闭</string>
+    <string name="conn_state_connecting">正在连接…</string>
+    <string name="conn_state_connected">已连接</string>
+    <string name="conn_state_sign_in">需要登录</string>
+    <string name="conn_state_failed">未连接</string>
+
+    <string name="tailnet_stage_disconnected">%1$s 已断开</string>
+    <string name="tailnet_stage_standby">%1$s 会在有主机连接时启动</string>
+    <plurals name="tailnet_used_by">
+        <item quantity="other">%1$d 台主机正在使用</item>
+    </plurals>
+    <plurals name="tailnet_stops_in">
+        <item quantity="other">没有主机在用 · %1$d 分钟后停止</item>
+    </plurals>
+
+    <string name="tailnet_disconnect_title">断开 %1$s？</string>
+    <plurals name="tailnet_disconnect_body">
+        <item quantity="other">%2$s 通过它连接，也会一起断开。它会保持关闭，直到你连接它或它上面的主机。</item>
+    </plurals>
+    <string name="tailnet_connect_item">连接 %1$s</string>
+    <string name="tailnet_disconnect_item">断开 %1$s</string>
+
+    <string name="conn_group_open">RexPocket 打开时</string>
+    <string name="conn_group_background">在后台</string>
+    <string name="conn_group_notifications">通知</string>
+    <string name="conn_group_tile">快捷设置</string>
+    <string name="conn_settings">连接与通知</string>
+    <string name="bg_group_tailnets">Tailnet</string>
+
+    <string name="tailnet_use">保持连接</string>
+    <string name="tailnet_use_open">应用打开期间</string>
+    <string name="tailnet_use_open_body">RexPocket 打开时一直在线，它上面的主机可以立即连接。</string>
+    <string name="tailnet_use_needed">仅在主机需要时</string>
+    <string name="tailnet_use_needed_body">它上面的主机连接时启动，最后一台主机离开一段时间后停止。更省电；第一次连接要等它启动。</string>
+    <string name="tailnet_linger">多久后停止</string>
+    <string name="tailnet_linger_body">在没有主机使用之后</string>
+    <string name="tailnet_linger_choice_body">没有主机时它保持在线多久，前台和后台都适用。</string>
+    <string name="linger_1">1 分钟</string>
+    <string name="linger_5">5 分钟</string>
+    <string name="linger_15">15 分钟</string>
+    <string name="linger_never">从不</string>
+
+    <string name="bg_keep">离开应用时</string>
+    <string name="bg_keep_host_follow">保持连接</string>
+    <string name="bg_keep_host_follow_body">如果离开时已连接，就在后台保持连接。</string>
+    <string name="bg_keep_host_off">放开</string>
+    <string name="bg_keep_tailnet_follow">跟随它的主机</string>
+    <string name="bg_keep_tailnet_follow_body">只要它上面有主机在后台保持连接，它就保持在线；没有主机后（按上面的时间）停止。</string>
+    <string name="bg_keep_tailnet_always">始终</string>
+    <string name="bg_keep_tailnet_always_body">后台模式开启时始终在线，即使没有主机连接，打开 RexPocket 时主机可以立即连接。更耗电。</string>
+    <string name="bg_keep_tailnet_off">放开</string>
+    <string name="bg_keep_tailnet_off_body">离开 RexPocket 一分钟后停止，它上面的主机也一起断开；回来时再启动。</string>
+    <string name="bg_keep_mode_off">后台模式已关闭，RexPocket 关闭时一切都会停止。</string>
+
+    <string name="tailnet_notify">登录和故障</string>
+    <string name="tailnet_notify_body">离开应用时，在它需要登录或停止工作时通知你。</string>
+
+    <string name="bg_watch_tailnet_title">%1$s 已连接</string>
+    <string name="bg_watch_tailnet_body">没有主机连接 · 保持在线以便快速连接</string>
+    <string name="bg_watch_line">%1$s · %2$s</string>
+    <string name="tailnet_alert_sign_in">%1$s 需要登录</string>
+    <string name="tailnet_alert_sign_in_body">登录之前无法访问它上面的主机。点按打开 RexPocket。</string>
+    <string name="tailnet_alert_failed">%1$s 已停止工作</string>
+    <string name="tailnet_alert_failed_body">无法访问它上面的主机。点按打开 RexPocket 并重试。</string>
+
+    <string name="tile_label">RexPocket</string>
+    <string name="tile_pick">点按选择</string>
+    <string name="tile_gone">已移除 · 点按选择</string>
+    <string name="tile_picker_title">这个磁贴要连接什么？</string>
+    <string name="tile_add">添加磁贴</string>
+    <string name="tile_add_body">在快捷设置中连接和断开。长按磁贴可回到这里。</string>
+    <string name="tile_added">在磁贴 %1$d 上</string>
+    <string name="tile_add_manual">编辑快捷设置，把 RexPocket %1$d 磁贴拖进来。</string>
+    <string name="tile_slots_full">三个磁贴都在使用中。在其中一个上选择别的项目即可空出来。</string>
+    <string name="tile_slot_label">RexPocket %1$d</string>
+</resources>

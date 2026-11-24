@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -74,7 +75,15 @@ import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.Trouble
 import me.leaver.rexpocket.core.explainTailnetProblem
 import me.leaver.rexpocket.core.plainText
+import me.leaver.rexpocket.core.BackgroundKeep
+import me.leaver.rexpocket.core.Connectable
+import me.leaver.rexpocket.core.ConnectableKind
+import me.leaver.rexpocket.core.LinkState
+import me.leaver.rexpocket.core.hostLinkState
+import me.leaver.rexpocket.core.linkState
+import me.leaver.rexpocket.core.tailnetStage
 import me.leaver.rexpocket.data.BackgroundStore
+import me.leaver.rexpocket.data.TailnetPolicyStore
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.SavedHost
 import me.leaver.rexpocket.data.TailnetSettings
@@ -172,6 +181,50 @@ class Connections private constructor(private val app: Application, val nodes: T
 
     private val foreground = MutableStateFlow(true)
 
+    /**
+     * Away long enough to let things go: the park moment a while after the screen went, or a start
+     * without a screen. With background mode on, that is when the background choices apply.
+     */
+    private val settledAway = MutableStateFlow(false)
+
+    /** The id of the tailnet a host on the tailnet goes through: the one joined. */
+    val currentTailnet: String get() = tailnet.value.backend.storageKey
+
+    /** The tailnet [host] goes through, or null for a host on the phone's own network. */
+    fun tailnetOf(host: SavedHost): String? = currentTailnet.takeIf { host.viaTailscale }
+
+    /** Every tailnet the app can run, each joined or not, from the settings as they are now. */
+    private fun specs(): List<TailnetSpec> = tailnet.value.let { settings ->
+        nodes.registered.map { backend ->
+        TailnetSpec(
+            id = backend.storageKey,
+            name = backend.displayName,
+            node = nodes[backend],
+            joined = settings.enabled && settings.backend == backend,
+            // The settings as they are at the start, which a join has just written.
+            config = { key -> configFor(tailnet.value.copy(backend = backend), key) },
+        )
+        }
+    }
+
+    /** When each tailnet runs: by hand, while open or when needed, in the background. */
+    val control: TailnetControl by lazy {
+        val policyStore = TailnetPolicyStore(app)
+        TailnetControl(
+            scope = scope,
+            specs = ::specs,
+            users = { _links.value.values.mapNotNull { tailnetOf(it.target) }.groupingBy { it }.eachCount() },
+            away = { settledAway.value && Alerts.enabled.value },
+            changes = listOf(tailnet, _links, settledAway, Alerts.enabled),
+            read = policyStore::read,
+            write = policyStore::write,
+        )
+    }
+
+    /** Ticks whenever a host's or a tailnet's state or name may have changed. */
+    val changes: kotlinx.coroutines.flow.Flow<Unit> =
+        merge(lives, control.runs, control.policies, tailnetStatus, tailnet).map { }
+
     /** Whether a screen has said whether it is visible yet: a start without one is in the background. */
     private var screenSeen = false
 
@@ -204,12 +257,12 @@ class Connections private constructor(private val app: Application, val nodes: T
                 if (store.alerts() != on) store.setAlerts(on)
             }
         }
-        // The watch runs while background mode is on and a host is connected, and goes with the
-        // last of them. The first look is skipped when nothing is connected yet: a watch Android
-        // started again is about to connect them (see [restoreBackground]).
+        // The watch runs while background mode is on and a host is connected or a tailnet is up,
+        // and goes with the last of them. The first look is skipped when nothing is connected yet:
+        // a watch Android started again is about to connect them (see [restoreBackground]).
         scope.launch {
             var first = true
-            combine(Alerts.enabled, _links) { on, links -> on && links.isNotEmpty() }
+            combine(Alerts.enabled, _links, control.runs) { on, links, runs -> on && (links.isNotEmpty() || runs.values.any { it.running }) }
                 .distinctUntilChanged()
                 .collect { watch ->
                     if (watch) Alerts.watch(app) else if (!first) Alerts.unwatch(app)
@@ -262,6 +315,23 @@ class Connections private constructor(private val app: Application, val nodes: T
                 .collect { pane -> if (pane != null) seen(pane.hostId, pane.blockId) }
         }
         scope.launch { fleet.signals.collect { onSignal(it) } }
+        // A tailnet that needs a sign-in or stopped working while the app is away says so, once,
+        // unless its "Sign-in and failures" is off; the notification goes when that is over.
+        scope.launch {
+            merge(changes, foreground, Alerts.enabled).map {
+                val id = currentTailnet
+                val away = !foreground.value && Alerts.enabled.value
+                val state = tailnetState(id)
+                val tell = away && tailnet.value.enabled && control.policies.value.of(id).notify
+                id to when {
+                    tell && state == LinkState.NeedsSignIn -> true
+                    tell && state == LinkState.Failed -> false
+                    else -> null
+                }
+            }.distinctUntilChanged().collect { (id, signIn) ->
+                if (signIn == null) Alerts.settleTailnet(app, id) else Alerts.tailnetTrouble(app, id, tailnet.value.backend.displayName, signIn)
+            }
+        }
         // What a desk looked at is seen here too: marked, and its notification goes. A live host's
         // marks of panes that have no report any more are dropped.
         scope.launch {
@@ -284,6 +354,7 @@ class Connections private constructor(private val app: Application, val nodes: T
         screenSeen = true
         val returning = visible && !foreground.value
         foreground.value = visible
+        if (visible) settledAway.value = false
         if (returning && _links.value.values.any { it.target.viaTailscale }) {
             scope.launch(Dispatchers.IO) { nodeFor(tailnet.value.backend).resetNetwork() }
         }
@@ -314,14 +385,27 @@ class Connections private constructor(private val app: Application, val nodes: T
      */
     fun backgroundStopped() {
         if (screens > 0) return
-        disconnectAll(forget = false)
-        nodes.all.forEach { it.stopAsync() }
+        closeWithScreen()
     }
 
-    /** Lets go of the connected hosts that are not kept in the background; see [parked]. */
+    /**
+     * Everything stops: the screen closing with background mode off, or the watch's Stop with no
+     * screen. The connections close and so do the tailnets; they come back with the next screen.
+     */
+    fun closeWithScreen() {
+        disconnectAll(forget = false)
+        control.stopAll()
+    }
+
+    /**
+     * Lets go of the connected hosts that are not kept in the background, and those whose tailnet
+     * is let go (they cannot be reached without it); see [parked].
+     */
     private fun park() {
         val onScreen = shown.value?.hostId
-        for (id in background.value.toPark(_links.value.keys, onScreen)) {
+        val tailnetGoes = _links.value.values.filter { !keptWithTailnet(it.target) }.map { it.id }
+        settledAway.value = true
+        for (id in (background.value.toPark(_links.value.keys, onScreen) + tailnetGoes).distinct()) {
             Diagnostics.event(CONN_TAG, "background: letting ${id.take(6)} go while away")
             parked += id
             disconnect(id, forget = false)
@@ -334,8 +418,15 @@ class Connections private constructor(private val app: Application, val nodes: T
         val ids = parked.toList()
         parked.clear()
         val saved = store.list()
-        for (id in ids) saved.firstOrNull { it.id == id }?.let { ensure(it) }
+        for (id in ids) saved.firstOrNull { it.id == id }?.takeIf { !tailnetSwitchedOff(it) }?.let { ensure(it) }
     }
+
+    /** Whether [host]'s tailnet was disconnected by hand: nothing connects the host on its own then. */
+    fun tailnetSwitchedOff(host: SavedHost): Boolean = tailnetOf(host)?.let { control.policies.value.isOff(it) } == true
+
+    /** Whether [host]'s tailnet stays in the background: one let go takes its hosts with it. */
+    private fun keptWithTailnet(host: SavedHost): Boolean =
+        tailnetOf(host)?.let { control.policies.value.of(it).keep != BackgroundKeep.Off } ?: true
 
     /**
      * Android started the app without a screen: the watch was restarted after its process was
@@ -347,6 +438,7 @@ class Connections private constructor(private val app: Application, val nodes: T
         // No screen has said it is on screen: news is for notifications, and no screen polls run.
         if (!screenSeen) {
             foreground.value = false
+            settledAway.value = true
             fleet.setActive(false)
         }
         val saved = store.list()
@@ -354,9 +446,11 @@ class Connections private constructor(private val app: Application, val nodes: T
         Diagnostics.event(CONN_TAG, "background restore: ${wanted.size} hosts, ${_links.value.size} connected")
         for (id in wanted) {
             if (this[id] != null) continue
-            saved.firstOrNull { it.id == id }?.let { connect(it) }
+            saved.firstOrNull { it.id == id }?.takeIf { !tailnetSwitchedOff(it) && keptWithTailnet(it) }?.let { connect(it, auto = true) }
         }
-        return _links.value.size
+        control.begin()
+        control.evaluate()
+        return _links.value.size + control.wantedUp()
     }
 
     /** Changes [hostId]'s background choices, and acts on them now. */
@@ -365,7 +459,7 @@ class Connections private constructor(private val app: Application, val nodes: T
         backgroundStore.setHosts(all)
         background.value = all
         // An always-connected host connects at once, as it would at the next start.
-        if (next.always && this[hostId] == null) store.list().firstOrNull { it.id == hostId }?.let { connect(it) }
+        if (next.always && this[hostId] == null) store.list().firstOrNull { it.id == hostId }?.takeIf { !tailnetSwitchedOff(it) }?.let { connect(it) }
     }
 
     private fun nodeFor(backend: TailnetBackend): TailnetNode = nodes[backend]
@@ -386,7 +480,9 @@ class Connections private constructor(private val app: Application, val nodes: T
      * Connects [target], and keeps every other host as it is. A host that was connected already
      * starts over. [resume] draws no cached list: the terminal is what comes back.
      */
-    fun connect(target: SavedHost, resume: Boolean = false): Link {
+    fun connect(target: SavedHost, resume: Boolean = false, auto: Boolean = false): Link {
+        // Connecting a host by hand brings its tailnet back, as a Connect of the tailnet would.
+        if (!auto) tailnetOf(target)?.let { control.switchOn(it) }
         drop(target.id)
         val link = Link(target)
         _links.value = LinkedHashMap(_links.value).apply { put(target.id, link) }
@@ -405,6 +501,78 @@ class Connections private constructor(private val app: Application, val nodes: T
         Diagnostics.event(CONN_TAG, "disconnect ${hostId.take(6)}")
         drop(hostId)
         if (forget) remember()
+    }
+
+    /**
+     * Disconnects tailnet [id] by hand, and the hosts connected through it, which it gives back
+     * (for the snackbar's Reconnect). It stays off until it, or a host on it, is connected again.
+     */
+    fun disconnectTailnet(id: String): List<SavedHost> {
+        val dropped = hostsOn(id)
+        dropped.forEach { disconnect(it.id) }
+        control.disconnect(id)
+        return dropped
+    }
+
+    /** Connects tailnet [id] by hand, and [hosts] with it (the Reconnect after a Disconnect). */
+    fun connectTailnet(id: String, hosts: List<SavedHost> = emptyList()) {
+        control.connect(id)
+        hosts.forEach { ensure(it) }
+    }
+
+    /** The hosts connected through tailnet [id] now. */
+    fun hostsOn(id: String): List<SavedHost> = _links.value.values.filter { tailnetOf(it.target) == id }.map { it.target }
+
+    /** The joined tailnet [id]'s state, in the words hosts share; any other tailnet is off. */
+    fun tailnetState(id: String): LinkState {
+        val settings = tailnet.value
+        if (id != currentTailnet) return LinkState.Off
+        val run = control.run(id)
+        val st = tailnetStatus.value
+        return tailnetStage(
+            joined = settings.enabled,
+            backendState = st.backendState,
+            authUrl = st.authUrl,
+            device = st.self?.name.orEmpty(),
+            network = st.networkName,
+            error = run.error,
+            running = run.running,
+            off = control.policies.value.isOff(id),
+        ).linkState()
+    }
+
+    /** [item]'s state, a host's or a tailnet's: what its tile and its watch line say. */
+    fun stateOf(item: Connectable): LinkState = when (item.kind) {
+        ConnectableKind.Host -> this[item.id]?.pocket?.value.let { hostLinkState(it?.phase, it?.problem) }
+        ConnectableKind.Tailnet -> tailnetState(item.id)
+    }
+
+    /** [item]'s name, or null when it is gone: a host removed, a tailnet left. */
+    fun nameOf(item: Connectable): String? = when (item.kind) {
+        ConnectableKind.Host -> store.find(item.id)?.label?.ifBlank { null } ?: store.find(item.id)?.host
+        ConnectableKind.Tailnet -> tailnet.value.takeIf { it.enabled && it.backend.storageKey == item.id }?.backend?.displayName
+    }
+
+    /** Everything a tile can be bound to: the joined tailnet, then the saved hosts. */
+    fun connectables(): List<Connectable> =
+        listOfNotNull(Connectable.tailnet(currentTailnet).takeIf { tailnet.value.enabled }) + store.list().map { Connectable.host(it.id) }
+
+
+    /**
+     * Connects [item] by hand (a tile, a notification action): a host as its Connect does, a
+     * tailnet as its Connect does. False when it is gone.
+     */
+    fun connectItem(item: Connectable): Boolean = when (item.kind) {
+        ConnectableKind.Host -> store.find(item.id)?.let { ensure(it); true } ?: false
+        ConnectableKind.Tailnet -> nameOf(item)?.let { connectTailnet(item.id); true } ?: false
+    }
+
+    /** Disconnects [item] by hand: a host, or a tailnet and the hosts through it. */
+    fun disconnectItem(item: Connectable) {
+        when (item.kind) {
+            ConnectableKind.Host -> disconnect(item.id)
+            ConnectableKind.Tailnet -> disconnectTailnet(item.id)
+        }
     }
 
     /** Disconnects every host; with [forget] false they connect again at the next start. */
@@ -456,7 +624,7 @@ class Connections private constructor(private val app: Application, val nodes: T
         if (!settings.enabled) throw CheckRouteException(CheckFailure.TailnetNotJoined, null)
         val node = nodeFor(settings.backend)
         val port = try {
-            withContext(Dispatchers.IO) { node.start(configFor(settings)) }
+            control.start(settings.backend.storageKey)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -545,7 +713,7 @@ class Connections private constructor(private val app: Application, val nodes: T
             val node = nodeFor(settings.backend)
             val socksPort = if (viaTailscale) {
                 val port = try {
-                    withContext(Dispatchers.IO) { node.start(configFor(settings)) }
+                    control.start(settings.backend.storageKey)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

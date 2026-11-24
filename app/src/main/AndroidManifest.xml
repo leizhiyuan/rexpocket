@@ -37,6 +37,10 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- A long press on one of the app's Quick Settings tiles: its host's or tailnet's page. -->
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+            </intent-filter>
         </activity>
         <!-- Share into RexPocket: text is pasted, images and other files uploaded, after a tap. -->
         <activity
@@ -87,6 +91,46 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- Quick Settings: a pool of three tiles, each bound to a host or a tailnet the person picks
+             (tile services are declared here, so there cannot be one per host). A long press on one
+             opens MainActivity's QS_TILE_PREFERENCES filter: that host's or tailnet's page. -->
+        <activity
+            android:name=".alerts.TilePickerActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <service
+            android:name=".alerts.RexTile1"
+            android:exported="true"
+            android:icon="@drawable/ic_tailnet"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".alerts.RexTile2"
+            android:exported="true"
+            android:icon="@drawable/ic_host"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".alerts.RexTile3"
+            android:exported="true"
+            android:icon="@drawable/ic_host"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
         <service
             android:name=".alerts.WatchService"
             android:exported="false"

@@ -162,6 +162,37 @@ object Alerts {
         context.stopService(Intent(context, WatchService::class.java))
     }
 
+    /**
+     * A tailnet that, while the app is away, needs a sign-in ([signIn]) or stopped working: one
+     * notification per tailnet (tag `tailnet/<id>`), which opens the app. Its "Sign-in and
+     * failures" choice turns it off.
+     */
+    @android.annotation.SuppressLint("MissingPermission")
+    fun tailnetTrouble(context: Context, id: String, name: String, signIn: Boolean) {
+        if (!allowed(context)) return
+        channels(context)
+        val open = PendingIntent.getActivity(
+            context, "tailnet/$id".hashCode(),
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE,
+        )
+        val title = context.getString(if (signIn) R.string.tailnet_alert_sign_in else R.string.tailnet_alert_failed, name)
+        val body = context.getString(if (signIn) R.string.tailnet_alert_sign_in_body else R.string.tailnet_alert_failed_body)
+        val n = NotificationCompat.Builder(context, CHANNEL_ATTENTION)
+            .setSmallIcon(R.drawable.ic_notifications)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        NotificationManagerCompat.from(context).notify("tailnet/$id", TAILNET_ID, n)
+    }
+
+    fun settleTailnet(context: Context, id: String) {
+        NotificationManagerCompat.from(context).cancel("tailnet/$id", TAILNET_ID)
+    }
+
     @android.annotation.SuppressLint("MissingPermission")
     fun raise(context: Context, alert: Alert, note: String? = null) {
         // Notifications can be turned off in system settings while alerts are on; then there is no one to tell.
@@ -431,11 +462,13 @@ object Alerts {
     internal const val ACTION_STOP = "me.leaver.rexpocket.alerts.STOP"
     internal const val ACTION_RESTORE = "me.leaver.rexpocket.alerts.RESTORE"
     internal const val ACTION_DISCONNECT = "me.leaver.rexpocket.alerts.DISCONNECT"
+    internal const val ACTION_TAILNET = "me.leaver.rexpocket.alerts.TAILNET"
     internal const val ACTION_REPLY = "me.leaver.rexpocket.alerts.REPLY"
     internal const val ACTION_INTERRUPT = "me.leaver.rexpocket.alerts.INTERRUPT"
     internal const val ACTION_APPROVE = "me.leaver.rexpocket.alerts.APPROVE"
     internal const val ACTION_DENY = "me.leaver.rexpocket.alerts.DENY"
     internal const val PANE_ID = 2
+    internal const val TAILNET_ID = 5
     internal const val PROGRESS_ID = 4
     private const val SUMMARY_ID = 3
     private const val SUMMARY_LINES = 6

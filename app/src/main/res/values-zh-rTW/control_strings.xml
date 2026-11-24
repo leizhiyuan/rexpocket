@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="conn_state_off">已關閉</string>
+    <string name="conn_state_connecting">正在連線…</string>
+    <string name="conn_state_connected">已連線</string>
+    <string name="conn_state_sign_in">需要登入</string>
+    <string name="conn_state_failed">未連線</string>
+
+    <string name="tailnet_stage_disconnected">%1$s 已中斷連線</string>
+    <string name="tailnet_stage_standby">%1$s 會在有主機連線時啟動</string>
+    <plurals name="tailnet_used_by">
+        <item quantity="other">%1$d 台主機正在使用</item>
+    </plurals>
+    <plurals name="tailnet_stops_in">
+        <item quantity="other">沒有主機在用 · %1$d 分鐘後停止</item>
+    </plurals>
+
+    <string name="tailnet_disconnect_title">中斷 %1$s？</string>
+    <plurals name="tailnet_disconnect_body">
+        <item quantity="other">%2$s 透過它連線，也會一起中斷。它會保持關閉，直到你連線它或它上面的主機。</item>
+    </plurals>
+    <string name="tailnet_connect_item">連線 %1$s</string>
+    <string name="tailnet_disconnect_item">中斷 %1$s</string>
+
+    <string name="conn_group_open">RexPocket 開啟時</string>
+    <string name="conn_group_background">在背景</string>
+    <string name="conn_group_notifications">通知</string>
+    <string name="conn_group_tile">快速設定</string>
+    <string name="conn_settings">連線與通知</string>
+    <string name="bg_group_tailnets">Tailnet</string>
+
+    <string name="tailnet_use">保持連線</string>
+    <string name="tailnet_use_open">應用程式開啟期間</string>
+    <string name="tailnet_use_open_body">RexPocket 開啟時一直在線，它上面的主機可以立即連線。</string>
+    <string name="tailnet_use_needed">只在主機需要時</string>
+    <string name="tailnet_use_needed_body">它上面的主機連線時啟動，最後一台主機離開一段時間後停止。比較省電；第一次連線要等它啟動。</string>
+    <string name="tailnet_linger">多久後停止</string>
+    <string name="tailnet_linger_body">在沒有主機使用之後</string>
+    <string name="tailnet_linger_choice_body">沒有主機時它保持在線多久，前景和背景都適用。</string>
+    <string name="linger_1">1 分鐘</string>
+    <string name="linger_5">5 分鐘</string>
+    <string name="linger_15">15 分鐘</string>
+    <string name="linger_never">永不</string>
+
+    <string name="bg_keep">離開應用程式時</string>
+    <string name="bg_keep_host_follow">保持連線</string>
+    <string name="bg_keep_host_follow_body">如果離開時已連線，就在背景保持連線。</string>
+    <string name="bg_keep_host_off">放開</string>
+    <string name="bg_keep_tailnet_follow">跟隨它的主機</string>
+    <string name="bg_keep_tailnet_follow_body">只要它上面有主機在背景保持連線，它就保持在線；沒有主機後（依上面的時間）停止。</string>
+    <string name="bg_keep_tailnet_always">一律</string>
+    <string name="bg_keep_tailnet_always_body">背景模式開啟時一律在線，即使沒有主機連線，開啟 RexPocket 時主機可以立即連線。比較耗電。</string>
+    <string name="bg_keep_tailnet_off">放開</string>
+    <string name="bg_keep_tailnet_off_body">離開 RexPocket 一分鐘後停止，它上面的主機也一起中斷；回來時再啟動。</string>
+    <string name="bg_keep_mode_off">背景模式已關閉，RexPocket 關閉時一切都會停止。</string>
+
+    <string name="tailnet_notify">登入和故障</string>
+    <string name="tailnet_notify_body">離開應用程式時，在它需要登入或停止運作時通知你。</string>
+
+    <string name="bg_watch_tailnet_title">%1$s 已連線</string>
+    <string name="bg_watch_tailnet_body">沒有主機連線 · 保持在線以便快速連線</string>
+    <string name="bg_watch_line">%1$s · %2$s</string>
+    <string name="tailnet_alert_sign_in">%1$s 需要登入</string>
+    <string name="tailnet_alert_sign_in_body">登入之前無法連到它上面的主機。輕觸以開啟 RexPocket。</string>
+    <string name="tailnet_alert_failed">%1$s 已停止運作</string>
+    <string name="tailnet_alert_failed_body">無法連到它上面的主機。輕觸以開啟 RexPocket 並重試。</string>
+
+    <string name="tile_label">RexPocket</string>
+    <string name="tile_pick">輕觸以選擇</string>
+    <string name="tile_gone">已移除 · 輕觸以選擇</string>
+    <string name="tile_picker_title">這個圖塊要連線什麼？</string>
+    <string name="tile_add">新增圖塊</string>
+    <string name="tile_add_body">在快速設定中連線和中斷。長按圖塊可回到這裡。</string>
+    <string name="tile_added">在圖塊 %1$d 上</string>
+    <string name="tile_add_manual">編輯快速設定，把 RexPocket %1$d 圖塊拖進來。</string>
+    <string name="tile_slots_full">三個圖塊都在使用中。在其中一個上選擇別的項目即可空出來。</string>
+    <string name="tile_slot_label">RexPocket %1$d</string>
+</resources>

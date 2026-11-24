@@ -94,6 +94,12 @@ person wants them, not as long as the screen. Code: `WatchService` (the anchor),
   `connected_hosts` meanwhile. **Always connected** connects the host at every launch and every
   restart, even after a Disconnect, and keeps it. At launch the app connects `atLaunch(...)`: the
   last host first, then `connected_hosts`, then the always-connected.
+- **Tailnets.** A tailnet has the same three background choices as a host (Follow, Always, Let
+  go), the same page and sheet items, and runs as its plan says (`TailnetControl`): by default up
+  while the app is open and, away, while a host on it is kept, then stopped after its linger. The
+  watch also runs for a tailnet alone (one kept Always), and a restart without a screen counts it in
+  what it brings back. A tailnet let go takes its hosts with it; one disconnected by hand keeps its
+  hosts off. See [tailnet-control.md](tailnet-control.md).
 - **Network and battery.** `NetworkWatcher` (a default-network callback) redials every host at once
   when the network changes or comes back. Away from the screen a host that stays down is retried
   with the same backoff, but capped at a minute instead of 8 s (`MAX_AWAY_BACKOFF_MS`); the screen
@@ -101,8 +107,9 @@ person wants them, not as long as the screen. Code: `WatchService` (the anchor),
   alarms: OkHttp's 30 s ping keeps a live socket honest, and Doze lets a foreground service's network
   through (more so once exempt).
 - **The watch notification** says how many hosts are connected and names them (with each one's
-  state when there are several), opens the app, and has Stop and, for one or two hosts, Disconnect
-  for each (a notification has room for three actions). Stop with no screen left turns the mode off
+  state, and the joined tailnet's, when there are several), opens the app, and has Stop and, while
+  the tailnet and the hosts number two at most, one action for each (a notification has room for
+  three actions); see notifications.md, "The watch notification and the tiles". Stop with no screen left turns the mode off
   and closes the connections (`connected_hosts` kept for the next start).
 
 ## Limits
@@ -111,7 +118,7 @@ person wants them, not as long as the screen. Code: `WatchService` (the anchor),
   the phone takes no pane on them and changes no desktop's size.
 - Each connected host is one control connection and its status events; a pane stream only for the
   pane on screen. Hosts the person does not use can be disconnected.
-- One tailnet node serves every tailnet host, as before.
+- One tailnet node serves every tailnet host, as before; it starts and stops on its own plan (tailnet-control.md).
 - A host saved twice (LAN and tailnet address of the same Rex) is two connections to one Rex, and
   its alerts come twice, once per host.
 - Seen state is not shared with the desktop: Rex has none, and does not say what other clients show

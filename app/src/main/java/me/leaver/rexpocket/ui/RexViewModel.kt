@@ -42,6 +42,7 @@ import me.leaver.rexpocket.core.SshCredentials
 import me.leaver.rexpocket.core.SshSettings
 import me.leaver.rexpocket.core.SshTunnel
 import me.leaver.rexpocket.core.TailnetBackend
+import me.leaver.rexpocket.core.TailnetPolicy
 import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.Trouble
 import kotlinx.coroutines.flow.emptyFlow
@@ -211,8 +212,10 @@ class RexViewModel @JvmOverloads constructor(
      * signing in, connecting, connected as a device - or why it is not. See [tailnetStage].
      */
     val tailnetStage: StateFlow<TailnetStage> by lazy {
-        combine(tailnet, tailnetStatus, tailnetError) { settings, status, error ->
+        combine(tailnet, tailnetStatus, tailnetError, tailnetView) { settings, status, error, view ->
             tailnetStage(
+                running = view.running,
+                off = view.off,
                 joined = settings.enabled,
                 backendState = status.backendState,
                 authUrl = status.authUrl,
@@ -509,9 +512,30 @@ class RexViewModel @JvmOverloads constructor(
 
     /** Waits for a resumed connection to go back to its pane; see [resumeInto]. */
     private var resumeJob: Job? = null
-    private var tailnetJob: Job? = null
-    private val _tailnetError = MutableStateFlow<TailnetFailure?>(null)
-    val tailnetError: StateFlow<TailnetFailure?> = _tailnetError
+    /** When each tailnet runs: by hand, while open or when needed, in the background. */
+    private val control: TailnetControl get() = connections.control
+
+    /** Why the joined node did not start, from its last start. */
+    val tailnetError: StateFlow<TailnetFailure?> = combine(tailnet, control.runs) { settings, runs ->
+        runs[settings.backend.storageKey]?.error?.let { TailnetFailure(it.ifBlank { null }) }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** The joined tailnet as its page, chip and sheet show it: its choices, its run, its hosts. */
+    val tailnetView: StateFlow<TailnetView> = combine(tailnet, control.runs, control.policies, connections.links) { settings, runs, policies, _ ->
+        val id = settings.backend.storageKey
+        val run = runs[id] ?: TailnetRun()
+        TailnetView(
+            id = id,
+            name = settings.backend.displayName,
+            backend = settings.backend,
+            joined = settings.enabled,
+            policy = policies.of(id),
+            off = policies.isOff(id),
+            running = run.running,
+            lingerUntil = run.lingerUntil,
+            hosts = connections.hostsOn(id),
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, TailnetView(id = tailnet.value.backend.storageKey, name = tailnet.value.backend.displayName, backend = tailnet.value.backend))
 
     /** The session being opened or created from the list, shown as busy until it is on screen. */
     private val _opening = MutableStateFlow<Opening?>(null)
@@ -651,8 +675,7 @@ class RexViewModel @JvmOverloads constructor(
         connections.detachScreen()
         if (!Alerts.enabled.value) {
             // The panes go back to the desktop's size.
-            connections.disconnectAll(forget = false)
-            nodes.all.forEach { it.stopAsync() }
+            connections.closeWithScreen()
             Alerts.unwatch(getApplication())
         }
         super.onCleared()
@@ -670,21 +693,14 @@ class RexViewModel @JvmOverloads constructor(
         store.setTailnet(TailnetSettings(backend, enabled = true, hostname = hostname.trim(), managementUrl = managementUrl.trim()))
         val next = store.tailnet()
         tailnet.value = next
-        // Only one node runs: the one that was joined before gives way.
-        if (previous.enabled && previous.backend != backend) nodeFor(previous.backend).stopAsync()
-        startTailnet(next, setupKey)
-    }
-
-    /** Brings the selected node up for [settings]; the login it already has makes this a plain restart. */
-    private fun startTailnet(settings: TailnetSettings, setupKey: String = "") {
-        tailnetJob?.cancel()
-        _tailnetError.value = null
-        tailnetJob = viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                runCatching { nodeFor(settings.backend).start(connections.configFor(settings, setupKey)) }
-                    .onFailure { _tailnetError.value = TailnetFailure(it.message) }
-            }
-        }
+        // Only one node runs: the one that was joined before is no longer joined, and its plan
+        // stops it. A join is a connect by hand, and it hands the setup key to this one start.
+        Diagnostics.event(CONN_TAG, "tailnet ${if (previous.enabled && previous.backend != backend) "switched" else "joined"}")
+        val id = backend.storageKey
+        control.switchOn(id)
+        // Started first, so the plan finds it starting and does not start it again without the key.
+        viewModelScope.launch { runCatching { control.start(id, setupKey) } }
+        control.begin()
     }
 
     /** Starts the joined node again after its start failed: the home screen's Try again. */
@@ -692,7 +708,42 @@ class RexViewModel @JvmOverloads constructor(
         val current = tailnet.value
         if (!current.enabled) return
         Diagnostics.event(CONN_TAG, "restarting the tailnet")
-        startTailnet(current)
+        control.retry(current.backend.storageKey)
+    }
+
+    /** Connects the joined tailnet by hand; it stays as its choices say from then on. */
+    fun connectTailnet(hosts: List<SavedHost> = emptyList()) {
+        connections.connectTailnet(tailnet.value.backend.storageKey, hosts)
+    }
+
+    /**
+     * Disconnects the joined tailnet by hand, and the hosts connected through it, which it gives
+     * back for the snackbar's Reconnect. It stays off until it, or a host on it, is connected again.
+     */
+    fun disconnectTailnet(): List<SavedHost> {
+        val dropped = connections.disconnectTailnet(tailnet.value.backend.storageKey)
+        if (focusId.value != null && dropped.any { it.id == focusId.value }) disconnect(focusId.value)
+        return dropped
+    }
+
+    /** What the home is asked to show from outside it: a tile's long press, a notification's Disconnect. */
+    val homeRequest = MutableStateFlow<HomeRequest?>(null)
+
+    /** Opens a host's or a tailnet's page ([me.leaver.rexpocket.core.Connectable.key]). */
+    fun openPage(key: String) {
+        route.value = Route.Home
+        homeRequest.value = HomeRequest.Page(key)
+    }
+
+    /** Asks whether to disconnect the tailnet, naming the hosts on it: a tile's or a notification's tap. */
+    fun askTailnetOff() {
+        route.value = Route.Home
+        homeRequest.value = HomeRequest.ConfirmTailnetOff
+    }
+
+    /** Changes tailnet [id]'s choices, and acts on them now. */
+    fun setTailnetPolicy(id: String, policy: TailnetPolicy) {
+        control.setPolicy(id, policy)
     }
 
     /** Leaves the tailnet: the node stops and its login stays in the app for the next join. */
@@ -702,8 +753,8 @@ class RexViewModel @JvmOverloads constructor(
         // The name is kept: rejoining later should not ask for it again.
         store.setTailnet(current.copy(enabled = false))
         tailnet.value = store.tailnet()
-        tailnetJob?.cancel()
-        nodeFor(current.backend).stopAsync()
+        // Not joined any more: its plan stops the node.
+        control.evaluate()
     }
 
     fun saveHost(host: SavedHost) {
@@ -986,9 +1037,9 @@ class RexViewModel @JvmOverloads constructor(
      * a reconnect rather than a new one.
      */
     fun restore() {
-        // A phone that has joined a tailnet keeps the node up: the Tailscale row is the honest
-        // answer to "am I in the tailnet", and a host on a tailnet can then be dialed at once.
-        if (tailnet.value.enabled) startTailnet(tailnet.value)
+        // A joined tailnet comes up as its choices say: while the app is open (the default), the
+        // node is up at once and a host on it is dialed at once; when needed, with its first host.
+        control.begin()
         if (openedFromAlert || openedFromShare || route.value != Route.Home || focusId.value != null) return
         // Every host the person connected and did not disconnect, the one open last first, and
         // the hosts set to be always connected.
@@ -996,6 +1047,8 @@ class RexViewModel @JvmOverloads constructor(
         val saved = store.list()
         val wanted = background.value.atLaunch(last?.id, store.connectedHosts(), saved.map { it.id })
             .mapNotNull { id -> saved.firstOrNull { it.id == id } }
+            // A tailnet disconnected by hand stays off, and its hosts with it, until asked for.
+            .filter { !connections.tailnetSwitchedOff(it) }
         if (wanted.isEmpty()) return
         val resume = terminalWasOpen || reopenLastTab.value
         Diagnostics.event(CONN_TAG, "launch: ${wanted.size} hosts, ${if (resume) "back to the last tab" else "the list"} (killed on the terminal: $terminalWasOpen)")
@@ -1501,6 +1554,13 @@ private val teardown = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 private const val UPLOAD_DONE_MS = 1_500L
 
 /** What a failure says in the report: its kind, then whatever the exception carried. */
+/** Something the home is asked to show from outside it; see [RexViewModel.homeRequest]. */
+sealed interface HomeRequest {
+    data class Page(val key: String) : HomeRequest
+
+    data object ConfirmTailnetOff : HomeRequest
+}
+
 /** Why the tailnet node did not start: what the node said, when it said anything ([tailnetFailureText]). */
 data class TailnetFailure(val detail: String?)
 

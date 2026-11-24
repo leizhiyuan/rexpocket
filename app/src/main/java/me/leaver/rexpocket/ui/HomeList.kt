@@ -703,7 +703,7 @@ internal fun HomeBottomBar(
  * the full card in the list instead.
  */
 @Composable
-internal fun TailnetChip(network: String, said: String, healthy: Boolean, onClick: () -> Unit) {
+internal fun TailnetChip(network: String, said: String, healthy: Boolean, on: Boolean = true, onClick: () -> Unit) {
     Row(
         Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(50)).clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = said }
@@ -714,7 +714,8 @@ internal fun TailnetChip(network: String, said: String, healthy: Boolean, onClic
             Modifier.clip(RoundedCornerShape(50)).background(Colors.surface).padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Dot(if (healthy) Colors.ok else Colors.amber, 8.dp)
+            // Grey while disconnected, by hand or until a host needs it: quiet, not wrong.
+            Dot(if (!on) Colors.muted else if (healthy) Colors.ok else Colors.amber, 8.dp)
             Spacer(Modifier.width(6.dp))
             Text(network, color = Colors.ink, fontSize = TextStyles.label, fontWeight = FontWeight.Medium, maxLines = 1)
         }

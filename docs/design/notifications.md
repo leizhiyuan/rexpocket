@@ -59,6 +59,35 @@ Tapping any of them opens exactly that pane (`openAlert`, a one-use token per no
   control characters out, direction overrides and invisible formatting gone, 300 characters at most.
   So a program cannot pose as another pane (Security: say which terminal it came from).
 
+## The watch notification and the tiles: hosts and tailnets alike
+
+The watch notification and the Quick Settings tiles treat a host and a tailnet the same way
+(tailnet-control.md, "One model for hosts and tailnets"):
+
+- **Lines.** With more than one item, one line each, the joined tailnet first, then each connected
+  host: "Tailscale · connected", "mac · connecting…", in the state words the pages and tiles use.
+  A tailnet alone (kept Always, no host) titles it "Tailscale connected", "No host connected · it
+  stays up for a quick connect".
+- **Actions, three at most.** Stop always comes first. Then one action per item, tailnets first
+  ("Connect Tailscale" when it is off, "Disconnect Tailscale" otherwise; "Disconnect mac"), while
+  every item fits in the two slots left. With three or more items there are none beyond Stop, so no
+  host or tailnet has an action another lacks; the tiles and the app have them all. A tailnet that
+  hosts are connected through does not go from the notification: its action opens the app on the
+  confirm that names them.
+- **Tailnet trouble.** While away, a tailnet that needs a sign-in or stopped working posts one
+  notification on Needs you ("Tailscale needs a sign-in"), which opens the app; it goes once that is
+  over or the app is on screen. Its page's "Sign-in and failures" turns it off.
+- **Tiles.** A pool of three (`RexTile1` to `RexTile3`): tile services are declared in the manifest,
+  so there cannot be one per host. Each is bound to a host or a tailnet: the first tap of an
+  unbound tile opens a picker, and a page's **Add a tile** binds the first free one (or the one it
+  is on) and, on Android 13 and later, asks Android to add it (`requestAddTileService`). A tap
+  connects what is off and disconnects the rest (a tailnet hosts use asks first, in the app); the
+  label is its name, the subtitle its state; a long press opens its page
+  (`QS_TILE_PREFERENCES`). Connecting from a tile starts the watch when background mode is on, and
+  opens the app when it is off, since the app is then what keeps the connection.
+  Why a pool and not one tile with a picker: a tap should act, not ask; three cover the tailnet and
+  the two hosts a person most uses, and a tile whose item was removed says so and asks again.
+
 ## Clearing
 
 A notification goes when its record goes (`program_status_removed`, a clear, the pane closing), when

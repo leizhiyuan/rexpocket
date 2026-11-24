@@ -43,6 +43,7 @@ internal class FakeTailnetNode : TailnetNode {
     @Volatile var socksPort = 0
     @Volatile var startError: String? = null
     @Volatile var starts = 0
+    @Volatile var stops = 0
 
     /** The node's reason for its last failed dial, by host. */
     val dialErrors = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -62,8 +63,10 @@ internal class FakeTailnetNode : TailnetNode {
         startError?.let { throw TailnetException(it) }
         return socksPort
     }
-    override fun stop() = Unit
-    override fun stopAsync() = Unit
+    override fun stop() {
+        stops++
+    }
+    override fun stopAsync() = stop()
 }
 
 /** What a node reports at each stage, with a tailnet of five devices. */
@@ -125,8 +128,11 @@ internal fun tailnetModel(
     open: SavedHost? = null,
     backend: TailnetBackend = TailnetBackend.Tailscale,
     joined: Boolean = true,
+    /** Each tailnet's choices and the ones disconnected by hand, as an earlier run left them. */
+    policies: me.leaver.rexpocket.core.TailnetPolicies? = null,
 ): RexViewModel {
     val app = freshApp()
+    policies?.let { me.leaver.rexpocket.data.TailnetPolicyStore(app).write(it) }
     val store = HostStore(app)
     hosts.forEach(store::upsert)
     store.setLastHost(open?.id)

@@ -18,6 +18,8 @@ import me.leaver.rexpocket.core.AlertEvent
 import me.leaver.rexpocket.core.AlertKind
 import me.leaver.rexpocket.core.AlertPrefs
 import me.leaver.rexpocket.core.BackgroundHosts
+import me.leaver.rexpocket.core.BackgroundKeep
+import me.leaver.rexpocket.core.Connectable
 import me.leaver.rexpocket.core.HostBackground
 import me.leaver.rexpocket.core.on
 import me.leaver.rexpocket.core.with
@@ -49,7 +51,10 @@ internal fun NotificationsSheet(
     onPrefs: (AlertPrefs) -> Unit,
     hosts: List<SavedHost> = emptyList(),
     background: BackgroundHosts = BackgroundHosts(),
-    onHostBackground: (String, HostBackground) -> Unit = { _, _ -> },
+    /** The tailnets joined, each with its page like a host's. */
+    tailnets: List<TailnetView> = emptyList(),
+    /** Opens a host's or a tailnet's page. */
+    onPage: (Connectable) -> Unit = {},
 ) {
     val context = LocalContext.current
     // Read again whenever the app comes back: the person may have changed them in Android's settings.
@@ -60,24 +65,11 @@ internal fun NotificationsSheet(
     }
     val checks = remember(resumed, alerts) { BackgroundChecks.read(context) }
     val blocked = remember(resumed) { AlertKind.entries.associateWith { Alerts.channelBlocked(context, it) } }
-    var hostPage by rememberSaveable { mutableStateOf<String?>(null) }
     val on = stringResource(R.string.alerts_on)
     val off = stringResource(R.string.alerts_off)
     val fix = stringResource(R.string.bg_fix)
     fun state(value: Boolean) = if (value) on else off
 
-    val pageHost = hostPage?.let { id -> hosts.firstOrNull { it.id == id } }
-    if (pageHost != null) {
-        HostBackgroundSheet(
-            host = pageHost,
-            choices = background.of(pageHost.id),
-            defaults = prefs,
-            onChoices = { onHostBackground(pageHost.id, it) },
-            onBack = { hostPage = null },
-            onDismiss = onDismiss,
-        )
-        return
-    }
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.notifications_title)) {
         Group {
             SheetItem(
@@ -138,6 +130,19 @@ internal fun NotificationsSheet(
                 onClick = { BackgroundChecks.open(context, BackgroundChecks.oemTips()) },
             )
         }
+        // Each tailnet and each host has its page, the same for both: what it does in the background.
+        if (tailnets.isNotEmpty()) {
+            Group(stringResource(R.string.bg_group_tailnets)) {
+                for (t in tailnets) {
+                    SheetItem(
+                        label = t.name,
+                        icon = R.drawable.ic_tailnet,
+                        detail = stringResource(tailnetKeepWord(t.policy.keep)),
+                        opens = true,
+                    ) { onPage(Connectable.tailnet(t.id)) }
+                }
+            }
+        }
         if (hosts.isNotEmpty()) {
             Group(stringResource(R.string.bg_group_hosts)) {
                 for (host in hosts) {
@@ -145,9 +150,8 @@ internal fun NotificationsSheet(
                         label = host.label.ifBlank { host.host },
                         icon = R.drawable.ic_host,
                         detail = hostSummary(background.of(host.id)),
-                        keepOpen = true,
                         opens = true,
-                    ) { hostPage = host.id }
+                    ) { onPage(Connectable.host(host.id)) }
                 }
             }
         }
@@ -205,61 +209,9 @@ internal fun hostSummary(choices: HostBackground): String {
     return if (choices.notify) stays else stays + " · " + stringResource(R.string.bg_host_silent)
 }
 
-/**
- * One host's page: kept connected in the background, always connected, and its notifications,
- * each kind following the page's default until it is set here.
- */
-@Composable
-private fun HostBackgroundSheet(
-    host: SavedHost,
-    choices: HostBackground,
-    defaults: AlertPrefs,
-    onChoices: (HostBackground) -> Unit,
-    onBack: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val on = stringResource(R.string.alerts_on)
-    val off = stringResource(R.string.alerts_off)
-    fun state(value: Boolean) = if (value) on else off
-    ActionSheet(onDismiss = onDismiss, title = host.label.ifBlank { host.host }, onBack = onBack) {
-        Group {
-            SheetItem(
-                label = stringResource(R.string.bg_stay),
-                supporting = stringResource(R.string.bg_stay_body),
-                // Always connected keeps it whatever this says.
-                detail = state(choices.kept),
-                enabled = !choices.always,
-                keepOpen = true,
-            ) { onChoices(choices.copy(stay = !choices.stay)) }
-            SheetItem(
-                label = stringResource(R.string.bg_always),
-                supporting = stringResource(R.string.bg_always_body),
-                detail = state(choices.always),
-                keepOpen = true,
-            ) { onChoices(choices.copy(always = !choices.always)) }
-            SheetItem(
-                label = stringResource(R.string.bg_notify),
-                detail = state(choices.notify),
-                keepOpen = true,
-            ) { onChoices(choices.copy(notify = !choices.notify)) }
-        }
-        Group(stringResource(R.string.notifications_group_when), icons = false) {
-            val effective = choices.copy(notify = true).prefs(defaults)
-            for ((event, label) in EVENTS) {
-                val value = effective.on(event)
-                val own = event in choices.overrides
-                SheetItem(
-                    label = stringResource(label),
-                    detail = if (own) state(value) else stringResource(R.string.bg_default, state(value)),
-                    enabled = choices.notify,
-                    keepOpen = true,
-                ) { onChoices(choices.with(event, !value, defaults)) }
-            }
-            if (choices.overrides.isNotEmpty()) {
-                SheetItem(stringResource(R.string.bg_reset), enabled = choices.notify, keepOpen = true) {
-                    onChoices(choices.copy(overrides = emptyMap()))
-                }
-            }
-        }
-    }
+/** A tailnet's background choice in a word, for its row. */
+internal fun tailnetKeepWord(keep: BackgroundKeep): Int = when (keep) {
+    BackgroundKeep.Follow -> R.string.bg_keep_tailnet_follow
+    BackgroundKeep.Always -> R.string.bg_keep_tailnet_always
+    BackgroundKeep.Off -> R.string.bg_keep_tailnet_off
 }

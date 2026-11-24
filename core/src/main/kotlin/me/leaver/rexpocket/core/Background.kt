@@ -52,6 +52,21 @@ data class HostBackground(
     /** Whether this host is kept connected while the app is away. */
     val kept: Boolean get() = stay || always
 
+    /** These choices as the background choice hosts and tailnets share. */
+    val keep: BackgroundKeep
+        get() = when {
+            always -> BackgroundKeep.Always
+            stay -> BackgroundKeep.Follow
+            else -> BackgroundKeep.Off
+        }
+
+    /** These choices with [keep] as the background choice. */
+    fun withKeep(keep: BackgroundKeep): HostBackground = when (keep) {
+        BackgroundKeep.Always -> copy(stay = true, always = true)
+        BackgroundKeep.Follow -> copy(stay = true, always = false)
+        BackgroundKeep.Off -> copy(stay = false, always = false)
+    }
+
     /** The choices that apply to this host: [base] (the page's defaults) with this host's on top. */
     fun prefs(base: AlertPrefs): AlertPrefs {
         if (!notify) return AlertEvent.entries.fold(base) { p, e -> p.with(e, false) }
