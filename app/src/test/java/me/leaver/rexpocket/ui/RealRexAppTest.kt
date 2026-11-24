@@ -283,12 +283,12 @@ class RealRexAppTest {
         awaitHeld(m)
         val pane = shown(m)
         // The command line says $((40+2)); only its output reads end-42-mark.
-        for (label in listOf(R.string.palette_clear_terminal, R.string.palette_reset_terminal)) {
+        for ((label, confirm) in listOf(R.string.palette_clear_terminal to R.string.action_clear, R.string.palette_reset_terminal to R.string.confirm_reset_action)) {
             runBlocking { desk.type(sid, pane, "seq 1 30; echo end-\$((40+2))-mark\n") }
             compose.awaitThat { runBlocking { desk.text(sid, pane) }.contains("\nend-42-mark") }
             palette(string(label))
-            // Clear and Reset ask first.
-            val confirm = if (label == R.string.palette_clear_terminal) R.string.action_clear else R.string.confirm_reset_action
+            // Each asks first, as Close pane does.
+            compose.awaitThat { compose.onAllNodes(hasText(string(confirm)) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
             compose.onNode(hasText(string(confirm)) and hasClickAction()).performClick()
             compose.awaitThat { !runBlocking { desk.text(sid, pane) }.contains("end-42-mark") }
         }

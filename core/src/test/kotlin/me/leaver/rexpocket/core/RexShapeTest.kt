@@ -327,12 +327,15 @@ class RexShapeTest {
                 phone.call("block.method", pane(s, split).put("method", "clear"))
                 phone.call("block.method", pane(s, split).put("method", "reset"))
             }
-            step("phone lists a folder with a file, then one that is missing (Insert path)") {
+            // One kind of entry per folder: a listing's order is the filesystem's, and a shape's
+            // alternatives follow it.
+            step("phone lists a folder's folders, a folder's files, then one that is missing (Insert path)") {
                 val dir = java.nio.file.Files.createTempDirectory("rexpocket-shape").toFile()
                 try {
                     File(dir, "sub").mkdir()
-                    File(dir, "file.txt").writeText("x")
+                    File(dir, "sub/file.txt").writeText("x")
                     phone.call("block.method", pane(s, split).put("method", "list_dir").put("args", JSONObject().put("path", dir.path).put("files", true)))
+                    phone.call("block.method", pane(s, split).put("method", "list_dir").put("args", JSONObject().put("path", File(dir, "sub").path).put("files", true)))
                     phone.call("block.method", pane(s, split).put("method", "list_dir").put("args", JSONObject().put("path", File(dir, "nope").path)))
                 } finally {
                     dir.deleteRecursively()
