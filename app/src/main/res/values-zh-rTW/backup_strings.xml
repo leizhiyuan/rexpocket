@@ -50,4 +50,5 @@
     <string name="backup_problem_value">%1$s 的值這個應用程式不認得。</string>
     <string name="backup_problem_unknown_host">%1$s 提到了 %2$s，但它不是檔案裡的主機。</string>
     <string name="backup_problem_secrets">加密的金鑰無法讀取（%1$s）。</string>
+    <string name="backup_setting_activity_by_session">依工作階段顯示活動</string>
 </resources>

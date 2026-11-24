@@ -168,7 +168,9 @@ What the desktop shows that the phone cannot get from Rex:
   **unconfirmed**. The phone shows the session's label.
 - **The failure box text** (`failed: prompt_failed: 40…`): the phone shows `msg`; whether Rex adds
   the word "failed:" itself or the program wrote it is **unconfirmed**.
-- By-session arrangement: the phone always shows by priority, with each row naming its session.
+- By-session arrangement and idle: built (this change), as the home's Activity chip
+  (home.md, "Filters"): Rex's two arrangements, and Include idle with the phone's own seen marks
+  standing in for the desk's (seen is per record, and a desk looking counts; home.md, "Seen").
 
 Tests: `ActivityTest` (core, ScriptedRex): grouping, priority, a split tab, records dropped by Rex
 (fails without this change), ages; `ActivityViewTest` (app, JVM and emulator): the eye shows failed
@@ -194,8 +196,9 @@ not done yet, with an estimate. Skip = not for this app, with the reason.
 | Command Palette (`client.palette.toggle`, `shift+cmd+p`) | Build now | command-palette.md |
 | Toggle Activity / View Activity (`client.sidebar.activity.toggle`, `pane.view_activity`) | Build now | the eye, above |
 | `terminal.program_status_removed` (docs:events) | Build now | was ignored |
-| Show Activity by Session (docs:mac-actions) | Adapt, 0.5 day | a second arrangement of the same rows |
-| Idle in Activity, seen/unseen, Mark as Unread (docs:mac-settings, `client.tab.unread`) | Adapt, 1-2 days | needs the phone's own seen state per tab (a tab shown on the phone counts as seen), stored per host |
+| Show Activity by Session, by Priority (docs:mac-actions) | Built (this change) | the home's Activity chip, its By priority and By session chips |
+| Include idle processes in activity (docs:mac-settings) | Built (this change) | the Activity view's Include idle: off, idle tabs until seen (the phone's per-record seen marks, a desk's look included); on, always |
+| Mark as Unread (`client.tab.unread`) | Adapt, 0.5 day | the phone's seen marks can be taken back (Undo does); a sheet item would do it on demand |
 | Custom actions in the palette (`rex.action`; `client.keymap` lists them, `client.action` runs them; docs:actions, docs:api) | Adapt, 1-2 days | the palette's next step: list the configuration file's actions with a `title` and no required `args`, run with `origin: palette`; the shape of `client.keymap`'s `actions` must be checked on a real Rex first |
 | Prompts from actions (`rex.ui`, `client_prompt_requested`, answered with `client.reply`; docs:api) | Adapt, 2 days | in the palette's sheet; without it an action that asks waits until another app answers |
 | Move Tab, Move Tab Backward/Forward (`session.move_window`); session order (`session.move`) | Done | Move up and Move down in the home's session and tab sheets and in TalkBack's actions ("Ordering") |

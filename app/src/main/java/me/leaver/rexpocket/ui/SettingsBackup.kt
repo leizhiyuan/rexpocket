@@ -80,6 +80,7 @@ data class PhoneSettings(
     val backgroundMode: Boolean,
     val filter: HomeFilter,
     val reopenLastTab: Boolean,
+    val activity: ActivityPrefs = ActivityPrefs(),
     val folds: HomeFolds,
     val background: BackgroundHosts,
     val quickReplies: List<String>,
@@ -93,6 +94,8 @@ data class SettingsWrite(
     val backgroundMode: Boolean? = null,
     val filter: HomeFilter? = null,
     val reopenLastTab: Boolean? = null,
+    val activityBySession: Boolean? = null,
+    val activityIncludeIdle: Boolean? = null,
     val folds: HomeFolds? = null,
     val background: Map<String, HostBackground> = emptyMap(),
     val quickReplies: List<String>? = null,
@@ -180,6 +183,8 @@ class SettingsBackupper(
             home = HomePrefs(
                 filter = now.filter.name,
                 reopenLastTab = now.reopenLastTab,
+                activityBySession = now.activity.bySession,
+                includeIdle = now.activity.includeIdle,
                 hostOrder = hosts.map { it.label },
                 folded = now.folds.hosts.mapNotNull { label[it] }.toSet(),
                 unfolded = now.folds.openHosts.mapNotNull { label[it] }.toSet(),
@@ -330,6 +335,8 @@ class SettingsBackupper(
             backgroundMode = backgroundMode(),
             homeFilter = now.filter.name,
             reopenLastTab = now.reopenLastTab,
+            activityBySession = now.activity.bySession,
+            includeIdle = now.activity.includeIdle,
             hosts = hosts.map { it.known() },
             hostBackground = now.background.hosts,
             folded = now.folds.hosts,
@@ -421,6 +428,8 @@ class SettingsBackupper(
                     backgroundMode = b.backgroundMode,
                     filter = b.home?.filter?.let(HomeFilter::of),
                     reopenLastTab = b.home?.reopenLastTab,
+                    activityBySession = b.home?.activityBySession,
+                    activityIncludeIdle = b.home?.includeIdle,
                     folds = folds,
                     background = b.hostBackground.mapNotNull { (n, bg) -> id(n)?.let { it to bg } }.toMap(),
                     quickReplies = b.quickReplies,
@@ -711,6 +720,8 @@ private fun settingName(key: SettingKey): String = stringResource(
         SettingKey.BackgroundMode -> R.string.alerts_title
         SettingKey.HomeFilter -> R.string.backup_setting_filter
         SettingKey.ReopenLastTab -> R.string.reopen_last_tab
+        SettingKey.ActivityBySession -> R.string.backup_setting_activity_by_session
+        SettingKey.IncludeIdle -> R.string.activity_include_idle
         SettingKey.HostOrder -> R.string.backup_setting_order
         SettingKey.HostFolds -> R.string.backup_setting_folds
         SettingKey.HostBackground -> R.string.backup_setting_host_background
@@ -728,6 +739,7 @@ private fun settingValue(v: Any?): String = when (v) {
     is TextSize -> stringResource(choice(v).label)
     is String -> when (v) {
         HomeFilter.All.name -> stringResource(R.string.filter_all)
+        HomeFilter.Activity.name -> stringResource(R.string.filter_activity)
         HomeFilter.NeedsYou.name -> stringResource(R.string.backup_filter_needs_you)
         HomeFilter.Running.name -> stringResource(R.string.backup_filter_running)
         else -> v

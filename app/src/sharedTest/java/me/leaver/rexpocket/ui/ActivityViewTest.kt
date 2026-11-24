@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -168,6 +169,61 @@ class ActivityViewTest {
         inSheet(string(R.string.status_details_copy)).performScrollTo().performClick()
         val clip = compose.activity.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.getItemAt(0)?.text.toString()
         assertTrue(clip, clip.contains("msg: Found 3 files") && clip.contains("home lists: Running"))
+    }
+
+    private fun scrollTo(tag: String) {
+        compose.onNode(androidx.compose.ui.test.hasScrollToIndexAction()).performScrollToNode(hasTestTag(tag))
+        compose.waitForIdle()
+    }
+
+    private fun exists(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    /**
+     * The Activity chip: every tab a program reported on, grouped as Rex's "Show Activity by
+     * Priority" groups them - Waiting, Failed, Done, Running, Idle - or by session. An idle tab is
+     * there until it is seen, unless Include idle is on; both choices are kept for the next start.
+     */
+    @Test
+    fun activityGroupsEveryTabByPriorityOrBySessionAndIdleUntilSeen() {
+        val m = start()
+        val waiting = tabs(m, other)[1]
+        val done = tabs(m, other)[0]
+        val running = tabs(m, shown)[0]
+        val idle = tabs(m, shown)[1]
+        desk.rex.report(waiting.blocks[0].id, "blocked", kind = "question", msg = "Which branch?", app = "claude")
+        desk.rex.report(done.blocks[0].id, "done", app = "cargo")
+        desk.rex.report(running.blocks[0].id, "working", app = "pi")
+        desk.rex.report(idle.blocks[0].id, "idle", app = "claude")
+        compose.awaitThat { m.pocket.value.blockStatus.size == 4 }
+        chip(HomeFilter.Activity).performClick()
+        compose.waitForIdle()
+        assertTrue(exists(activityGroupTag(me.leaver.rexpocket.core.ActivityGroup.Waiting)))
+        row(waiting.id).assertExists()
+        scrollTo(activityGroupTag(me.leaver.rexpocket.core.ActivityGroup.Idle))
+        row(idle.id).assertExists()
+        // Idle is never in Needs you's or Running's count.
+        chip(HomeFilter.NeedsYou).assert(hasText(string(R.string.filter_needs_you, 2)))
+        chip(HomeFilter.Running).assert(hasText(string(R.string.filter_running, 1)))
+
+        // Seen, the idle tab leaves the view; Include idle brings it back.
+        compose.runOnUiThread { m.markSeen(desk.host.id, listOf(idle.blocks[0].id)) }
+        compose.awaitThat { rowGone(idle.id) }
+        scrollTo(ACTIVITY_IDLE_TAG)
+        compose.onNodeWithTag(ACTIVITY_IDLE_TAG).performClick()
+        compose.waitForIdle()
+        scrollTo(activityGroupTag(me.leaver.rexpocket.core.ActivityGroup.Idle))
+        row(idle.id).assertExists()
+
+        // By session: the same tabs under their sessions.
+        scrollTo(ACTIVITY_BY_SESSION_TAG)
+        compose.onNodeWithTag(ACTIVITY_BY_SESSION_TAG).performClick()
+        compose.waitForIdle()
+        scrollTo(activitySessionTag(shown))
+        scrollTo(activitySessionTag(other))
+        assertTrue(!exists(activityGroupTag(me.leaver.rexpocket.core.ActivityGroup.Waiting)))
+        val again = RexViewModel(compose.activity.application)
+        assertEquals(ActivityPrefs(bySession = true, includeIdle = true), again.activityPrefs.value)
+        assertEquals(HomeFilter.Activity, again.homeFilter.value)
     }
 
     /** A tab working in one pane and waiting in another is in both lists. */

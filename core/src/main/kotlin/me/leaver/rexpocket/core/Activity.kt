@@ -7,9 +7,9 @@ package me.leaver.rexpocket.core
 /**
  * The groups of the activity view, in the order they are shown: Rex's "Show Activity by Priority"
  * lists blocked, failed, done, working, idle. The states are the Program Status Protocol's
- * (`blocked`, `error`, `done`, `working`, `idle`). Idle is not shown: Rex keeps an idle tab in
- * Activity only until it has been seen, and whether a tab was seen is the desktop's own, not
- * something Rex tells another client.
+ * (`blocked`, `error`, `done`, `working`, `idle`). Idle shows in the Activity view only: until the
+ * phone (or a desk) saw it, or always with Include idle, as Rex's "Include idle processes in
+ * activity" does. Needs you, Running, the dots and the counts never count idle.
  */
 enum class ActivityGroup(val state: String) {
     /** Cannot go on until the person does something: a permission, a question, a login. */
@@ -17,6 +17,7 @@ enum class ActivityGroup(val state: String) {
     Failed("error"),
     Done("done"),
     Running("working"),
+    Idle("idle"),
     ;
 
     /**
@@ -79,7 +80,7 @@ data class TabAttention(
     val isRunning: Boolean get() = running != null
 
     /** It waits on the person, or failed or finished and that was not seen: it is in Needs you. */
-    val needsYou: Boolean get() = group != ActivityGroup.Running
+    val needsYou: Boolean get() = group == ActivityGroup.Waiting || group == ActivityGroup.Failed || group == ActivityGroup.Done
 
     /**
      * What else the tab has besides one report of group [shown], in Rex's order, for the words
@@ -89,7 +90,7 @@ data class TabAttention(
     fun alsoBesides(shown: ActivityGroup): List<Pair<ActivityGroup, Int>> = ActivityGroup.entries.mapNotNull { g ->
         val n = (counts[g] ?: 0) - if (g == shown) 1 else 0
         when {
-            n <= 0 -> null
+            n <= 0 || g == ActivityGroup.Idle -> null
             g == ActivityGroup.Running -> if (shown == ActivityGroup.Running) null else g to 1
             else -> g to n
         }
@@ -100,10 +101,15 @@ data class TabAttention(
 fun paneRecords(state: PocketState, blockId: String): List<ProgramRecord> =
     state.records[blockId] ?: listOfNotNull(state.blockStatus[blockId])
 
+/**
+ * [window]'s [TabAttention]. Idle records count only with [idle], and then those it does not say
+ * were seen: the Activity view's idle tabs (with Include idle, nothing is seen).
+ */
 fun tabAttention(
     window: WindowInfo,
     state: PocketState,
     seen: SeenCheck = { _, _ -> false },
+    idle: SeenCheck? = null,
 ): TabAttention? {
     var top: PaneReport? = null
     var topGroup: ActivityGroup? = null
@@ -114,6 +120,7 @@ fun tabAttention(
         for (record in paneRecords(state, block.id)) {
             val group = ActivityGroup.of(record.state) ?: continue
             if (group.needsSeeing && seen(block.id, record)) continue
+            if (group == ActivityGroup.Idle && (idle == null || idle(block.id, record))) continue
             counts[group] = (counts[group] ?: 0) + 1
             if (topGroup == null || group.ordinal < topGroup.ordinal) {
                 top = PaneReport(block, record)
@@ -130,14 +137,14 @@ fun tabAttention(
 }
 
 /** Each tab of [state] that has a report, with its attention, in the order of the sessions and their tabs. */
-private fun tabItems(state: PocketState, seen: SeenCheck): List<ActivityItem> {
+private fun tabItems(state: PocketState, seen: SeenCheck, idle: SeenCheck? = null): List<ActivityItem> {
     val items = ArrayList<ActivityItem>()
     val order = state.sessions.map { it.id } + state.views.keys.filter { id -> state.sessions.none { it.id == id } }
     for (sid in order) {
         val view = state.views[sid] ?: continue
         val label = state.sessions.firstOrNull { it.id == sid }?.label ?: view.label
         for (window in view.windows) {
-            val pane = tabAttention(window, state, seen) ?: continue
+            val pane = tabAttention(window, state, seen, idle) ?: continue
             items += ActivityItem(sid, label, window, pane.block, pane.record, sinceOf(state, pane.block.id, pane.record), pane)
         }
     }
@@ -168,8 +175,9 @@ private fun List<ActivityItem>.newestFirst(): List<ActivityItem> = withIndex()
 fun activitySections(
     state: PocketState,
     seen: SeenCheck = { _, _ -> false },
+    idle: SeenCheck? = null,
 ): List<ActivitySection> {
-    val items = tabItems(state, seen)
+    val items = tabItems(state, seen, idle)
     return ActivityGroup.entries.mapNotNull { group ->
         val inGroup = items.filter { it.group == group }.newestFirst()
         if (inGroup.isEmpty()) null else ActivitySection(group, inGroup)
@@ -184,7 +192,22 @@ fun activitySections(
 fun needsYouSections(
     state: PocketState,
     seen: SeenCheck = { _, _ -> false },
-): List<ActivitySection> = activitySections(state, seen).filter { it.group != ActivityGroup.Running }
+): List<ActivitySection> = activitySections(state, seen).filter { it.group != ActivityGroup.Running && it.group != ActivityGroup.Idle }
+
+/** One session's tabs in the Activity view's by-session arrangement. */
+data class SessionActivity(val sessionId: String, val label: String, val items: List<ActivityItem>)
+
+/**
+ * Rex's "Show Activity by Session": the same rows as [activitySections], each tab once, by its most
+ * pressing report, but under its session, in the order of the sessions and their tabs.
+ */
+fun activityBySession(
+    state: PocketState,
+    seen: SeenCheck = { _, _ -> false },
+    idle: SeenCheck? = null,
+): List<SessionActivity> = tabItems(state, seen, idle)
+    .groupBy { it.sessionId }
+    .map { (sid, items) -> SessionActivity(sid, items.first().sessionLabel, items) }
 
 /**
  * The home's Running: every tab with a working report, whatever else it has - a tab whose agent

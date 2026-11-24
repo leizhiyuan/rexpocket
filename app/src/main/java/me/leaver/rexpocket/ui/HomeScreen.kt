@@ -114,6 +114,8 @@ import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.HomeFolds
 import me.leaver.rexpocket.data.HomeMarks
 import me.leaver.rexpocket.core.markCovers
+import me.leaver.rexpocket.core.ActivityGroup
+import me.leaver.rexpocket.core.activityBySession
 import androidx.compose.material3.SnackbarDuration
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -161,6 +163,9 @@ internal fun HomeScreen(
     /** Which list shows: every host's tree, Needs you or Running. */
     filter: HomeFilter = HomeFilter.All,
     onHomeFilter: (HomeFilter) -> Unit = {},
+    /** The Activity view's arrangement and Include idle. */
+    activityPrefs: ActivityPrefs = ActivityPrefs(),
+    onActivityPrefs: (ActivityPrefs) -> Unit = {},
     /** Which done and failed panes were seen, by host and pane ([HomeMarks.key]). */
     seenMarks: Map<String, String> = emptyMap(),
     /** Marks panes seen; gives back the marks they had, for the Undo. */
@@ -411,7 +416,7 @@ internal fun HomeScreen(
         } else {
             connectedHosts.associate { h ->
                 val st = lives.getValue(h.id).state
-                h.id to searched(filterSections(st, filter, seenOn(h.id)), st, query)
+                h.id to searched(filterSections(st, filter, seenOn(h.id), activityPrefs), st, query)
             }
         }
         Column(Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().imePadding()) {
@@ -459,41 +464,80 @@ internal fun HomeScreen(
                         }
                     }
                     if (filter != HomeFilter.All) {
-                        var shown = 0
-                        for (host in connectedHosts) {
-                            val sections = filtered[host.id].orEmpty()
-                            if (sections.isEmpty()) continue
+                        // What a row's buttons do, on its host: Reply, Interrupt, Approve and Deny
+                        // where something may wait on the person (Needs you and Activity).
+                        val answers = filter == HomeFilter.NeedsYou || filter == HomeFilter.Activity
+                        fun opsFor(host: SavedHost): AttentionOps {
                             val ref = HostRef(host, lives[host.id])
-                            val first = shown++ == 0
-                            item(key = "filter-host-${host.id}") {
-                                if (!first) Spacer(Modifier.height(12.dp))
-                                HostItem(tree, ref, treeRows[host.id].orEmpty(), expanded = true, foldable = false)
-                            }
-                            attentionItems(
-                                sections,
-                                ref.state,
-                                keyPrefix = host.id,
-                                ops = AttentionOps(
-                                    open = { item -> onOpenPane(host, item.sessionId, item.window.id, item.block.id) },
-                                    manage = { item -> sheets.sheet = ManageTarget.Tab(host.id, item.sessionId, item.window.id) },
-                                    actionsOf = { item -> tabActions(HostRef(host, lives[host.id]), item.sessionId, item.window.id, ops, sheets).talkBack() },
-                                    reply = if (filter == HomeFilter.NeedsYou) {
-                                        { item -> replyTo = ReplyTarget(host.id, item.sessionId, item.block.id, paneTitle(item.block, item.record, ref.state.programs[item.block.id])) }
-                                    } else {
-                                        null
-                                    },
-                                    interrupt = if (filter == HomeFilter.NeedsYou) {
-                                        { item -> onInterrupt(host.id, item.sessionId, item.block.id) }
-                                    } else {
-                                        null
-                                    },
-                                    answer = if (filter == HomeFilter.NeedsYou) {
-                                        { item, approve -> onAnswer(host.id, item.sessionId, item.window.id, item.block.id, promptStamp(item.record), approve) }
-                                    } else {
-                                        null
-                                    },
-                                ),
+                            return AttentionOps(
+                                open = { item -> onOpenPane(host, item.sessionId, item.window.id, item.block.id) },
+                                manage = { item -> sheets.sheet = ManageTarget.Tab(host.id, item.sessionId, item.window.id) },
+                                actionsOf = { item -> tabActions(HostRef(host, lives[host.id]), item.sessionId, item.window.id, ops, sheets).talkBack() },
+                                reply = if (answers) {
+                                    { item -> replyTo = ReplyTarget(host.id, item.sessionId, item.block.id, paneTitle(item.block, item.record, ref.state.programs[item.block.id])) }
+                                } else {
+                                    null
+                                },
+                                interrupt = if (answers) {
+                                    { item -> onInterrupt(host.id, item.sessionId, item.block.id) }
+                                } else {
+                                    null
+                                },
+                                answer = if (answers) {
+                                    { item, approve -> onAnswer(host.id, item.sessionId, item.window.id, item.block.id, promptStamp(item.record), approve) }
+                                } else {
+                                    null
+                                },
                             )
+                        }
+                        var shown = 0
+                        if (filter == HomeFilter.Activity) {
+                            item(key = "activity-controls") { ActivityControls(activityPrefs, onActivityPrefs) }
+                        }
+                        if (filter == HomeFilter.Activity && !activityPrefs.bySession) {
+                            // By priority: one list across every connected host, group by group, as
+                            // Rex's Activity; a row names its host when more than one is connected.
+                            val named = connectedHosts.size > 1
+                            for (group in ActivityGroup.entries) {
+                                val rows = connectedHosts.flatMap { host ->
+                                    val ops = opsFor(host)
+                                    val st = lives.getValue(host.id).state
+                                    filtered[host.id].orEmpty().filter { it.group == group }.flatMap { it.items }
+                                        .map { HostedItem(it, st, ops, host.label.takeIf { named }) }
+                                }
+                                if (rows.isEmpty()) continue
+                                shown++
+                                item(key = "activity-group-${group.name}") {
+                                    ActivityCaption("${activityGroupName(group)} · ${rows.size}", activityTint(group), Modifier.testTag(activityGroupTag(group)))
+                                }
+                                hostedItems("activity-rows-${group.name}", rows)
+                            }
+                        } else {
+                            for (host in connectedHosts) {
+                                val sections = filtered[host.id].orEmpty()
+                                if (sections.isEmpty()) continue
+                                val ref = HostRef(host, lives[host.id])
+                                val first = shown++ == 0
+                                item(key = "filter-host-${host.id}") {
+                                    if (!first) Spacer(Modifier.height(12.dp))
+                                    HostItem(tree, ref, treeRows[host.id].orEmpty(), expanded = true, foldable = false)
+                                }
+                                if (filter == HomeFilter.Activity) {
+                                    // By session: each session's tabs, in Rex's order of its tabs.
+                                    val inList = sections.flatMap { it.items }.mapTo(HashSet()) { it.window.id }
+                                    val ops = opsFor(host)
+                                    for (session in activityBySession(ref.state, seenOn(host.id), activityPrefs.idle(seenOn(host.id)))) {
+                                        val rows = session.items.filter { it.window.id in inList }
+                                        if (rows.isEmpty()) continue
+                                        item(key = "activity-session-${host.id}-${session.sessionId}") {
+                                            ActivityCaption(session.label, Colors.muted, Modifier.testTag(activitySessionTag(session.sessionId)))
+                                        }
+                                        hostedItems("activity-session-rows-${host.id}-${session.sessionId}", rows.map { HostedItem(it, ref.state, ops, null) })
+                                    }
+                                } else {
+                                    attentionItems(sections, ref.state, keyPrefix = host.id, ops = opsFor(host))
+                                }
+                            }
                         }
                         if (shown == 0) {
                             item(key = "filter-empty") { ActivityEmpty(filter, live = connectedHosts.isNotEmpty(), searching = q.isNotEmpty()) }

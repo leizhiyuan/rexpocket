@@ -184,6 +184,7 @@ class RexViewModel @JvmOverloads constructor(
                 backgroundMode = Alerts.enabled.value,
                 filter = homeFilter.value,
                 reopenLastTab = reopenLastTab.value,
+                activity = activityPrefs.value,
                 folds = folds.value,
                 background = background.value,
                 quickReplies = quickReplies.value.items,
@@ -351,6 +352,14 @@ class RexViewModel @JvmOverloads constructor(
 
     /** The home's filter: All, Needs you or Running, kept for the next start. */
     val homeFilter = MutableStateFlow(HomeFilter.of(connections.marks.filter()))
+
+    /** The Activity view's arrangement and Include idle, kept for the next start. */
+    val activityPrefs = MutableStateFlow(ActivityPrefs(connections.marks.activityBySession(), connections.marks.activityIncludeIdle()))
+
+    fun setActivityPrefs(prefs: ActivityPrefs) {
+        connections.marks.setActivity(prefs.bySession, prefs.includeIdle)
+        activityPrefs.value = prefs
+    }
 
     fun setHomeFilter(filter: HomeFilter) {
         connections.marks.setFilter(filter.name)
@@ -613,6 +622,10 @@ class RexViewModel @JvmOverloads constructor(
         w.alertPrefs?.let(::setAlertPrefs)
         w.filter?.let(::setHomeFilter)
         w.reopenLastTab?.let(::setReopenLastTab)
+        if (w.activityBySession != null || w.activityIncludeIdle != null) {
+            val now = activityPrefs.value
+            setActivityPrefs(ActivityPrefs(w.activityBySession ?: now.bySession, w.activityIncludeIdle ?: now.includeIdle))
+        }
         w.folds?.let(::setFolds)
         w.background.forEach { (id, b) -> setHostBackground(id, b) }
         w.quickReplies?.let { setQuickReplies(QuickReplies(it)) }

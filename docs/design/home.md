@@ -69,6 +69,29 @@ confirm first, so they have no Undo, nor does Rename.
 
 ## Filters, search and the bottom bar
 
+**Activity** is a fourth chip, between All and Needs you: Rex's Activity view on the phone. It
+lists every connected host's tabs that a program reported on, each once, by its most pressing
+report (seen done and failed ones left out, as everywhere), arranged as Rex arranges it:
+
+- **By priority** (Rex's "Show Activity by Priority", the default): captions Waiting, Failed,
+  Done, Running, Idle, each with its count, as TalkBack headings; under each, one card of rows
+  from every connected host, newest first, a row naming its host when more than one is
+  connected. One list across hosts is what Rex's priority view is for: the most pressing thing
+  first, wherever it is.
+- **By session** (Rex's "Show Activity by Session"): under each host's header, each session's
+  caption and its tabs in Rex's order.
+- **Include idle** (Rex's "Include idle processes in activity"): off, an idle tab is there until
+  it was seen - shown on the phone, Mark as seen, or a desk looking at it, as done and failed
+  are; on, always. Idle is in the Activity view only: never in Needs you, Running, the counts or
+  the dots.
+
+The two choices are a pair of chips and a switch row at the top of the list, every one 48 dp and
+said as selected or on; they are kept, with the chip, and go in the settings backup. A row is the
+same row as Needs you's - tap opens the pane that reported, long press and ⋮ the tab sheet, the
+same TalkBack actions, Reply, Approve and Deny on a waiting row, Interrupt on a busy one - so the
+Activity view is Needs you and Running together, with idle, and Rex's two arrangements; those two
+chips stay as they were, for the one-handed "what needs me" and "what runs".
+
 **All, Needs you, Running** are chips at the top, with counts across every connected host; the
 choice is kept. **Needs you** is the tabs whose most pressing report waits on the person, or failed
 or finished and was not seen. **Running is anything working**: every tab with a `working` record in
@@ -143,7 +166,7 @@ titles, messages, record ids or labels.
 
 ## Tests
 
-`RunningTest` (core, ScriptedRex: root working with a child done, unseen and seen; seen on a desk;
+`ActivityTest` (core: idle until seen or always, by session in Rex's order), `SettingsBackupTest` (the Activity fields optional), `RunningTest` (core, ScriptedRex: root working with a child done, unseen and seen; seen on a desk;
 a tab working in one pane and waiting in another; a tab with nothing at work; old marks still
 hold), `RealRexAppTest.anAgentAtWorkWithAChildDoneIsRunning` (rex-real: a shell reporting OSC 7501
 root working and a child done), `HomeStateTest` (status words, summaries, hidden-pane line; folds kept; a session without its tabs
@@ -152,7 +175,7 @@ folds and opens from its button; Collapse all's Undo restores the folds exactly)
 reach Rex without attaching; a session ended at the desk closes its sheet and says so),
 `MultiHostTest` (host taps fold, never connect; the three-state fold; the host sheet following its
 connection; a failing host's Retry; + with two, one and no hosts connected; host order and Remove
-host with Undo), `ActivityViewTest` (Needs you and Running: an agent at work with a child done in both lists and
+host with Undo), `ActivityViewTest` (the Activity chip by priority and by session, idle until seen and with Include idle, both kept; Needs you and Running: an agent at work with a child done in both lists and
 still running once seen, a tab working and waiting in both, Status details and its Copy; order,
 counts, Mark as seen and Undo, seen on
 the phone and on a desk, Reply hidden for `auth`, Interrupt, the not-connected line, the filter

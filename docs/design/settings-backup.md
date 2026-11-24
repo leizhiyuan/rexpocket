@@ -16,7 +16,7 @@ the way to move a phone's setup instead: one file the person makes, keeps and op
 | `notifications` | Background and notifications | `waiting`, `failed`, `done`, `messages`, `bells`, `vibrate`, `progress` (progress bars while away; missing is off) |
 | `background.enabled` | Background alerts | turned on only where notifications are allowed (below) |
 | `background.hosts[]` | each host's page | `name`, `stay`, `always`, `notify`, `events` (`Waiting`, `Failed`, `Done`, `Message`, `Bell` → on or off) |
-| `home` | the Home | `filter` (`All`, `NeedsYou`, `Running`), `reopenLastTab`, `hostOrder`, `folded` and `unfolded` (host names) |
+| `home` | the Home | `filter` (`All`, `Activity`, `NeedsYou`, `Running`), `reopenLastTab`, `activityBySession` and `includeIdle` (the Activity view's arrangement and Include idle; optional, added without a new format: a file without them leaves the phone's as they are), `hostOrder`, `folded` and `unfolded` (host names) |
 | `hosts` | the saved hosts | a `rexpocket-hosts/1` list, below |
 | `quickReplies` | Settings › Quick replies | the replies and prompts in order, at most 20 of at most 2,000 characters; an import replaces the list |
 | `secrets` | SSH passwords and keys | only with **Include SSH keys**, sealed |

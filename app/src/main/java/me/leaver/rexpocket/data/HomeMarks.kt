@@ -64,7 +64,17 @@ class HomeMarks(context: Context) {
     @Synchronized
     fun forget(hostId: String) = prune(hostId, emptySet())
 
-    /** The home's filter, by name: All, NeedsYou or Running. */
+    /** The Activity view's arrangement: by session (true) or by priority. */
+    fun activityBySession(): Boolean = prefs.getBoolean(KEY_BY_SESSION, false)
+
+    /** The Activity view's Include idle: idle tabs always, not only until seen. */
+    fun activityIncludeIdle(): Boolean = prefs.getBoolean(KEY_INCLUDE_IDLE, false)
+
+    fun setActivity(bySession: Boolean, includeIdle: Boolean) {
+        prefs.edit().putBoolean(KEY_BY_SESSION, bySession).putBoolean(KEY_INCLUDE_IDLE, includeIdle).apply()
+    }
+
+    /** The home's filter, by name: All, Activity, NeedsYou or Running. */
     fun filter(): String? = prefs.getString(KEY_FILTER, null)
 
     fun setFilter(name: String) {
@@ -74,6 +84,8 @@ class HomeMarks(context: Context) {
     companion object {
         private const val KEY_SEEN = "seen"
         private const val KEY_FILTER = "filter"
+        private const val KEY_BY_SESSION = "activity.bySession"
+        private const val KEY_INCLUDE_IDLE = "activity.includeIdle"
 
         fun key(hostId: String, blockId: String) = "$hostId/$blockId"
     }

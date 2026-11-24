@@ -26,7 +26,7 @@ object SettingsFormat {
     const val MAX_PRIVATE_KEY = 16 * 1024
     const val MIN_FONT_SCALE = 0.7f
     const val MAX_FONT_SCALE = 1.8f
-    val HOME_FILTERS = listOf("All", "NeedsYou", "Running")
+    val HOME_FILTERS = listOf("All", "Activity", "NeedsYou", "Running")
 
     fun mentionsFormat(text: String): Boolean =
         text.contains(FORMAT_MARKER) || text.contains(FORMAT_MARKER.replace("/", "\\/"))
@@ -147,6 +147,8 @@ object SettingsFormat {
             HomePrefs(
                 filter = filter,
                 reopenLastTab = bool(h, "reopenLastTab", "home"),
+                activityBySession = bool(h, "activityBySession", "home"),
+                includeIdle = bool(h, "includeIdle", "home"),
                 hostOrder = hostNames("hostOrder", h),
                 folded = hostNames("folded", h)?.toSet(),
                 unfolded = hostNames("unfolded", h)?.toSet(),
@@ -272,6 +274,8 @@ object SettingsFormat {
             val home = JSONObject()
             h.filter?.let { home.put("filter", it) }
             h.reopenLastTab?.let { home.put("reopenLastTab", it) }
+            h.activityBySession?.let { home.put("activityBySession", it) }
+            h.includeIdle?.let { home.put("includeIdle", it) }
             h.hostOrder?.let { order -> home.put("hostOrder", JSONArray(order.filter { it in written })) }
             h.folded?.let { f -> home.put("folded", JSONArray(f.filter { it in written })) }
             h.unfolded?.let { f -> home.put("unfolded", JSONArray(f.filter { it in written })) }
@@ -343,6 +347,10 @@ object SettingsFormat {
 data class HomePrefs(
     val filter: String? = null,
     val reopenLastTab: Boolean? = null,
+    /** The Activity view by session (true) or by priority. */
+    val activityBySession: Boolean? = null,
+    /** The Activity view's Include idle. */
+    val includeIdle: Boolean? = null,
     val hostOrder: List<String>? = null,
     val folded: Set<String>? = null,
     val unfolded: Set<String>? = null,
@@ -436,6 +444,8 @@ data class CurrentSettings(
     val backgroundMode: Boolean = false,
     val homeFilter: String = "All",
     val reopenLastTab: Boolean = false,
+    val activityBySession: Boolean = false,
+    val includeIdle: Boolean = false,
     /** The phone's hosts, in its order. */
     val hosts: List<KnownHost> = emptyList(),
     val hostBackground: Map<String, HostBackground> = emptyMap(),
@@ -447,7 +457,7 @@ data class CurrentSettings(
 enum class SettingKey {
     Theme, TerminalColors, TextSize, TerminalFontScale,
     AlertWaiting, AlertFailed, AlertDone, AlertMessages, AlertBells, AlertVibrate, AlertProgress,
-    BackgroundMode, HomeFilter, ReopenLastTab, HostOrder, HostFolds, HostBackground, QuickReplies,
+    BackgroundMode, HomeFilter, ReopenLastTab, ActivityBySession, IncludeIdle, HostOrder, HostFolds, HostBackground, QuickReplies,
 }
 
 /** One preference an import changes: [old] → [new], for [host] when it is one host's. */
@@ -483,6 +493,8 @@ fun settingChanges(backup: SettingsBackup, current: CurrentSettings, plan: Impor
     backup.home?.let { h ->
         change(SettingKey.HomeFilter, current.homeFilter, h.filter)
         change(SettingKey.ReopenLastTab, current.reopenLastTab, h.reopenLastTab)
+        change(SettingKey.ActivityBySession, current.activityBySession, h.activityBySession)
+        change(SettingKey.IncludeIdle, current.includeIdle, h.includeIdle)
     }
     val planned = plan.hosts.associateBy { it.imported.name }
     for ((name, next) in backup.hostBackground) {

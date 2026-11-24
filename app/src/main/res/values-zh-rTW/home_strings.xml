@@ -57,4 +57,10 @@
     <string name="status_details_copied">已複製狀態詳情</string>
     <string name="status_details_tab">此分頁</string>
     <string name="status_details_pane">窗格 %1$d · %2$s</string>
+    <string name="filter_activity">活動</string>
+    <string name="filter_activity_none">沒有程式回報它在做什麼</string>
+    <string name="activity_by_priority">依優先順序</string>
+    <string name="activity_by_session">依工作階段</string>
+    <string name="activity_include_idle">包含閒置的分頁</string>
+    <string name="activity_idle">閒置</string>
 </resources>

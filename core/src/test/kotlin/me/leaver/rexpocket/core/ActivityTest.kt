@@ -10,6 +10,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicLong
 
@@ -162,6 +163,40 @@ class ActivityTest {
             desk.close()
             rex.close()
         }
+    }
+
+    /**
+     * Idle in the Activity view, as Rex's "Include idle processes in activity": off, an idle tab is
+     * listed until it was seen; on, always. Never in Needs you or Running. By session, the same
+     * tabs under their sessions, in Rex's order.
+     */
+    @Test
+    fun idleTabsShowUntilSeenOrAlwaysAndBySessionKeepsRexsOrder() = withRex { rex, _, phone, sessions ->
+        val (first, tabs) = sessions[0]
+        val (second, otherTabs) = sessions[1]
+        rex.report(tabs[2].second, "idle", app = "claude")
+        rex.report(tabs[0].second, "working", app = "cargo")
+        rex.report(otherTabs[1].second, "error", app = "pi")
+        val st = phone.until("three reports") { it.blockStatus.size == 3 }
+        val none: SeenCheck = { _, _ -> false }
+        assertEquals(
+            listOf(ActivityGroup.Failed to listOf(otherTabs[1].first), ActivityGroup.Running to listOf(tabs[0].first), ActivityGroup.Idle to listOf(tabs[2].first)),
+            activitySections(st, none, idle = none).map { s -> s.group to s.items.map { it.window.id } },
+        )
+        // Seen: gone from Activity while Include idle is off, there with it on.
+        val marks = mapOf(tabs[2].second to seenMark(st.records.getValue(tabs[2].second))!!)
+        val seen: SeenCheck = { block, record -> markCovers(marks[block], record) }
+        assertTrue(activitySections(st, seen, idle = seen).none { it.group == ActivityGroup.Idle })
+        assertTrue(activitySections(st, seen, idle = none).any { it.group == ActivityGroup.Idle })
+        // Idle is the Activity view's only.
+        assertTrue(needsYouSections(st, none).none { it.group == ActivityGroup.Idle })
+        assertEquals(listOf(tabs[0].first), runningItems(st, none).map { it.window.id })
+        assertNull(tabAttention(st.views.getValue(first).windows[2], st))
+        // By session: the shown session's tabs in their order, then the other's.
+        assertEquals(
+            listOf(first to listOf(tabs[0].first, tabs[2].first), second to listOf(otherTabs[1].first)),
+            activityBySession(st, none, idle = none).map { s -> s.sessionId to s.items.map { it.window.id } },
+        )
     }
 
     @Test

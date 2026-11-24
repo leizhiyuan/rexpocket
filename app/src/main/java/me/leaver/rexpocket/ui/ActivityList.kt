@@ -21,7 +21,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.heading
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,9 +66,12 @@ import me.leaver.rexpocket.core.TabAttention
 // Running) under each connected host's name. See docs/design/home.md and, for what comes from Rex,
 // docs/design/rex-parity.md.
 
-/** Which of the home's lists shows: every host's tree, what needs the person, or what runs. */
+/**
+ * Which of the home's lists shows: every host's tree, the Activity view (every tab a program
+ * reported on, grouped as Rex's Activity groups it), what needs the person, or what runs.
+ */
 enum class HomeFilter {
-    All, NeedsYou, Running;
+    All, Activity, NeedsYou, Running;
 
     companion object {
         fun of(name: String?): HomeFilter = entries.firstOrNull { it.name == name } ?: All
@@ -77,9 +84,15 @@ enum class HomeFilter {
  * it has - so a tab can be in both. Seen is per report: a seen done report of a pane that still
  * works leaves it running.
  */
-internal fun filterSections(state: PocketState, filter: HomeFilter, seen: (String, ProgramRecord) -> Boolean): List<ActivitySection> =
+internal fun filterSections(
+    state: PocketState,
+    filter: HomeFilter,
+    seen: (String, ProgramRecord) -> Boolean,
+    prefs: ActivityPrefs = ActivityPrefs(),
+): List<ActivitySection> =
     when (filter) {
         HomeFilter.All -> activitySections(state, seen)
+        HomeFilter.Activity -> activitySections(state, seen, prefs.idle(seen))
         HomeFilter.NeedsYou -> needsYouSections(state, seen)
         HomeFilter.Running -> runningItems(state, seen).takeIf { it.isNotEmpty() }?.let { listOf(ActivitySection(ActivityGroup.Running, it)) }.orEmpty()
     }
@@ -95,6 +108,95 @@ internal fun alsoWords(attention: TabAttention, shown: ActivityGroup): List<Stri
         ActivityGroup.Waiting -> stringResource(R.string.home_count_waiting, n)
         ActivityGroup.Failed -> stringResource(R.string.home_count_failed, n)
         ActivityGroup.Done -> stringResource(R.string.home_count_done, n)
+        ActivityGroup.Idle -> stringResource(R.string.state_idle)
+    }
+}
+
+/**
+ * The Activity view's two settings, as Rex's: "Show Activity by Session" (else by priority) and
+ * "Include idle processes in activity" - off, an idle tab is listed until it was seen; on, always.
+ * Kept, and in the settings backup.
+ */
+data class ActivityPrefs(val bySession: Boolean = false, val includeIdle: Boolean = false) {
+    /** Which idle reports are left out: the seen ones, or none with Include idle. */
+    fun idle(seen: (String, ProgramRecord) -> Boolean): (String, ProgramRecord) -> Boolean =
+        if (includeIdle) { _, _ -> false } else seen
+}
+
+/** Test tags of the Activity view's controls. */
+internal const val ACTIVITY_BY_PRIORITY_TAG = "activity-by-priority"
+internal const val ACTIVITY_BY_SESSION_TAG = "activity-by-session"
+internal const val ACTIVITY_IDLE_TAG = "activity-include-idle"
+
+/** Test tag of an Activity group's or session's caption. */
+internal fun activityGroupTag(group: ActivityGroup) = "activity-group-${group.name}"
+internal fun activitySessionTag(sessionId: String) = "activity-session-$sessionId"
+
+/**
+ * The Activity view's controls, at the top of its list: By priority or By session, as two chips
+ * that say which is on, and Include idle, a switch the whole row toggles. All 48 dp.
+ */
+@Composable
+internal fun ActivityControls(prefs: ActivityPrefs, onPrefs: (ActivityPrefs) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            for ((bySession, label, tag) in listOf(
+                Triple(false, stringResource(R.string.activity_by_priority), ACTIVITY_BY_PRIORITY_TAG),
+                Triple(true, stringResource(R.string.activity_by_session), ACTIVITY_BY_SESSION_TAG),
+            )) {
+                FilterChip(
+                    selected = prefs.bySession == bySession,
+                    onClick = { onPrefs(prefs.copy(bySession = bySession)) },
+                    label = { Text(label, fontSize = TextStyles.label, fontWeight = FontWeight.Medium) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = Colors.surface,
+                        labelColor = Colors.ink,
+                        selectedContainerColor = Colors.keyOn,
+                        selectedLabelColor = Colors.accent,
+                    ),
+                    border = null,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(tag),
+                )
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(top = 4.dp).heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.card))
+                .toggleable(value = prefs.includeIdle, role = Role.Switch) { onPrefs(prefs.copy(includeIdle = it)) }
+                .testTag(ACTIVITY_IDLE_TAG)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(R.string.activity_include_idle), color = Colors.ink, fontSize = TextStyles.label, modifier = Modifier.weight(1f))
+            Switch(checked = prefs.includeIdle, onCheckedChange = null, colors = SwitchDefaults.colors(checkedTrackColor = Colors.accent))
+        }
+    }
+}
+
+/** A caption over a group of the Activity view, or a session in it: a TalkBack heading. */
+@Composable
+internal fun ActivityCaption(text: String, color: Color, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        color = color,
+        fontSize = TextStyles.label,
+        fontWeight = FontWeight.SemiBold,
+        modifier = modifier.fillMaxWidth().padding(start = 16.dp, top = 14.dp, bottom = 6.dp).semantics { heading() },
+    )
+}
+
+/** One row of the Activity view, from any connected host: the row, its host's state and its ops. */
+internal class HostedItem(val item: ActivityItem, val state: PocketState, val ops: AttentionOps, val host: String?)
+
+/** Rows of several hosts on one card, as the Activity view's priority groups have them. */
+internal fun LazyListScope.hostedItems(key: String, items: List<HostedItem>) {
+    if (items.isEmpty()) return
+    item(key = key) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Colors.surface)) {
+            items.forEachIndexed { i, hosted ->
+                if (i > 0) Box(Modifier.padding(start = 64.dp).fillMaxWidth().heightIn(min = 1.dp, max = 1.dp).background(Colors.line))
+                AttentionRow(hosted.item, hosted.state, hosted.ops, hosted.host)
+            }
+        }
     }
 }
 
@@ -120,6 +222,7 @@ internal fun activityGroupName(group: ActivityGroup): String = stringResource(
         ActivityGroup.Failed -> R.string.activity_failed
         ActivityGroup.Done -> R.string.activity_done
         ActivityGroup.Running -> R.string.activity_running
+        ActivityGroup.Idle -> R.string.activity_idle
     },
 )
 
@@ -129,6 +232,7 @@ internal fun activityTint(group: ActivityGroup): Color = when (group) {
     ActivityGroup.Failed -> Colors.danger
     ActivityGroup.Done -> Colors.accent
     ActivityGroup.Running -> Colors.ok
+    ActivityGroup.Idle -> Colors.muted
 }
 
 /** Test tag of one filtered row, by tab id. */
@@ -147,6 +251,7 @@ internal fun FilterChips(filter: HomeFilter, needsYou: Int, running: Int, onFilt
         for (choice in HomeFilter.entries) {
             val label = when (choice) {
                 HomeFilter.All -> stringResource(R.string.filter_all)
+                HomeFilter.Activity -> stringResource(R.string.filter_activity)
                 HomeFilter.NeedsYou -> stringResource(R.string.filter_needs_you, needsYou)
                 HomeFilter.Running -> stringResource(R.string.filter_running, running)
             }
@@ -206,7 +311,7 @@ internal fun LazyListScope.attentionItems(
  */
 @Composable
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
-private fun AttentionRow(item: ActivityItem, state: PocketState, ops: AttentionOps) {
+internal fun AttentionRow(item: ActivityItem, state: PocketState, ops: AttentionOps, host: String? = null) {
     val view = state.views[item.sessionId]
     val title = view?.let { tabTitle(it, item.window, state) } ?: item.window.label
     val program = state.programs[item.block.id] ?: item.record.app
@@ -247,7 +352,7 @@ private fun AttentionRow(item: ActivityItem, state: PocketState, ops: AttentionO
             Column(Modifier.weight(1f)) {
                 Text(title, color = Colors.ink, fontSize = TextStyles.body, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val word = (listOf(statusWord(item.record) ?: activityGroupName(item.group)) + alsoWords(item.attention, item.group)).joinToString(" · ")
-                val detail = listOfNotNull(item.sessionLabel, progress?.let { "$it%" }, age).joinToString(" · ")
+                val detail = listOfNotNull(item.sessionLabel, host, progress?.let { "$it%" }, age).joinToString(" · ")
                 Text(word, color = ownTint, fontSize = TextStyles.label, fontWeight = FontWeight.Medium)
                 Text(detail, color = Colors.muted, fontSize = TextStyles.label)
                 val message = item.record.msg?.takeIf { it.isNotBlank() }
@@ -293,6 +398,7 @@ internal fun ActivityEmpty(filter: HomeFilter, live: Boolean, searching: Boolean
                 !live -> R.string.activity_offline
                 searching -> R.string.search_none
                 filter == HomeFilter.Running -> R.string.filter_running_none
+                filter == HomeFilter.Activity -> R.string.filter_activity_none
                 else -> R.string.filter_needs_you_none
             },
         ),

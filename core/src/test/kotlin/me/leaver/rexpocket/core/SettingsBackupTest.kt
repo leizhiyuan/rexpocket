@@ -36,7 +36,7 @@ class SettingsBackupTest {
         terminalFontScale = 1.25f,
         notifications = AlertPrefs(waiting = true, failed = false, done = true, messages = false, bells = true, vibrate = false, progress = true),
         backgroundMode = true,
-        home = HomePrefs("NeedsYou", reopenLastTab = true, hostOrder = listOf("studio", "agents", "Desk mac"), folded = setOf("Desk mac"), unfolded = setOf("agents")),
+        home = HomePrefs("Activity", reopenLastTab = true, activityBySession = true, includeIdle = true, hostOrder = listOf("studio", "agents", "Desk mac"), folded = setOf("Desk mac"), unfolded = setOf("agents")),
         hosts = listOf(ssh, rexPort, tls),
         hostBackground = mapOf(
             "agents" to HostBackground(stay = true, always = true, notify = true, overrides = mapOf(AlertEvent.Bell to true)),
@@ -78,6 +78,31 @@ class SettingsBackupTest {
         assertEquals(rexPort.address, b.hosts[1].address)
         assertTrue(b.hosts[2].address.sameAs(tls.address))
         assertNull(b.secrets)
+    }
+
+    /**
+     * The Activity view's settings are two new fields of `home`, read when there and left as they
+     * are when not: a file from before them still imports, and changes nothing of them.
+     */
+    @Test
+    fun theActivitySettingsAreOptionalFieldsOfHome() {
+        val root = JSONObject(SettingsFormat.write(snapshot).text)
+        val home = root.getJSONObject("home")
+        assertEquals(true, home.getBoolean("activityBySession"))
+        assertEquals(true, home.getBoolean("includeIdle"))
+        assertEquals("Activity", home.getString("filter"))
+        home.remove("activityBySession")
+        home.remove("includeIdle")
+        val older = parsed(root.toString())
+        assertNull(older.home!!.activityBySession)
+        assertNull(older.home!!.includeIdle)
+        val changes = settingChanges(older, CurrentSettings(activityBySession = true), ImportPlan(emptyList()))
+        assertTrue(changes.none { it.key == SettingKey.ActivityBySession || it.key == SettingKey.IncludeIdle })
+        val both = settingChanges(parsed(SettingsFormat.write(snapshot).text), CurrentSettings(), ImportPlan(emptyList()))
+        assertTrue(both.any { it.key == SettingKey.ActivityBySession && it.new == true })
+        assertTrue(both.any { it.key == SettingKey.IncludeIdle && it.new == true })
+        home.put("includeIdle", "yes")
+        assertEquals(SettingsProblem.Kind.BadValue, problem(root.toString()).kind)
     }
 
     @Test

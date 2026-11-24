@@ -1417,7 +1417,7 @@ class PocketSession(
     private fun tookOnDesk(block: String, owner: String) {
         if (owner == _state.value.clientId) return
         val records = _state.value.records[block] ?: return
-        if (records.none { ActivityGroup.of(it.state)?.needsSeeing == true }) return
+        if (records.none(::markable)) return
         takes[block] = owner to (seenMark(records) ?: return)
         noteDeskLooks()
     }
@@ -1439,7 +1439,7 @@ class PocketSession(
             val block = window.focusedBlock() ?: continue
             val owner = block.owner ?: continue
             val records = st.records[block.id] ?: continue
-            if (records.none { ActivityGroup.of(it.state)?.needsSeeing == true }) continue
+            if (records.none(::markable)) continue
             if (desk(owner) == true) looked[block.id] = seenMark(records) ?: continue
         }
         for ((block, take) in takes.entries.toList()) {

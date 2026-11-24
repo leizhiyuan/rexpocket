@@ -50,4 +50,5 @@
     <string name="backup_problem_value">%1$s 的值这个应用不认识。</string>
     <string name="backup_problem_unknown_host">%1$s 提到了 %2$s，但它不是文件里的主机。</string>
     <string name="backup_problem_secrets">加密的密钥无法读取（%1$s）。</string>
+    <string name="backup_setting_activity_by_session">按会话显示活动</string>
 </resources>

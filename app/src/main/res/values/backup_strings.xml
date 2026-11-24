@@ -51,4 +51,5 @@
     <string name="backup_problem_value">%1$s is not a value this app knows.</string>
     <string name="backup_problem_unknown_host">%1$s names %2$s, which is not one of the file\'s hosts.</string>
     <string name="backup_problem_secrets">The sealed keys are not readable (%1$s).</string>
+    <string name="backup_setting_activity_by_session">Activity by session</string>
 </resources>

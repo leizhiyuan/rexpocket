@@ -83,6 +83,7 @@ fun RexPocketApp(
     val updateChannel by model.updateChannel.collectAsState()
     val folds by model.folds.collectAsState()
     val homeFilter by model.homeFilter.collectAsState()
+    val activityPrefs by model.activityPrefs.collectAsState()
     val seenMarks by model.seenMarks.collectAsState()
     val reopenLastTab by model.reopenLastTab.collectAsState()
     val appearance by model.appearance.collectAsState()
@@ -179,6 +180,8 @@ fun RexPocketApp(
                     onSetFolds = model::setFolds,
                     filter = homeFilter,
                     onHomeFilter = model::setHomeFilter,
+                    activityPrefs = activityPrefs,
+                    onActivityPrefs = model::setActivityPrefs,
                     seenMarks = seenMarks,
                     onMarkSeen = { hostId, blocks -> model.markSeen(hostId, blocks) },
                     onRestoreSeen = model::restoreSeen,

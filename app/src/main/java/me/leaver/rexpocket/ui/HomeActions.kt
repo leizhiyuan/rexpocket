@@ -19,6 +19,7 @@ import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.paneRecords
+import me.leaver.rexpocket.core.markable
 import me.leaver.rexpocket.core.tabDetails
 import me.leaver.rexpocket.data.HomeFolds
 import me.leaver.rexpocket.data.SavedHost
@@ -106,11 +107,11 @@ internal class HomeOps(
     val removeHost: (hostId: String) -> Unit = {},
 )
 
-/** The panes of [windows] with a done or failed report not seen yet. */
+/** The panes of [windows] with a done, failed or idle report not seen yet. */
 internal fun HomeOps.unseen(hostId: String, state: PocketState, windows: List<WindowInfo>): List<String> =
     windows.flatMap { it.blocks }.mapNotNull { block ->
         block.id.takeIf {
-            paneRecords(state, block.id).any { record -> ActivityGroup.of(record.state)?.needsSeeing == true && !seen(hostId, block.id, record) }
+            paneRecords(state, block.id).any { record -> markable(record) && !seen(hostId, block.id, record) }
         }
     }
 

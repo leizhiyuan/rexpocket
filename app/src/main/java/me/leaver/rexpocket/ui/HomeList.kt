@@ -147,6 +147,8 @@ internal fun hostSummary(state: PocketState, sessions: Int, seen: Seen = { _, _ 
                     ActivityGroup.Failed -> R.string.home_count_failed
                     ActivityGroup.Done -> R.string.home_count_done
                     ActivityGroup.Running -> R.string.home_count_running
+                    // Never counted: idle is the Activity view's only.
+                    ActivityGroup.Idle -> continue
                 },
                 n,
             )

@@ -57,4 +57,10 @@
     <string name="status_details_copied">已复制状态详情</string>
     <string name="status_details_tab">此标签页</string>
     <string name="status_details_pane">窗格 %1$d · %2$s</string>
+    <string name="filter_activity">活动</string>
+    <string name="filter_activity_none">没有程序报告它在做什么</string>
+    <string name="activity_by_priority">按优先级</string>
+    <string name="activity_by_session">按会话</string>
+    <string name="activity_include_idle">包括空闲的标签页</string>
+    <string name="activity_idle">空闲</string>
 </resources>
