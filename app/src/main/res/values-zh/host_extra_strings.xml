@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="export_ssh_only">仅 SSH 主机：名称、地址和固定的主机密钥。“设置 › 备份”包含所有主机和设置。</string>
+    <string name="export_open_backup">所有主机和设置：备份</string>
+    <string name="export_left_not_ssh">未写入，通过 Rex 端口连接（主机列表只含 SSH 主机；备份中有它们）：%1$s</string>
+    <string name="export_left_name">未写入，名称不符合格式：%1$s</string>
+    <string name="export_left_same_name">未写入，与已写入的主机同名。重命名其中一个即可都保留：%1$s</string>
+    <string name="export_left_too_many">未写入，超出一个文件能容纳的主机数：%1$s</string>
+
+    <string name="host_link_check">来自链接：保存前请检查名称和地址。保存之前不会写入任何内容。</string>
+    <string name="host_link_refused">该链接没有指明要添加的主机。</string>
+
+    <string name="host_name_taken">已有一台主机名为 %1$s。同名的两台主机难以区分，导出时只保留第一台。</string>
+    <string name="ssh_host_key_forget">忘记主机密钥</string>
+    <string name="ssh_host_key_forget_title">忘记这个主机密钥？</string>
+    <string name="ssh_host_key_forget_body">保存后将不再信任 %1$s。下次连接会显示这台机器的密钥，并像第一次那样询问是否信任。</string>
+    <string name="ssh_host_key_forgotten">主机密钥已忘记。保存后，下次连接会询问是否信任显示的密钥。</string>
+    <string name="other_address_pending_bad">上面输入的其他地址不是有效地址：请修正并添加，或清空后再保存。</string>
+
+    <string name="backup_setting_key_arrangement_value">文件中的按键和按键组</string>
+    <string name="backup_setting_gestures_value">文件中的手势及其时间</string>
+    <string name="backup_font_downloads">（需下载 %1$d MB）</string>
+    <string name="backup_font_system">手机自带</string>
+
+    <string name="settings_reset_confirm">重置</string>
+    <string name="controls_reset">恢复默认设置</string>
+    <string name="controls_reset_body">手势、手势时间、接外接键盘时的按键栏和 C-c 键</string>
+    <string name="controls_reset_title">重置终端操作？</string>
+    <string name="controls_reset_confirm_body">单击、双击和长按恢复为最初的作用，使用手机自身的时间；接外接键盘时隐藏按键栏；C-c 轻点即发送。你的按键和按键组保留：“排列按键”有自己的重置。</string>
+    <string name="notifications_reset">恢复默认设置</string>
+    <string name="notifications_reset_body">提醒类型、振动和进度条</string>
+    <string name="notifications_reset_title">重置通知？</string>
+    <string name="notifications_reset_confirm_body">等待、失败、完成和消息会再次提醒，响铃不提醒，屏幕上的响铃会振动，进度条关闭。后台模式以及每台主机和 tailnet 的页面保持不变。</string>
+    <string name="import_problem_option">%1$s 的值不对：tryOthers 应为 true 或 false，tailnetAccount 应为不超过 64 个字符的一行文字。</string>
+</resources>

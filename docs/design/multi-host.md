@@ -151,7 +151,11 @@ startRoutes`, `HostDialogParts.kt`.
   that left home goes straight to the address that works, and one back home returns to the main
   address at its next connection, without moving a connection that is up.
 - **Try other addresses**, in the host dialog, on by default: off connects by the main address
-  alone. Not in the settings backup: a restored host tries its other addresses.
+  alone. In the settings backup and Export hosts (`tryOthers`, beside the whole ordered list as
+  `otherUris`), so a restored host tries what it tried before.
+- **Typed, not added.** An address typed in the dialog's field and not added with Add is added by
+  Save, at the end of the list, as Add would; text that is not an address holds Save back with a
+  line saying to fix or clear it, so nothing typed is lost without a word.
 - **Shown.** The host's row says "via 192.168.1.20:7297" while live on another address, "trying ..."
   while it dials one; the diagnostics report says how many other addresses a host has and which one
   is in use ("on other address 2"), every address and user name hidden like the main ones.

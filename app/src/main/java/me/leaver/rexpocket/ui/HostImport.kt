@@ -64,6 +64,8 @@ import me.leaver.rexpocket.core.KnownHost
 import me.leaver.rexpocket.core.PlannedHost
 import me.leaver.rexpocket.core.PublicKeyList
 import me.leaver.rexpocket.core.SshKeys
+import me.leaver.rexpocket.core.TailnetBackend
+import me.leaver.rexpocket.core.TailnetProfiles
 import me.leaver.rexpocket.core.applyTo
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.SavedHost
@@ -105,6 +107,8 @@ class HostImporter(
     private val onChanged: () -> Unit,
     /** Reads the host list of the Rex behind this saved host's connection; null when not connected. */
     private val rexHosts: suspend (hostId: String) -> HostImportParse?,
+    /** The tailnet accounts, to name a host's account in a list and find it again. */
+    private val profiles: () -> TailnetProfiles = { TailnetProfiles() },
 ) {
     private val _step = MutableStateFlow<HostImportStep?>(null)
     val step: StateFlow<HostImportStep?> = _step
@@ -202,7 +206,7 @@ class HostImporter(
                 Diagnostics.event(TAG, "import refused: ${parse.problem.kind} at entry ${parse.problem.entry ?: "-"}")
                 _step.value = HostImportStep.Source(problem = parse.problem)
             }
-            is HostImportParse.Parsed -> when (val planned = ImportPlan.of(parse, store.list().map { it.known() })) {
+            is HostImportParse.Parsed -> when (val planned = ImportPlan.of(parse, store.list().map { it.known(profiles()) })) {
                 is HostImportPlan.Failed -> _step.value = HostImportStep.Source(problem = planned.problem)
                 is HostImportPlan.Planned -> {
                     Diagnostics.event(TAG, "import read: ${parse.hosts.size} hosts, ${parse.skipped.size} skipped")
@@ -231,10 +235,10 @@ class HostImporter(
             val all = result.applyTo(
                 store.list(),
                 id = { it.id },
-                update = { h, p -> h.imported(p, keys[p.imported.name]) },
+                update = { h, p -> h.imported(p, keys[p.imported.name], profiles()) },
                 create = { p ->
                     SavedHost(id = HostStore.newId(), label = p.imported.name, host = "", port = 0, plaintext = true)
-                        .imported(p, keys[p.imported.name])
+                        .imported(p, keys[p.imported.name], profiles())
                 },
             )
             store.saveAll(all)
@@ -253,18 +257,11 @@ class HostImporter(
         }
     }
 
-    /** Export hosts: the phone's SSH hosts as `rexpocket-hosts/1`, public data only. */
-    fun export(): HostListExport = HostListFormat.write(
-        store.list().filter { it.viaSsh }.map { h ->
-            ExportedHost(
-                name = h.label,
-                address = h.importAddress(),
-                fallbacks = h.fallbacks.mapNotNull(ImportAddress::parse),
-                fingerprint = h.sshHostKey.ifBlank { null },
-                keyComment = h.sshPrivateKey.takeIf { it.isNotBlank() }?.let(SshKeys::commentOf),
-            )
-        },
-    ).also {
+    /**
+     * Export hosts: the phone's SSH hosts as `rexpocket-hosts/1`, public data only. A host on a Rex
+     * port is left out and named, as the format holds SSH hosts; Settings › Backup has every host.
+     */
+    fun export(): HostListExport = HostListFormat.write(store.list().map { it.exported(profiles()) }).also {
         Diagnostics.event(TAG, "export: ${it.written.size} hosts, ${it.left.size} left out")
         _step.value = HostImportStep.Source(exported = it)
     }
@@ -287,27 +284,58 @@ class HostImporter(
 internal fun SavedHost.importAddress(): ImportAddress =
     if (viaSsh) ImportAddress(sshUser, host, port, plaintext = true) else ImportAddress(null, host, port, plaintext)
 
-internal fun SavedHost.known(): KnownHost = KnownHost(
+/** The name of the tailnet account this host names, or null when it follows the active one (or is no tailnet host). */
+internal fun SavedHost.accountName(profiles: TailnetProfiles): String? =
+    tailnetProfile.takeIf { viaTailscale && it.isNotBlank() }?.let { profiles.find(it)?.name }
+
+/** This host as a host list writes it: public data only, never a password or key. */
+internal fun SavedHost.exported(profiles: TailnetProfiles): ExportedHost = ExportedHost(
+    name = label,
+    address = importAddress(),
+    fallbacks = fallbacks.mapNotNull(ImportAddress::parse),
+    fingerprint = sshHostKey.ifBlank { null },
+    keyComment = sshPrivateKey.takeIf { it.isNotBlank() }?.let(SshKeys::commentOf),
+    tryOthers = tryOthers,
+    tailnetAccount = accountName(profiles),
+)
+
+internal fun SavedHost.known(profiles: TailnetProfiles = TailnetProfiles()): KnownHost = KnownHost(
     id = id,
     name = label,
     address = importAddress(),
     fallbacks = fallbacks.mapNotNull(ImportAddress::parse),
     hostKey = sshHostKey.ifBlank { null },
     hasCredentials = !viaSsh || sshPassword.isNotEmpty() || sshPrivateKey.isNotBlank(),
+    tryOthers = tryOthers,
+    tailnetAccount = accountName(profiles),
 )
+
+/** The id of the account called [name] (any backend, ignoring case), if this phone has one. */
+internal fun TailnetProfiles.idOf(name: String): String? =
+    TailnetBackend.entries.flatMap { of(it) }.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }?.id
 
 /**
  * This host as the import leaves it: the entry's name and addresses, the pinned key the plan says,
- * and [key] (a fresh one of its own) when it gets one. Its password or key stays otherwise.
+ * and [key] (a fresh one of its own) when it gets one. Its password or key stays otherwise. Try
+ * other addresses and the tailnet account follow the entry when it names them; an account this
+ * phone does not have leaves the host following the active one.
  */
-internal fun SavedHost.imported(p: PlannedHost, key: GeneratedKey?): SavedHost {
+internal fun SavedHost.imported(p: PlannedHost, key: GeneratedKey?, profiles: TailnetProfiles = TailnetProfiles()): SavedHost {
     val a = p.imported.address
+    val tailnet = HostAddressParser.isTailnet(a.host)
+    val account = when {
+        !tailnet -> ""
+        p.imported.tailnetAccount != null -> profiles.idOf(p.imported.tailnetAccount!!) ?: ""
+        else -> tailnetProfile
+    }
     return copy(
+        tryOthers = p.imported.tryOthers ?: tryOthers,
+        tailnetProfile = account,
         label = p.imported.name,
         host = a.host,
         port = a.port,
         plaintext = a.plaintext,
-        viaTailscale = HostAddressParser.isTailnet(a.host),
+        viaTailscale = tailnet,
         sshUser = a.user.orEmpty(),
         sshPassword = if (!a.ssh || key != null) "" else sshPassword,
         sshPrivateKey = key?.privateKey ?: if (a.ssh) sshPrivateKey else "",
@@ -329,11 +357,15 @@ internal fun hostListToOpen(context: Context, intent: Intent): Uri? {
 }
 
 internal const val HOST_IMPORT_TAG = "host-import"
+internal const val EXPORT_RESULT_TAG = "host-export-result"
 
-/** The import sheet, on whichever page [step] is. [connected] are the hosts whose Rex can be asked. */
+/**
+ * The import sheet, on whichever page [step] is. [connected] are the hosts whose Rex can be asked;
+ * [onBackup] opens Settings › Backup, which moves every host and setting.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun HostImportSheet(step: HostImportStep, connected: List<SavedHost>, importer: HostImporter) {
+internal fun HostImportSheet(step: HostImportStep, connected: List<SavedHost>, importer: HostImporter, onBackup: (() -> Unit)? = null) {
     val context = LocalContext.current
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { importer.readUri(it) } }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -365,18 +397,27 @@ internal fun HostImportSheet(step: HostImportStep, connected: List<SavedHost>, i
                 }
             }
             Group(stringResource(R.string.import_group_export)) {
-                SheetItem(stringResource(R.string.export_hosts_file), icon = R.drawable.ic_attach_file, keepOpen = true) {
+                // A host list holds SSH hosts only: said before, and the result names who was left out.
+                SheetItem(
+                    stringResource(R.string.export_hosts_file),
+                    icon = R.drawable.ic_attach_file,
+                    supporting = stringResource(R.string.export_ssh_only),
+                    keepOpen = true,
+                ) {
                     importer.export()
                     save.launch("rexpocket-hosts.json")
                 }
                 SheetItem(stringResource(R.string.export_hosts_share), icon = R.drawable.ic_share, keepOpen = true) {
                     shareText(context, importer.export().text)
                 }
+                if (onBackup != null) {
+                    SheetItem(stringResource(R.string.export_open_backup), icon = R.drawable.ic_lock, opens = true, onClick = onBackup)
+                }
             }
             step.exported?.let { e ->
-                Column(Modifier.padding(16.dp)) {
+                Column(Modifier.padding(16.dp).testTag(EXPORT_RESULT_TAG)) {
                     Text(stringResource(R.string.export_written, e.written.size), color = Colors.muted, fontSize = TextStyles.label)
-                    if (e.left.isNotEmpty()) Text(stringResource(R.string.export_left, e.left.joinToString(", ")), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
+                    LeftOut(e.left, e.reasons)
                 }
             }
         }
@@ -482,9 +523,17 @@ internal fun PlannedRow(host: PlannedHost, confirmed: Boolean, held: Boolean, cr
                 Text(fieldName(ImportField.Fallbacks) + ": " + host.imported.fallbacks.joinToString(", "), color = Colors.muted, fontSize = TextStyles.label)
             }
         }
+        val on = stringResource(R.string.alerts_on)
+        val off = stringResource(R.string.alerts_off)
+        val none = stringResource(R.string.import_none)
         host.changes.forEach { c ->
+            fun value(v: String?): String = when {
+                v == null -> none
+                c.field == ImportField.TryOthers -> if (v.toBoolean()) on else off
+                else -> v
+            }
             Text(
-                stringResource(R.string.import_change, fieldName(c.field), c.old ?: stringResource(R.string.import_none), c.new ?: stringResource(R.string.import_none)),
+                stringResource(R.string.import_change, fieldName(c.field), value(c.old), value(c.new)),
                 color = Colors.ink,
                 fontSize = TextStyles.label,
                 lineHeight = labelLeading,
@@ -541,8 +590,37 @@ private fun fieldName(field: ImportField): String = stringResource(
         ImportField.Name -> R.string.import_field_name
         ImportField.Address -> R.string.import_field_address
         ImportField.Fallbacks -> R.string.import_field_fallbacks
+        ImportField.TryOthers -> R.string.other_addresses_try
+        ImportField.TailnetAccount -> R.string.tailnet_account_label
     },
 )
+
+/**
+ * The hosts an export left out, by why: on a Rex port (with where to find them), a name the format
+ * refuses, the name of a host already written (rename one), past the most a file holds.
+ */
+@Composable
+internal fun LeftOut(left: List<String>, reasons: Map<String, HostListExport.Reason>) {
+    if (left.isEmpty()) return
+    for (reason in HostListExport.Reason.entries) {
+        val names = left.filter { reasons[it] == reason }
+        if (names.isEmpty()) continue
+        val text = when (reason) {
+            HostListExport.Reason.NotSsh -> R.string.export_left_not_ssh
+            HostListExport.Reason.BadName -> R.string.export_left_name
+            HostListExport.Reason.SameName -> R.string.export_left_same_name
+            HostListExport.Reason.TooMany -> R.string.export_left_too_many
+        }
+        Text(
+            stringResource(text, names.joinToString(", ")),
+            color = if (reason == HostListExport.Reason.SameName) Colors.amber else Colors.muted,
+            fontSize = TextStyles.label,
+            lineHeight = labelLeading,
+        )
+    }
+    val other = left.filter { it !in reasons }
+    if (other.isNotEmpty()) Text(stringResource(R.string.export_left, other.joinToString(", ")), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
+}
 
 /** Why a list cannot be imported, naming the entry when it is one entry's fault. */
 @Composable
@@ -568,6 +646,7 @@ internal fun importProblemText(p: ImportProblem): String {
         ImportProblem.Kind.BadPort -> stringResource(R.string.import_problem_port, field)
         ImportProblem.Kind.BadFingerprint -> stringResource(R.string.import_problem_fingerprint)
         ImportProblem.Kind.BadKeyComment -> stringResource(R.string.import_problem_comment)
+        ImportProblem.Kind.BadOption -> stringResource(R.string.import_problem_option, field)
         ImportProblem.Kind.AmbiguousMatch -> stringResource(R.string.import_problem_ambiguous, p.detail.orEmpty())
     }
     val entry = p.entry ?: return why

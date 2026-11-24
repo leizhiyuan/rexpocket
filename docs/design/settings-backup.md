@@ -13,6 +13,10 @@ the way to move a phone's setup instead: one file the person makes, keeps and op
 | --- | --- | --- |
 | `appearance` | Settings › Appearance | `app` (`system`, `light`, `dark`), `terminal` (`app`, `dark`, `light`), `text` (`system`, `85`, `115`, `130`, `150`) |
 | `terminal.fontScale` | the terminal's text size (pinch, Terminal font) | 0.7 to 1.8 |
+| `terminal.font` | Settings › Terminal font | the font's id (`system`, `jetbrains-mono`, `jetbrains-nerd`, ...; `[a-z0-9-]{1,40}`). An import applies it, downloading it first when it is not on the phone (the preview says how many MB); an id this version's font list does not have is a newer app's font and is left alone |
+| `keyBar` | Settings › Terminal controls, Arrange keys | `always` (the bar with a desk keyboard), `ctrlC` (`tap`, `hold`), `order` (both pills' keys by their stored names, the wide pill's first), `hidden` (the keys the bar has had by default that are off it, so a key a later version adds lands in its default place), `groups[]` (`id`, `name`, `keys`). A key name this version does not know is a newer app's key and is left out, as a stored one is; a group id that is not one (`[a-z0-9]{1,16}`) or a `ctrlC` of any other value is refused |
+| `gestures` | Settings › Terminal controls | `tap` (`keyboard`, `toggle`, `nothing`), `doubleTap` (`full_screen`, `keyboard`, `nothing`), `longPress` (`select`, `full_screen`, `keyboard`), `waitForDoubleTap`, `doubleTapMs` (0 or 100-600) and `longPressMs` (0 or 150-1500); 0 is the phone's own time |
+| `security` | Settings › Security (app-lock.md) | `lock`, `lockAfterSeconds` (0, 60, 300, 900, 3600), `blockScreenshots`. The lock is turned on only on a phone with a screen lock; otherwise it stays off and the app says why |
 | `notifications` | Background and notifications | `waiting`, `failed`, `done`, `messages`, `bells`, `vibrate`, `progress` (progress bars while away; missing is off) |
 | `background.enabled` | Background alerts | turned on only where notifications are allowed (below) |
 | `background.hosts[]` | each host's page | `name`, `stay`, `always`, `notify`, `events` (`Waiting`, `Failed`, `Done`, `Message`, `Bell` → on or off), `mutedTabs` (the tabs muted on that host, by Rex's window id; left out when none; like the rest of the entry, it replaces what the phone has) |
@@ -24,16 +28,25 @@ the way to move a phone's setup instead: one file the person makes, keeps and op
 | `secrets` | SSH passwords and keys | only with **Include SSH keys**, sealed |
 
 Never in it: the tailnet's state (joined, disconnected by hand), its node key, its login or setup
-key, the management server; the
-session and pane a host had open; seen marks; the update channel; key bar and gestures (a later
-version can add them as new parts). Session folds are left out: a session's id is the Rex's, so it
-means nothing on a phone that has not connected yet.
+key, the management server (a
+host names its tailnet account by the account's name only, below); the session and pane a host had
+open; seen marks; the update channel; the font files themselves (only the font's id). Session folds
+are left out: a session's id is the Rex's, so it means nothing on a phone that has not connected
+yet.
+
+The parts after `quickReplies` (`terminal.font`, `keyBar`, `gestures`, `security`, and the hosts'
+`otherUris`, `tryOthers` and `tailnetAccount`) came without a new format: a file from before them
+reads as it did and changes none of them, and an older app ignores them.
 
 ```json
 {
   "format": "rexpocket-settings/1",
   "appearance": { "app": "dark", "terminal": "app", "text": "115" },
-  "terminal": { "fontScale": 1.2 },
+  "terminal": { "fontScale": 1.2, "font": "jetbrains-nerd" },
+  "keyBar": { "always": false, "ctrlC": "hold", "order": ["tab", "escape", "ctrl_c", "…"], "hidden": ["shift", "alt", "slash"],
+              "groups": [ { "id": "fn", "name": "Fn", "keys": ["f1", "…"] } ] },
+  "gestures": { "tap": "keyboard", "doubleTap": "full_screen", "longPress": "select", "waitForDoubleTap": false, "doubleTapMs": 0, "longPressMs": 600 },
+  "security": { "lock": true, "lockAfterSeconds": 60, "blockScreenshots": false },
   "notifications": { "waiting": true, "failed": true, "done": true, "messages": true, "bells": false, "vibrate": true, "progress": false },
   "background": { "enabled": true, "hosts": [ { "name": "agents", "stay": true, "always": true, "notify": true, "events": { "Bell": true } } ] },
   "home": { "filter": "NeedsYou", "reopenLastTab": false, "hostOrder": ["agents", "Desk mac"], "folded": ["Desk mac"], "unfolded": [] },
@@ -41,8 +54,10 @@ means nothing on a phone that has not connected yet.
     "format": "rexpocket-hosts/1",
     "hosts": [
       { "name": "agents", "uri": "ssh://me@100.92.1.2:22", "dnsUri": "ssh://me@agents.example.ts.net:22",
-        "hostKeyFingerprint": "SHA256:…", "keyComment": "rexpocket:agents" },
-      { "name": "Desk mac", "uri": null, "dnsUri": "ws://desk.local:7297", "hostKeyFingerprint": null, "keyComment": null }
+        "hostKeyFingerprint": "SHA256:…", "keyComment": "rexpocket:agents",
+        "otherUris": ["ssh://me@100.92.1.2:22", "ssh://me@agents.local:2222"], "tryOthers": true, "tailnetAccount": "Work" },
+      { "name": "Desk mac", "uri": null, "dnsUri": "ws://desk.local:7297", "hostKeyFingerprint": null, "keyComment": null,
+        "otherUris": [], "tryOthers": false }
     ]
   },
   "quickReplies": ["yes", "continue", "/compact"],
@@ -84,6 +99,18 @@ phone has rather than the SSH hosts another tool provisions:
 - A name follows Rex's rule (1-64 characters, no surrounding spaces, no control characters), so
   "Desk mac" goes in; two hosts with the same name (ignoring case) keep the first.
 - Up to 200 hosts, and none at all.
+
+Each entry also carries what a host list file carries since `otherUris` (host-import.md): every
+other address in order (`otherUris`; `uri` stays the first, for an older reader), Try other
+addresses (`tryOthers`), and, for a tailnet host that names its account, the account's name
+(`tailnetAccount`). The account is found again by name on import (any backend, ignoring case); a
+name this phone has no account of leaves the host following the active account. The name is all
+that goes in: never the account's id, its login or anything of its node.
+
+Export names every host it left out and why, each kind on its own line: a second host of a name
+(ignoring case) is left out with "rename one to keep both", rather than renamed, since a renamed
+host would come back as a new one. The host dialog warns about a name another host has before it
+gets that far.
 
 The SSH entries of a backup's list are a valid `rexpocket-hosts/1` list on their own, so a tool can
 take them out and hand them to Import hosts. The other way round does not hold: Import hosts refuses
@@ -151,8 +178,8 @@ The same steps as Import hosts: **read and check all of it → plan → preview 
 
 Settings › Backup › Save to a file (the system's create-document picker) or Share (the share sheet,
 as text). Include SSH keys asks for the passphrase first. The sheet then says how many hosts went in,
-how many hosts' sign-ins were sealed, and names the hosts left out (a name Rex's rule refuses, or a
-second host of one name).
+how many hosts' sign-ins were sealed, and names the hosts left out, by why (a name Rex's rule
+refuses; a second host of one name, with "rename one to keep both").
 
 ## Code
 
@@ -181,3 +208,12 @@ second host of one name).
 - `SettingsBackupScreenTest` (app, JVM and emulator): a backup read back puts every setting back and
   removes no host; a bad file imports nothing and says where, and never opens Import hosts; a plain
   host list still goes to Import hosts; sealed keys come in only with their passphrase.
+- `BackupPartsTest` (core): the font, key bar, gestures and Security round-trip (export, import, and
+  no change on the phone that wrote it), at their defaults too; each host's whole ordered list of
+  other addresses, Try other addresses and account round-trip, and a host list file carries them
+  with `uri` still the first; a backup exactly as the first version wrote it still loads and changes
+  none of the new parts; a newer app's key name is left out and each bad value refused with where;
+  why each host was left out; no tailnet secret in the file.
+- `HostsAndSecurityTest` (app, JVM and emulator): the key bar, gestures, Security and a host's other
+  addresses and Try other addresses come back from a backup on the real view model and store; a
+  backup's lock stays off on a phone with no screen lock.

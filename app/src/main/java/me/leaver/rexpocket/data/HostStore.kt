@@ -11,6 +11,7 @@ import me.leaver.rexpocket.core.BarKey
 import me.leaver.rexpocket.core.KeyArrangement
 import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.ListedSession
+import me.leaver.rexpocket.core.SecurityPrefs
 import me.leaver.rexpocket.core.TailnetBackend
 import me.leaver.rexpocket.core.Endpoint
 import me.leaver.rexpocket.core.HostRoute
@@ -443,6 +444,21 @@ class HostStore(context: Context) {
 
     fun setFontScale(scale: Float) {
         prefs.edit().putFloat(KEY_FONT, scale.coerceIn(0.7f, 1.8f)).apply()
+    }
+
+    /** Settings › Security: the app lock, how long away before it asks, and the screenshot block; all off at first. */
+    fun security(): SecurityPrefs = SecurityPrefs(
+        lock = prefs.getBoolean("app_lock", false),
+        lockAfterSeconds = SecurityPrefs.cleanLockAfter(prefs.getInt("app_lock_after", SecurityPrefs().lockAfterSeconds)),
+        blockScreenshots = prefs.getBoolean("block_screenshots", false),
+    )
+
+    fun setSecurity(security: SecurityPrefs) {
+        prefs.edit()
+            .putBoolean("app_lock", security.lock)
+            .putInt("app_lock_after", SecurityPrefs.cleanLockAfter(security.lockAfterSeconds))
+            .putBoolean("block_screenshots", security.blockScreenshots)
+            .apply()
     }
 
     private fun write(hosts: List<SavedHost>) {

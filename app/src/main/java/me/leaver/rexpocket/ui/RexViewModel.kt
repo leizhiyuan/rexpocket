@@ -13,6 +13,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import me.leaver.rexpocket.core.Appearance
+import me.leaver.rexpocket.core.AppLockState
+import me.leaver.rexpocket.core.HostLink
+import me.leaver.rexpocket.core.SecurityPrefs
 import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.Endpoint
 import me.leaver.rexpocket.core.AlertKind
@@ -167,6 +170,7 @@ class RexViewModel @JvmOverloads constructor(
         viewModelScope,
         onChanged = { hosts.value = store.list() },
         rexHosts = { id -> connections[id]?.session?.hostList() },
+        profiles = { connections.profiles.value },
     )
 
     /**
@@ -190,6 +194,13 @@ class RexViewModel @JvmOverloads constructor(
                 background = background.value,
                 quickReplies = quickReplies.value.items,
                 templates = launchTemplates.value,
+                terminalFont = terminalFont.value.selected,
+                keyBarAlways = keyBar.value,
+                ctrlC = keyBarCtrlC.value,
+                keyArrangement = keyArrangement.value,
+                gestures = gestures.value,
+                security = security.value,
+                accounts = connections.profiles.value,
             )
         },
         write = { writeSettings(it) },
@@ -725,6 +736,61 @@ class RexViewModel @JvmOverloads constructor(
         gestures.value = next
     }
 
+    /** Settings › Security: the app lock and the screenshot block, both off until turned on. */
+    val security = MutableStateFlow(store.security())
+
+    /** Whether the app is locked now; see [AppLockState]. Kept here, so a rebuilt screen stays locked. */
+    private val lockState = AppLockState(store.security())
+    private val _locked = MutableStateFlow(lockState.locked)
+    val locked: StateFlow<Boolean> = _locked
+
+    fun setSecurity(next: SecurityPrefs) {
+        Diagnostics.event(CONN_TAG, "security: lock ${if (next.lock) "on" else "off"}, screenshots ${if (next.blockScreenshots) "blocked" else "allowed"}")
+        store.setSecurity(next)
+        security.value = next
+        lockState.update(next)
+        _locked.value = lockState.locked
+    }
+
+    /** The app left the screen, or came back to it ([MainActivity]'s stop and start). */
+    fun lockAway(now: Long = System.currentTimeMillis()) = lockState.away(now)
+
+    fun lockBack(now: Long = System.currentTimeMillis()) {
+        lockState.back(now)
+        _locked.value = lockState.locked
+    }
+
+    /** The phone's prompt went up: leaving for its PIN screen is not leaving the app. */
+    fun lockAsking() = lockState.ask()
+
+    /** The phone's prompt came down without confirming the person: still locked. */
+    fun lockNotConfirmed() = lockState.notConfirmed()
+
+    /** The phone confirmed the person: the lock screen goes. */
+    fun unlocked() {
+        Diagnostics.event(CONN_TAG, "app unlocked")
+        lockState.unlocked()
+        _locked.value = false
+    }
+
+    /**
+     * A `rexpocket://add` link, tapped or scanned: the Add host dialog opens filled in, for the
+     * person to check and save. Nothing is saved from the link alone; a bad link says so.
+     */
+    fun openHostLink(uri: String) {
+        when (val link = HostLink.parse(uri)) {
+            is HostLink.Read.Ok -> {
+                Diagnostics.event(CONN_TAG, "host link opened")
+                route.value = Route.Home
+                homeRequest.value = HomeRequest.AddHost(link.name, link.address)
+            }
+            is HostLink.Read.Refused -> {
+                Diagnostics.event(CONN_TAG, "host link refused: ${link.why}")
+                toast(getApplication(), getApplication<Application>().getString(R.string.host_link_refused))
+            }
+        }
+    }
+
     fun setAlertPrefs(next: AlertPrefs) {
         store.setAlertPrefs(next)
         alertPrefs.value = next
@@ -753,6 +819,18 @@ class RexViewModel @JvmOverloads constructor(
         w.background.forEach { (id, b) -> setHostBackground(id, b) }
         w.quickReplies?.let { setQuickReplies(QuickReplies(it)) }
         w.templates.forEach { (id, list) -> setLaunchTemplates(id, list) }
+        w.keyBarAlways?.let(::setKeyBar)
+        w.ctrlC?.let(::setKeyBarCtrlC)
+        w.keyArrangement?.let(::setKeyArrangement)
+        w.gestures?.let(::setGestures)
+        // Downloaded first when it is not on the phone yet; the font page shows how it goes.
+        w.terminalFont?.let { if (it != terminalFont.value.selected) selectTerminalFont(it) }
+        w.security?.let { next ->
+            // The lock needs the phone's own screen lock to ask for: without one it stays off.
+            val lock = next.lock && AppLockGate.deviceSecure(getApplication())
+            if (next.lock && !lock) toast(getApplication(), getApplication<Application>().getString(R.string.security_backup_lock_not_on))
+            setSecurity(next.copy(lock = lock))
+        }
         val on = w.backgroundMode ?: return true
         if (on == Alerts.enabled.value) return true
         if (on && !Alerts.allowed(getApplication())) return false
@@ -1824,6 +1902,9 @@ sealed interface HomeRequest {
 
     /** Settings › Background and notifications. */
     data object Notifications : HomeRequest
+
+    /** The Add host dialog, filled in from a `rexpocket://add` link, waiting for the person's Save. */
+    data class AddHost(val name: String?, val address: String) : HomeRequest
 }
 
 /** Why the tailnet node did not start: what the node said, when it said anything ([tailnetFailureText]). */

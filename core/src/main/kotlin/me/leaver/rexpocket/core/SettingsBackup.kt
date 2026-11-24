@@ -31,6 +31,9 @@ object SettingsFormat {
     const val MAX_TAB_ID = 128
     val HOME_FILTERS = listOf("All", "Activity", "NeedsYou", "Running")
 
+    /** A terminal font's id, as the app's font list names it (`system`, `jetbrains-mono`, ...). */
+    private val FONT_ID = Regex("[a-z0-9-]{1,40}")
+
     fun mentionsFormat(text: String): Boolean =
         text.contains(FORMAT_MARKER) || text.contains(FORMAT_MARKER.replace("/", "\\/"))
 
@@ -97,6 +100,26 @@ object SettingsFormat {
                 if (n.isNaN() || n < MIN_FONT_SCALE || n > MAX_FONT_SCALE) refuse(SettingsProblem.Kind.BadValue, "terminal.fontScale", v.toString())
                 n
             }
+        }
+        val terminalFont = section(root, "terminal")?.let { t ->
+            val v = t.opt("font")
+            if (v == null || v == JSONObject.NULL) null
+            else (v as? String)?.takeIf { FONT_ID.matches(it) } ?: refuse(SettingsProblem.Kind.BadValue, "terminal.font", v.toString())
+        }
+        val keyBar = section(root, "keyBar")?.let(::readKeyBar)
+        val gestures = section(root, "gestures")?.let(::readGestures)
+        val security = section(root, "security")?.let { s ->
+            val d = SecurityPrefs()
+            val after = s.opt("lockAfterSeconds").let { v ->
+                if (v == null || v == JSONObject.NULL) d.lockAfterSeconds
+                else (v as? Number)?.takeIf { (it is Int || it is Long) && it.toLong() in SecurityPrefs.LOCK_AFTER.map(Int::toLong) }?.toInt()
+                    ?: refuse(SettingsProblem.Kind.BadValue, "security.lockAfterSeconds", v.toString())
+            }
+            SecurityPrefs(
+                lock = bool(s, "lock", "security") ?: d.lock,
+                lockAfterSeconds = after,
+                blockScreenshots = bool(s, "blockScreenshots", "security") ?: d.blockScreenshots,
+            )
         }
         val notifications = section(root, "notifications")?.let { n ->
             val d = AlertPrefs()
@@ -205,17 +228,114 @@ object SettingsFormat {
             templates = templates,
             appearance = appearance,
             terminalFontScale = fontScale,
+            terminalFont = terminalFont,
             notifications = notifications,
             backgroundMode = backgroundMode,
             home = home,
             hosts = hosts,
             hostBackground = hostBackground,
             quickReplies = quickReplies,
+            keyBar = keyBar,
+            gestures = gestures,
+            security = security,
             secrets = secrets,
             tailnets = tailnets,
             tiles = tiles,
         )
     }
+
+    /**
+     * `keyBar`: the bar with a desk keyboard, the C-c key, and the arrangement as the phone stores
+     * it. A key name this version does not know is a newer app's key and is left out, as a stored
+     * one is; a group id or name that is not one is refused.
+     */
+    private fun readKeyBar(k: JSONObject): KeyBarPrefs {
+        val ctrlC = k.opt("ctrlC").let { v ->
+            if (v == null || v == JSONObject.NULL) null
+            else (v as? String)?.let { s -> listOf(CtrlCKey.Tap, CtrlCKey.Hold).firstOrNull { it.pref == s } }
+                ?: refuse(SettingsProblem.Kind.BadValue, "keyBar.ctrlC", v.toString())
+        }
+        fun names(field: String, o: JSONObject, path: String): String? {
+            val v = o.opt(field) ?: return null
+            if (v == JSONObject.NULL) return null
+            val arr = v as? JSONArray ?: refuse(SettingsProblem.Kind.BadValue, path)
+            if (arr.length() > 200) refuse(SettingsProblem.Kind.BadValue, path)
+            return List(arr.length()) { i -> arr.opt(i) as? String ?: refuse(SettingsProblem.Kind.BadValue, "$path[${i + 1}]") }
+                .filter { !it.contains(',') }
+                .joinToString(",")
+        }
+        val order = names("order", k, "keyBar.order")
+        val hidden = names("hidden", k, "keyBar.hidden")
+        val groupsV = k.opt("groups")
+        val groups = if (groupsV == null || groupsV == JSONObject.NULL) null else {
+            val arr = groupsV as? JSONArray ?: refuse(SettingsProblem.Kind.BadValue, "keyBar.groups")
+            if (arr.length() > KeyArrangement.MAX_GROUPS) refuse(SettingsProblem.Kind.BadValue, "keyBar.groups", arr.length().toString())
+            List(arr.length()) { i ->
+                val path = "keyBar.groups[${i + 1}]"
+                val g = arr.opt(i) as? JSONObject ?: refuse(SettingsProblem.Kind.BadValue, path)
+                val id = (g.opt("id") as? String)?.takeIf(BarKey::validGroupId) ?: refuse(SettingsProblem.Kind.BadValue, "$path.id")
+                val name = g.opt("name").let { v ->
+                    if (v == null || v == JSONObject.NULL) null
+                    else (v as? String)?.let(KeyArrangement::cleanName) ?: refuse(SettingsProblem.Kind.BadValue, "$path.name")
+                }
+                Triple(id, name, names("keys", g, "$path.keys").orEmpty())
+            }.distinctBy { it.first }
+        }
+        val arrangement = if (order == null && hidden == null && groups == null) null else KeyArrangement.fromStored(
+            order = order,
+            hidden = hidden,
+            groups = groups?.joinToString(",") { it.first },
+            groupKeys = { id -> groups?.firstOrNull { it.first == id }?.third },
+            groupName = { id -> groups?.firstOrNull { it.first == id }?.second },
+        )
+        return KeyBarPrefs(always = bool(k, "always", "keyBar"), ctrlC = ctrlC, arrangement = arrangement)
+    }
+
+    /** `gestures`: each choice by the name the phone stores it under, and the two times (0 is the phone's own). */
+    private fun readGestures(g: JSONObject): GestureSettings {
+        val d = GestureSettings()
+        fun <T> choice(field: String, parse: (String) -> T?): T? {
+            val v = g.opt(field) ?: return null
+            if (v == JSONObject.NULL) return null
+            return (v as? String)?.let(parse) ?: refuse(SettingsProblem.Kind.BadValue, "gestures.$field", v.toString())
+        }
+        fun ms(field: String, range: IntRange): Int? {
+            val v = g.opt(field) ?: return null
+            if (v == JSONObject.NULL) return null
+            val n = (v as? Number)?.takeIf { it is Int || it is Long }?.toInt() ?: refuse(SettingsProblem.Kind.BadValue, "gestures.$field", v.toString())
+            if (n != 0 && n !in range) refuse(SettingsProblem.Kind.BadValue, "gestures.$field", v.toString())
+            return n
+        }
+        return GestureSettings(
+            tap = choice("tap") { s -> TapAction.entries.firstOrNull { it.pref == s } } ?: d.tap,
+            doubleTap = choice("doubleTap") { s -> DoubleTapAction.entries.firstOrNull { it.pref == s } } ?: d.doubleTap,
+            longPress = choice("longPress") { s -> LongPressAction.entries.firstOrNull { it.pref == s } } ?: d.longPress,
+            waitForDoubleTap = bool(g, "waitForDoubleTap", "gestures") ?: d.waitForDoubleTap,
+            doubleTapMs = ms("doubleTapMs", GestureSettings.DOUBLE_TAP_RANGE) ?: d.doubleTapMs,
+            longPressMs = ms("longPressMs", GestureSettings.LONG_PRESS_RANGE) ?: d.longPressMs,
+        )
+    }
+
+    private fun writeKeyBar(k: KeyBarPrefs): JSONObject = JSONObject().apply {
+        k.always?.let { put("always", it) }
+        k.ctrlC?.let { put("ctrlC", if (it == CtrlCKey.Hold) CtrlCKey.Hold.pref else CtrlCKey.Tap.pref) }
+        k.arrangement?.let { a ->
+            put("order", JSONArray((a.keys + a.rest).map { it.pref }))
+            put("hidden", JSONArray(a.storedHidden().split(',').filter { it.isNotEmpty() }))
+            put(
+                "groups",
+                JSONArray(a.groups.map { g -> JSONObject().put("id", g.id).put("name", g.name).put("keys", JSONArray(g.keys.map { it.pref })) }),
+            )
+        }
+    }
+
+    private fun writeGestures(g: GestureSettings): JSONObject = JSONObject()
+        .put("tap", g.tap.pref)
+        .put("doubleTap", g.doubleTap.pref)
+        .put("longPress", g.longPress.pref)
+        .put("waitForDoubleTap", g.waitForDoubleTap)
+        .put("doubleTapMs", g.doubleTapMs)
+        .put("longPressMs", g.longPressMs)
 
     private fun readSealed(s: JSONObject): SealedSecrets {
         fun bad(field: String): Nothing = refuse(SettingsProblem.Kind.BadSecrets, "secrets.$field")
@@ -284,7 +404,19 @@ object SettingsFormat {
         snapshot.appearance?.let { a ->
             root.put("appearance", JSONObject().put("app", a.app.pref).put("terminal", a.terminal.pref).put("text", a.text.pref))
         }
-        snapshot.terminalFontScale?.let { root.put("terminal", JSONObject().put("fontScale", it.toDouble())) }
+        val terminal = JSONObject()
+        snapshot.terminalFontScale?.let { terminal.put("fontScale", it.toDouble()) }
+        snapshot.terminalFont?.takeIf { FONT_ID.matches(it) }?.let { terminal.put("font", it) }
+        if (terminal.length() > 0) root.put("terminal", terminal)
+        snapshot.keyBar?.let { root.put("keyBar", writeKeyBar(it)) }
+        snapshot.gestures?.let { root.put("gestures", writeGestures(it)) }
+        snapshot.security?.let { s ->
+            root.put(
+                "security",
+                JSONObject().put("lock", s.lock).put("lockAfterSeconds", SecurityPrefs.cleanLockAfter(s.lockAfterSeconds))
+                    .put("blockScreenshots", s.blockScreenshots),
+            )
+        }
         snapshot.notifications?.let { n ->
             root.put(
                 "notifications",
@@ -365,7 +497,7 @@ object SettingsFormat {
                     .put("data", BackupCrypto.b64(box.data)),
             )
         }
-        return SettingsExport(root.toString(2), hostExport.written, hostExport.left, sealedCount)
+        return SettingsExport(root.toString(2), hostExport.written, hostExport.left, sealedCount, hostExport.reasons)
     }
 
     private fun section(root: JSONObject, key: String): JSONObject? {
@@ -402,10 +534,22 @@ data class HomePrefs(
     val unfolded: Set<String>? = null,
 )
 
+/**
+ * Settings › Terminal controls' key bar: shown with a desk keyboard, the C-c key's tap or hold, and
+ * the keys and groups. Each null leaves the phone's as it is.
+ */
+data class KeyBarPrefs(
+    val always: Boolean? = null,
+    val ctrlC: CtrlCKey? = null,
+    val arrangement: KeyArrangement? = null,
+)
+
 /** A settings file, read and checked. Every part is optional: a missing one leaves the phone's as it is. */
 data class SettingsBackup(
     val appearance: Appearance? = null,
     val terminalFontScale: Float? = null,
+    /** The terminal font's id; one this version's font list does not have is left alone. */
+    val terminalFont: String? = null,
     val notifications: AlertPrefs? = null,
     val backgroundMode: Boolean? = null,
     val home: HomePrefs? = null,
@@ -414,6 +558,9 @@ data class SettingsBackup(
     val hostBackground: Map<String, HostBackground> = emptyMap(),
     /** Settings › Quick replies, in order: the replies and prompts the person sends often. */
     val quickReplies: List<String>? = null,
+    val keyBar: KeyBarPrefs? = null,
+    val gestures: GestureSettings? = null,
+    val security: SecurityPrefs? = null,
     val secrets: SealedSecrets? = null,
     /** Each tailnet account's choices, by backend and account name; optional, added later. */
     val tailnets: List<TailnetChoices>? = null,
@@ -450,12 +597,16 @@ sealed interface OpenedSecrets {
 data class SettingsSnapshot(
     val appearance: Appearance? = null,
     val terminalFontScale: Float? = null,
+    val terminalFont: String? = null,
     val notifications: AlertPrefs? = null,
     val backgroundMode: Boolean? = null,
     val home: HomePrefs? = null,
     val hosts: List<ExportedHost> = emptyList(),
     val hostBackground: Map<String, HostBackground> = emptyMap(),
     val quickReplies: List<String>? = null,
+    val keyBar: KeyBarPrefs? = null,
+    val gestures: GestureSettings? = null,
+    val security: SecurityPrefs? = null,
     /** Written only when a passphrase is given. */
     val secrets: List<HostSecret> = emptyList(),
     val tailnets: List<TailnetChoices>? = null,
@@ -465,8 +616,16 @@ data class SettingsSnapshot(
     val templates: Map<String, List<LaunchTemplate>> = emptyMap(),
 )
 
-/** A written settings file: its text, the hosts in it and those left out, and how many hosts' credentials went in sealed. */
-data class SettingsExport(val text: String, val hosts: List<String>, val left: List<String>, val sealedHosts: Int) {
+/** A written settings file: its text, the hosts in it and those left out (each with why), and how many hosts' credentials went in sealed. */
+data class SettingsExport(
+    val text: String,
+    val hosts: List<String>,
+    val left: List<String>,
+    val sealedHosts: Int,
+    val reasons: Map<String, HostListExport.Reason> = emptyMap(),
+) {
+    fun leftFor(reason: HostListExport.Reason): List<String> = left.filter { reasons[it] == reason }
+
     override fun toString(): String = "SettingsExport(${hosts.size} hosts, ${left.size} left out, $sealedHosts sealed)"
 }
 
@@ -515,10 +674,16 @@ data class CurrentSettings(
     val tiles: List<TileBinding> = emptyList(),
     /** Each host's launch templates, by host id. */
     val templates: Map<String, List<LaunchTemplate>> = emptyMap(),
+    val terminalFont: String = "system",
+    val keyBarAlways: Boolean = false,
+    val ctrlC: CtrlCKey = CtrlCKey.Tap,
+    val keyArrangement: KeyArrangement = KeyArrangement(),
+    val gestures: GestureSettings = GestureSettings(),
+    val security: SecurityPrefs = SecurityPrefs(),
 )
 
 enum class SettingKey {
-    Theme, TerminalColors, TextSize, TerminalFontScale,
+    Theme, TerminalColors, TextSize, TerminalFontScale, TerminalFont,
     AlertWaiting, AlertFailed, AlertDone, AlertMessages, AlertBells, AlertVibrate, AlertProgress,
     BackgroundMode, HomeFilter, ReopenLastTab, ActivityBySession, IncludeIdle, HostOrder, HostFolds, HostBackground, QuickReplies,
 
@@ -529,6 +694,7 @@ enum class SettingKey {
     Tile,
     /** One host's launch templates: old and new are their names, in order. */
     Templates,
+    KeyBarAlways, CtrlC, KeyArrangement, Gestures, AppLock, LockAfter, BlockScreenshots,
 }
 
 /** One preference an import changes: [old] → [new], for [host] when it is one host's. */
@@ -549,6 +715,18 @@ fun settingChanges(backup: SettingsBackup, current: CurrentSettings, plan: Impor
         change(SettingKey.TextSize, current.appearance.text, a.text)
     }
     change(SettingKey.TerminalFontScale, current.terminalFontScale, backup.terminalFontScale)
+    change(SettingKey.TerminalFont, current.terminalFont, backup.terminalFont)
+    backup.keyBar?.let { k ->
+        change(SettingKey.KeyBarAlways, current.keyBarAlways, k.always)
+        change(SettingKey.CtrlC, current.ctrlC, k.ctrlC)
+        change(SettingKey.KeyArrangement, current.keyArrangement, k.arrangement)
+    }
+    change(SettingKey.Gestures, current.gestures, backup.gestures)
+    backup.security?.let { s ->
+        change(SettingKey.AppLock, current.security.lock, s.lock)
+        change(SettingKey.LockAfter, current.security.lockAfterSeconds, s.lockAfterSeconds)
+        change(SettingKey.BlockScreenshots, current.security.blockScreenshots, s.blockScreenshots)
+    }
     backup.notifications?.let { n ->
         val c = current.notifications
         change(SettingKey.AlertWaiting, c.waiting, n.waiting)

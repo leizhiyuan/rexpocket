@@ -328,6 +328,9 @@ press open) shows:
 - Vibrate on a bell, and each channel's Android page (sound, vibration, lock screen, Do Not
   Disturb): Needs you, Failures, Finished, Program messages and Progress, marked "Off in Android"
   when the person switched it off there.
+- **Reset to defaults**, last, after a confirm: the kinds of alert, Vibrate and Progress bars as
+  the app comes (`AlertPrefs()`). Background mode, each host's and tailnet's page and Android's own
+  settings are not this page's to reset. Greyed out while they are the defaults already.
 
 The page reads Android's side again whenever the app comes back.
 

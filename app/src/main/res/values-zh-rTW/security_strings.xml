@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_group_security">安全性</string>
+    <string name="security_title">安全性</string>
+    <string name="security_detail_locked">使用手機螢幕鎖定</string>
+    <string name="security_detail_off">關閉</string>
+    <string name="security_detail_screenshots">已禁止螢幕截圖</string>
+    <string name="security_lock">鎖定 RexPocket</string>
+    <string name="security_lock_body">回到應用程式時要求指紋、臉部或螢幕鎖定</string>
+    <string name="security_lock_no_screen_lock">請先在 Android 設定中設定螢幕鎖定：應用程式鎖需要用它驗證。</string>
+    <string name="security_lock_not_confirmed">手機未確認你的身分，應用程式鎖保持關閉。</string>
+    <string name="security_lock_after">鎖定時間</string>
+    <string name="security_lock_after_now">立即</string>
+    <string name="security_lock_after_minutes">離開 %1$d 分鐘</string>
+    <string name="security_lock_after_hours">離開 %1$d 小時</string>
+    <string name="security_wait_now">立即</string>
+    <string name="security_wait_now_hint">每次回到應用程式都要驗證，從檔案選擇器回來也是</string>
+    <string name="security_wait_1m">1 分鐘後</string>
+    <string name="security_wait_5m">5 分鐘後</string>
+    <string name="security_wait_15m">15 分鐘後</string>
+    <string name="security_wait_1h">1 小時後</string>
+    <string name="security_wait_hint">離開不到這麼久，應用程式照原樣開啟</string>
+    <string name="security_block_screenshots">禁止螢幕截圖</string>
+    <string name="security_block_screenshots_body">螢幕截圖和螢幕錄影看不到應用程式的內容，最近使用的應用程式裡的縮圖也是空白</string>
+    <string name="security_note">應用程式鎖定時，通知和通知裡的回覆仍可使用。背景模式的連線不受影響。</string>
+    <string name="security_prompt_title">解鎖 RexPocket</string>
+    <string name="security_prompt_body">確認是你本人</string>
+    <string name="security_locked_title">RexPocket 已鎖定</string>
+    <string name="security_locked_body">連線保持原樣。用指紋、臉部或螢幕鎖定解鎖。</string>
+    <string name="security_unlock">解鎖</string>
+    <string name="security_unlock_description">解鎖 RexPocket</string>
+    <string name="security_backup_lock_not_on">應用程式鎖保持關閉：這支手機沒有可驗證的螢幕鎖定。</string>
+</resources>

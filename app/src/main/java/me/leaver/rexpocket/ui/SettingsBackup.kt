@@ -67,6 +67,14 @@ import me.leaver.rexpocket.core.applyTo
 import me.leaver.rexpocket.core.credentialsFor
 import me.leaver.rexpocket.core.inFileOrder
 import me.leaver.rexpocket.core.settingChanges
+import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.GestureSettings
+import me.leaver.rexpocket.core.KeyArrangement
+import me.leaver.rexpocket.core.KeyBarPrefs
+import me.leaver.rexpocket.core.SecurityPrefs
+import me.leaver.rexpocket.core.TailnetProfiles
+import me.leaver.rexpocket.data.FontCatalog
+import me.leaver.rexpocket.data.SYSTEM_FONT
 import me.leaver.rexpocket.data.HomeFolds
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.SavedHost
@@ -86,6 +94,14 @@ data class PhoneSettings(
     val quickReplies: List<String>,
     /** Each host's launch templates, by host id. */
     val templates: Map<String, List<me.leaver.rexpocket.core.LaunchTemplate>> = emptyMap(),
+    val terminalFont: String = SYSTEM_FONT,
+    val keyBarAlways: Boolean = false,
+    val ctrlC: CtrlCKey = CtrlCKey.Tap,
+    val keyArrangement: KeyArrangement = KeyArrangement(),
+    val gestures: GestureSettings = GestureSettings(),
+    val security: SecurityPrefs = SecurityPrefs(),
+    /** The tailnet accounts: a host's account goes in by name and comes back by name. */
+    val accounts: TailnetProfiles = TailnetProfiles(),
 )
 
 /** What an import writes beside the hosts; null leaves a setting as it is. Hosts by id. */
@@ -103,6 +119,13 @@ data class SettingsWrite(
     val quickReplies: List<String>? = null,
     /** Launch templates, by host id: each host's replace that host's. */
     val templates: Map<String, List<me.leaver.rexpocket.core.LaunchTemplate>> = emptyMap(),
+    /** A font of this version's list: applied, downloading it first when it is not on the phone. */
+    val terminalFont: String? = null,
+    val keyBarAlways: Boolean? = null,
+    val ctrlC: CtrlCKey? = null,
+    val keyArrangement: KeyArrangement? = null,
+    val gestures: GestureSettings? = null,
+    val security: SecurityPrefs? = null,
 )
 
 /** The sealed SSH credentials of the file being imported. */
@@ -182,6 +205,10 @@ class SettingsBackupper(
         return SettingsSnapshot(
             appearance = now.appearance,
             terminalFontScale = now.fontScale,
+            terminalFont = now.terminalFont,
+            keyBar = KeyBarPrefs(always = now.keyBarAlways, ctrlC = now.ctrlC, arrangement = now.keyArrangement),
+            gestures = now.gestures,
+            security = now.security,
             notifications = now.alertPrefs,
             backgroundMode = backgroundMode(),
             home = HomePrefs(
@@ -193,15 +220,7 @@ class SettingsBackupper(
                 folded = now.folds.hosts.mapNotNull { label[it] }.toSet(),
                 unfolded = now.folds.openHosts.mapNotNull { label[it] }.toSet(),
             ),
-            hosts = hosts.map { h ->
-                ExportedHost(
-                    name = h.label,
-                    address = h.importAddress(),
-                    fallbacks = h.fallbacks.mapNotNull(ImportAddress::parse),
-                    fingerprint = h.sshHostKey.ifBlank { null },
-                    keyComment = h.sshPrivateKey.takeIf { it.isNotBlank() }?.let(SshKeys::commentOf),
-                )
-            },
+            hosts = hosts.map { it.exported(now.accounts) },
             hostBackground = now.background.hosts.mapNotNull { (id, b) -> label[id]?.let { it to b } }.toMap(),
             quickReplies = now.quickReplies,
             tailnets = tailnetChoicesOf(Connections.of(app)),
@@ -312,9 +331,14 @@ class SettingsBackupper(
                 _step.value = BackupStep.Menu(problem = parse.problem)
             }
             is SettingsParse.Parsed -> {
-                val backup = parse.backup
+                // A font this version's list does not have is a newer app's: left as the phone has it.
+                val backup = parse.backup.let { b ->
+                    val font = b.terminalFont
+                    if (font != null && font != SYSTEM_FONT && FontCatalog.find(font) == null) b.copy(terminalFont = null) else b
+                }
                 val hosts = store.list()
-                when (val planned = ImportPlan.of(HostImportParse.Parsed(backup.hosts), hosts.map { it.known() })) {
+                val accounts = read().accounts
+                when (val planned = ImportPlan.of(HostImportParse.Parsed(backup.hosts), hosts.map { it.known(accounts) })) {
                     is HostImportPlan.Failed -> _step.value = BackupStep.Menu(
                         problem = SettingsProblem(SettingsProblem.Kind.Plan, "hosts", hosts = planned.problem),
                     )
@@ -344,7 +368,7 @@ class SettingsBackupper(
             reopenLastTab = now.reopenLastTab,
             activityBySession = now.activity.bySession,
             includeIdle = now.activity.includeIdle,
-            hosts = hosts.map { it.known() },
+            hosts = hosts.map { it.known(now.accounts) },
             hostBackground = now.background.hosts,
             folded = now.folds.hosts,
             unfolded = now.folds.openHosts,
@@ -352,6 +376,12 @@ class SettingsBackupper(
             tailnets = tailnetChoicesOf(Connections.of(app), all = true),
             tiles = tileBindingsOf(app, hosts),
             templates = now.templates,
+            terminalFont = now.terminalFont,
+            keyBarAlways = now.keyBarAlways,
+            ctrlC = now.ctrlC,
+            keyArrangement = now.keyArrangement,
+            gestures = now.gestures,
+            security = now.security,
         )
     }
 
@@ -399,13 +429,14 @@ class SettingsBackupper(
             val ids = HashMap<String, String>()
             result.unchanged.forEach { p -> p.existing?.let { ids[p.imported.name.lowercase()] = it.id } }
             result.updates.forEach { p -> ids[p.imported.name.lowercase()] = p.existing!!.id }
+            val accounts = read().accounts
             var all = result.applyTo(
                 store.list(),
                 id = { it.id },
-                update = { h, p -> h.imported(p, keys[p.imported.name]).signedInWith(credentialsFor(p, secrets)) },
+                update = { h, p -> h.imported(p, keys[p.imported.name], accounts).signedInWith(credentialsFor(p, secrets)) },
                 create = { p ->
                     SavedHost(id = HostStore.newId(), label = p.imported.name, host = "", port = 0, plaintext = true)
-                        .imported(p, keys[p.imported.name]).signedInWith(credentialsFor(p, secrets))
+                        .imported(p, keys[p.imported.name], accounts).signedInWith(credentialsFor(p, secrets))
                         .also { ids[p.imported.name.lowercase()] = it.id }
                 },
             )
@@ -444,6 +475,12 @@ class SettingsBackupper(
                     background = b.hostBackground.mapNotNull { (n, bg) -> id(n)?.let { it to bg } }.toMap(),
                     quickReplies = b.quickReplies,
                     templates = b.templates.mapNotNull { (n, list) -> id(n)?.let { it to list } }.toMap(),
+                    terminalFont = b.terminalFont,
+                    keyBarAlways = b.keyBar?.always,
+                    ctrlC = b.keyBar?.ctrlC,
+                    keyArrangement = b.keyBar?.arrangement,
+                    gestures = b.gestures,
+                    security = b.security,
                 ),
             )
             b.tailnets?.let { applyTailnetChoices(Connections.of(app), it) }
@@ -521,7 +558,7 @@ internal fun SettingsBackupSheet(step: BackupStep, backupper: SettingsBackupper)
                             color = Colors.ok,
                             fontSize = TextStyles.label,
                         )
-                        if (e.left.isNotEmpty()) Text(stringResource(R.string.export_left, e.left.joinToString(", ")), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
+                        LeftOut(e.left, e.reasons)
                     }
                 }
                 Group(stringResource(R.string.backup_group_export)) {
@@ -712,6 +749,15 @@ private fun ChangeRow(c: SettingChange) {
             (c.old as? List<*>).orEmpty().joinToString(", ").ifEmpty { stringResource(R.string.import_none) },
             (c.new as? List<*>).orEmpty().joinToString(", ").ifEmpty { stringResource(R.string.import_none) },
         )
+        // The keys by their faces would be a long line: the change is named, Arrange keys shows it.
+        SettingKey.KeyArrangement -> stringResource(R.string.backup_setting_key_arrangement_value)
+        SettingKey.Gestures -> stringResource(R.string.backup_setting_gestures_value)
+        SettingKey.TerminalFont -> stringResource(
+            R.string.import_change_short,
+            fontName(c.old as? String),
+            fontName(c.new as? String) + (FontCatalog.find(c.new as? String ?: "")?.let { " " + stringResource(R.string.backup_font_downloads, it.downloadMb) } ?: ""),
+        )
+        SettingKey.LockAfter -> stringResource(R.string.import_change_short, lockAfterText((c.old as? Int) ?: 0), lockAfterText((c.new as? Int) ?: 0))
         SettingKey.QuickReplies -> stringResource(
             R.string.import_change_short,
             (c.old as? List<*>).orEmpty().joinToString(", ") { QuickReplies.short(it.toString()) },
@@ -751,8 +797,21 @@ private fun settingName(key: SettingKey): String = stringResource(
         SettingKey.TailnetChoices -> R.string.backup_setting_tailnets
         SettingKey.Tile -> R.string.tile_group_all
         SettingKey.Templates -> R.string.template_new_tab
+        SettingKey.TerminalFont -> R.string.terminal_font_title
+        SettingKey.KeyBarAlways -> R.string.keybar_title
+        SettingKey.CtrlC -> R.string.keybar_ctrl_c
+        SettingKey.KeyArrangement -> R.string.arrange_title
+        SettingKey.Gestures -> R.string.controls_group_gestures
+        SettingKey.AppLock -> R.string.security_lock
+        SettingKey.LockAfter -> R.string.security_lock_after
+        SettingKey.BlockScreenshots -> R.string.security_block_screenshots
     },
 )
+
+/** A terminal font's name, by its id; the system's for none. */
+@Composable
+private fun fontName(id: String?): String =
+    id?.let { FontCatalog.find(it)?.name } ?: stringResource(R.string.backup_font_system)
 
 @Composable
 private fun settingValue(v: Any?): String = when (v) {
@@ -762,6 +821,7 @@ private fun settingValue(v: Any?): String = when (v) {
     is AppTheme -> stringResource(choice(v).label)
     is TerminalColors -> stringResource(choice(v).label)
     is TextSize -> stringResource(choice(v).label)
+    is CtrlCKey -> stringResource(choice(v).label)
     is String -> when (v) {
         HomeFilter.All.name -> stringResource(R.string.filter_all)
         HomeFilter.Activity.name -> stringResource(R.string.filter_activity)

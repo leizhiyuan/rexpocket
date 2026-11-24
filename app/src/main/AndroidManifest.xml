@@ -41,6 +41,14 @@
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
             </intent-filter>
+            <!-- A host to add: rexpocket://add?addr=...&name=..., tapped as a link or read from a
+                 QR code by the phone's camera app. It opens Add host filled in; only Save saves. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="rexpocket" android:host="add" />
+            </intent-filter>
         </activity>
         <!-- Share into RexPocket: text is pasted, images and other files uploaded, after a tap. -->
         <activity

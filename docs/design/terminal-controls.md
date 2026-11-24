@@ -439,6 +439,12 @@ Settings › Terminal shows **Terminal controls ›**, **Terminal font ›**, **
 **Reopen the last tab ›**. A row that opens another page or dialog ends in a chevron (›); a row that
 acts at once (Check for updates, Source code) does not.
 
+**Reset to defaults**, at the end of Terminal controls, after a confirm: the gestures and their
+times, the key bar with a desk keyboard and the C-c key as the app comes. The keys and key groups
+stay: Arrange keys has its own Reset. Greyed out while all of them are the defaults. The gestures,
+the key bar and the arrangement are in the settings backup (`gestures`, `keyBar`;
+settings-backup.md).
+
 **Pickers.** No row steps blindly through its values any more: a tap used to move to the next
 option, so a person had to tap round to find what the others were, and with three options could
 not go back one. A row of a setting with named options now opens a Material single-choice dialog

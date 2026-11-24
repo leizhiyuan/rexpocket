@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Settings › Security: the app lock and the screenshot block. See docs/design/app-lock.md. -->
+    <string name="settings_group_security">Security</string>
+    <string name="security_title">Security</string>
+    <string name="security_detail_locked">Locked with the phone\'s lock</string>
+    <string name="security_detail_off">Off</string>
+    <string name="security_detail_screenshots">Screenshots blocked</string>
+    <string name="security_lock">Lock RexPocket</string>
+    <string name="security_lock_body">Asks for your fingerprint, face or screen lock when you come back to the app</string>
+    <string name="security_lock_no_screen_lock">Set a screen lock in Android\'s settings first: the app lock asks for it.</string>
+    <string name="security_lock_not_confirmed">The phone did not confirm you, so the lock stays off.</string>
+    <string name="security_lock_after">Lock after</string>
+    <string name="security_lock_after_now">At once</string>
+    <string name="security_lock_after_minutes">%1$d min away</string>
+    <string name="security_lock_after_hours">%1$d h away</string>
+    <string name="security_wait_now">At once</string>
+    <string name="security_wait_now_hint">Every time the app comes back, even from the file picker</string>
+    <string name="security_wait_1m">After 1 minute</string>
+    <string name="security_wait_5m">After 5 minutes</string>
+    <string name="security_wait_15m">After 15 minutes</string>
+    <string name="security_wait_1h">After 1 hour</string>
+    <string name="security_wait_hint">Away for less than this, the app opens as it was</string>
+    <string name="security_block_screenshots">Block screenshots</string>
+    <string name="security_block_screenshots_body">Screenshots and screen recordings show nothing of the app, and its picture in recent apps is blank</string>
+    <string name="security_note">Notifications and their Reply still work while the app is locked. Background mode keeps its connections either way.</string>
+    <string name="security_prompt_title">Unlock RexPocket</string>
+    <string name="security_prompt_body">Confirm it is you</string>
+    <string name="security_locked_title">RexPocket is locked</string>
+    <string name="security_locked_body">Your connections stay as they were. Unlock with your fingerprint, face or screen lock.</string>
+    <string name="security_unlock">Unlock</string>
+    <string name="security_unlock_description">Unlock RexPocket</string>
+    <string name="security_backup_lock_not_on">The app lock stayed off: this phone has no screen lock to ask for.</string>
+</resources>

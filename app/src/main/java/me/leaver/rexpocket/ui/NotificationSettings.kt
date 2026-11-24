@@ -67,6 +67,7 @@ internal fun NotificationsSheet(
         resumed++
         onPauseOrDispose { }
     }
+    var confirmReset by remember { mutableStateOf(false) }
     val checks = remember(resumed, alerts) { BackgroundChecks.read(context) }
     val blocked = remember(resumed) { AlertKind.entries.associateWith { Alerts.channelBlocked(context, it) } }
     val progressOff = remember(resumed) { Alerts.channelOff(context, Alerts.CHANNEL_PROGRESS) }
@@ -256,8 +257,30 @@ internal fun NotificationsSheet(
                 opens = true,
             ) { context.startActivity(Alerts.channelSettings(context, Alerts.CHANNEL_PROGRESS)) }
         }
+        // The switches above as the app comes, after a confirm. Background mode, each host's page
+        // and Android's own settings are not this page's to reset.
+        Group {
+            SheetItem(
+                stringResource(R.string.notifications_reset),
+                if (prefs == AlertPrefs()) Colors.muted else Colors.accent,
+                icon = R.drawable.ic_restart,
+                supporting = stringResource(R.string.notifications_reset_body),
+                keepOpen = true,
+                enabled = prefs != AlertPrefs(),
+                modifier = androidx.compose.ui.Modifier.testTag(NOTIFICATIONS_RESET_TAG),
+            ) { confirmReset = true }
+        }
+    }
+    if (confirmReset) {
+        ResetDialog(
+            title = stringResource(R.string.notifications_reset_title),
+            body = stringResource(R.string.notifications_reset_confirm_body),
+            onDismiss = { confirmReset = false },
+        ) { onPrefs(AlertPrefs()) }
     }
 }
+
+internal const val NOTIFICATIONS_RESET_TAG = "notifications-reset"
 
 internal const val WATCH_CHECK_TAG = "watch-check"
 internal const val ANDROID_STOP_TAG = "android-stop"

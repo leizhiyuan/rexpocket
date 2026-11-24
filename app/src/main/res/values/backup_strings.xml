@@ -3,7 +3,7 @@
     <!-- Settings › Backup: every setting and host to one file, and back. See docs/design/settings-backup.md. -->
     <string name="settings_group_backup">Backup</string>
     <string name="backup_title">Export and import settings</string>
-    <string name="backup_body">One file with your appearance, notifications, background and Home choices and your hosts, for another phone or after a reset. A tailnet\'s sign-in never goes in; SSH keys and passwords only if you ask.</string>
+    <string name="backup_body">One file with your appearance, terminal controls and font, notifications, background, Home and security choices and your hosts, for another phone or after a reset. A tailnet\'s sign-in never goes in; SSH keys and passwords only if you ask.</string>
     <string name="backup_working">Working…</string>
     <string name="backup_refused">Nothing was imported.</string>
     <string name="backup_export_failed">The file could not be written.</string>

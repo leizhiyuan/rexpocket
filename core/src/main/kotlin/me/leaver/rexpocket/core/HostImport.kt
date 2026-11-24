@@ -27,6 +27,12 @@ object HostListFormat {
     const val MAX_NAME = 64
     const val MAX_KEY_COMMENT = 256
 
+    /** The most other addresses an entry's `otherUris` may hold. */
+    const val MAX_OTHER_URIS = 16
+
+    /** The longest tailnet account name an entry may name. */
+    const val MAX_ACCOUNT = 64
+
     private val NAME = Regex("[A-Za-z0-9._-]{1,$MAX_NAME}")
 
     /** `SHA256:` and 43 characters of base64 without padding: 32 bytes, as [SshFingerprint] writes it. */
@@ -95,10 +101,36 @@ object HostListFormat {
                 return problem(ImportProblem.Kind.BadKeyComment)
             }
 
+            // `otherUris`, when there, is every other address in order (it came after `uri`, which
+            // holds only the first); a file without it keeps `uri` beside `dnsUri` as before.
+            val others = o.opt("otherUris")
+            val otherList = if (others == null || others == JSONObject.NULL) null else {
+                val arr = others as? JSONArray ?: return problem(ImportProblem.Kind.BadUri, "otherUris")
+                if (arr.length() > MAX_OTHER_URIS) return problem(ImportProblem.Kind.BadUri, "otherUris")
+                List(arr.length()) { j ->
+                    val raw = arr.opt(j) as? String ?: return problem(ImportProblem.Kind.BadUri, "otherUris")
+                    readUri(raw, rules).let { it.address ?: return problem(it.problem!!, "otherUris") }
+                }
+            }
+            val tryOthers = o.opt("tryOthers").let { v ->
+                if (v == null || v == JSONObject.NULL) null else v as? Boolean ?: return problem(ImportProblem.Kind.BadOption, "tryOthers")
+            }
+            val account = o.opt("tailnetAccount").let { v ->
+                if (v == null || v == JSONObject.NULL) {
+                    null
+                } else {
+                    val t = v as? String ?: return problem(ImportProblem.Kind.BadOption, "tailnetAccount")
+                    if (t.isBlank() || t.length > MAX_ACCOUNT || t.any { it.isISOControl() }) return problem(ImportProblem.Kind.BadOption, "tailnetAccount")
+                    t.trim()
+                }
+            }
+
             // The name is the address to connect by; the bare address is kept beside it.
             val primary = dns ?: uri!!
-            val fallbacks = listOfNotNull(uri).filter { dns != null && !it.sameAs(dns) }
-            hosts += ImportedHost(name, primary, fallbacks, fingerprint, comment?.takeIf { it.isNotBlank() })
+            val fallbacks = (otherList ?: listOfNotNull(uri))
+                .filter { !it.sameAs(primary) }
+                .fold(emptyList<ImportAddress>()) { acc, a -> if (acc.any { it.sameAs(a) }) acc else acc + a }
+            hosts += ImportedHost(name, primary, fallbacks, fingerprint, comment?.takeIf { it.isNotBlank() }, tryOthers, account)
         }
         return HostImportParse.Parsed(hosts)
     }
@@ -148,24 +180,42 @@ object HostListFormat {
      */
     internal fun writeList(hosts: List<ExportedHost>, rules: HostListRules): Pair<JSONObject, HostListExport> {
         val seen = HashSet<String>()
-        val (fit, left) = hosts.partition { h ->
-            rules.validName(h.name) && (h.address.ssh || rules.rexPorts) && seen.add(h.name.lowercase())
+        val why = LinkedHashMap<String, HostListExport.Reason>()
+        val fit = hosts.filter { h ->
+            val reason = when {
+                !h.address.ssh && !rules.rexPorts -> HostListExport.Reason.NotSsh
+                !rules.validName(h.name) -> HostListExport.Reason.BadName
+                !seen.add(h.name.lowercase()) -> HostListExport.Reason.SameName
+                else -> null
+            }
+            if (reason != null) why.putIfAbsent(h.name, reason)
+            reason == null
         }
         val list = JSONArray()
         val written = fit.take(rules.maxHosts)
+        fit.drop(rules.maxHosts).forEach { why.putIfAbsent(it.name, HostListExport.Reason.TooMany) }
         written.forEach { h ->
-            val other = h.fallbacks.firstOrNull { (it.ssh || rules.rexPorts) && !it.sameAs(h.address) }
+            val others = h.fallbacks.filter { (it.ssh || rules.rexPorts) && !it.sameAs(h.address) }
+                .fold(emptyList<ImportAddress>()) { acc, a -> if (acc.any { it.sameAs(a) }) acc else acc + a }
+                .take(MAX_OTHER_URIS)
             list.put(
                 JSONObject()
                     .put("name", h.name)
-                    .put("uri", other?.toString() ?: JSONObject.NULL)
+                    // The first other address, for a reader from before `otherUris`.
+                    .put("uri", others.firstOrNull()?.toString() ?: JSONObject.NULL)
                     .put("dnsUri", h.address.toString())
                     .put("hostKeyFingerprint", h.fingerprint?.takeIf { h.address.ssh && validFingerprint(it) } ?: JSONObject.NULL)
-                    .put("keyComment", h.keyComment?.takeIf { c -> c.isNotBlank() && c.length <= MAX_KEY_COMMENT && c.none { it.isISOControl() } } ?: JSONObject.NULL),
+                    .put("keyComment", h.keyComment?.takeIf { c -> c.isNotBlank() && c.length <= MAX_KEY_COMMENT && c.none { it.isISOControl() } } ?: JSONObject.NULL)
+                    .put("otherUris", JSONArray(others.map { it.toString() }))
+                    .put("tryOthers", h.tryOthers)
+                    .apply {
+                        h.tailnetAccount?.trim()?.takeIf { a -> a.isNotEmpty() && a.length <= MAX_ACCOUNT && a.none { it.isISOControl() } }
+                            ?.let { put("tailnetAccount", it) }
+                    },
             )
         }
         val root = JSONObject().put("format", FORMAT).put("hosts", list)
-        return root to HostListExport("", written.map { it.name }, left.map { it.name } + fit.drop(rules.maxHosts).map { it.name })
+        return root to HostListExport("", written.map { it.name }, why.keys.toList(), why)
     }
 
     /** Exactly what [SshFingerprint] shows: no padding, and the base64 decodes to 32 bytes and back. */
@@ -325,6 +375,10 @@ data class ImportedHost(
     val fallbacks: List<ImportAddress>,
     val fingerprint: String?,
     val keyComment: String?,
+    /** Try Other addresses; null leaves the host's choice as it is (a file from before the field). */
+    val tryOthers: Boolean? = null,
+    /** The tailnet account the host is on, by its name; null leaves the host's as it is. */
+    val tailnetAccount: String? = null,
 ) {
     /** The comment of the key the phone makes for this host. */
     val commentForKey: String get() = keyComment ?: "rexpocket:$name"
@@ -339,13 +393,30 @@ data class SkippedHost(val name: String, val reason: Reason) {
 data class ExportedHost(
     val name: String,
     val address: ImportAddress,
+    /** Every other address, in the order a connection tries them. */
     val fallbacks: List<ImportAddress>,
     val fingerprint: String?,
     val keyComment: String?,
+    val tryOthers: Boolean = true,
+    /** The name of the tailnet account the host names; null when it follows the active one. */
+    val tailnetAccount: String? = null,
 )
 
-/** A written host list, the names in it, and the names left out (not SSH, or a name the format refuses). */
-data class HostListExport(val text: String, val written: List<String>, val left: List<String>)
+/**
+ * A written host list, the names in it, and the names left out, each with why ([reasons]): not an
+ * SSH host, a name the format refuses, the name of a host already written, or past the most hosts.
+ */
+data class HostListExport(
+    val text: String,
+    val written: List<String>,
+    val left: List<String>,
+    val reasons: Map<String, Reason> = emptyMap(),
+) {
+    enum class Reason { NotSsh, BadName, SameName, TooMany }
+
+    /** The names left out for [reason], in the phone's order. */
+    fun leftFor(reason: Reason): List<String> = left.filter { reasons[it] == reason }
+}
 
 /** Why a list cannot be imported. [entry] counts from 1, as a person reading the file does. */
 data class ImportProblem(
@@ -359,6 +430,9 @@ data class ImportProblem(
         TooLarge, NotJson, MissingFormat, WrongFormat, NoHosts, TooManyHosts, NotAnEntry, BadName,
         DuplicateName, NoAddress, BadUri, NotSsh, UriHasPassword, UriHasPath, UriHasQuery, UriNoUser,
         BadPort, BadFingerprint, BadKeyComment,
+
+        /** A `tryOthers` or `tailnetAccount` that is not what the field holds. */
+        BadOption,
 
         /** Planning: two of the phone's hosts fit one entry, or one of them fits two entries. */
         AmbiguousMatch,
@@ -385,6 +459,9 @@ data class KnownHost(
     val fallbacks: List<ImportAddress>,
     val hostKey: String?,
     val hasCredentials: Boolean,
+    val tryOthers: Boolean = true,
+    /** The name of the tailnet account it names; null when it follows the active one. */
+    val tailnetAccount: String? = null,
 )
 
 /** What the import does with an entry's host key. */
@@ -404,7 +481,7 @@ sealed interface KeyChange {
 
 enum class ImportStatus { New, Unchanged, Changed }
 
-enum class ImportField { Name, Address, Fallbacks }
+enum class ImportField { Name, Address, Fallbacks, TryOthers, TailnetAccount }
 
 data class FieldChange(val field: ImportField, val old: String?, val new: String?)
 
@@ -524,6 +601,12 @@ data class ImportPlan(val hosts: List<PlannedHost>, val skipped: List<SkippedHos
                             host.fallbacks.joinToString(", "),
                         ),
                     )
+                }
+                if (host.tryOthers != null && host.tryOthers != existing.tryOthers) {
+                    add(FieldChange(ImportField.TryOthers, existing.tryOthers.toString(), host.tryOthers.toString()))
+                }
+                if (host.tailnetAccount != null && !host.tailnetAccount.equals(existing.tailnetAccount, ignoreCase = true)) {
+                    add(FieldChange(ImportField.TailnetAccount, existing.tailnetAccount, host.tailnetAccount))
                 }
             }
             val pinned = existing.hostKey?.takeIf { it.isNotBlank() }

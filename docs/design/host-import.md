@@ -61,18 +61,30 @@ and a file that names the settings format is taken by Settings › Backup before
   unpadded base64 of 32 bytes, as `ssh-keygen -lf` prints it.
 - `keyComment`: null, or one line of at most 256 characters: the comment of the key the phone makes
   for the host (`rexpocket:<name>` when null).
+- `otherUris` (optional, added without a new format): every other address, in the order a
+  connection tries them, each read as `uri` is; at most 16. With it, `uri` is ignored for the list
+  (Export still writes the first other address there, for a reader from before `otherUris`);
+  without it, `uri` is the one other address, as before. An empty list leaves a host's own as they
+  are, as a file without other addresses always did.
+- `tryOthers` (optional): Try other addresses, true or false; missing leaves the host's as it is.
+- `tailnetAccount` (optional): the name of the tailnet account the host names (one line, at most 64
+  characters). Found by name on import; an account this phone does not have leaves the host
+  following the active one. Never an account's id or anything of its login.
 - Unknown fields are ignored. A file is at most 64 KiB and 50 hosts.
 
 The file holds public data only. There is no field for a password or a private key, and an `ssh://`
 with a password is refused.
 
 **Export hosts** (on the same sheet: save to a file, or share) writes this format from the phone's
-SSH hosts: the name, the address as `dnsUri`, the first other SSH address as `uri`, the pinned host
-key and the comment of the host's key when it is one the phone made. A host reached on a Rex port,
-whose name the format does not allow, or that has the name of a host already written (ignoring
-case: the list would not read back), is left out and named. Never a password, a key or a
-passphrase. To move every host, with its settings and optionally its sign-in, use Settings › Backup
-(settings-backup.md).
+SSH hosts: the name, the address as `dnsUri`, every other SSH address in order as `otherUris` (the
+first also as `uri`), Try other addresses, the tailnet account's name, the pinned host key and the
+comment of the host's key when it is one the phone made. The row says before it runs that it holds
+SSH hosts only, and that Settings › Backup has every host and setting (a row on the sheet opens
+it). Afterwards the sheet names each host left out, by why: reached on a Rex port (Backup has
+them), a name the format does not allow, the name of a host already written (ignoring case: the
+list would not read back; "rename one to keep both"), or past the most a file holds. Never a
+password, a key or a passphrase. To move every host, with its settings and optionally its sign-in,
+use Settings › Backup (settings-backup.md).
 
 ## What counts as the same host
 
@@ -112,7 +124,8 @@ the whole import.
 in order: a file's `uri` beside its `dnsUri`, Rex's other endpoints. When the main address cannot be
 reached, a connection tries them in turn; the host dialog edits the list and its order, and Test
 connection checks each. See [multi-host.md](multi-host.md), "Other addresses". Export hosts and the
-settings backup write them back as `uri` (the first SSH one) and in the backup's host list.
+settings backup write them all back, in order, as `otherUris` (and the first as `uri`), with Try
+other addresses; an import shows a changed order or Try other addresses as a change of that host.
 
 ## Code
 

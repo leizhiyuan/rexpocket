@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import me.leaver.rexpocket.R
@@ -86,6 +87,7 @@ internal fun ControlsSheet(
     onArrangeKeys: () -> Unit,
 ) {
     var timing by remember { mutableStateOf<Timing?>(null) }
+    var confirmReset by remember { mutableStateOf(false) }
     val systemDoubleTap = ViewConfiguration.getDoubleTapTimeout()
     val systemLongPress = ViewConfiguration.getLongPressTimeout()
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.controls_title)) {
@@ -136,6 +138,30 @@ internal fun ControlsSheet(
                 if (keyBarCtrlC == CtrlCKey.Hold) CtrlCKey.Hold else CtrlCKey.Tap, ::choice, onPick = onKeyBarCtrlC,
             )
         }
+        // Everything on this page as the app comes, after a confirm; Arrange keys has its own Reset.
+        val atDefaults = gestures == GestureSettings() && !keyBar && keyBarCtrlC != CtrlCKey.Hold
+        Group {
+            SheetItem(
+                stringResource(R.string.controls_reset),
+                if (atDefaults) Colors.muted else Colors.accent,
+                icon = R.drawable.ic_restart,
+                supporting = stringResource(R.string.controls_reset_body),
+                keepOpen = true,
+                enabled = !atDefaults,
+                modifier = Modifier.testTag(CONTROLS_RESET_TAG),
+            ) { confirmReset = true }
+        }
+    }
+    if (confirmReset) {
+        ResetDialog(
+            title = stringResource(R.string.controls_reset_title),
+            body = stringResource(R.string.controls_reset_confirm_body),
+            onDismiss = { confirmReset = false },
+        ) {
+            onGestures(GestureSettings())
+            onKeyBar(false)
+            onKeyBarCtrlC(CtrlCKey.Tap)
+        }
     }
     when (timing) {
         Timing.DoubleTap -> TimingDialog(
@@ -170,6 +196,31 @@ private fun msLabel(ms: Int, system: Int): String =
  * icon come from the same place and cannot disagree. An action that does nothing has the neutral
  * "block" mark rather than no icon, so the group's labels keep their keyline.
  */
+
+internal const val CONTROLS_RESET_TAG = "controls-reset"
+
+/**
+ * Asks before a page's settings go back to how the app comes: what goes is in [body]. Reset is in
+ * red, as it cannot be undone from here.
+ */
+@Composable
+internal fun ResetDialog(title: String, body: String, onDismiss: () -> Unit, onReset: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Colors.surface,
+        title = { Text(title, color = Colors.ink) },
+        text = { Text(body, color = Colors.muted) },
+        confirmButton = {
+            TextButton(onClick = {
+                onDismiss()
+                onReset()
+            }, modifier = Modifier.testTag(RESET_CONFIRM_TAG)) { Text(stringResource(R.string.settings_reset_confirm), color = Colors.danger) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Colors.muted) } },
+    )
+}
+
+internal const val RESET_CONFIRM_TAG = "reset-confirm"
 
 /** A setting that is on or off, in the order its picker lists them. */
 internal val ON_OFF = listOf(true, false)

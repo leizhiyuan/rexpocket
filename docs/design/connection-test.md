@@ -29,6 +29,12 @@ not the pinned one shows both, in red, with **Trust the new key and test again**
 key trusted here is held by the dialog for that account, machine and port only (changing any of
 them forgets it) and pinned when the person taps Save; the test itself writes nothing.
 
+**Forget host key**, under the pinned key in the dialog, asks first and then drops the pin from
+what Save writes (until Save, nothing is forgotten). The next connection, or a Test connection,
+meets the machine's key as a first one: it shows the fingerprint and asks to trust it, through the
+same prompt. It is for a machine that was set up again, whose new key would otherwise stop every
+connection at "host key changed". `HostDialogQolTest` (emulator) holds it.
+
 ## Other addresses
 
 With other addresses (multi-host.md, "Other addresses"), the test goes on after the main address to

@@ -93,6 +93,7 @@ fun RexPocketApp(
     val share by model.share.collectAsState()
     val hostImport by model.hostImport.step.collectAsState()
     val backup by model.settingsBackup.step.collectAsState()
+    val security by model.security.collectAsState()
     val context = LocalContext.current
     // The home screen leaves the composition while a terminal fills the window; its saved state
     // (the open sheet, search, eye, scroll) is kept here for when it comes back.
@@ -264,6 +265,8 @@ fun RexPocketApp(
                     onImportHosts = model.hostImport::open,
                     onBackup = model.settingsBackup::open,
                     hostTester = model.hostTester,
+                    security = security,
+                    onSecurity = model::setSecurity,
                 )
             } }
             val term: @Composable (Boolean) -> Unit = { embedded ->
@@ -372,6 +375,10 @@ fun RexPocketApp(
                 step = step,
                 connected = hosts.filter { lives[it.id]?.state?.phase == Phase.Live },
                 importer = model.hostImport,
+                onBackup = {
+                    model.hostImport.close()
+                    model.settingsBackup.open()
+                },
             )
         }
         if (fontSettingsOpen) {

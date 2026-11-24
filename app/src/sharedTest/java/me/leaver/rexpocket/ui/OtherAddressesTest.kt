@@ -77,6 +77,7 @@ class OtherAddressesTest {
             RexTheme {
                 var list by remember { mutableStateOf(start.fallbacks) }
                 var on by remember { mutableStateOf(start.tryOthers) }
+                var adding by remember { mutableStateOf("") }
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     OtherAddressesEditor(
                         fallbacks = list,
@@ -85,6 +86,8 @@ class OtherAddressesTest {
                         sshUser = start.sshUser,
                         onChange = { list = it; kept.list = it },
                         onTryOthers = { on = it; kept.tryOthers = it },
+                        adding = adding,
+                        onAdding = { adding = it },
                     )
                 }
             }

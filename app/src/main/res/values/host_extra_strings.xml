@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Export hosts: who was left out, and why. See docs/design/host-import.md. -->
+    <string name="export_ssh_only">SSH hosts only: names, addresses and pinned host keys. Settings › Backup has every host and setting.</string>
+    <string name="export_open_backup">Every host and setting: Backup</string>
+    <string name="export_left_not_ssh">Left out, reached on a Rex port (a host list holds SSH hosts; Backup has them): %1$s</string>
+    <string name="export_left_name">Left out, a name the format does not allow: %1$s</string>
+    <string name="export_left_same_name">Left out, the same name as a host already written. Rename one to keep both: %1$s</string>
+    <string name="export_left_too_many">Left out, past the most hosts a file holds: %1$s</string>
+
+    <!-- A rexpocket://add link or QR code. See docs/design/host-link.md. -->
+    <string name="host_link_check">From a link: check the name and address before you save. Nothing is saved until you do.</string>
+    <string name="host_link_refused">That link does not name a host to add.</string>
+
+    <!-- The host dialog. -->
+    <string name="host_name_taken">Another host is called %1$s. Two hosts of one name are hard to tell apart, and an export keeps only the first.</string>
+    <string name="ssh_host_key_forget">Forget host key</string>
+    <string name="ssh_host_key_forget_title">Forget this host key?</string>
+    <string name="ssh_host_key_forget_body">%1$s stops being trusted once you save. The next connection shows the key the machine has and asks you to trust it, as the first one did.</string>
+    <string name="ssh_host_key_forgotten">Host key forgotten. Save, and the next connection asks you to trust the key it is shown.</string>
+    <string name="other_address_pending_bad">The other address typed above is not an address: fix it and Add, or clear it, to save.</string>
+
+    <!-- Settings › Backup's preview of the new parts. -->
+    <string name="backup_setting_key_arrangement_value">The keys and key groups of the file</string>
+    <string name="backup_setting_gestures_value">The gestures and their times of the file</string>
+    <string name="backup_font_downloads">(downloads %1$d MB)</string>
+    <string name="backup_font_system">The phone\'s</string>
+
+    <!-- Reset to defaults. -->
+    <string name="settings_reset_confirm">Reset</string>
+    <string name="controls_reset">Reset to defaults</string>
+    <string name="controls_reset_body">Gestures, their times, the key bar with a desk keyboard and the C-c key</string>
+    <string name="controls_reset_title">Reset terminal controls?</string>
+    <string name="controls_reset_confirm_body">Tap, double tap and long press go back to what they do at first, with the phone\'s own times; the key bar hides with a desk keyboard; C-c sends on a tap. Your keys and key groups stay: Arrange keys has its own Reset.</string>
+    <string name="notifications_reset">Reset to defaults</string>
+    <string name="notifications_reset_body">The kinds of alert, Vibrate and Progress bars</string>
+    <string name="notifications_reset_title">Reset notifications?</string>
+    <string name="notifications_reset_confirm_body">Waiting, failed, done and messages alert again, bells do not, a bell on screen vibrates, and progress bars are off. Background mode and each host\'s and tailnet\'s page stay as they are.</string>
+    <string name="import_problem_option">%1$s is not what the field holds: true or false for tryOthers, one line of at most 64 characters for tailnetAccount.</string>
+</resources>

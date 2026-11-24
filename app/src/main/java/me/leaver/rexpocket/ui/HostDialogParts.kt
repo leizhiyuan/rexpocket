@@ -54,6 +54,11 @@ internal const val ADD_ADDRESS_TAG = "add-other-address"
 internal const val GENERATE_KEY_TAG = "generate-key"
 internal const val SHOW_PUBLIC_KEY_TAG = "show-public-key"
 internal const val PUBLIC_KEY_TAG = "public-key"
+internal const val HOST_LINK_NOTE_TAG = "host-link-note"
+internal const val HOST_NAME_TAKEN_TAG = "host-name-taken"
+internal const val FORGET_HOST_KEY_TAG = "forget-host-key"
+internal const val FORGET_HOST_KEY_CONFIRM_TAG = "forget-host-key-confirm"
+internal const val PENDING_ADDRESS_TAG = "pending-other-address"
 
 /** The words for why one of a host's other addresses is not dialed. */
 @Composable
@@ -66,10 +71,34 @@ internal fun skipText(skip: RouteSkip): String = stringResource(
     },
 )
 
+/** What is typed in Other addresses' field and not added yet, as Save finds it. */
+internal sealed interface PendingAddress {
+    /** Nothing typed, or an address the list has already. */
+    data object None : PendingAddress
+
+    /** An address Save adds to the end of the list, as the phone writes it. */
+    data class Ready(val address: String) : PendingAddress
+
+    /** Not an address: Save waits until it is fixed or cleared. */
+    data object Unreadable : PendingAddress
+}
+
+/** [typed] as Add would take it, given the list and the main address ([main], null while it is not one). */
+internal fun pendingAddress(typed: String, fallbacks: List<String>, main: HostRoute?, sshUser: String): PendingAddress {
+    val text = typed.trim()
+    if (text.isEmpty()) return PendingAddress.None
+    val parsed = main?.let { HostRoutes.fallback(text, it, sshUser) }
+    if (parsed?.second == RouteSkip.Unreadable) return PendingAddress.Unreadable
+    val key = parsed?.first?.key ?: text
+    if (fallbacks.any { it.equals(text, ignoreCase = true) || it.equals(key, ignoreCase = true) }) return PendingAddress.None
+    return PendingAddress.Ready(key)
+}
+
 /**
  * The host dialog's Other addresses: Try other addresses, then each address in the order it is
  * tried, with Move up, Move down and Remove (buttons, and TalkBack actions on the row), and a field
  * to add one. [main] is the host's own address as typed, which decides what the others may be.
+ * The field's text is the dialog's ([adding]), so Save can add an address typed and not added.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -80,8 +109,9 @@ internal fun OtherAddressesEditor(
     sshUser: String,
     onChange: (List<String>) -> Unit,
     onTryOthers: (Boolean) -> Unit,
+    adding: String,
+    onAdding: (String) -> Unit,
 ) {
-    var adding by remember { mutableStateOf("") }
     Column(Modifier.fillMaxWidth().testTag(OTHER_ADDRESSES_TAG), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.other_addresses_title), color = Colors.ink, fontSize = TextStyles.body)
         if (fallbacks.isNotEmpty()) {
@@ -138,7 +168,7 @@ internal fun OtherAddressesEditor(
             if (!canAdd) return
             // Kept as the phone writes addresses, so the list reads the same as an import's.
             onChange(fallbacks + (parsedNew?.first?.key ?: adding.trim()))
-            adding = ""
+            onAdding("")
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -150,7 +180,7 @@ internal fun OtherAddressesEditor(
                     autoCorrect = false,
                     imeAction = ImeAction.Done,
                     onDone = { add() },
-                ) { adding = it }
+                ) { onAdding(it) }
             }
             TextButton(onClick = { add() }, enabled = canAdd, modifier = Modifier.heightIn(min = 48.dp).testTag(ADD_ADDRESS_TAG)) {
                 Text(stringResource(R.string.other_address_add), color = if (canAdd) Colors.accent else Colors.muted)

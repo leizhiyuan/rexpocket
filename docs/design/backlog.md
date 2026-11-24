@@ -4,8 +4,7 @@ Ideas reviewed and judged worth having, but not worth the effort yet. Each notes
 
 | Idea | What | Size | Needs |
 | --- | --- | --- | --- |
-| Host onboarding | Import hosts from a connected Rex (`hosts.list`). Suggest tailnet devices that answer as Rex on 443 or 7297. Add a host from a `rexpocket://add?addr=&name=` link or QR code, with no secrets in it. | M | A QR made on the desk needs Rex or a small script. |
-| App lock and screenshot block | An optional biometric or device-credential lock with a timeout. An optional `FLAG_SECURE`, which blocks screenshots and blanks the recents thumbnail. | S | - |
+| Find Rex on the tailnet | Mark the tailnet sheet's devices that answer as Rex on 7297 or 443, beside the Add host each already has. The device list is there; the probe is not: a dial and a hello through the node per device and port, with timeouts. | S-M | Run it on asking (a "Look for Rex" row), a few at a time, with `ConnectionCheck`'s Rex step. |
 
 ## Next: a QoL scout pass
 
@@ -64,6 +63,10 @@ actions, from the table above, are built too (home.md, "Launch templates"; comma
 Areas, one per scout:
 - Home and its sheets (done: see above);
 - the terminal and key bar;
-- hosts, import and backup;
+- hosts, import and backup (done: each host's whole list of other addresses, Try other addresses
+  and tailnet account in Export and the backup, Forget host key, an other address typed and not
+  added kept by Save, the terminal font, key bar and gestures in the backup, Reset to defaults on
+  Terminal controls and Notifications, a name another host has warned about and an export that says
+  why it left a host out; with host links (host-link.md) and Settings › Security (app-lock.md));
 - tailnets, tiles and background (done: account removal and sign-out, Leave with its hosts and Rejoin, sign-in and Restart on the page, why a tailnet is up or a host is off, tile taps and Add a tile confirmed, tiles and tailnet choices in the backup; launcher shortcuts with it);
 - notifications and the alert actions (done: alert taps that open their pane after a restart, signed with a per-install key, and an expired or removed-host alert that says so; Reply, Approve, Deny and Interrupt confirmed, Not sent shown even after a restart; a Failures channel; Mute on an alert and in the tab menu, in the backup; Stop with Turn on, Android's stop on the page, hosts that went kept in the watch notification, Manage; the summary, tailnet trouble and stopped notes deep-linked; the background-mode tile and the Glance widget).

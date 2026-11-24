@@ -13,6 +13,14 @@ import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.alerts.HomeWidget
 import me.leaver.rexpocket.alerts.WatchService
 import me.leaver.rexpocket.ui.Connections
+import android.view.WindowManager
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import me.leaver.rexpocket.core.HostLink
+import me.leaver.rexpocket.ui.LockGate
+import me.leaver.rexpocket.ui.rememberDeviceAuthenticator
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.ui.RexPocketApp
 import me.leaver.rexpocket.ui.RexViewModel
@@ -35,7 +43,23 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) alert(intent)
         // Something shared from another app waits on its sheet for a tap; it is never sent on its own.
         if (savedInstanceState == null) received(intent)
-        setContent { RexPocketApp(model) }
+        // Block screenshots: the window is secure, so screenshots, screen recording and the recents
+        // thumbnail show nothing of it. Followed as the setting changes.
+        lifecycleScope.launch {
+            model.security.collect { prefs ->
+                if (prefs.blockScreenshots) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
+        setContent {
+            val locked by model.locked.collectAsState()
+            LockGate(
+                locked = locked,
+                authenticate = rememberDeviceAuthenticator(),
+                onAsking = model::lockAsking,
+                onResult = { ok -> if (ok) model.unlocked() else model.lockNotConfirmed() },
+            ) { RexPocketApp(model) }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -100,6 +124,12 @@ class MainActivity : ComponentActivity() {
                 return
             }
         }
+        // A host to add, from a rexpocket://add link or a QR code the camera read: the dialog
+        // opens filled in, and nothing is saved until the person taps Save.
+        if (intent.action == Intent.ACTION_VIEW && intent.data?.scheme.equals(HostLink.SCHEME, ignoreCase = true)) {
+            model.openHostLink(intent.dataString.orEmpty())
+            return
+        }
         // A settings backup names its own format; anything else opened is a host list, as before.
         hostListToOpen(this, intent)?.let { uri ->
             model.settingsBackup.readUri(uri) { model.hostImport.readUri(uri) }
@@ -121,6 +151,8 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         Diagnostics.event(LIFECYCLE_TAG, "foreground")
+        // Back after long enough away, with the app lock on: locked until the phone says who it is.
+        model.lockBack()
     }
 
     override fun onStop() {
@@ -128,6 +160,7 @@ class MainActivity : ComponentActivity() {
         // The widget's counts as the app leaves: the background watch keeps them fresh from here,
         // when it runs; without it they say when they were read.
         runCatching { HomeWidget.update(this, Connections.of(application), background = WatchService.running) }
+        model.lockAway()
         super.onStop()
     }
 }

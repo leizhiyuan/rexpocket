@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_group_security">安全</string>
+    <string name="security_title">安全</string>
+    <string name="security_detail_locked">使用手机锁屏锁定</string>
+    <string name="security_detail_off">关闭</string>
+    <string name="security_detail_screenshots">已禁止截屏</string>
+    <string name="security_lock">锁定 RexPocket</string>
+    <string name="security_lock_body">回到应用时要求指纹、面容或锁屏密码</string>
+    <string name="security_lock_no_screen_lock">请先在 Android 设置中设置锁屏：应用锁需要用它验证。</string>
+    <string name="security_lock_not_confirmed">手机未确认你的身份，应用锁保持关闭。</string>
+    <string name="security_lock_after">锁定时间</string>
+    <string name="security_lock_after_now">立即</string>
+    <string name="security_lock_after_minutes">离开 %1$d 分钟</string>
+    <string name="security_lock_after_hours">离开 %1$d 小时</string>
+    <string name="security_wait_now">立即</string>
+    <string name="security_wait_now_hint">每次回到应用都要验证，从文件选择器回来也是</string>
+    <string name="security_wait_1m">1 分钟后</string>
+    <string name="security_wait_5m">5 分钟后</string>
+    <string name="security_wait_15m">15 分钟后</string>
+    <string name="security_wait_1h">1 小时后</string>
+    <string name="security_wait_hint">离开不到这么久，应用照原样打开</string>
+    <string name="security_block_screenshots">禁止截屏</string>
+    <string name="security_block_screenshots_body">截屏和录屏看不到应用的内容，最近任务里的缩略图也是空白</string>
+    <string name="security_note">应用锁定时，通知和通知里的回复仍可使用。后台模式的连接不受影响。</string>
+    <string name="security_prompt_title">解锁 RexPocket</string>
+    <string name="security_prompt_body">确认是你本人</string>
+    <string name="security_locked_title">RexPocket 已锁定</string>
+    <string name="security_locked_body">连接保持原样。用指纹、面容或锁屏密码解锁。</string>
+    <string name="security_unlock">解锁</string>
+    <string name="security_unlock_description">解锁 RexPocket</string>
+    <string name="security_backup_lock_not_on">应用锁保持关闭：这台手机没有可验证的锁屏。</string>
+</resources>

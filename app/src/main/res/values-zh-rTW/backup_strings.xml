@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_group_backup">備份</string>
     <string name="backup_title">匯出和匯入設定</string>
-    <string name="backup_body">一個檔案，包含外觀、通知、背景和首頁的選擇以及你的主機，用於另一支手機或重設之後。Tailnet 的登入資訊永遠不會寫入；SSH 金鑰和密碼只在你要求時寫入。</string>
+    <string name="backup_body">一個檔案，包含外觀、終端機操作和字型、通知、背景、首頁和安全性的選擇以及你的主機，用於另一支手機或重設之後。Tailnet 的登入資訊永遠不會寫入；SSH 金鑰和密碼只在你要求時寫入。</string>
     <string name="backup_working">正在處理…</string>
     <string name="backup_refused">什麼都沒有匯入。</string>
     <string name="backup_export_failed">無法寫入這個檔案。</string>

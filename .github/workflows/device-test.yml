@@ -130,6 +130,8 @@ jobs:
               me.leaver.rexpocket.ui.SettingsBackupScreenTest \
               me.leaver.rexpocket.ui.HostCheckScreenTest \
               me.leaver.rexpocket.ui.OtherAddressesTest \
+              me.leaver.rexpocket.ui.HostsAndSecurityTest \
+              me.leaver.rexpocket.ui.HostDialogQolTest \
               me.leaver.rexpocket.ui.TilesScreenTest \
               me.leaver.rexpocket.ui.ShareTest \
               me.leaver.rexpocket.ui.QuickRepliesScreenTest \
@@ -274,6 +276,7 @@ jobs:
             --tests 'me.leaver.rexpocket.ui.MultiHostTest' \
             --tests 'me.leaver.rexpocket.ui.HostImportScreenTest' \
             --tests 'me.leaver.rexpocket.ui.SettingsBackupScreenTest' \
+            --tests 'me.leaver.rexpocket.ui.HostsAndSecurityTest' \
             --tests 'me.leaver.rexpocket.ui.HostCheckScreenTest' \
             --tests 'me.leaver.rexpocket.ui.ShareTest' \
             --tests 'me.leaver.rexpocket.ui.ShareIntentTest' \

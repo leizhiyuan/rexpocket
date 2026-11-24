@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.core.QuickReplies
+import me.leaver.rexpocket.core.SecurityPrefs
 import me.leaver.rexpocket.core.promptStamp
 import me.leaver.rexpocket.core.AlertPrefs
 import me.leaver.rexpocket.core.BackgroundHosts
@@ -53,6 +54,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -271,6 +273,9 @@ internal fun HomeScreen(
     onBackup: () -> Unit = {},
     /** The host dialog's Test connection; null leaves it out. */
     hostTester: HostTester? = null,
+    /** Settings › Security: the app lock and the screenshot block. */
+    security: SecurityPrefs = SecurityPrefs(),
+    onSecurity: (SecurityPrefs) -> Unit = {},
 ) {
     val context = LocalContext.current
     // Android 13 asks for notifications at run time; alerts come on once the person allows them.
@@ -304,6 +309,8 @@ internal fun HomeScreen(
     // A device picked in the tailnet sheet: a new host starts from its name and Rex's port.
     var prefillLabel by rememberSaveable { mutableStateOf<String?>(null) }
     var prefillAddress by rememberSaveable { mutableStateOf<String?>(null) }
+    // The dialog was filled in from a rexpocket://add link: it says so, to check before saving.
+    var fromLink by rememberSaveable { mutableStateOf(false) }
     var tailnetDetails by rememberSaveable { mutableStateOf(false) }
     // A host's or a tailnet's page (Connectable.key), and whether Back goes to Notifications.
     var page by rememberSaveable { mutableStateOf<String?>(null) }
@@ -315,6 +322,7 @@ internal fun HomeScreen(
     var notifications by rememberSaveable { mutableStateOf(false) }
     var controlsPage by rememberSaveable { mutableStateOf<ControlsPage?>(null) }
     var appearanceOpen by rememberSaveable { mutableStateOf(false) }
+    var securityOpen by rememberSaveable { mutableStateOf(false) }
     var diagnostics by rememberSaveable { mutableStateOf(false) }
     var recording by remember { mutableStateOf(Diagnostics.capture(context) != null) }
     val sheets = rememberSaveable(saver = HomeSheets.Saver) { HomeSheets() }
@@ -363,6 +371,14 @@ internal fun HomeScreen(
                 settings = false
                 page = null
                 notifications = true
+            }
+            // A rexpocket://add link: Add host, filled in, for the person to check and save.
+            is HomeRequest.AddHost -> {
+                editingId = null
+                prefillLabel = request.name
+                prefillAddress = request.address
+                fromLink = true
+                creating = true
             }
             null -> return@LaunchedEffect
         }
@@ -796,13 +812,17 @@ internal fun HomeScreen(
             editingId = null
             prefillLabel = null
             prefillAddress = null
+            fromLink = false
         }
-        HostDialog(
+        // A link that comes while the dialog is open starts it again with what the link says.
+        key(prefillLabel, prefillAddress) { HostDialog(
             initial = editing,
             tailnetEnabled = tailnet.enabled,
             accounts = tailnetView.accounts,
             prefillLabel = prefillLabel,
             prefillAddress = prefillAddress,
+            fromLink = fromLink,
+            otherLabels = hosts.filter { it.id != editing?.id }.map { it.label },
             onDismiss = done,
             // Remove host is in the host's sheet, with a confirm and an Undo.
             onDelete = null,
@@ -815,7 +835,7 @@ internal fun HomeScreen(
                 onTailnet()
             },
             tester = hostTester,
-        )
+        ) }
     }
 
     if (confirmTailnetOff) {
@@ -943,6 +963,11 @@ internal fun HomeScreen(
                 settings = false
                 onBackup()
             },
+            security = security,
+            onSecurity = {
+                settings = false
+                securityOpen = true
+            },
             reopenLastTab = reopenLastTab,
             onReopenLastTab = onReopenLastTab,
             recording = recording,
@@ -1059,6 +1084,16 @@ internal fun HomeScreen(
 
     if (appearanceOpen) AppearanceSheet(appearance, onAppearance, onDismiss = { appearanceOpen = false }, terminalTextSize = terminalTextSize, onTerminalTextSize = onTerminalTextSize)
 
+    if (securityOpen) {
+        SecuritySheet(
+            prefs = security,
+            onPrefs = onSecurity,
+            onDismiss = { securityOpen = false },
+            authenticate = rememberDeviceAuthenticator(),
+            deviceSecure = remember(securityOpen) { AppLockGate.deviceSecure(context) },
+        )
+    }
+
     if (diagnostics) {
         DiagnosticsSheet(
             onDismiss = { diagnostics = false },
@@ -1097,6 +1132,9 @@ private fun SettingsSheet(
     onImportHosts: () -> Unit = {},
     /** Settings › Backup: every setting to one file, and back. */
     onBackup: () -> Unit = {},
+    /** Settings › Security's row: its state, and the tap that opens it. */
+    security: SecurityPrefs = SecurityPrefs(),
+    onSecurity: () -> Unit = {},
     /** The Quick replies row's detail, and the row's tap. */
     quickReplies: String? = null,
     onQuickReplies: () -> Unit = {},
@@ -1145,6 +1183,22 @@ private fun SettingsSheet(
         // Everything above, and the hosts, to one file for another phone, and back.
         Group(stringResource(R.string.settings_group_backup)) {
             SheetItem(stringResource(R.string.backup_title), icon = R.drawable.ic_backup, opens = true, onClick = onBackup)
+        }
+        // Who can open the app, and whether it can be seen in screenshots and recents.
+        Group(stringResource(R.string.settings_group_security)) {
+            SheetItem(
+                stringResource(R.string.security_title),
+                icon = R.drawable.ic_lock,
+                detail = stringResource(
+                    when {
+                        security.lock -> R.string.security_detail_locked
+                        security.blockScreenshots -> R.string.security_detail_screenshots
+                        else -> R.string.security_detail_off
+                    },
+                ),
+                opens = true,
+                onClick = onSecurity,
+            )
         }
         Group(stringResource(R.string.settings_group_version)) {
             // The channel first: it is what the row under it looks on. Its picker says what each
@@ -1473,6 +1527,10 @@ internal fun HostDialog(
     tester: HostTester? = null,
     /** The joined tailnet's accounts: with more than one, a tailnet host picks its own. */
     accounts: List<TailnetProfile> = emptyList(),
+    /** Filled in from a `rexpocket://add` link: the dialog says to check it before saving. */
+    fromLink: Boolean = false,
+    /** The other hosts' names: a name one of them has already is warned about. */
+    otherLabels: List<String> = emptyList(),
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1512,10 +1570,22 @@ internal fun HostDialog(
     // A host key the person trusted in Test connection, for this account, machine and port only:
     // Save keeps it as the pinned key. Nothing is written before Save.
     var trusted by remember(parsed?.host, parsed?.port, user) { mutableStateOf<String?>(null) }
-    val pinned = trusted ?: if (sameSshHost) initial.sshHostKey else ""
+    // Forget host key: Save writes none, and the next connection asks to trust the key it is shown.
+    var forgotten by remember(parsed?.host, parsed?.port, user) { mutableStateOf(false) }
+    var confirmForget by remember { mutableStateOf(false) }
+    val pinned = trusted ?: if (sameSshHost && !forgotten) initial.sshHostKey else ""
     val credentialReady = if (useKey) privateKey.isNotBlank() else password.isNotBlank()
     val identityReady = !ssh || (user.isNotBlank() && credentialReady)
-    val canSave = parsed != null && identityReady
+    // Other addresses' field: typed and not added yet, Save adds it; not an address, Save waits.
+    var addingOther by rememberSaveable { mutableStateOf("") }
+    val pendingMain = parsed?.let {
+        asSavedHost(initial, label, it, it.viaTailscale, sshUser = user).copy(fallbacks = fallbacks).mainRoute()
+    }
+    val pending = pendingAddress(addingOther, fallbacks, pendingMain, user)
+    val canSave = parsed != null && identityReady && pending != PendingAddress.Unreadable
+    // Two hosts of one name are hard to tell apart, and a backup or a host list keeps only the first.
+    val shownLabel = label.trim().ifBlank { parsed?.host.orEmpty() }
+    val nameTaken = shownLabel.isNotEmpty() && otherLabels.any { it.equals(shownLabel, ignoreCase = true) }
 
     fun savedHost(viaTailscale: Boolean): SavedHost? {
         val address = parsed ?: return null
@@ -1531,7 +1601,7 @@ internal fun HostDialog(
             sshHostKey = pinned,
         ).copy(
             tailnetProfile = if (viaTailscale && accounts.size > 1) account else initial?.tailnetProfile.orEmpty().takeIf { viaTailscale }.orEmpty(),
-            fallbacks = fallbacks,
+            fallbacks = (pending as? PendingAddress.Ready)?.let { fallbacks + it.address } ?: fallbacks,
             tryOthers = tryOthers,
         )
     }
@@ -1577,12 +1647,24 @@ internal fun HostDialog(
                 Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                if (fromLink && initial == null) {
+                    Text(stringResource(R.string.host_link_check), color = Colors.amber, fontSize = TextStyles.label, lineHeight = labelLeading, modifier = Modifier.testTag(HOST_LINK_NOTE_TAG))
+                }
                 Field(
                     stringResource(R.string.field_name),
                     label,
                     placeholder = stringResource(R.string.field_name_optional),
                     imeAction = ImeAction.Next,
                 ) { label = it }
+                if (nameTaken) {
+                    Text(
+                        stringResource(R.string.host_name_taken, shownLabel),
+                        color = Colors.amber,
+                        fontSize = TextStyles.label,
+                        lineHeight = labelLeading,
+                        modifier = Modifier.testTag(HOST_NAME_TAKEN_TAG),
+                    )
+                }
                 // Enter goes on to the next field, and on the last one saves, as the button does.
                 Field(
                     stringResource(R.string.field_address),
@@ -1683,6 +1765,14 @@ internal fun HostDialog(
                     }
                     if (pinned.isNotBlank()) {
                         Text(stringResource(R.string.ssh_host_key_trusted, pinned), color = Colors.muted, fontSize = TextStyles.label)
+                        // A machine set up again shows a new key: forgetting the old one lets the
+                        // next connection ask, through the same trust prompt as a first one.
+                        TextButton(
+                            onClick = { confirmForget = true },
+                            modifier = Modifier.heightIn(min = 48.dp).testTag(FORGET_HOST_KEY_TAG),
+                        ) { Text(stringResource(R.string.ssh_host_key_forget), color = Colors.danger) }
+                    } else if (forgotten) {
+                        Text(stringResource(R.string.ssh_host_key_forgotten), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
                     }
                 }
                 // The host's other addresses, tried in turn when this one cannot be reached.
@@ -1694,7 +1784,12 @@ internal fun HostDialog(
                         sshUser = user,
                         onChange = { fallbacks = it },
                         onTryOthers = { tryOthers = it },
+                        adding = addingOther,
+                        onAdding = { addingOther = it },
                     )
+                    if (pending == PendingAddress.Unreadable) {
+                        Text(stringResource(R.string.other_address_pending_bad), color = Colors.amber, fontSize = TextStyles.label, modifier = Modifier.testTag(PENDING_ADDRESS_TAG))
+                    }
                 }
                 if (parsed != null && parsed.viaTailscale && accounts.size > 1) {
                     Text(stringResource(R.string.tailnet_account_label), color = Colors.muted, fontSize = TextStyles.label)
@@ -1735,7 +1830,7 @@ internal fun HostDialog(
                         report = report,
                         running = report?.finished == false,
                         enabled = canSave && target != null,
-                        pinned = (if (sameSshHost) initial?.sshHostKey else null)?.ifBlank { null },
+                        pinned = (if (sameSshHost && !forgotten) initial?.sshHostKey else null)?.ifBlank { null },
                         trusted = trusted,
                         onRun = { target?.let { tester.start(it, others) } },
                         onCancel = tester::cancel,
@@ -1760,6 +1855,24 @@ internal fun HostDialog(
             }
         },
     )
+    if (confirmForget) {
+        AlertDialog(
+            onDismissRequest = { confirmForget = false },
+            containerColor = Colors.surface,
+            title = { Text(stringResource(R.string.ssh_host_key_forget_title), color = Colors.ink) },
+            text = { Text(stringResource(R.string.ssh_host_key_forget_body, pinned), color = Colors.muted) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmForget = false
+                    trusted = null
+                    forgotten = true
+                }, modifier = Modifier.testTag(FORGET_HOST_KEY_CONFIRM_TAG)) { Text(stringResource(R.string.ssh_host_key_forget), color = Colors.danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmForget = false }) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
+            },
+        )
+    }
     if (confirmDelete && onDelete != null && initial != null) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
