@@ -870,7 +870,15 @@ class PocketSession(
     }
 
     private suspend fun refreshView(sid: String) {
-        val payload = rpc("session.view", JSONObject().put("session_id", sid))
+        val payload = try {
+            rpc("session.view", JSONObject().put("session_id", sid))
+        } catch (e: RexCallException) {
+            if (e.code == "session_not_found" || e.code == "not_found") {
+                dropSession(sid)
+                return
+            }
+            throw e
+        }
         applyView(parseView(payload))
     }
 
@@ -968,10 +976,7 @@ class PocketSession(
             } catch (e: RexCallException) {
                 trace("pane $blockId: ${e.code} ${e.message}")
                 // The pane or its session is gone; watching it again cannot help.
-                if (e.code == "not_found" || e.code == "session_not_found") {
-                    note(e.toProblem())
-                    return@flow
-                }
+                if (e.code == "not_found" || e.code == "session_not_found") return@flow
                 note(e.toProblem())
             } catch (e: Exception) {
                 trace("pane $blockId: ${e.javaClass.simpleName}: ${e.message}")

@@ -157,6 +157,9 @@ class CloseOwnedPaneTest {
                 assertEquals(listOf("session:1"), rex.destroyedSessions)
                 assertTrue("session should be removed after closing its last pane", session.state.value.sessions.isEmpty())
                 assertNull("activeSessionId should be cleared", session.state.value.activeSessionId)
+                // Give any trailing block_closed/session.view events time to settle.
+                delay(150)
+                assertNull("destroying the session should not note session_not_found", session.state.value.notice)
             } finally {
                 session.stop()
                 scope.cancel()
@@ -239,14 +242,44 @@ private class FakeRexForClose(
                         .put("selected_session", JSONObject().put("view", viewJson())),
                 ),
             )
-            "session.view" -> webSocket.send(response(id, viewJson()))
+            "session.view" -> {
+                val sid = payload.optString("session_id")
+                if (sid in destroyedSessions) {
+                    webSocket.send(error(id, "session_not_found", 404, "session $sid not found"))
+                } else {
+                    webSocket.send(response(id, viewJson()))
+                }
+            }
             "session.destroy" -> {
-                destroyedSessions += payload.getString("session_id")
+                val sid = payload.getString("session_id")
+                destroyedSessions += sid
                 liveBlocks.clear()
                 owners.clear()
                 dataSockets.forEach { it.close(4000, "session destroyed") }
                 dataSockets.clear()
                 webSocket.send(response(id, JSONObject()))
+                // Match real Rex: destroying a session can emit block_closed right before/alongside it.
+                webSocket.send(
+                    JSONObject()
+                        .put("type", "event")
+                        .put(
+                            "payload",
+                            JSONObject()
+                                .put("type", "session_event")
+                                .put(
+                                    "payload",
+                                    JSONObject()
+                                        .put("session_id", sid)
+                                        .put(
+                                            "event",
+                                            JSONObject()
+                                                .put("type", "block_closed")
+                                                .put("payload", JSONObject().put("block_id", "block:1")),
+                                        ),
+                                ),
+                        )
+                        .toString(),
+                )
             }
             "session.own_block" -> {
                 val ids = payload.optJSONArray("block_ids") ?: JSONArray()
