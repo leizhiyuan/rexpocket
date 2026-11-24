@@ -70,6 +70,11 @@ import me.leaver.rexpocket.core.RexClient
 import me.leaver.rexpocket.core.SshCredentials
 import me.leaver.rexpocket.core.SshSettings
 import me.leaver.rexpocket.core.SshTunnel
+import me.leaver.rexpocket.core.HostDialer
+import me.leaver.rexpocket.core.HostRoute
+import me.leaver.rexpocket.core.ProblemException
+import me.leaver.rexpocket.core.RouteCursor
+import me.leaver.rexpocket.core.RouteVia
 import me.leaver.rexpocket.core.TailnetBackend
 import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.Trouble
@@ -160,6 +165,12 @@ class Connections private constructor(private val app: Application, val nodes: T
         var session: PocketSession? = null
             internal set
         internal var tunnel: SshTunnel? = null
+
+        /** With other addresses to try: the addresses and their transports (multi-host.md, "Other addresses"). */
+        internal var dialer: HostDialer? = null
+
+        /** The address the connection uses now, or tries next; null before the first dial. */
+        val route = MutableStateFlow<HostRoute?>(null)
         internal var connectJob: Job? = null
         internal var followJob: Job? = null
         internal var pathJob: Job? = null
@@ -677,10 +688,11 @@ class Connections private constructor(private val app: Application, val nodes: T
 
     /** Measures the path to [hostId]; a no-op unless that host goes through the tailnet. */
     fun probePath(hostId: String) {
-        val link = this[hostId]?.takeIf { it.target.viaTailscale } ?: return
+        val link = this[hostId]?.takeIf { it.route.value?.viaTailnet ?: it.target.viaTailscale } ?: return
+        val host = link.route.value?.endpoint?.host ?: link.target.host
         link.pathJob?.cancel()
         link.pathJob = scope.launch {
-            val path = withContext(Dispatchers.IO) { nodeFor(tailnet.value.backend).probePath(link.target.host) }
+            val path = withContext(Dispatchers.IO) { nodeFor(tailnet.value.backend).probePath(host) }
             link.path.value = path
             Diagnostics.event(CONN_TAG, "tailnet path to ${link.target.host}: $path")
         }
@@ -721,12 +733,14 @@ class Connections private constructor(private val app: Application, val nodes: T
         link.ready.cancel()
         val closing = fleet.remove(hostId)
         val tunnel = link.tunnel
+        val dialer = link.dialer
         link.pocket.value = PocketState()
         // The teardown waits for a disown round trip; leaving the screen must not wait with it.
         // The SSH session closes after that round trip, which may still need it.
         teardown.launch {
             if (closing != null) runCatching { closing.stop() }
             tunnel?.close()
+            dialer?.close()
         }
     }
 
@@ -744,17 +758,23 @@ class Connections private constructor(private val app: Application, val nodes: T
     }
 
     /** The state with its problem told from what the tailnet node knows; see [explainTailnetProblem]. */
-    private fun explained(st: PocketState, target: SavedHost): PocketState {
+    private fun explained(st: PocketState, target: SavedHost, route: HostRoute? = null): PocketState {
         val problem = st.problem ?: return st
-        if (!target.viaTailscale || st.phase == Phase.Live) return st
+        val viaTailnet = route?.viaTailnet ?: target.viaTailscale
+        if (!viaTailnet || st.phase == Phase.Live) return st
+        val host = route?.endpoint?.host ?: target.host
+        val port = route?.endpoint?.port ?: target.port
         val status = tailnetStatus.value
-        val dial = runCatching { nodeFor(tailnet.value.backend).dialError(target.host) }.getOrNull()
-        val better = explainTailnetProblem(problem, target.host, target.port, status.backendState, status.peers, status.peersKnown, dial)
+        val dial = runCatching { nodeFor(tailnet.value.backend).dialError(host) }.getOrNull()
+        val better = explainTailnetProblem(problem, host, port, status.backendState, status.peers, status.peersKnown, dial)
         return if (better == problem) st else st.copy(problem = better)
     }
 
     private fun start(link: Link, resume: Boolean) {
         val target = link.target
+        val last = store.lastRoute(target.id)
+        val routes = target.routes(last?.first, last?.second ?: 0)
+        if (routes.size > 1) return startRoutes(link, routes, resume)
         val previousSession = store.lastSession(target.id)
         val settings = store.tailnet()
         val endpoint = target.endpoint()
@@ -857,6 +877,104 @@ class Connections private constructor(private val app: Application, val nodes: T
         }
     }
 
+    /**
+     * Readies the tailnet node for a dial to [host] through it, as a connection on its own address
+     * does: started, settled, the peer listed or waited for a moment. Its SOCKS port, or a failure
+     * as the connection's problem, which moves on to the next address.
+     */
+    private suspend fun readyTailnet(link: Link, host: String): Int {
+        val settings = store.tailnet()
+        if (!settings.enabled) throw ProblemException(Problem(Trouble.TailnetNotJoined, null))
+        val node = nodeFor(settings.backend)
+        progress(link, ConnectStep.StartTailnet)
+        val port = try {
+            control.start(settings.backend.storageKey)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw ProblemException(Problem(Trouble.Tailnet, e.message))
+        }
+        val settled = withTimeoutOrNull(NODE_READY_MS) {
+            node.status.first { it.backendState in setOf("Running", "NeedsLogin", "NeedsMachineAuth", "Stopped") }
+        }
+        if (settled?.backendState == "Running") {
+            progress(link, ConnectStep.FindPeer)
+            val wait = if (node.status.value.peersKnown) PEER_LISTED_MS else PEER_READY_MS
+            if (!node.awaitPeer(host, wait)) Diagnostics.event(CONN_TAG, "a peer is not in the netmap yet; dialing anyway")
+        }
+        progress(link, ConnectStep.Reach)
+        return port
+    }
+
+    /**
+     * Connects a host that has other addresses: one PocketSession whose dials go through [routes]
+     * in turn (multi-host.md, "Other addresses"). A tailnet node is started only for an address
+     * that goes through it, when that address is tried.
+     */
+    private fun startRoutes(link: Link, routes: List<HostRoute>, resume: Boolean) {
+        val target = link.target
+        val previousSession = store.lastSession(target.id)
+        val cursor = RouteCursor(routes) { route ->
+            store.setLastRoute(target.id, route.key, System.currentTimeMillis())
+            link.route.value = route
+        }
+        link.route.value = cursor.current
+        val dialer = HostDialer(
+            cursor,
+            sshSettings = { route, via ->
+                if (!route.endpoint.viaSsh) null else SshSettings(
+                    host = route.endpoint.host,
+                    port = route.endpoint.port,
+                    user = route.endpoint.sshUser.orEmpty(),
+                    credentials = SshCredentials(
+                        password = target.sshPassword.takeIf { it.isNotEmpty() },
+                        privateKey = target.sshPrivateKey.takeIf { it.isNotEmpty() },
+                        passphrase = target.sshPassphrase.takeIf { it.isNotEmpty() },
+                    ),
+                    // One host, one trusted key, at every address: another key is never this host's.
+                    hostKey = target.sshHostKey.takeIf { it.isNotEmpty() },
+                    socksPort = via.socksPort,
+                    dialer = via.dialer,
+                )
+            },
+            trace = { line -> if (BuildConfig.DEBUG) Log.i(CONN_TAG, line) },
+        )
+        link.dialer = dialer
+        Diagnostics.event(CONN_TAG, "connect ${target.mainRoute().endpoint.label()} with ${routes.size - 1} other addresses, first ${if (cursor.current.main) "its own" else "the last that worked"} ssh=${target.viaSsh} resume=$resume")
+        val cached = if (resume) emptyList() else store.cachedSessions(target.id)
+        link.pocket.value = PocketState(phase = Phase.Connecting, endpointLabel = cursor.current.endpoint.label(), sessions = cached)
+        link.progress.value = ConnectProgress(
+            host = cursor.current.endpoint.host,
+            viaTailnet = cursor.current.viaTailnet,
+            step = ConnectStep.Reach,
+            startedAt = System.currentTimeMillis(),
+        )
+        val trace = { line: String -> if (BuildConfig.DEBUG) Log.i(CONN_TAG, line) }
+        val s = PocketSession(
+            target.mainRoute().endpoint,
+            httpFactory = dialer::http,
+            clientFactory = { dialer.client() },
+            uploadClientFactory = { dialer.client(FileUpload.API_REVISION) },
+            cachedSessions = cached,
+            trace = trace,
+            routes = cursor,
+            prepare = { route ->
+                link.route.value = route
+                Diagnostics.event(CONN_TAG, "dial address ${routes.indexOf(route) + 1} of ${routes.size}${if (route.main) " (its own)" else ""} tailnet=${route.viaTailnet}")
+                if (route.viaTailnet) {
+                    val port = readyTailnet(link, route.endpoint.host)
+                    dialer.setVia(route, RouteVia(port, nodeFor(store.tailnet().backend).dialer))
+                } else {
+                    dialer.setVia(route, RouteVia())
+                }
+            },
+        )
+        link.session = s
+        fleet.add(target.id, s, previousSession)
+        link.ready.complete(s)
+        link.followJob = scope.launch { follow(link, s) }
+    }
+
     /** What follows one host's connection, here rather than on a screen: the store, the steps, the path. */
     private suspend fun follow(link: Link, s: PocketSession) = coroutineScope {
         val target = link.target
@@ -864,7 +982,7 @@ class Connections private constructor(private val app: Application, val nodes: T
         // problem is told again on either.
         launch {
             combine(s.state, tailnetStatus) { st, _ -> st }.collect { st ->
-                link.pocket.value = explained(st, target)
+                link.pocket.value = explained(st, target, link.dialer?.cursor?.current)
                 // Rex answered the connection: what is left is its sessions.
                 if (st.clientId != null && st.phase != Phase.Live) progress(link, ConnectStep.OpenRex)
                 if (st.phase == Phase.Live) {

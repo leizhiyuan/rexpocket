@@ -164,7 +164,8 @@ sealed interface PaneSignal {
  * phone client takes the pane while it is on screen. Leaving disowns it.
  */
 class PocketSession(
-    private val endpoint: Endpoint,
+    /** The host's address; with [routes], only what is shown until the first dial. */
+    private val mainEndpoint: Endpoint,
     /** The list this host had last time, shown until the live one arrives with the bootstrap. */
     cachedSessions: List<ListedSession> = emptyList(),
     /** The app's own Tailscale inbound, when a terminal stream has to go through it like the control one. */
@@ -180,7 +181,18 @@ class PocketSession(
     /** How long a progress bar stays without a new report; see [PocketState.progress]. */
     private val progressStaleMs: Long = PROGRESS_STALE_MS,
     private val clientFactory: () -> RexClient = { RexClient(httpFactory()) },
+    /**
+     * The host's addresses, when it has others to try: each dial uses the cursor's current one,
+     * and one that could not be reached moves it on at once (multi-host.md, "Other addresses").
+     * The factories above read the same cursor.
+     */
+    private val routes: RouteCursor? = null,
+    /** Readies what [HostRoute] needs before it is dialed (the tailnet node); throws when it cannot. */
+    private val prepare: suspend (HostRoute) -> Unit = {},
 ) {
+    /** The address in use now. */
+    private val endpoint: Endpoint get() = routes?.current?.endpoint ?: mainEndpoint
+
     private val _state = MutableStateFlow(PocketState(sessions = cachedSessions))
     val state: StateFlow<PocketState> = _state
 
@@ -316,11 +328,17 @@ class PocketSession(
                     trace("connection ended: " + generateSequence(e as Throwable) { it.cause }.joinToString(" <- ") { "${it.javaClass.simpleName}: ${it.message}" })
                     // A connection that was up starts over from the shortest wait.
                     if (_state.value.phase == Phase.Live) backoff = MIN_BACKOFF_MS
+                    val problem = e.toProblem()
                     updateState {
                         it.copy(
                             phase = if (it.phase == Phase.Live) Phase.Reconnecting else Phase.Connecting,
-                            problem = e.toProblem(),
+                            problem = problem,
                         )
+                    }
+                    // This address could not be reached: the next one is tried now, not after a wait.
+                    if (routes?.failed(problem) == true) {
+                        trace("trying the next address (${routes.routes.indexOf(routes.current) + 1} of ${routes.routes.size})")
+                        continue
                     }
                     val woken = withTimeoutOrNull(backoff) { retry.receive() } != null
                     // Away from the screen (background mode) a host that stays down is tried less
@@ -1034,6 +1052,7 @@ class PocketSession(
     private fun List<InputCall>.dataLength() = sumOf { it.data().length }
 
     private suspend fun runConnection() {
+        routes?.let { prepare(it.current) }
         val client = clientFactory()
         clientRef.set(client)
         // The last failure stays on screen while the next attempt runs: a picker that only says
@@ -1062,6 +1081,7 @@ class PocketSession(
                 bootstrap()
                 if (!ready.isCompleted) ready.complete(Unit)
                 updateState { it.copy(phase = Phase.Live, problem = null) }
+                routes?.live()
                 // bootstrap is what attaches this connection to its session; only after it are pane
                 // calls taken. Panes that came back meanwhile start watching at once.
                 attached.value = true
@@ -1741,7 +1761,7 @@ class PocketSession(
                         launch { sizeLoop(sid, blockId) }
                         ownershipLoop(sid, blockId)
                     }
-                    val stream = TerminalStream(endpoint, httpFactory, trace) { ticket(sid, blockId) }
+                    val stream = TerminalStream({ endpoint }, httpFactory, trace) { ticket(sid, blockId) }
                     streams += stream
                     try {
                         var flowing = false

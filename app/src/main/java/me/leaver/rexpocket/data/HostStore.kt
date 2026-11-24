@@ -12,6 +12,9 @@ import me.leaver.rexpocket.core.KeyArrangement
 import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.TailnetBackend
+import me.leaver.rexpocket.core.Endpoint
+import me.leaver.rexpocket.core.HostRoute
+import me.leaver.rexpocket.core.HostRoutes
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -35,11 +38,24 @@ data class SavedHost(
     val sshHostKey: String = "",
     /**
      * Other addresses of this host, in the order to try them (`ssh://user@host:port`, `ws://` or
-     * `wss://`), as an import gave them. Shown in the host's details; the app connects by [host].
+     * `wss://`), from an import, Rex's endpoints or the host dialog. When [host] cannot be
+     * reached, the connection tries these in turn ([HostRoutes]; multi-host.md, "Other addresses").
      */
     val fallbacks: List<String> = emptyList(),
+    /** Try Other addresses: off connects by [host] alone. */
+    val tryOthers: Boolean = true,
 ) {
     val viaSsh: Boolean get() = sshUser.isNotBlank()
+
+    /** The host's own address as a route, first in its [HostRoutes.plan]. */
+    fun mainRoute(): HostRoute {
+        val user = sshUser.takeIf { it.isNotBlank() }
+        return HostRoute(HostRoutes.key(host, port, plaintext, user), Endpoint(host, port, plaintext, sshUser = user), viaTailscale, main = true)
+    }
+
+    /** Every address a connection would try, in order, given the one that worked last. */
+    fun routes(lastKey: String? = null, lastAt: Long = 0, now: Long = System.currentTimeMillis()): List<HostRoute> =
+        HostRoutes.plan(mainRoute(), fallbacks, sshUser, tryOthers, lastKey, lastAt, now)
 }
 
 /**
@@ -116,6 +132,7 @@ class HostStore(context: Context) {
                         sshPassphrase = secrets.open(o.optString("sshPassphrase", "")),
                         sshHostKey = o.optString("sshHostKey", ""),
                         fallbacks = o.optJSONArray("fallbacks")?.let { a -> List(a.length()) { a.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
+                        tryOthers = o.optBoolean("tryOthers", true),
                     ),
                 )
             }
@@ -135,7 +152,7 @@ class HostStore(context: Context) {
     fun delete(id: String) {
         write(list().filter { it.id != id })
         if (prefs.contains(KEY_CONNECTED_HOSTS)) setConnectedHosts(connectedHosts() - id)
-        prefs.edit().remove(lastKey(id)).remove(panesKey(id)).remove(sessionsKey(id)).apply()
+        prefs.edit().remove(lastKey(id)).remove(panesKey(id)).remove(sessionsKey(id)).remove(routeKey(id)).apply()
     }
 
     /**
@@ -161,6 +178,21 @@ class HostStore(context: Context) {
     }
 
     fun lastSession(hostId: String): String? = prefs.getString(lastKey(hostId), null)
+
+    /**
+     * The address of [hostId] the last connection was made on ([HostRoute.key]) and when, or null:
+     * a connection tries it first while it is recent ([HostRoutes.PREFER_LAST_MS]).
+     */
+    fun lastRoute(hostId: String): Pair<String, Long>? {
+        val raw = prefs.getString(routeKey(hostId), null) ?: return null
+        val o = runCatching { JSONObject(raw) }.getOrNull() ?: return null
+        val key = o.optString("key").takeIf { it.isNotBlank() } ?: return null
+        return key to o.optLong("at")
+    }
+
+    fun setLastRoute(hostId: String, key: String, at: Long) {
+        prefs.edit().putString(routeKey(hostId), JSONObject().put("key", key).put("at", at).toString()).apply()
+    }
 
     fun setLastSession(hostId: String, sessionId: String?) {
         prefs.edit().apply {
@@ -430,7 +462,8 @@ class HostStore(context: Context) {
                     .put("sshPrivateKey", secrets.seal(h.sshPrivateKey))
                     .put("sshPassphrase", secrets.seal(h.sshPassphrase))
                     .put("sshHostKey", h.sshHostKey)
-                    .apply { if (h.fallbacks.isNotEmpty()) put("fallbacks", JSONArray(h.fallbacks)) },
+                    .apply { if (h.fallbacks.isNotEmpty()) put("fallbacks", JSONArray(h.fallbacks)) }
+                    .apply { if (!h.tryOthers) put("tryOthers", false) },
             )
         }
         prefs.edit().putString(KEY_HOSTS, arr.toString()).apply()
@@ -475,5 +508,6 @@ class HostStore(context: Context) {
         private fun lastKey(id: String) = "last:$id"
         private fun panesKey(id: String) = "panes:$id"
         private fun sessionsKey(id: String) = "sessions:$id"
+        private fun routeKey(id: String) = "route:$id"
     }
 }

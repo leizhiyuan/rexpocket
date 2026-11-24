@@ -88,8 +88,12 @@ fun Throwable.explainedBy(transport: Throwable?): Throwable {
 }
 
 /** Classifies by exception type along the cause chain; the message is kept as detail. */
+/** A failure that already knows what it is, such as a tailnet route that could not be set up. */
+class ProblemException(val problem: Problem) : Exception(problem.detail ?: problem.trouble.name)
+
 fun Throwable.toProblem(): Problem {
     val chain = generateSequence(this) { it.cause }.toList()
+    chain.firstOrNull { it is ProblemException }?.let { return (it as ProblemException).problem }
     chain.firstOrNull { it is SshHostKeyException }?.let { error ->
         val ssh = error as SshHostKeyException
         return Problem(

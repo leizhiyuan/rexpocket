@@ -30,12 +30,16 @@ import java.util.Base64
  * control connection for the one-time ticket a new stream needs.
  */
 class TerminalStream(
-    private val endpoint: Endpoint,
+    /** The address each attempt dials: a host's address in use can change between attempts. */
+    private val endpointOf: () -> Endpoint,
     private val httpFactory: () -> OkHttpClient,
     /** Diagnostics: each connection, how its handshake went and why it ended. */
     private val trace: (String) -> Unit = {},
     private val ticket: suspend () -> String,
 ) {
+    constructor(endpoint: Endpoint, httpFactory: () -> OkHttpClient, trace: (String) -> Unit = {}, ticket: suspend () -> String) :
+        this({ endpoint }, httpFactory, trace, ticket)
+
     /** Stream bytes handed over so far: what a RESUME tells Rex it does not need again. */
     @Volatile private var received = 0L
     @Volatile private var resumeToken: ByteString? = null
@@ -158,7 +162,7 @@ class TerminalStream(
         // and the next connection must not take that close for its own.
         val frames = Channel<Frame>(Channel.UNLIMITED)
         val request = Request.Builder()
-            .url(endpoint.ws("/api/data"))
+            .url(endpointOf().ws("/api/data"))
             .header("Sec-WebSocket-Protocol", PROTOCOL)
             .build()
         val ws = httpFactory().newWebSocket(request, listener(hello, welcome, frames))

@@ -61,6 +61,24 @@ object SshKeys {
         string(private).decodeToString().takeIf { it.isNotBlank() }
     }.getOrNull()
 
+    /**
+     * The `authorized_keys` line of [privateKey] (any key SSH signs in with: OpenSSH, PEM, PuTTY),
+     * with [comment] when the key itself carries none; null when it cannot be read, or is
+     * encrypted and [passphrase] does not open it. Only the public half leaves this function.
+     */
+    fun publicKeyOf(privateKey: String, passphrase: String? = null, comment: String = ""): String? = runCatching {
+        val pair = com.jcraft.jsch.KeyPair.load(com.jcraft.jsch.JSch(), privateKey.trim().toByteArray(), null)
+        try {
+            if (pair.isEncrypted && (passphrase.isNullOrEmpty() || !pair.decrypt(passphrase))) return null
+            val blob = pair.publicKeyBlob ?: return null
+            val type = pair.keyTypeString ?: return null
+            val note = (pair.publicKeyComment?.takeIf { it.isNotBlank() } ?: commentOf(privateKey) ?: comment).filterNot { it.isISOControl() }.trim()
+            "$type " + Base64.getEncoder().encodeToString(blob) + if (note.isEmpty()) "" else " $note"
+        } finally {
+            pair.dispose()
+        }
+    }.getOrNull()
+
     private fun string(buf: ByteBuffer): ByteArray = ByteArray(buf.int).also { buf.get(it) }
 
     private fun publicBlob(pub: ByteArray): ByteArray = bytes {
