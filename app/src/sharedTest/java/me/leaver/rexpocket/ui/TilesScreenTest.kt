@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.alerts.TILE_PICKER_CLEAR_TAG
+import me.leaver.rexpocket.alerts.TILE_PICKER_OPEN_APP_TAG
 import me.leaver.rexpocket.alerts.TILE_PICKER_SLOT_TAG
 import me.leaver.rexpocket.alerts.TilePicker
 import me.leaver.rexpocket.alerts.TileStore
@@ -81,7 +82,7 @@ class TilesScreenTest {
     fun aPageOnATileSaysWhichAndRemovesIt() {
         store().bind(2, Connectable.host("mac"))
         page()
-        row(string(R.string.tile_added, 2)).performScrollTo()
+        row(string(R.string.tile_bound, 2)).performScrollTo()
         row(string(R.string.tile_remove)).performScrollTo().performClick()
         compose.waitForIdle()
         assertNull(store().of(2))
@@ -89,7 +90,31 @@ class TilesScreenTest {
         row(string(R.string.tile_add)).performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(1, store().slotOf(Connectable.host("mac")))
-        row(string(R.string.tile_added, 1)).performScrollTo()
+        row(string(R.string.tile_bound, 1)).performScrollTo()
+    }
+
+    @Test
+    fun aTileIsOnlyBoundUntilAndroidSaysItIsInQuickSettings() {
+        store().bind(2, Connectable.host("mac"))
+        // Dismissed: bound, and the page says how to add it by hand.
+        store().setAdded(2, false)
+        page()
+        row(string(R.string.tile_bound, 2)).performScrollTo()
+        compose.onNode(hasText(string(R.string.tile_not_added, 2), substring = true), useUnmergedTree = true).assertExists()
+        // Added: on the tile.
+        compose.runOnUiThread { store().setAdded(2, true) }
+        compose.waitForIdle()
+        row(string(R.string.tile_added, 2)).performScrollTo()
+    }
+
+    @Test
+    fun thePickerWithNothingToBindSaysWhatToDoAndOpensTheApp() {
+        var opened = 0
+        compose.setContent { RexTheme { TilePicker(1, emptyList(), nameOf, onDone = {}, onOpenApp = { opened++ }) } }
+        compose.waitForIdle()
+        compose.onNode(hasText(string(R.string.tile_picker_empty))).assertExists()
+        compose.onNodeWithTag(TILE_PICKER_OPEN_APP_TAG).performScrollTo().performClick()
+        assertEquals(1, opened)
     }
 
     @Test
@@ -102,7 +127,7 @@ class TilesScreenTest {
         compose.waitForIdle()
         assertEquals(Connectable.host("mac"), store().of(2))
         assertEquals(Connectable.host("linux"), store().of(1))
-        row(string(R.string.tile_added, 2)).performScrollTo()
+        row(string(R.string.tile_bound, 2)).performScrollTo()
     }
 
     @Test

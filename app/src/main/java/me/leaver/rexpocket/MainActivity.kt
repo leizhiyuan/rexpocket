@@ -46,6 +46,11 @@ class MainActivity : ComponentActivity() {
      * its sheet for a tap.
      */
     private fun received(intent: Intent) {
+        // A launcher shortcut opens its tab, connecting its host first.
+        me.leaver.rexpocket.ui.LauncherShortcuts.read(intent)?.let {
+            model.openShortcut(it)
+            return
+        }
         // A tile's long press, a tile whose tailnet hosts use, or a page asked for.
         when (intent.action) {
             android.service.quicksettings.TileService.ACTION_QS_TILE_PREFERENCES -> {

@@ -211,14 +211,28 @@ internal fun HostPage(
     tile: @Composable SheetScope.() -> Unit = {},
     /** Turns background mode on, from the line that says what it brings; null leaves it out. */
     onBackgroundMode: (() -> Unit)? = null,
+    /** Why its tailnet keeps it off (disconnected, or on another account), and what clears that. */
+    parked: HostParked? = null,
+    onUnpark: () -> Unit = {},
 ) {
     val on = stringResource(R.string.alerts_on)
     val off = stringResource(R.string.alerts_off)
     fun state(value: Boolean) = if (value) on else off
     val linkState = hostLinkState(live?.state?.phase, live?.state?.problem)
+    val parkedNow = parked?.takeIf { linkState == LinkState.Off }
     ActionSheet(onDismiss = onDismiss, title = host.label.ifBlank { host.host }, onBack = onBack) {
         Group {
-            StateRow(linkState, "${host.host}:${host.port}")
+            StateRow(linkState, listOfNotNull(parkedNow?.let { parkedText(it) }, "${host.host}:${host.port}").joinToString(" · "))
+            if (parkedNow != null) {
+                SheetItem(
+                    parkedAction(parkedNow),
+                    color = Colors.accent,
+                    icon = R.drawable.ic_tailnet,
+                    keepOpen = true,
+                    modifier = Modifier.testTag(HOST_PARKED_TAG),
+                    onClick = onUnpark,
+                )
+            }
             Actions(connectionActions(linkState, ConnectableKind.Host, onConnect, onDisconnect, onRetry))
         }
         BackgroundGroup(ConnectableKind.Host, choices.keep, backgroundMode, onBackgroundMode) { onChoices(choices.withKeep(it)) }
@@ -269,6 +283,12 @@ internal fun TailnetPage(
     accounts: TailnetAccountOps? = null,
     /** Turns background mode on, from the line that says what it brings; null leaves it out. */
     onBackgroundMode: (() -> Unit)? = null,
+    /** Opens the node's sign-in page, while it asks for one; null leaves it out. */
+    onSignIn: ((String) -> Unit)? = null,
+    /** Restart, while the node runs or starts, as the sheet has it; null leaves it out. */
+    onRestart: (() -> Unit)? = null,
+    /** Tailnet settings (the join dialog), as the sheet has it; null leaves it out. */
+    onSettings: (() -> Unit)? = null,
 ) {
     val policy = view.policy
     val on = stringResource(R.string.alerts_on)
@@ -276,8 +296,21 @@ internal fun TailnetPage(
     val linkState = stage.linkState()
     ActionSheet(onDismiss = onDismiss, title = view.name, onBack = onBack) {
         Group {
-            StateRow(linkState, tailnetSupporting(view, stage))
-            Actions(connectionActions(linkState, ConnectableKind.Tailnet, onConnect, onDisconnect, onRetry))
+            StateRow(linkState, tailnetSupporting(view, stage, backgroundMode))
+            if (onSignIn != null && stage is TailnetStage.SigningIn && stage.authUrl.isNotBlank()) {
+                SheetItem(
+                    stringResource(R.string.action_sign_in),
+                    color = Colors.accent,
+                    icon = R.drawable.ic_tailnet,
+                    supporting = stage.authUrl,
+                    keepOpen = true,
+                    modifier = Modifier.testTag(TAILNET_SIGN_IN_TAG),
+                ) { onSignIn(stage.authUrl) }
+            }
+            Actions(connectionActions(linkState, ConnectableKind.Tailnet, onConnect, onDisconnect, onRetry, onRestart))
+            if (onSettings != null) {
+                SheetItem(stringResource(R.string.action_tailnet_settings), icon = R.drawable.ic_settings, opens = true, onClick = onSettings)
+            }
         }
         me.leaver.rexpocket.net.addon.TailnetBackendRow(this, view.backend)
         if (accounts != null && view.accounts.isNotEmpty()) AccountsGroup(view, accounts)
@@ -311,9 +344,12 @@ internal fun TailnetPage(
     }
 }
 
-/** The line under a tailnet's state: how many hosts use it, or when it stops while it lingers. */
+/**
+ * The line under a tailnet's state: how many hosts use it, or when it stops while it lingers, and
+ * why it is kept up ([tailnetKeptReason]).
+ */
 @Composable
-internal fun tailnetSupporting(view: TailnetView, stage: TailnetStage): String? {
+internal fun tailnetSupporting(view: TailnetView, stage: TailnetStage, backgroundMode: Boolean = false): String? {
     val until = view.lingerUntil
     if (until != null && view.hosts.isEmpty()) {
         // Worked out when the view changes, not on a timer: a ticking effect would keep the
@@ -322,8 +358,11 @@ internal fun tailnetSupporting(view: TailnetView, stage: TailnetStage): String? 
         val minutes = (((until - now).coerceAtLeast(0) + 59_999) / 60_000).toInt()
         return pluralStringResource(R.plurals.tailnet_stops_in, minutes, minutes)
     }
-    if (view.hosts.isNotEmpty()) return pluralStringResource(R.plurals.tailnet_used_by, view.hosts.size, view.hosts.size)
-    return if (stage is TailnetStage.Disconnected || stage is TailnetStage.Failed) tailnetStageText(stage, view.backend) else null
+    val why = tailnetKeptReason(view, backgroundMode)
+    if (view.hosts.isNotEmpty()) {
+        return listOfNotNull(pluralStringResource(R.plurals.tailnet_used_by, view.hosts.size, view.hosts.size), why).joinToString(" · ")
+    }
+    return if (stage is TailnetStage.Disconnected || stage is TailnetStage.Failed) tailnetStageText(stage, view.backend) else why
 }
 
 /**
@@ -351,6 +390,8 @@ internal const val TILE_CHANGE_TAG = "tile-change"
 internal const val TILE_REMOVE_TAG = "tile-remove"
 internal const val TILE_REPLACE_TAG = "tile-replace-"
 internal const val BG_TURN_ON_TAG = "background-turn-on"
+internal const val TAILNET_SIGN_IN_TAG = "tailnet-sign-in"
+internal const val HOST_PARKED_TAG = "host-parked"
 
 /**
  * A page's Quick Settings group, the same for a host and a tailnet. On a tile: "On tile N" with
@@ -367,10 +408,17 @@ internal fun SheetScope.TileGroup(item: me.leaver.rexpocket.core.Connectable, na
     var full by remember(item) { androidx.compose.runtime.mutableStateOf(false) }
     Group(stringResource(R.string.conn_group_tile)) {
         if (slot != null) {
+            // "On tile N" once Android said the tile is in Quick Settings; until then only bound to it.
+            val added = remember(slot, version) { me.leaver.rexpocket.alerts.TileStore(context).added(slot) }
             SheetItem(
-                label = stringResource(R.string.tile_added, slot),
+                label = stringResource(if (added == true) R.string.tile_added else R.string.tile_bound, slot),
                 icon = R.drawable.ic_check,
-                supporting = if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) stringResource(R.string.tile_add_manual, slot) else stringResource(R.string.tile_add_body),
+                supporting = when {
+                    added == true -> stringResource(R.string.tile_add_body)
+                    added == false -> stringResource(R.string.tile_not_added, slot)
+                    android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU -> stringResource(R.string.tile_add_manual, slot)
+                    else -> stringResource(R.string.tile_add_body)
+                },
                 detail = stringResource(R.string.tile_change),
                 keepOpen = true,
                 opens = true,

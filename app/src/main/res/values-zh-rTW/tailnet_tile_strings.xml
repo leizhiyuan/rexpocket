@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tailnet_leave_title">離開 %1$s？</string>
+    <string name="tailnet_leave_body">這支手機不再是它上面的裝置，在重新加入之前，它上面的主機都連不上。</string>
+    <plurals name="tailnet_leave_hosts">
+        <item quantity="other">%2$s 透過它連線，也會一起中斷。</item>
+    </plurals>
+    <string name="tailnet_leave_forget">刪除這支手機上的登入</string>
+    <string name="tailnet_leave_forget_body">再次加入 %1$s 時需要重新登入。</string>
+    <string name="tailnet_leave_and_forget">離開並刪除登入</string>
+    <string name="tailnet_left">已離開 %1$s</string>
+    <string name="tailnet_left_forgot">已離開 %1$s 並刪除了登入</string>
+    <string name="tailnet_rejoin">重新加入</string>
+    <string name="tailnet_switched_to">已把 %1$s 切換到 %2$s</string>
+    <plurals name="tailnet_switched_hosts">
+        <item quantity="other">%1$d 台主機已中斷</item>
+    </plurals>
+    <string name="tailnet_account_remove_in_use">使用中：先切換到另一個帳號才能移除它。</string>
+    <string name="tailnet_account_remove_only">這是唯一的帳號：先新增另一個帳號才能移除它，或者離開 tailnet 並刪除登入。</string>
+
+    <string name="host_parked_tailnet_off">%1$s 已關閉</string>
+    <string name="host_parked_other_account">在帳號 %1$s 上</string>
+    <string name="host_parked_connect_tailnet">連線 %1$s</string>
+    <string name="host_parked_use_account">使用 %1$s</string>
+
+    <string name="tailnet_kept_open">App 開著時保持連線</string>
+    <string name="tailnet_kept_never">保持連線：停止時間設為永不</string>
+    <string name="tailnet_kept_always">保持連線：在背景一律連線</string>
+    <plurals name="tailnet_stops_after_last">
+        <item quantity="other">最後一台主機中斷 %1$d 分鐘後停止</item>
+    </plurals>
+
+    <string name="tile_bound">已綁定到圖塊 %1$d</string>
+    <string name="tile_not_added">還沒加到快速設定。編輯快速設定，把 RexPocket %1$d 圖塊拖進來。</string>
+    <string name="tile_picker_empty">先新增一台主機或加入 tailnet。</string>
+    <string name="tile_picker_open_app">開啟 RexPocket</string>
+
+    <string name="shortcut_host_gone">這台主機已從 RexPocket 移除。</string>
+    <string name="shortcut_session_gone">%1$s 上已經沒有這個工作階段了。</string>
+    <string name="shortcut_tab_gone">這個分頁已關閉，顯示它所在的工作階段。</string>
+</resources>

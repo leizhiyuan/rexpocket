@@ -72,6 +72,12 @@ internal class FakeTailnetNode : TailnetNode {
     }
     override fun stopAsync() = stop()
 
+    /** The accounts whose login was deleted, in order. */
+    val forgotten = java.util.concurrent.CopyOnWriteArrayList<String>()
+    override fun forgetProfile(profile: String) {
+        forgotten += profile
+    }
+
     /** Whether the node can keep accounts now; a test turns it off as an older helper app would. */
     val accountsKept = MutableStateFlow(true)
     override val keepsAccounts: StateFlow<Boolean> = accountsKept

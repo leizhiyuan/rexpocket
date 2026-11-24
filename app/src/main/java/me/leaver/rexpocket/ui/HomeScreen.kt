@@ -209,6 +209,8 @@ internal fun HomeScreen(
     onRestoreHost: (RemovedHost) -> Unit = {},
     /** What the home says of its own accord: an action that failed, a session ended elsewhere. */
     notices: Flow<HomeNotice> = emptyFlow(),
+    /** A notice's snackbar action: Rejoin after leaving the tailnet, Undo of an account switch. */
+    onNoticeAction: (HomeNotice) -> Unit = {},
     onConnect: (SavedHost) -> Unit,
     onOpenSession: (SavedHost, String) -> Unit,
     onOpenTab: (SavedHost, String, String) -> Unit,
@@ -458,6 +460,7 @@ internal fun HomeScreen(
             onSignIn = onSignIn,
             onDevices = { tailnetDetails = true },
             onTailnet = onTailnet,
+            parked = { hostParked(it, tailnetView) },
         )
         val treeRows = tree.rows()
         // The filters cover every connected host; a host the phone is not connected to has nothing
@@ -751,7 +754,7 @@ internal fun HomeScreen(
                 onConnect = tailnetOn, onDisconnect = { tailnetOff(false) }, onRetry = onTailnetRetry,
                 onRestart = onTailnetRestart,
             ).takeIf { tailnet.enabled }.orEmpty(),
-            supporting = tailnetSupporting(tailnetView, tailnetStage),
+            supporting = tailnetSupporting(tailnetView, tailnetStage, alerts),
             onPage = {
                 pageFromNotifications = false
                 page = Connectable.tailnet(tailnetView.id).key
@@ -792,6 +795,18 @@ internal fun HomeScreen(
                     hosts.firstOrNull { it.id == notice.hostId }?.let { onOpenPane(it, notice.sessionId, notice.windowId, notice.blockId) }
                 }
                 is HomeNotice.NotAnswered -> snack(context.getString(R.string.home_answer_failed))
+                is HomeNotice.LeftTailnet -> snack(
+                    context.getString(if (notice.forgotSignIn) R.string.tailnet_left_forgot else R.string.tailnet_left, notice.name),
+                    context.getString(R.string.tailnet_rejoin),
+                ) { onNoticeAction(notice) }
+                is HomeNotice.AccountSwitched -> {
+                    val gone = notice.switch.disconnected.size
+                    val switched = context.getString(R.string.tailnet_switched_to, notice.switch.network, notice.switch.account)
+                    snack(
+                        if (gone == 0) switched else switched + " · " + context.resources.getQuantityString(R.plurals.tailnet_switched_hosts, gone, gone),
+                        context.getString(R.string.action_undo),
+                    ) { onNoticeAction(notice) }
+                }
                 is HomeNotice.Failed -> snack(
                     context.getString(failedText(notice.action), notice.detail.ifBlank { context.getString(R.string.status_failed) }),
                     context.getString(R.string.action_retry),
@@ -902,6 +917,14 @@ internal fun HomeScreen(
                 onDismiss = closePage,
                 tile = { TileGroup(Connectable.host(host.id), host.label.ifBlank { host.host }, tileName) },
                 onBackgroundMode = toggleAlerts,
+                parked = hostParked(host, tailnetView),
+                onUnpark = {
+                    when (val why = hostParked(host, tailnetView)) {
+                        is HostParked.TailnetOff -> tailnetOn()
+                        is HostParked.OtherAccount -> tailnetAccounts?.switch?.invoke(host.tailnetProfile)
+                        null -> Unit
+                    }
+                },
             )
         } ?: LaunchedEffect(page) { page = null }
         ConnectableKind.Tailnet -> TailnetPage(
@@ -916,6 +939,12 @@ internal fun HomeScreen(
             onDismiss = closePage,
             tile = { TileGroup(Connectable.tailnet(tailnetView.id), tailnetView.name, tileName) },
             onBackgroundMode = toggleAlerts,
+            onSignIn = onSignIn,
+            onRestart = onTailnetRestart,
+            onSettings = {
+                page = null
+                onTailnet()
+            },
             accounts = tailnetAccounts?.let { ops -> TailnetAccountOps(ops.switch, ops.add, ops.rename, ops.remove, ops.hostsNaming) { accountEdit = it } },
         )
         null -> Unit

@@ -65,7 +65,8 @@ abstract class TailnetBox(protected val context: Context) : TailnetNode {
 
     override fun forgetProfile(profile: String) {
         val dir = directoryFor(profile)
-        if (dir == stateDirectory || node != null && running?.profile == profile) return
+        // Never the login of the node that runs: it is stopped first. The first account's is its old directory.
+        if (node != null && running?.let { directoryFor(it.profile) } == dir) return
         // The account's login and node key go with it; nothing of it is read or logged.
         if (dir.exists()) dir.deleteRecursively()
         Diagnostics.event(LOG_TAG, "$name: an account's login was removed")

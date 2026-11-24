@@ -127,6 +127,10 @@ private fun AccountDialog(account: TailnetProfile, active: Boolean, view: Tailne
         text = {
             Column {
                 Field(stringResource(R.string.tailnet_account_name), name) { name = it }
+                if (active) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(if (view.accounts.size < 2) R.string.tailnet_account_remove_only else R.string.tailnet_account_remove_in_use), color = Colors.muted, fontSize = TextStyles.label)
+                }
                 if (!active) {
                     Spacer(Modifier.height(8.dp))
                     val through = view.hosts
@@ -150,7 +154,10 @@ private fun AccountDialog(account: TailnetProfile, active: Boolean, view: Tailne
         },
         dismissButton = {
             Row {
-                if (!active) TextButton(onClick = { removing = true }) { Text(stringResource(R.string.tailnet_account_remove), color = Colors.danger) }
+                // The one in use stays until another runs: shown, not hidden, so it can be found.
+                TextButton(onClick = { removing = true }, enabled = !active) {
+                    Text(stringResource(R.string.tailnet_account_remove), color = if (active) Colors.muted else Colors.danger)
+                }
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
             }
         },

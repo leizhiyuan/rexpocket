@@ -53,6 +53,20 @@ class TileStore(context: Context) {
 
     private fun key(slot: Int) = "tile.$slot"
 
+    /**
+     * Whether [slot]'s tile is in Quick Settings, as far as the app was told: Android's answer to
+     * Add a tile, or the tile itself when it is added or removed. Null when it never said.
+     */
+    fun added(slot: Int): Boolean? = if (prefs.contains(addedKey(slot))) prefs.getBoolean(addedKey(slot), false) else null
+
+    fun setAdded(slot: Int, added: Boolean) {
+        if (added(slot) == added) return
+        prefs.edit().putBoolean(addedKey(slot), added).apply()
+        changes.value++
+    }
+
+    private fun addedKey(slot: Int) = "tile.$slot.added"
+
     companion object {
         const val SLOTS = 3
 
@@ -123,7 +137,16 @@ class TileStore(context: Context) {
                         label,
                         Icon.createWithResource(context, if (item.kind == ConnectableKind.Tailnet) R.drawable.ic_tailnet else R.drawable.ic_host),
                         context.mainExecutor,
-                    ) { result -> Diagnostics.event(TAG, "tile $slot add: $result") }
+                    ) { result ->
+                        Diagnostics.event(TAG, "tile $slot add: $result")
+                        // Added now or before: in Quick Settings. Dismissed: bound, but not there.
+                        when (result) {
+                            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED,
+                            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> TileStore(context).setAdded(slot, true)
+                            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> TileStore(context).setAdded(slot, false)
+                            else -> Unit
+                        }
+                    }
                 }
             }
             return slot
@@ -158,8 +181,20 @@ abstract class ConnectableTile(private val slot: Int) : TileService() {
 
     private val connections: Connections get() = Connections.of(application as Application)
 
+    override fun onTileAdded() {
+        super.onTileAdded()
+        TileStore(this).setAdded(slot, true)
+    }
+
+    override fun onTileRemoved() {
+        TileStore(this).setAdded(slot, false)
+        super.onTileRemoved()
+    }
+
     override fun onStartListening() {
         super.onStartListening()
+        // Listening at all means it is in Quick Settings.
+        TileStore(this).setAdded(slot, true)
         val s = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).also { scope = it }
         follow = s.launch { connections.changes.collect { show() } }
         show()
@@ -179,8 +214,15 @@ abstract class ConnectableTile(private val slot: Int) : TileService() {
             return
         }
         val state = connections.stateOf(item)
-        Diagnostics.event(TAG, "tile $slot: ${item.kind} ${if (state == LinkState.Off) "connect" else "disconnect"}")
+        Diagnostics.event(TAG, "tile $slot: ${item.kind} ${tapOf(state)}")
         when {
+            // A sign-in is done in the app: the tailnet's page, which has Sign in.
+            state == LinkState.NeedsSignIn -> open(TileStore.pageIntent(this, Connectable.tailnet(connections.currentTailnet), slot))
+            // Not connected after a failure: tried again now, as the page's Retry now does.
+            state == LinkState.Failed -> {
+                connections.retryItem(item)
+                if (Alerts.enabled.value) Alerts.watch(this)
+            }
             state == LinkState.Off -> {
                 connections.connectItem(item)
                 // The connection lives as long as the process: background mode's watch holds it;
@@ -196,11 +238,17 @@ abstract class ConnectableTile(private val slot: Int) : TileService() {
 
     @SuppressLint("StartActivityAndCollapseDeprecated")
     private fun open(intent: Intent) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startActivityAndCollapse(PendingIntent.getActivity(this, slot, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
-        } else {
-            @Suppress("DEPRECATION")
-            startActivityAndCollapse(intent)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startActivityAndCollapse(PendingIntent.getActivity(this, slot, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+            } else {
+                @Suppress("DEPRECATION")
+                startActivityAndCollapse(intent)
+            }
+        }.onFailure {
+            // A tile Quick Settings is not bound to (a test, a panel already closing): opened as is.
+            Diagnostics.event(TAG, "tile $slot: collapse failed (${it.javaClass.simpleName}); opening directly")
+            runCatching { startActivity(intent) }
         }
     }
 
@@ -230,6 +278,14 @@ abstract class ConnectableTile(private val slot: Int) : TileService() {
     private companion object {
         const val TAG = "RexPocketTile"
     }
+}
+
+/** What a tap on a tile in [state] does, for the diagnostics. */
+private fun tapOf(state: LinkState): String = when (state) {
+    LinkState.Off -> "connect"
+    LinkState.NeedsSignIn -> "sign in"
+    LinkState.Failed -> "retry"
+    LinkState.Connecting, LinkState.Connected -> "disconnect"
 }
 
 /** The state words, as strings, for the tile and the watch notification. */

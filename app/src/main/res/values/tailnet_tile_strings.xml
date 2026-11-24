@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Leaving a tailnet, its accounts, why it is up or keeps a host off, the tiles, and launcher shortcuts. -->
+<resources>
+    <string name="tailnet_leave_title">Leave %1$s?</string>
+    <string name="tailnet_leave_body">This phone stops being a device on it, and hosts on it can\'t be reached until you join again.</string>
+    <plurals name="tailnet_leave_hosts">
+        <item quantity="one">%2$s is connected through it and disconnects.</item>
+        <item quantity="other">%2$s are connected through it and disconnect.</item>
+    </plurals>
+    <string name="tailnet_leave_forget">Forget the sign-in on this phone</string>
+    <string name="tailnet_leave_forget_body">Joining %1$s again asks you to sign in.</string>
+    <string name="tailnet_leave_and_forget">Leave and forget sign-in</string>
+    <string name="tailnet_left">Left %1$s</string>
+    <string name="tailnet_left_forgot">Left %1$s and forgot its sign-in</string>
+    <string name="tailnet_rejoin">Rejoin</string>
+    <string name="tailnet_switched_to">Switched %1$s to %2$s</string>
+    <plurals name="tailnet_switched_hosts">
+        <item quantity="one">%1$d host disconnected</item>
+        <item quantity="other">%1$d hosts disconnected</item>
+    </plurals>
+    <string name="tailnet_account_remove_in_use">In use: switch to another account first to remove it.</string>
+    <string name="tailnet_account_remove_only">The only account: add another to remove it, or leave the tailnet and forget its sign-in.</string>
+
+    <string name="host_parked_tailnet_off">%1$s is off</string>
+    <string name="host_parked_other_account">On account %1$s</string>
+    <string name="host_parked_connect_tailnet">Connect %1$s</string>
+    <string name="host_parked_use_account">Use %1$s</string>
+
+    <string name="tailnet_kept_open">Kept up while the app is open</string>
+    <string name="tailnet_kept_never">Kept up: Stop after is Never</string>
+    <string name="tailnet_kept_always">Kept up: Always in the background</string>
+    <plurals name="tailnet_stops_after_last">
+        <item quantity="one">Stops %1$d minute after the last host</item>
+        <item quantity="other">Stops %1$d minutes after the last host</item>
+    </plurals>
+
+    <string name="tile_bound">Bound to tile %1$d</string>
+    <string name="tile_not_added">Not added to Quick Settings. Edit Quick Settings and drag the RexPocket %1$d tile in.</string>
+    <string name="tile_picker_empty">Add a host or join a tailnet first.</string>
+    <string name="tile_picker_open_app">Open RexPocket</string>
+
+    <string name="shortcut_host_gone">That host was removed from RexPocket.</string>
+    <string name="shortcut_session_gone">That session is no longer on %1$s.</string>
+    <string name="shortcut_tab_gone">That tab was closed; showing the session.</string>
+</resources>

@@ -98,6 +98,8 @@ fun RexPocketApp(
     // (the open sheet, search, eye, scroll) is kept here for when it comes back.
     val saveable = rememberSaveableStateHolder()
     var tailnetOpen by remember { mutableStateOf(false) }
+    // Leave tailnet's confirm: the hosts that go with it, and Forget the sign-in.
+    var tailnetLeaving by remember { mutableStateOf(false) }
     // Each offer is shown once per app run; the settings row still has it afterwards.
     var offeredOnce by remember { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(Unit) { model.restore() }
@@ -215,6 +217,7 @@ fun RexPocketApp(
                     onRemoveHost = model::removeHost,
                     onRestoreHost = model::restoreHost,
                     notices = model.homeNotices,
+                    onNoticeAction = model::noticeAction,
                     onFoldSession = model::setSessionFolded,
                     onConnect = { model.connect(it) },
                     onOpenSession = model::openSessionOn,
@@ -374,11 +377,17 @@ fun RexPocketApp(
                     tailnetOpen = false
                 },
                 onLeave = {
-                    loginGate.cancel()
-                    model.leaveTailnet()
                     tailnetOpen = false
+                    tailnetLeaving = true
                 },
             )
+        }
+        if (tailnetLeaving) {
+            LeaveTailnetDialog(tailnetView, onDismiss = { tailnetLeaving = false }) { forget ->
+                tailnetLeaving = false
+                loginGate.cancel()
+                model.leaveTailnet(forget)
+            }
         }
         // Any connected SSH host can ask, not only the one on screen: it is waiting for the answer.
         sshKeyQuestion?.let { asking ->

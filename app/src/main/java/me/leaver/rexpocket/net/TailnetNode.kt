@@ -120,7 +120,7 @@ interface TailnetNode {
      */
     val watched: Boolean get() = false
 
-    /** Deletes the login of account [profile], which is not running: the account was removed. */
+    /** Deletes the login of account [profile], which is not running: the account was removed, or its sign-in forgotten. */
     fun forgetProfile(profile: String) = Unit
 
     /**

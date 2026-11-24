@@ -59,7 +59,10 @@ class TilePickerActivity : ComponentActivity() {
         val appearance = HostStore(this).appearance()
         setContent {
             RexTheme(appearance.app, appearance.terminal, appearance.text) {
-                TilePicker(first, items, nameOf = { connections.nameOf(it) }, onDone = ::finish)
+                TilePicker(first, items, nameOf = { connections.nameOf(it) }, onOpenApp = {
+                    startActivity(android.content.Intent(this, me.leaver.rexpocket.MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                    finish()
+                }, onDone = ::finish)
             }
         }
     }
@@ -71,13 +74,21 @@ class TilePickerActivity : ComponentActivity() {
 
 internal const val TILE_PICKER_SLOT_TAG = "tile-picker-slot-"
 internal const val TILE_PICKER_CLEAR_TAG = "tile-picker-clear"
+internal const val TILE_PICKER_OPEN_APP_TAG = "tile-picker-open-app"
 
 /**
  * The picker itself: the three tiles as choices, each with its item ("Tile 2 · mac"), the
  * chosen tile's item marked in the list below, and Clear tile.
  */
 @Composable
-internal fun TilePicker(first: Int, items: List<Pair<Connectable, String>>, nameOf: (Connectable) -> String?, onDone: () -> Unit) {
+internal fun TilePicker(
+    first: Int,
+    items: List<Pair<Connectable, String>>,
+    nameOf: (Connectable) -> String?,
+    /** With nothing to bind yet: the app, to add a host or join a tailnet; null just closes. */
+    onOpenApp: (() -> Unit)? = null,
+    onDone: () -> Unit,
+) {
     val context = LocalContext.current
     var slot by rememberSaveable { mutableIntStateOf(first) }
     val version by TileStore.changes.collectAsState()
@@ -105,6 +116,17 @@ internal fun TilePicker(first: Int, items: List<Pair<Connectable, String>>, name
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(stringResource(R.string.tile_picker_items), color = Colors.muted, fontSize = TextStyles.label)
+                if (items.isEmpty()) {
+                    Text(
+                        stringResource(R.string.tile_picker_empty),
+                        color = Colors.ink,
+                        fontSize = TextStyles.body,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                    TextButton(onClick = onOpenApp ?: onDone, modifier = Modifier.heightIn(min = 48.dp).testTag(TILE_PICKER_OPEN_APP_TAG)) {
+                        Text(stringResource(R.string.tile_picker_open_app), color = Colors.accent)
+                    }
+                }
                 for ((item, name) in items) {
                     val here = bound[slot - 1] == item
                     val elsewhere = bound.indexOf(item).takeIf { it >= 0 && it != slot - 1 }?.plus(1)

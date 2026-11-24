@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tailnet_leave_title">离开 %1$s？</string>
+    <string name="tailnet_leave_body">这部手机不再是它上面的设备，在重新加入之前，它上面的主机都连不上。</string>
+    <plurals name="tailnet_leave_hosts">
+        <item quantity="other">%2$s 通过它连接，也会一起断开。</item>
+    </plurals>
+    <string name="tailnet_leave_forget">删除这部手机上的登录</string>
+    <string name="tailnet_leave_forget_body">再次加入 %1$s 时需要重新登录。</string>
+    <string name="tailnet_leave_and_forget">离开并删除登录</string>
+    <string name="tailnet_left">已离开 %1$s</string>
+    <string name="tailnet_left_forgot">已离开 %1$s 并删除了登录</string>
+    <string name="tailnet_rejoin">重新加入</string>
+    <string name="tailnet_switched_to">已把 %1$s 切换到 %2$s</string>
+    <plurals name="tailnet_switched_hosts">
+        <item quantity="other">%1$d 台主机已断开</item>
+    </plurals>
+    <string name="tailnet_account_remove_in_use">使用中：先切换到另一个账户才能移除它。</string>
+    <string name="tailnet_account_remove_only">这是唯一的账户：先添加另一个账户才能移除它，或者离开 tailnet 并删除登录。</string>
+
+    <string name="host_parked_tailnet_off">%1$s 已关闭</string>
+    <string name="host_parked_other_account">在账户 %1$s 上</string>
+    <string name="host_parked_connect_tailnet">连接 %1$s</string>
+    <string name="host_parked_use_account">使用 %1$s</string>
+
+    <string name="tailnet_kept_open">应用打开时保持连接</string>
+    <string name="tailnet_kept_never">保持连接：停止时间设为从不</string>
+    <string name="tailnet_kept_always">保持连接：在后台始终连接</string>
+    <plurals name="tailnet_stops_after_last">
+        <item quantity="other">最后一台主机断开 %1$d 分钟后停止</item>
+    </plurals>
+
+    <string name="tile_bound">已绑定到磁贴 %1$d</string>
+    <string name="tile_not_added">还没加到快捷设置。编辑快捷设置，把 RexPocket %1$d 磁贴拖进来。</string>
+    <string name="tile_picker_empty">先添加一台主机或加入 tailnet。</string>
+    <string name="tile_picker_open_app">打开 RexPocket</string>
+
+    <string name="shortcut_host_gone">这台主机已从 RexPocket 移除。</string>
+    <string name="shortcut_session_gone">%1$s 上已经没有这个会话了。</string>
+    <string name="shortcut_tab_gone">这个标签页已关闭，显示它所在的会话。</string>
+</resources>

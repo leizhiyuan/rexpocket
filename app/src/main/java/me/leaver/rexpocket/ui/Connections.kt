@@ -13,6 +13,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -528,8 +529,17 @@ class Connections private constructor(private val app: Application, val nodes: T
     fun connect(target: SavedHost, resume: Boolean = false, auto: Boolean = false): Link {
         // Connecting a host by hand brings its tailnet back, as a Connect of the tailnet would.
         if (!auto) tailnetOf(target)?.let { id ->
-            // A host on another account switches its tailnet to that account first.
-            if (onOtherAccount(target)) switchAccount(profiles.value.profileOf(tailnet.value.backend, target.tailnetProfile).id)
+            // A host on another account switches its tailnet to that account first, and says so:
+            // the hosts on the account it ran go (the snackbar's Undo brings them back).
+            if (onOtherAccount(target)) {
+                val backend = tailnet.value.backend
+                val from = accountOf(backend)
+                val before = hostsOn(id)
+                val to = profiles.value.profileOf(backend, target.tailnetProfile)
+                switchAccount(to.id)
+                val gone = before.filter { this[it.id] == null }
+                accountSwitches.tryEmit(AccountSwitch(backend.displayName, to.name, from, gone))
+            }
             control.switchOn(id)
         }
         drop(target.id)
@@ -600,12 +610,27 @@ class Connections private constructor(private val app: Application, val nodes: T
 
     fun renameAccount(id: String, name: String) = setProfiles(profiles.value.rename(id, name))
 
+    /** Switches made by connecting a host on another account, for the home's snackbar and its Undo. */
+    val accountSwitches = MutableSharedFlow<AccountSwitch>(extraBufferCapacity = 4)
+
+    /** A switch's Undo: the account it ran before, and the hosts that went with the switch. */
+    fun undoAccountSwitch(switch: AccountSwitch) {
+        switchAccount(switch.from)
+        switch.disconnected.forEach { ensure(it) }
+    }
+
+    /** Deletes the sign-in of the account [backend] runs: Leave and forget sign-in, once it was left. */
+    fun forgetSignIn(backend: TailnetBackend) {
+        Diagnostics.event(CONN_TAG, "tailnet ${backend.storageKey}: forgetting the sign-in")
+        control.forget(backend.storageKey, accountOf(backend))
+    }
+
     /** Removes account [id], not the one running, and its login on the phone with it. */
     fun removeAccount(id: String) {
         val p = profiles.value.find(id) ?: return
         val next = profiles.value.remove(id)
         if (next == profiles.value) return
-        nodes[p.backend].forgetProfile(id)
+        control.forget(p.backend.storageKey, id)
         setProfiles(next)
         // Its hosts follow whichever account runs from now on.
         for (h in store.list().filter { it.tailnetProfile == id }) store.upsert(h.copy(tailnetProfile = ""))
@@ -661,6 +686,14 @@ class Connections private constructor(private val app: Application, val nodes: T
     fun connectItem(item: Connectable): Boolean = when (item.kind) {
         ConnectableKind.Host -> store.find(item.id)?.let { ensure(it); true } ?: false
         ConnectableKind.Tailnet -> nameOf(item)?.let { connectTailnet(item.id); true } ?: false
+    }
+
+    /** Tries [item] again now after a failure, as its page's Retry now does: a tile's tap on Not connected. */
+    fun retryItem(item: Connectable) {
+        when (item.kind) {
+            ConnectableKind.Host -> store.find(item.id)?.let { saved -> if (this[item.id] != null) retry(item.id, saved, resume = false) else ensure(saved) }
+            ConnectableKind.Tailnet -> if (nameOf(item) != null) control.retry(item.id)
+        }
     }
 
     /** Disconnects [item] by hand: a host, or a tailnet and the hosts through it. */
@@ -1207,3 +1240,9 @@ private const val PEER_READY_MS = 10_000L
 
 /** How long a connection waits for a host its node's device list does not have: a device added a moment ago. */
 private const val PEER_LISTED_MS = 2_000L
+
+/**
+ * Connecting a host on another account switched [network] to account [account] (named); [from] is
+ * the account it ran before, and [disconnected] the hosts on it that went with the switch.
+ */
+data class AccountSwitch(val network: String, val account: String, val from: String, val disconnected: List<SavedHost>)

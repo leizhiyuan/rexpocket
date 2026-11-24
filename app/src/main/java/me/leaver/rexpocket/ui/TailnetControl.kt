@@ -391,6 +391,26 @@ class TailnetControl(
         }
     }
 
+    /**
+     * Deletes account [profile]'s login on the phone: Leave and forget sign-in, or a removed
+     * account. A node whose plan is down (a tailnet just left) is stopped first, under the same
+     * lock, so the files go only once nothing uses them; a node running another account is left
+     * alone, and the node never deletes the login it runs on. Nothing of the login is read or logged.
+     */
+    fun forget(id: String, profile: String): Job? {
+        val spec = spec(id) ?: return null
+        return scope.launch(Dispatchers.IO) {
+            lock(id).withLock {
+                if (plan(id) == TailnetPlan.Down) {
+                    ports.remove(id)
+                    runCatching { spec.node.stop() }
+                }
+                runCatching { spec.node.forgetProfile(profile) }
+                    .onFailure { Diagnostics.event(CONN_TAG, "tailnet $id: forgetting a sign-in failed: ${it.javaClass.simpleName}") }
+            }
+        }
+    }
+
     private fun stop(spec: TailnetSpec, why: String) {
         Diagnostics.event(CONN_TAG, "tailnet ${spec.id}: stopping ($why)")
         update(spec.id) { it.copy(running = false, lingerUntil = null) }

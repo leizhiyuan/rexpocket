@@ -24,9 +24,11 @@ class TailnetProfileStore(context: Context) {
             TailnetProfile(id, TailnetBackend.fromStorage(p.optString("backend")), p.optString("name"))
         }
         val active = o.optJSONObject("active") ?: JSONObject()
+        val removed = o.optJSONArray("removedFirst") ?: JSONArray()
         return TailnetProfiles(
             profiles,
             active.keys().asSequence().associate { TailnetBackend.fromStorage(it) to active.optString(it) },
+            (0 until removed.length()).mapNotNull { i -> TailnetBackend.entries.firstOrNull { it.storageKey == removed.optString(i) } }.toSet(),
         )
     }
 
@@ -35,8 +37,10 @@ class TailnetProfileStore(context: Context) {
         for (p in next.profiles) list.put(JSONObject().put("id", p.id).put("backend", p.backend.storageKey).put("name", p.name))
         val active = JSONObject()
         for ((b, id) in next.active) active.put(b.storageKey, id)
+        val o = JSONObject().put("profiles", list).put("active", active)
+        if (next.removedFirst.isNotEmpty()) o.put("removedFirst", JSONArray(next.removedFirst.map { it.storageKey }.sorted()))
         // Committed: a restart without a screen starts the active account's node.
-        prefs.edit().putString(KEY, JSONObject().put("profiles", list).put("active", active).toString()).commit()
+        prefs.edit().putString(KEY, o.toString()).commit()
     }
 
     private companion object {

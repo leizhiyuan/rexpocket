@@ -36,6 +36,36 @@ class TailnetProfilesTest {
     }
 
     @Test
+    fun theFirstAccountIsRemovedForGoodOnceAnotherRuns() {
+        val work = TailnetProfile("tailscale-w", ts, "Work")
+        var p = TailnetProfiles().add(work)
+        // In use: switch first.
+        assertEquals(p, p.remove("tailscale"))
+        p = p.activate(work.id).remove("tailscale")
+        assertEquals(listOf(work.id), p.of(ts).map { it.id })
+        assertEquals(null, p.find("tailscale"))
+        assertTrue(ts in p.removedFirst)
+        // Gone after another account is added, and the last one stays.
+        p = p.add(TailnetProfile("tailscale-h", ts, "Home"))
+        assertEquals(listOf(work.id, "tailscale-h"), p.of(ts).map { it.id })
+        assertEquals(work.id, p.activeOf(ts).id)
+        assertEquals(p, p.remove(work.id))
+        val one = p.activate("tailscale-h").remove(work.id)
+        assertEquals(listOf("tailscale-h"), one.of(ts).map { it.id })
+        assertEquals(one, one.remove("tailscale-h"))
+        // A host that named the first account follows the one in use.
+        assertEquals("tailscale-h", one.profileOf(ts, "tailscale").id)
+    }
+
+    @Test
+    fun anAccountIsFoundByName() {
+        val p = TailnetProfiles().add(TailnetProfile("tailscale-w", ts, "Work"))
+        assertEquals("tailscale-w", p.named(ts, " work ")?.id)
+        assertEquals("tailscale", p.named(ts, "Tailscale")?.id)
+        assertEquals(null, p.named(ts, "Home"))
+    }
+
+    @Test
     fun namesAreKeptApart() {
         val p = TailnetProfiles().add(TailnetProfile("tailscale-a", ts, "Tailscale")).add(TailnetProfile("tailscale-b", ts, "Tailscale"))
         assertEquals(listOf("Tailscale", "Tailscale 2", "Tailscale 3"), p.of(ts).map { it.name })

@@ -566,6 +566,7 @@ class RexViewModel @JvmOverloads constructor(
 
     init {
         connections.attachScreen()
+        viewModelScope.launch { connections.accountSwitches.collect { _homeNotices.tryEmit(HomeNotice.AccountSwitched(it)) } }
         // Kept for Android to hand back if it kills the process: see [terminalWasOpen].
         viewModelScope.launch { route.collect { saved[KEY_TERMINAL_OPEN] = it == Route.Term } }
         viewModelScope.launch {
@@ -796,15 +797,44 @@ class RexViewModel @JvmOverloads constructor(
         control.setPolicy(id, policy)
     }
 
-    /** Leaves the tailnet: the node stops and its login stays in the app for the next join. */
-    fun leaveTailnet() {
-        Diagnostics.event(CONN_TAG, "leaving the tailnet")
+    /**
+     * Leaves the tailnet: the hosts connected through it disconnect, the node stops, and its login
+     * stays in the app for the next join; with [forgetSignIn], the login of the account in use is
+     * deleted too, so joining again asks for a sign-in. The home says so, with Rejoin.
+     */
+    fun leaveTailnet(forgetSignIn: Boolean = false) {
+        Diagnostics.event(CONN_TAG, "leaving the tailnet${if (forgetSignIn) " and forgetting its sign-in" else ""}")
         val current = tailnet.value
+        if (!current.enabled) return
+        val id = current.backend.storageKey
+        val name = tailnetView.value.name
+        val dropped = connections.hostsOn(id)
+        dropped.forEach { connections.disconnect(it.id) }
+        if (focusId.value != null && dropped.any { it.id == focusId.value }) disconnect(focusId.value)
         // The name is kept: rejoining later should not ask for it again.
         store.setTailnet(current.copy(enabled = false))
         tailnet.value = store.tailnet()
         // Not joined any more: its plan stops the node.
         control.evaluate()
+        if (forgetSignIn) connections.forgetSignIn(current.backend)
+        _homeNotices.tryEmit(HomeNotice.LeftTailnet(name, current, dropped, forgetSignIn))
+    }
+
+    /** The left tailnet's Rejoin: joined again with the settings it had, and its hosts back. */
+    fun rejoinTailnet(left: HomeNotice.LeftTailnet) {
+        val s = left.settings
+        joinTailnet(s.backend, s.hostname, s.managementUrl)
+        left.hosts.forEach { connections.ensure(it) }
+    }
+
+    /** What a snackbar's action does for [notice]: Rejoin, Undo. */
+    fun noticeAction(notice: HomeNotice) {
+        userActed()
+        when (notice) {
+            is HomeNotice.LeftTailnet -> rejoinTailnet(notice)
+            is HomeNotice.AccountSwitched -> connections.undoAccountSwitch(notice.switch)
+            else -> Unit
+        }
     }
 
     fun saveHost(host: SavedHost) {
@@ -813,6 +843,7 @@ class RexViewModel @JvmOverloads constructor(
     }
 
     fun deleteHost(id: String) {
+        LauncherShortcuts.hostRemoved(getApplication(), id)
         disconnect(id)
         store.delete(id)
         hosts.value = store.list()
@@ -921,6 +952,18 @@ class RexViewModel @JvmOverloads constructor(
                         if (shown != null && lastPane != Triple(link.id, shown.first, shown.second)) {
                             lastPane = Triple(link.id, shown.first, shown.second)
                             store.setLastPane(link.id, shown.first, shown.second, st.sessions.map { it.id })
+                            // The launcher's long press lists the panes opened last.
+                            st.view?.takeIf { it.sessionId == shown.first }?.let { v ->
+                                v.windows.firstOrNull { w -> w.blocks.any { it.id == shown.second } }?.let { w ->
+                                    LauncherShortcuts.opened(
+                                        getApplication(),
+                                        PaneShortcut(link.id, shown.first, w.id, shown.second),
+                                        LauncherShortcuts.title(v, w, st),
+                                        v.label,
+                                        link.target.label,
+                                    )
+                                }
+                            }
                         }
                         st.activeSessionId?.let { sid -> st.sessions.firstOrNull { it.id == sid }?.label?.let { shownLabel = it } }
                         // A session that is no longer on Rex leaves nothing to show: back to the list,
@@ -937,6 +980,40 @@ class RexViewModel @JvmOverloads constructor(
 
     /** Set once an alert has opened a pane, so the start-up resume does not replace it. */
     private var openedFromAlert = false
+
+    /**
+     * Opens the tab a launcher shortcut names, connecting its host first. A host removed since, a
+     * session that ended or a tab that closed is said in a toast: the first two stay on the list,
+     * the last opens the session where it is.
+     */
+    fun openShortcut(pane: PaneShortcut) {
+        val app = getApplication<Application>()
+        val saved = store.find(pane.hostId)
+        if (saved == null) {
+            LauncherShortcuts.hostRemoved(app, pane.hostId)
+            android.widget.Toast.makeText(app, app.getString(R.string.shortcut_host_gone), android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        openedFromAlert = true
+        userActed()
+        route.value = Route.Home
+        val link = connections.ensure(saved)
+        viewModelScope.launch {
+            val s = withTimeoutOrNull(SHORTCUT_WAIT_MS) { link.ready.await().also { it.awaitReady() } } ?: return@launch
+            if (s.state.value.sessions.none { it.id == pane.sessionId }) {
+                LauncherShortcuts.gone(app, pane)
+                android.widget.Toast.makeText(app, app.getString(R.string.shortcut_session_gone, saved.label), android.widget.Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            enterSession(link, Opening.Existing(pane.sessionId, saved.id)) {
+                openSession(pane.sessionId, pane.blockId, pane.windowId)
+                if (state.value.view?.windows?.none { it.id == pane.windowId } == true) {
+                    LauncherShortcuts.gone(app, pane)
+                    android.widget.Toast.makeText(app, app.getString(R.string.shortcut_tab_gone), android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
     /** Opens the pane an alert names, connecting its host first when it is not connected. */
     fun openAlert(target: AlertTarget) {
@@ -1649,7 +1726,16 @@ sealed interface HomeNotice {
 
     /** Approve or Deny could not reach the pane. */
     data class NotAnswered(val hostId: String) : HomeNotice
+
+    /** The tailnet [name] was left, with what Rejoin needs: its settings and the hosts that went. */
+    data class LeftTailnet(val name: String, val settings: TailnetSettings, val hosts: List<SavedHost>, val forgotSignIn: Boolean) : HomeNotice
+
+    /** Connecting a host on another account switched the tailnet to it; Undo switches back. */
+    data class AccountSwitched(val switch: AccountSwitch) : HomeNotice
 }
+
+/** How long a launcher shortcut waits for its host before it leaves the person on the list. */
+private const val SHORTCUT_WAIT_MS = 30_000L
 
 /** Connection diagnostics: `adb logcat -s RexPocketConn`. */
 internal const val CONN_TAG = "RexPocketConn"

@@ -11,14 +11,20 @@ data class TailnetProfile(val id: String, val backend: TailnetBackend, val name:
     val isFirst: Boolean get() = id == backend.storageKey
 }
 
-/** Every account, by backend, and which one each backend runs. */
+/**
+ * Every account, by backend, and which one each backend runs. [removedFirst] marks the backends
+ * whose first account was removed: it is otherwise always there, since a phone that joined before
+ * accounts has its login under it without an entry of its own.
+ */
 data class TailnetProfiles(
     val profiles: List<TailnetProfile> = emptyList(),
     val active: Map<TailnetBackend, String> = emptyMap(),
+    val removedFirst: Set<TailnetBackend> = emptySet(),
 ) {
-    /** [backend]'s accounts, the first one always among them. */
+    /** [backend]'s accounts: the first one among them unless it was removed, and never none. */
     fun of(backend: TailnetBackend): List<TailnetProfile> {
         val mine = profiles.filter { it.backend == backend }
+        if (backend in removedFirst && mine.any { !it.isFirst }) return mine.filter { !it.isFirst }
         return if (mine.any { it.isFirst }) mine else listOf(first(backend)) + mine
     }
 
@@ -33,6 +39,10 @@ data class TailnetProfiles(
     /** With [profile] added (its name made unique among its backend's). */
     fun add(profile: TailnetProfile): TailnetProfiles = copy(profiles = withFirst(profile.backend) + profile.copy(name = uniqueName(profile.backend, profile.name)))
 
+    /** [backend]'s account named [name] (ignoring case and surrounding spaces), if it has one. */
+    fun named(backend: TailnetBackend, name: String): TailnetProfile? =
+        of(backend).firstOrNull { it.name.trim().equals(name.trim(), ignoreCase = true) }
+
     fun rename(id: String, name: String): TailnetProfiles {
         val p = find(id) ?: return this
         val clean = name.trim().ifBlank { return this }
@@ -41,12 +51,14 @@ data class TailnetProfiles(
 
     /**
      * Without account [id]. The active one is not removed (switch first): its node runs on it.
-     * The last account of a backend is not removed either; leaving the tailnet is for that.
+     * The last account of a backend is not removed either: Leave and forget sign-in is for that.
+     * The first account goes too, marked in [removedFirst], since it may have no entry to take out.
      */
     fun remove(id: String): TailnetProfiles {
         val p = find(id) ?: return this
         if (activeOf(p.backend).id == id || of(p.backend).size < 2) return this
-        return copy(profiles = withFirst(p.backend).filter { it.id != id })
+        val rest = withFirst(p.backend).filter { it.id != id }
+        return if (p.isFirst) copy(profiles = rest, removedFirst = removedFirst + p.backend) else copy(profiles = rest)
     }
 
     fun activate(id: String): TailnetProfiles {
@@ -62,7 +74,7 @@ data class TailnetProfiles(
         of(backend).firstOrNull { it.id == named } ?: activeOf(backend)
 
     private fun withFirst(backend: TailnetBackend): List<TailnetProfile> =
-        if (profiles.any { it.backend == backend && it.isFirst }) profiles else profiles + first(backend)
+        if (backend in removedFirst || profiles.any { it.backend == backend && it.isFirst }) profiles else profiles + first(backend)
 
     private fun uniqueName(backend: TailnetBackend, name: String): String {
         val base = name.trim().ifBlank { backend.displayName }

@@ -754,6 +754,8 @@ internal class TreeEnv(
     val onSignIn: (String) -> Unit,
     val onDevices: () -> Unit,
     val onTailnet: () -> Unit,
+    /** Why a host's tailnet keeps it off: disconnected by hand, or on another account. */
+    val parked: (SavedHost) -> HostParked? = { null },
 ) {
     fun ref(host: SavedHost) = HostRef(host, lives[host.id])
 
@@ -874,7 +876,7 @@ internal fun HostItem(env: TreeEnv, ref: HostRef, rows: List<HomeSession>, expan
         ref.isLive -> hostSummary(state, state.sessions.size) { block, record -> env.ops.seen(host.id, block, record) }
         problem != null && problem.needsTailnet() -> problemText(problem, state.endpointLabel, env.network)
         live != null -> hostSummary(state, sessions.size)
-        else -> stringResource(R.string.host_not_connected) +
+        else -> (env.parked(host)?.let { parkedText(it) } ?: stringResource(R.string.host_not_connected)) +
             if (sessions.isNotEmpty()) " · " + pluralStringResource(R.plurals.session_count, sessions.size, sessions.size) else ""
     }
     val groups = hostActions(ref, expanded, sessions, env.folds, env.ops, env.hosts.indexOfFirst { it.id == host.id }, env.hosts.size, env.sheets)
