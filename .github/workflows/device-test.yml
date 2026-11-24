@@ -116,6 +116,8 @@ jobs:
               me.leaver.rexpocket.ui.ActivityViewTest \
               me.leaver.rexpocket.ui.EmptySessionTest \
               me.leaver.rexpocket.ui.TailnetStatusTest \
+              me.leaver.rexpocket.ui.TailnetControlTest \
+              me.leaver.rexpocket.ui.TailnetAccountsTest \
               me.leaver.rexpocket.ui.EmptyHomeTest \
               me.leaver.rexpocket.ui.LargeFontTest \
               me.leaver.rexpocket.ui.CommandPaletteTest \
