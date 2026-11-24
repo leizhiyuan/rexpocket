@@ -86,12 +86,12 @@ netbird-paths.txt. The script then keeps its worktree and says where it is. To f
   embedded build's stand-in), `values*/netbird_addon_strings.xml`, and `core/…/DialedSocket.kt`
   with its test (the socket an add-on dial gives the connection).
 
-### Shared files, with Netbird hunks (netbird.patch, 42 files)
+### Shared files, with Netbird hunks (netbird.patch, 44 files)
 
 | Area | Files | What PR B adds |
 | --- | --- | --- |
 | Backend choice | `core/…/TailnetBackend.kt`, `app/…/net/TailnetNode.kt` | the `Netbird` and `NetbirdAddon` entries (no sign-in step), their `TailnetEntry`s in `TailnetNodes.of` (`addonEntries`); `NetbirdConfig`; `TailnetNode.dialer` |
-| Dialing without SOCKS | `core/…/RexClient.kt`, `core/…/SshTunnel.kt`, `ui/Connections.kt` | a `StreamDialer` beside the SOCKS port: `defaultHttp(socksPort, dialer)`, `SshSettings.dialer`, and the connections passing the node's; the Netbird branch of `Connections.configFor` |
+| Dialing without SOCKS | `core/…/RexClient.kt`, `core/…/SshTunnel.kt`, `core/…/HostRoutes.kt`, `ui/Connections.kt` | a `StreamDialer` beside the SOCKS port: `defaultHttp(socksPort, dialer)`, `SshSettings.dialer`, `RouteVia.dialer` (an other address through the tailnet), and the connections passing the node's; the Netbird branch of `Connections.configFor` |
 | Settings | `data/HostStore.kt`, `ui/HomeScreen.kt`, `ui/RexApp.kt`, `ui/RexViewModel.kt` | the management server setting, the setup key, the Netbird fields and hint in the Tailnet dialog (and `TailnetBackendNote`, the add-on's line), `joinTailnet`'s two Netbird arguments, the config of a Netbird node |
 | Tailnet details | `core/…/TailnetState.kt`, `TailnetPath.kt`, `ui/TailnetUi.kt` | `PeerLink.Relay`, a peer's `latencyMs`, `TailnetPath.Relay` and the ping's `relayServer` |
 | Names | `core/…/HostAddress.kt` | `.netbird.cloud` is on the tailnet |
@@ -100,7 +100,7 @@ netbird-paths.txt. The script then keeps its worktree and says where it is. To f
 | Tests | the core tailnet tests, `HostAddressTest`, `TailnetHarness`, `ScreenshotsTest`, `TailnetNodeInstrumentedTest` | the Netbird cases, the Netbird sample and screenshot, the instrumented Netbird load and start checks |
 | Build | `app/build.gradle.kts`, `tools/build-tailnet.sh`, `.gitignore`, `settings.gradle.kts`, `build.gradle.kts` | `-Prexpocket.netbird=true`, `REXPOCKET_NETBIRD=1` and `tailnet-netbird.aar`; `REXPOCKET_NETBIRD=addon`; the add-on's source sets and `:netbirdaddon-api` in the default build; the two add-on modules and the library plugin |
 | CI | `android-apk.yml`, `device-test.yml` | `rexpocket-netbird-addon.apk` and `rexpocket-netbird.apk` beside `rexpocket.apk`, and their checks; device tests on the Netbird build, and the add-on's |
-| Docs | the three READMEs, `docs/design/tailnet-status.md` | Netbird in the features, setup, how-it-works, build and acknowledgements, and which of the three APKs to install; the Netbird state fields |
+| Docs | the three READMEs, `docs/design/tailnet-status.md`, `docs/design/backlog.md` | Netbird in the features, setup, how-it-works, build and acknowledgements, and which of the three APKs to install; the Netbird state fields; the add-on pairing in the QoL scout's list |
 
 `tools/build-tailnet.sh` on split/ui is the merge base's: everything the tip changed in it is for
 Netbird (the tag, the second package, `-checklinkname=0`).
