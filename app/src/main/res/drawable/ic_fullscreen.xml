@@ -1,0 +1,13 @@
+<!-- Full screen: four corners pointing out, drawn on the Material Symbols grid and weight. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+  <path
+      android:strokeColor="#FF000000"
+      android:strokeWidth="80"
+      android:strokeLineCap="round"
+      android:strokeLineJoin="round"
+      android:pathData="M160,320L160,160L320,160M640,160L800,160L800,320M800,640L800,800L640,800M320,800L160,800L160,640"/>
+</vector>

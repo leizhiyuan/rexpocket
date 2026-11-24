@@ -1,0 +1,46 @@
+{
+  "name": "hosts.remove",
+  "description": "Remove a host from the server's host list.",
+  "invoke": {
+    "method": "hosts.remove"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "The host to remove."
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "hash": {
+        "type": "string",
+        "description": "Identifies the list after the call, the same way hosts.list does."
+      },
+      "removed": {
+        "type": "boolean",
+        "description": "True if the host was in the list before the call and isn't now. False if there was nothing to remove."
+      }
+    },
+    "required": [
+      "removed",
+      "hash"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\"id\": \"host:0199abcd-1234-7abc-8def-0123456789ab\"}",
+  "response_example": "{\n  \"removed\": true,\n  \"hash\": \"4b8d0f2a6c8e0a2c4e6a8c0e2a4c6e8a0c2e4a6c8e0a2c4e6a8c0e2a4c6e8a0c\"\n}",
+  "validation_notes": [
+    "Removing a host that isn't in the list isn't an error. `removed` is false, nothing changes, and no event is sent, so calling it again is safe. The same happens if `id` is left out.",
+    "The server never writes the configuration file, so removing a declared host hides it. Removing a stored host that took the place of a declared one removes both. Either way, only a later `hosts.put` with the same `id` brings the host back.",
+    "When a host is removed, every connected client receives a `hosts_changed` event.",
+    "If `id` isn't a valid host ID, the call fails with `bad_request`. A server started without a state directory can't store hosts, and fails with `not_supported`. A hand edit that broke the file that stores the hosts makes the call fail with `conflict`."
+  ]
+}

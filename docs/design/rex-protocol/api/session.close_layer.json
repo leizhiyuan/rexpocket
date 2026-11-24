@@ -1,0 +1,51 @@
+{
+  "name": "session.close_layer",
+  "description": "Close a floating layer and every block in it.",
+  "invoke": {
+    "method": "session.close_layer"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "layer_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The floating layer to close. Every block in it closes too."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      }
+    },
+    "required": [
+      "session_id",
+      "layer_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the call changed nothing that session.view shows, unless the method's notes say otherwise.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"layer_id\": \"layer:<uuid>\"\n}",
+  "response_example": "{\"revision\": 42}",
+  "validation_notes": [
+    "`layer_id` must name a floating layer. Naming the window's layout, the layer of kind `tiled` in `session.view`, fails the call with `bad_request`. Close the window with `session.close_window` instead.",
+    "The server closes every block in the layer, which ends the programs running in them. The call returns once the blocks have closed.",
+    "If the layer had focus, focus returns to the layer that had it before, at the block last focused there. Otherwise focus doesn't change.",
+    "If the layer held the window's last blocks, the server closes the window too.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If `layer_id` names no layer in the session, it fails with `not_found`."
+  ]
+}

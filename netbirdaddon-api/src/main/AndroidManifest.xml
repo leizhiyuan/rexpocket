@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+    Only an app signed with the same key may bind the add-on's node. Both RexPocket and the add-on
+    declare the permission, so either can be installed first; Android refuses an app signed with
+    another key that declares it.
+    -->
+    <permission
+        android:name="me.leaver.rexpocket.netbird.permission.NODE"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="me.leaver.rexpocket.netbird.permission.NODE" />
+    <!-- RexPocket looks for the add-on and binds it (package visibility, Android 11 and later). -->
+    <queries>
+        <package android:name="me.leaver.rexpocket.netbird" />
+    </queries>
+</manifest>

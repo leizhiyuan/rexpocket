@@ -1,0 +1,3 @@
+# Paths of split/ui allowed to mention Netbird (git grep -i netbird). Empty on purpose: PR A says
+# nothing about Netbird. tailnet/go.mod and go.sum are generated without it, and app/libs/tailnet.aar
+# is checked for Netbird classes on its own.

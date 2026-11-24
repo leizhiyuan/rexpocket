@@ -1,0 +1,36 @@
+$ rex move --help
+Move a block next to an anchor block.
+
+DIRECTION selects BLOCK's new position relative to ANCHOR. It must be right,
+left, above, or below. The two blocks may be in different windows, but both
+must be visible and belong to the same session.
+
+If BLOCK is omitted, Rex uses REX_BLOCK when it identifies a visible block.
+Otherwise, Rex uses the focused block in the default window. The --ratio flag
+sets the percentage of the resulting split assigned to BLOCK. PCT must be
+between 1 and 99.
+
+If a block label is also a direction word, identify the block by its full block
+ID or a hexadecimal ID suffix.
+
+Examples:
+  rex move below editor
+  rex move logs right editor --ratio 30
+  rex move c2a9f3 above 1bc2a9 -s work
+
+Usage:
+  rex move [BLOCK] DIRECTION ANCHOR [flags]
+
+Options:
+      --ratio PCT       give the moved block PCT percent of the split (default 50)
+  -s, --session string  scope to session SESSION
+  -w, --window string   scope to window WINDOW
+  -h, --help            help for move
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

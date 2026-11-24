@@ -56,6 +56,22 @@ internal class TerminalFrame(
     fun singleCodePoint(index: Int): Int = if (textLength[index] == 1) text[textStart[index]] else -1
 
     /** Whether the row carries on into the next one: a line the terminal wrapped, not one the program ended. */
+    /**
+     * The last of the first [limit] rows with anything drawn on it - text, a background colour or
+     * inverse video - or -1 when they are all empty. Kitty images count as reaching [limit].
+     */
+    fun lastDrawnRow(limit: Int = rows): Int {
+        val end = minOf(limit, rows)
+        if (images.isNotEmpty()) return end - 1
+        for (row in end - 1 downTo 0) {
+            for (column in 0 until columns) {
+                val i = index(column, row)
+                if (!isBlank(i) || flags[i] and (FLAG_BG_DEFAULT or FLAG_INVERSE) != FLAG_BG_DEFAULT) return row
+            }
+        }
+        return -1
+    }
+
     fun wrapped(row: Int): Boolean = columns > 0 && flags[index(0, row)] and FLAG_WRAPPED != 0
 
     /**

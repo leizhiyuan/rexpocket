@@ -1,0 +1,74 @@
+{
+  "name": "client.perform",
+  "description": "Ask another client to perform one of its actions and wait for its answer.",
+  "invoke": {
+    "method": "client.perform"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "description": "The name of an action the client declared, such as pane.split. client.inspect lists them. At most 256 bytes."
+      },
+      "args": {
+        "description": "The action's arguments, as a JSON object. Leave it out if there are none."
+      },
+      "block_id": {
+        "type": "string",
+        "description": "The block to act on instead of the client's focused block, if any. The client receives it without the server checking it."
+      },
+      "client_id": {
+        "type": "string",
+        "description": "The client to ask. To find one by its label, call target.resolve with kinds set to client."
+      },
+      "origin": {
+        "type": "string",
+        "description": "What caused the request, such as key, palette, api, or cli. The client receives it unchanged. Empty means api."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session the action applies to, if any. The client receives it without the server checking it."
+      },
+      "timeout_ms": {
+        "type": "integer",
+        "description": "How long to wait for the answer, in milliseconds, once the client is sent the request. Defaults to 10000. Values over 30000 count as 30000."
+      }
+    },
+    "required": [
+      "client_id",
+      "action"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "performed_by": {
+        "type": "string",
+        "description": "The client that performed the action. It is always the client that client_id named."
+      },
+      "result": {
+        "description": "What the client's action returned. Left out if it returned null, as most actions do."
+      }
+    },
+    "required": [
+      "performed_by"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"client_id\": \"client:<uuid>\",\n  \"action\": \"pane.split\",\n  \"args\": {\"direction\": \"right\"},\n  \"origin\": \"cli\"\n}",
+  "response_example": "{\"performed_by\": \"client:<uuid>\"}",
+  "validation_notes": [
+    "The server sends the named client a `client_perform_requested` event and waits for it to answer with `client.reply`.",
+    "The server tells the named client which client asked, based on the connection the request arrived on, so a client can't claim to be another.",
+    "The connection doesn't need to be attached to `session_id`, because the server only passes it on to the client.",
+    "Requests to one client wait in line, and the client answers them one at a time in the order they arrived. `timeout_ms` counts from when a request reaches the front of the line.",
+    "A request without `client_id` or `action`, with an `action` longer than 256 bytes, with a negative `timeout_ms`, or with `args` that aren't an object or don't match the action's schema fails with `bad_request`. If `client_id` names no connected client, the call fails with `not_found`.",
+    "If the client has listed its actions and `action` isn't one of them, the call fails with `not_supported`. A client that listed none is asked anyway, and it may answer `not_supported` itself.",
+    "A client that declines answers `refused`, and the call fails with that code and a message that says why.",
+    "If the client is reconnecting, already has 16 requests waiting for it, or disconnects while the request waits, the call fails with `client_unavailable`.",
+    "If the client doesn't answer in time, the call fails with `timeout`. The client isn't told, so it may still perform the action later.",
+    "When a request ends, the server sends a `client_performed` event with the outcome to connections that called `session.attach_all` with `event_scope` set to `all`. A request that names no connected client sends no event."
+  ]
+}

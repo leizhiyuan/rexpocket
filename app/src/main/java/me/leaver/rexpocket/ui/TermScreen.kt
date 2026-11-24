@@ -1,5 +1,6 @@
 package me.leaver.rexpocket.ui
 
+import android.os.Build
 import android.os.SystemClock
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.BackHandler
@@ -15,21 +16,26 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -40,6 +46,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,9 +54,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -57,6 +66,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -64,20 +74,38 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import me.leaver.rexpocket.terminal.TerminalSession
 import kotlinx.coroutines.delay
+import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlin.math.roundToInt
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.BlockInfo
+import me.leaver.rexpocket.core.ClosedPane
+import me.leaver.rexpocket.core.BarKey
+import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.KeyArrangement
+import me.leaver.rexpocket.core.DeskKey
+import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.KeyModifiers
+import me.leaver.rexpocket.core.metaState
 import me.leaver.rexpocket.core.KeyPress
 import me.leaver.rexpocket.core.keyPressFor
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketSession
 import me.leaver.rexpocket.core.PocketState
+import me.leaver.rexpocket.core.PaletteEntry
+import me.leaver.rexpocket.core.AppShortcut
+import me.leaver.rexpocket.core.PaneProgress
+import me.leaver.rexpocket.core.repeats
+import me.leaver.rexpocket.core.tabProgress
+import me.leaver.rexpocket.core.QuickReplies
 import me.leaver.rexpocket.core.ProgramMark
 import me.leaver.rexpocket.core.programMark
 import me.leaver.rexpocket.core.ProgramRecord
 import me.leaver.rexpocket.core.SessionView
+import me.leaver.rexpocket.core.Holder
 import me.leaver.rexpocket.core.TerminalFeed
 import me.leaver.rexpocket.core.UploadPhase
 import me.leaver.rexpocket.core.WindowInfo
@@ -130,8 +158,15 @@ internal sealed interface Sheet {
     data object Sessions : Sheet
     data object Actions : Sheet
     data object Navigator : Sheet
+    data object Palette : Sheet
+
+    /** What a keyboard on the desk can do here: the screen's own keys. */
+    data object Shortcuts : Sheet
     data class TabActions(val windowId: String) : Sheet
     data class PaneActions(val blockId: String) : Sheet
+
+    /** The prompt composer, for the pane that was on screen when it opened. */
+    data class Composer(val sessionId: String, val blockId: String, val title: String) : Sheet
 }
 
 @Composable
@@ -153,10 +188,22 @@ internal fun TermScreen(
     onRetryUpload: () -> Unit,
     /** True when the key bar is kept even with a keyboard on the desk. */
     keyBarWithKeyboard: Boolean = false,
-    keyBarShift: Boolean = false,
-    keyBarAlt: Boolean = false,
+    /** The key bar's keys in the person's order, and which show. */
+    keyArrangement: KeyArrangement = KeyArrangement(),
+    keyBarCtrlC: CtrlCKey = CtrlCKey.Tap,
+    /** What a tap, a double tap and a long press on the pane do; full screen is in the menu and the pill either way. */
+    gestures: GestureSettings = GestureSettings(),
     /** True when this pane shares the window with the list, which is then the way back. */
     embedded: Boolean = false,
+    /** Shows a tab of this host: of the session on screen, or of another one, which is opened on it. */
+    onOpenTab: (sessionId: String, windowId: String) -> Unit = { sessionId, _ -> onOpenSession(sessionId) },
+    /** What the program in a pane copies with OSC 52; see [PocketSession.copies]. */
+    paneCopies: (String) -> Flow<String> = { emptyFlow() },
+    /** The person's quick replies: the key bar's Quick replies key, the palette and the composer. */
+    quickReplies: List<String> = emptyList(),
+    /** The composer's drafts, by host and pane; [draftHost] is the host on screen. */
+    drafts: PromptDrafts = remember { PromptDrafts() },
+    draftHost: String? = null,
 ) {
     val context = LocalContext.current
     val ime = LocalSoftwareKeyboardController.current
@@ -164,7 +211,10 @@ internal fun TermScreen(
         if (uri != null) onAttach(uri)
     }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
-    var mods by remember(keyBarShift, keyBarAlt) { mutableStateOf(KeyModifiers()) }
+    // A modifier taken off the bar while held would stay held with no key to let it go.
+    val shift = keyArrangement.isShown(BarKey.Shift)
+    val alt = keyArrangement.isShown(BarKey.Alt)
+    var mods by remember(shift, alt) { mutableStateOf(KeyModifiers()) }
     var link by remember { mutableStateOf<String?>(null) }
     var rename by remember { mutableStateOf<Rename?>(null) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
@@ -172,10 +222,35 @@ internal fun TermScreen(
     // The pane's editor: what the keyboard key raises, and what Back and the session list drop.
     var keyboard by remember { mutableStateOf<TerminalImeView?>(null) }
     val view = state.view
-    val tab = view?.activeWindow()
-    val focused = view?.focusedBlock()
+    // The pane on screen was closed elsewhere. The view has moved on to what Rex shows instead, but
+    // that is held back behind a note - no pane, no keys, no tab - until the person chooses it.
+    val closed = state.closed?.takeIf { view != null && it.sessionId == view.sessionId }
+    val tab = if (closed != null) null else view?.activeWindow()
+    val focused = if (closed != null) null else view?.focusedBlock()
     val status = focused?.let { state.blockStatus[it.id] }
     val panes = tab?.blocks.orEmpty()
+
+    // A program's OSC 52 copy goes on the phone's clipboard, from the pane on screen only and only
+    // while the app is in front: a copy is the program speaking for the person at the keyboard.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(focused?.id) {
+        val pane = focused?.id ?: return@LaunchedEffect
+        paneCopies(pane).collect { text ->
+            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@collect
+            clipboardSet(context, text)
+            // Android 13 and later say so themselves.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) toast(context, context.getString(R.string.toast_program_copied))
+        }
+    }
+
+    /**
+     * A key or a paste that goes to the program through Rex rather than through the pane's own
+     * terminal: the pane follows it to the newest output, as typing does, so whoever had scrolled
+     * back sees what it did.
+     */
+    fun followNewest() {
+        termSession?.scrollToBottom()
+    }
 
     /** Puts what the clipboard holds into the program, where a key on the bar or the menu asks for it. */
     fun pasteClipboard() {
@@ -183,14 +258,42 @@ internal fun TermScreen(
         if (text.isNullOrEmpty()) {
             toast(context, context.getString(R.string.toast_clipboard_empty))
         } else {
+            followNewest()
             onAct { paste(text) }
         }
+    }
+
+    /** The composer for the pane on screen; it keeps that pane while it is open. */
+    fun openComposer() {
+        val v = view ?: return
+        val pane = focused ?: return
+        sheet = Sheet.Composer(v.sessionId, pane.id, paneTitle(pane, state.blockStatus[pane.id], state.programs[pane.id]))
+    }
+
+    /** A quick reply from the key bar or the palette: pasted into the pane on screen, then Return. */
+    fun sendQuickReply(text: String) {
+        val v = view ?: return
+        val pane = focused ?: return
+        followNewest()
+        onAct { replyTo(v.sessionId, pane.id, text) }
     }
 
     /** Sends a key with the modifiers the key row holds; the ones on for one key are then used up. */
     fun press(key: KeyPress, own: String = "") {
         val e = mods.event(key, own)
+        followNewest()
         onAct { sendKey(e.code, mods = e.mods, text = e.text, codepoint = e.codepoint, consumedMods = e.consumedMods) }
+        mods = mods.consume()
+    }
+
+    /**
+     * Home, Page Up, F5 and the rest, as a keyboard on the desk sends them: the pane's terminal
+     * encodes the key in the modes the program set, with the modifiers the key row holds, and the
+     * bytes go the way a desk keyboard's do.
+     */
+    fun pressDesk(key: DeskKey) {
+        val terminal = termSession ?: return
+        deskKeyBytes(terminal, key, mods)?.let(terminal::send)
         mods = mods.consume()
     }
 
@@ -226,8 +329,98 @@ internal fun TermScreen(
         }
     }
 
-    // An open sheet handles Back itself and closes.
+    /** The holder chip's one tap, which the menu repeats: hand the pane back, or take it over. */
+    fun toggleHolder() {
+        if (state.holder == Holder.Phone) onAct { releasePane() } else onAct { takeOver() }
+    }
+
+    val shownTabTitle = if (view != null && tab != null) tabTitle(view, tab, state) else ""
+
+    // Find in the pane's scrollback: a bar over the pane, its matches drawn on it.
+    var findOpen by rememberSaveable { mutableStateOf(false) }
+    var findAgain by remember { mutableIntStateOf(0) }
+    val find = remember { FindModel() }
+    FindEffects(find, findOpen && focused != null, termSession)
+
+    /** Opens Find, or puts the keys in its field again; a selection of one line is what it looks for. */
+    fun openFind() {
+        if (focused == null) return
+        val picked = termSession?.selectionText().orEmpty()
+        if (picked.isNotBlank() && '\n' !in picked) find.query = androidx.compose.ui.text.input.TextFieldValue(picked.trim())
+        findOpen = true
+        findAgain++
+    }
+
+    fun closeFind() {
+        findOpen = false
+        // The keys of a desk keyboard go back to the pane.
+        keyboard?.pane?.takeIf { it.hardwareKeys }?.requestFocus()
+    }
+
+    /** Next or previous tab of the session on screen, round the ends. */
+    fun stepTab(forward: Boolean) {
+        val windows = view?.windows ?: return
+        val at = windows.indexOfFirst { it.id == tab?.id }
+        if (windows.size < 2 || at < 0) return
+        val next = windows[(at + (if (forward) 1 else -1) + windows.size) % windows.size]
+        onAct { focusWindow(next.id) }
+    }
+
+    /** What the screen does for one of its own keys on a desk keyboard (terminal-controls.md, "A desk keyboard"). */
+    fun runShortcut(shortcut: AppShortcut) {
+        when (shortcut) {
+            AppShortcut.Find -> openFind()
+            AppShortcut.Copy -> {
+                val text = termSession?.selectionText().orEmpty()
+                if (text.isEmpty()) {
+                    toast(context, context.getString(R.string.toast_nothing_selected))
+                } else {
+                    clipboardSet(context, text)
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) toast(context, context.getString(R.string.toast_copied))
+                }
+            }
+            AppShortcut.Paste -> if (focused != null) pasteClipboard()
+            AppShortcut.NewTab -> if (view != null) onAct { newWindow() }
+            AppShortcut.NextTab -> stepTab(forward = true)
+            AppShortcut.PreviousTab -> stepTab(forward = false)
+            AppShortcut.CloseTab -> if (view != null && tab != null) confirm = Confirm(Level.Tab, tab.id, shownTabTitle)
+            AppShortcut.FontBigger -> onFont(fontScale + FONT_STEP)
+            AppShortcut.FontSmaller -> onFont(fontScale - FONT_STEP)
+            AppShortcut.FontReset -> onFont(1f)
+            AppShortcut.Palette -> sheet = Sheet.Palette
+            AppShortcut.Home -> onBack()
+            AppShortcut.Help -> sheet = Sheet.Shortcuts
+        }
+    }
+
+    /** A key from a desk keyboard, offered before the program gets it: true when it was the screen's. */
+    fun onShortcutKey(event: android.view.KeyEvent, fromFind: Boolean = false): Boolean {
+        if (event.action != android.view.KeyEvent.ACTION_DOWN) return false
+        val shortcut = shortcutOf(event) ?: return false
+        // Copy and paste in Find's field are the field's own.
+        if (fromFind && (shortcut == AppShortcut.Copy || shortcut == AppShortcut.Paste)) return false
+        // A held key does not open tab after tab; only the font steps on.
+        if (event.repeatCount > 0 && !shortcut.repeats) return true
+        runShortcut(shortcut)
+        return true
+    }
+    TerminalShortcutsShown()
+
+    /** Who holds the pane shows while there is one on screen to hold: the chip, and the menu's row. */
+    val showHolder = holderShown(state, tab)
+    val imeUp = imeShown()
+
+    // Full screen is this screen's own: it survives a rotation, and is gone once the terminal is left.
+    var fullScreen by rememberSaveable { mutableStateOf(false) }
+    val toggleFullScreen = { fullScreen = TermChrome(fullScreen).toggled().fullScreen }
+    val short = LocalConfiguration.current.screenHeightDp < SHORT_WINDOW_DP
+    val chrome = TermChrome(fullScreen, short = short, imeUp = imeShown())
+    SystemBars(shown = chrome.systemBars)
+
+    // An open sheet handles Back itself and closes. In full screen Back first brings the bars back:
+    // the later handler is the one asked first.
     BackHandler(onBack = onBack)
+    BackHandler(enabled = chrome.fullScreen) { TermChrome(fullScreen).back()?.let { fullScreen = it.fullScreen } }
 
     // The keyboard belongs to the pane that is on screen: leaving the terminal drops it, so the
     // session list does not come back with a keyboard over it.
@@ -243,34 +436,95 @@ internal fun TermScreen(
     //
     // The keyboard takes no room from the terminal. The pane keeps the grid it has and slides up by
     // what the keyboard covers - the bottom of the terminal, the rows being typed into, stays where
-    // it was - while the dock and the rest of the bottom chrome rise over it. A program is therefore
+    // it was, unless the cursor is too near the top for that - while the dock and the rest of the
+    // bottom chrome rise over it. A program is therefore
     // never resized by the screen keyboard opening, so it never redraws or reflows for it.
     val hardwareKeys = rememberHardwareKeyboard()
-    val dock = keyBarShown(hardwareKeys, keyBarWithKeyboard)
+    // Rex keeps a session whose last tab closed, with no windows at all (seen on 0.1.0-preview.22):
+    // there is no pane to type into, so the screen says so and offers a new tab, without keys.
+    val empty = closed == null && view != null && view.windows.isEmpty()
+    val dock = chrome.keyBar(keyBarShown(hardwareKeys, keyBarWithKeyboard)) && closed == null && !empty
     var bottomPx by remember { mutableIntStateOf(0) }
     var panePx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
-    val slide = imeShift(imeHeight(), panePx)
+    // Where the pane's cursor is, so the slide never takes its row out of view; a new pane starts
+    // with none until it has drawn.
+    var cursorTopPx by remember(focused?.id) { mutableStateOf<Int?>(null) }
+    // And where what it has drawn ends, so a short screen is moved only as far as it needs.
+    var drawnBottomPx by remember(focused?.id) { mutableStateOf<Int?>(null) }
+    val slide = imeShift(imeCover(), panePx, cursorTopPx, drawnBottomPx)
 
-    Box(Modifier.fillMaxSize().background(Colors.terminal).statusBarsPadding().navigationBarsPadding()) {
+    // In full screen the phone's bars are hidden, so the pane reaches the edges; a swipe brings them
+    // over it for a moment without taking room. A camera cutout keeps the text out from under it at
+    // the sides, where it would hide the start of every line; at the top of a phone held upright it
+    // would cost a whole band of rows for a punch hole.
+    //
+    // The room for the bars follows full screen itself, not the bars' insets as last heard: Compose
+    // drops the insets sent while a bar animation is being prepared and takes them at its end only
+    // when it had a duration, so with animations off, or a bar that goes without one, the old insets
+    // stayed - a band at the bottom - until the keyboard sent new ones. The bars' sizes while hidden
+    // are known all along, so leaving full screen makes room for them at once too.
+    val cutout = if (chrome.fullScreen) WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal) else WindowInsets.displayCutout
+    val bars = if (chrome.fullScreen) Modifier else Modifier.windowInsetsPadding(systemBarsRoom())
+    Box(Modifier.fillMaxSize().background(if (chrome.fullScreen) Colors.pane else Colors.terminal).then(bars).windowInsetsPadding(cutout)) {
         Column(Modifier.fillMaxSize().padding(bottom = with(density) { bottomPx.toDp() })) {
-            SessionTopBar(
-                state = state,
-                view = view,
-                tab = tab,
-                status = status,
-                onBack = onBack,
-                showBack = !embedded,
-                onNavigate = { if (view != null) sheet = Sheet.Navigator },
-                onHolder = { if (state.owning) onAct { releasePane() } else onAct { takeOver() } },
-                onMore = { sheet = Sheet.Actions },
-            )
+            if (chrome.topBar) {
+                SessionTopBar(
+                    state = state,
+                    view = view,
+                    tab = tab,
+                    status = status,
+                    onBack = onBack,
+                    showBack = !embedded,
+                    onNavigate = { if (view != null) sheet = Sheet.Navigator },
+                    onHolder = ::toggleHolder,
+                    onMore = { sheet = Sheet.Actions },
+                    panes = if (chrome.panesInTopBar && panes.size > 1) {
+                        {
+                            PaneBar(
+                                tab = tab,
+                                focused = focused,
+                                status = state.blockStatus,
+                                busyPanes = state.busy,
+                                programs = state.programs,
+                                onSelect = { block -> onAct { focusBlock(block.id) } },
+                                modifier = Modifier.widthIn(max = 420.dp),
+                                progress = state.progress,
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    progress = tab?.let { tabProgress(it, state.progress) },
+                )
+            } else if (chrome.cornerMenu) {
+                // The bar steps aside for the key bar, but its room is kept: the pane keeps its
+                // grid, so the program is not resized each time the keyboard comes and goes.
+                Spacer(Modifier.height(TOP_BAR_HEIGHT))
+            }
             TermBanner(state, onRetry = onRetry, onDismiss = onDismissNotice)
             // The pane sits on its own paper: white in the day, the page at night, edge to edge, the
-            // way a terminal fills the screen.
-            Box(Modifier.weight(1f).fillMaxWidth().background(Colors.terminal).clipToBounds()) {
-                val shown = focused?.id
-                key(shown) {
+            // way a terminal fills the screen. A terminal on it has the terminal's colours, which
+            // Settings › Appearance can set apart from the app's; the notes in its place are the app's.
+            val shown = focused?.id
+            val paper = if (closed != null && view != null || empty) Colors.terminal else Colors.pane
+            Box(Modifier.weight(1f).fillMaxWidth().background(paper).clipToBounds().testTag(PANE_TAG)) {
+                if (closed != null && view != null) {
+                    ClosedPaneNote(
+                        closed = closed,
+                        next = view.activeWindow()?.let { tabTitle(view, it, state) },
+                        onShowNext = { onAct { leaveClosedPane() } },
+                        onNewTab = { onAct { newWindow() } },
+                        onSessions = onBack.takeIf { !embedded },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else if (empty) {
+                    EmptySessionNote(
+                        onNewTab = { onAct { newWindow() } },
+                        onSessions = onBack.takeIf { !embedded },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else key(shown) {
                     TerminalPane(
                         blockId = shown.orEmpty(),
                         feeds = watchPane,
@@ -280,9 +534,13 @@ internal fun TermScreen(
                         onInput = { bytes -> onAct { writeBytes(bytes) } },
                         onTyped = ::typed,
                         onLink = { link = it },
+                        onPaste = { pasteClipboard() },
+                        onShare = { shareText(context, it) },
                         onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
                         onSession = { termSession = it },
                         onKeyboard = { keyboard = it },
+                        onCursorTop = { cursorTopPx = it },
+                        onDrawnBottom = { drawnBottomPx = it },
                         hardwareKeyboard = hardwareKeys,
                         // A horizontal swipe on the pane moves to the pane beside it, as the dots
                         // under it say there is one.
@@ -293,7 +551,13 @@ internal fun TermScreen(
                                 if (next != index) onAct { focusBlock(panes[next].id) }
                             }
                         },
+                        gestures = gestures,
+                        fullScreen = chrome.fullScreen,
+                        onFullScreen = toggleFullScreen,
                         onError = { onAct { note(it.toProblem()) } },
+                        // The screen's own keys: Ctrl+Shift+P for the palette (Cmd+Shift+P on a Mac
+                        // keyboard), Ctrl+Shift+F for Find and the rest of the shortcut table.
+                        onShortcut = { event -> onShortcutKey(event) },
                         modifier = Modifier.fillMaxSize()
                             // Moved, not resized: see imeShift. An offset keeps the pane's measured size
                             // - and so the grid the program was given - exactly as it was.
@@ -302,20 +566,47 @@ internal fun TermScreen(
                             .onSizeChanged { panePx = it.height },
                     )
                 }
+                // Find, over the pane's top rows rather than taking a row from it: the program keeps
+                // its size while the person looks through what it printed.
+                if (findOpen && focused != null) {
+                    key(findAgain) {
+                        FindBar(
+                            find,
+                            onClose = ::closeFind,
+                            onShortcut = { onShortcutKey(it, fromFind = true) },
+                            modifier = Modifier.align(Alignment.TopCenter).padding(end = if (chrome.fullScreen) 44.dp else 0.dp),
+                        )
+                    }
+                }
+                // The way back out of full screen, always on screen while it is on: small, in the
+                // corner a video player uses, and over the pane rather than taking a row from it.
+                if (chrome.fullScreen) {
+                    RoundButton(
+                        R.drawable.ic_fullscreen_exit,
+                        stringResource(R.string.action_exit_full_screen),
+                        { fullScreen = TermChrome(fullScreen).toggled().fullScreen },
+                        modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                        plate = Colors.key.copy(alpha = 0.85f),
+                        size = 36.dp,
+                        iconSize = 20.dp,
+                    )
+                }
             }
         }
         // The bottom of the screen, on its own: the pane's size is measured above without it, so the
         // keyboard can lift this stack without the terminal ever changing shape.
         Box(Modifier.align(Alignment.BottomCenter).imePadding()) {
-            Column(Modifier.onSizeChanged { bottomPx = it.height }) {
-                if (panes.size > 1) {
+            Column(Modifier.onSizeChanged { bottomPx = it.height }.testTag(DOCK_TAG)) {
+                if (panes.size > 1 && chrome.panesBelow) {
                     Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp), contentAlignment = Alignment.Center) {
                         PaneBar(
                             tab = tab,
                             focused = focused,
                             status = state.blockStatus,
+                            busyPanes = state.busy,
                             programs = state.programs,
                             onSelect = { block -> onAct { focusBlock(block.id) } },
+                            progress = state.progress,
                         )
                     }
                 }
@@ -336,21 +627,39 @@ internal fun TermScreen(
                     ReachableWidth {
                         KeyBar(
                             mods = mods,
-                            busy = status?.state == "working" || status?.state == "blocked",
+                            busy = focused?.id?.let { it in state.busy } == true,
                             imeUp = imeShown(),
                             onMod = { mods = mods.tap(it, SystemClock.uptimeMillis()) },
                             onKey = { key, own -> press(key, own) },
-                            showShift = keyBarShift,
-                            showAlt = keyBarAlt,
+                            arrangement = keyArrangement,
+                            ctrlC = keyBarCtrlC,
+                            onDeskKey = { pressDesk(it) },
                             onNewLine = { press(KeyPress("enter", 0), "shift") },
                             onPaste = { pasteClipboard() },
                             onAttach = { filePicker.launch("*/*") },
                             attachReady = upload?.running != true,
                             onKeyboard = { toggleKeyboard() },
+                            onFullScreen = toggleFullScreen,
+                            quickReplies = quickReplies,
+                            onQuickReply = ::sendQuickReply,
+                            onCompose = ::openComposer,
                         )
                     }
                 }
             }
+        }
+        // A short window typing has given the top bar's place to the key bar; its menu stays here,
+        // over everything, in the corner the exit-full-screen button uses.
+        if (chrome.cornerMenu) {
+            RoundButton(
+                R.drawable.ic_more,
+                stringResource(R.string.action_more),
+                { sheet = Sheet.Actions },
+                modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                plate = Colors.key.copy(alpha = 0.85f),
+                size = 36.dp,
+                iconSize = 20.dp,
+            )
         }
     }
 
@@ -363,23 +672,63 @@ internal fun TermScreen(
             onCreate = { onAct { createShell(null) } },
         )
         Sheet.Actions -> ActionSheet(onDismiss = { sheet = null }) {
+            // The key bar's keys that act on the phone rather than send a key, in the bar's order,
+            // whatever the bar shows: a keyboard on the desk takes the bar away, Arrange keys can
+            // hide them, and full screen hides it all. See terminal-controls.md, 4.
+            Group {
+                // Everything below, and every tab and session, searchable: see command-palette.md.
+                SheetItem(stringResource(R.string.palette_title), icon = R.drawable.ic_command) { sheet = Sheet.Palette }
+                if (focused != null) SheetItem(stringResource(R.string.find_title), icon = R.drawable.ic_search) { openFind() }
+                SheetItem(stringResource(R.string.shortcuts_title), icon = R.drawable.ic_keyboard, opens = true) { sheet = Sheet.Shortcuts }
+                for (key in PHONE_ACTIONS) {
+                    when (key) {
+                        // Paste, Send a file and the keyboard act on the pane on screen.
+                        BarKey.Paste -> if (focused != null) {
+                            SheetItem(stringResource(R.string.key_paste), icon = R.drawable.ic_paste) { pasteClipboard() }
+                        }
+                        // One file at a time, as the bar's key: greyed out while one is on its way,
+                        // so the rows below do not move up and down with the upload.
+                        BarKey.Attach -> if (focused != null) {
+                            SheetItem(
+                                stringResource(R.string.upload_attach),
+                                icon = R.drawable.ic_attach_file,
+                                enabled = upload?.running != true,
+                            ) { filePicker.launch("*/*") }
+                        }
+                        BarKey.Keyboard -> if (focused != null) {
+                            SheetItem(
+                                stringResource(if (imeUp) R.string.menu_hide_keyboard else R.string.menu_show_keyboard),
+                                icon = if (imeUp) R.drawable.ic_keyboard_hide else R.drawable.ic_keyboard,
+                            ) { toggleKeyboard() }
+                        }
+                        BarKey.FullScreen -> SheetItem(stringResource(R.string.action_full_screen), icon = R.drawable.ic_fullscreen) { toggleFullScreen() }
+                        BarKey.Compose -> if (focused != null) {
+                            SheetItem(stringResource(R.string.composer_title), icon = R.drawable.ic_edit) { openComposer() }
+                        }
+                        else -> Unit
+                    }
+                }
+            }
             Group(stringResource(R.string.level_pane)) {
+                // The top bar's holder chip, which full screen and a short window's keyboard hide.
+                if (showHolder) {
+                    SheetItem(
+                        stringResource(if (state.holder == Holder.Phone) R.string.action_release else R.string.action_take_over),
+                        // A hand handing the pane back, or one reaching out for it.
+                        icon = if (state.holder == Holder.Phone) R.drawable.ic_back_hand else R.drawable.ic_front_hand,
+                    ) { toggleHolder() }
+                }
                 SheetItem(stringResource(R.string.menu_split_right), icon = R.drawable.ic_split_right) { onAct { split(vertical = false) } }
                 SheetItem(stringResource(R.string.menu_split_below), icon = R.drawable.ic_split_below) { onAct { split(vertical = true) } }
                 if (focused != null) {
                     SheetItem(stringResource(R.string.menu_rename_pane), icon = R.drawable.ic_edit) { rename = Rename(Level.Pane, focused.id, focused.label) }
-                    SheetItem(stringResource(R.string.menu_close_pane), Colors.danger, icon = R.drawable.ic_close) {
-                        confirm = Confirm(Level.Pane, focused.id, focused.label)
+                    // A tab's last pane closing closes the tab on Rex: that is Close tab, below.
+                    if (panes.size > 1) {
+                        SheetItem(stringResource(R.string.menu_close_pane), Colors.danger, icon = R.drawable.ic_close) {
+                            confirm = Confirm(Level.Pane, focused.id, focused.label)
+                        }
                     }
                 }
-            }
-            // Paste is here as well as on the key bar, because a keyboard on the desk takes the bar
-            // away and a chord only reaches the program, never the phone's clipboard.
-            Group {
-                if (upload?.running != true) {
-                    SheetItem(stringResource(R.string.upload_attach), icon = R.drawable.ic_attach_file) { filePicker.launch("*/*") }
-                }
-                SheetItem(stringResource(R.string.key_paste), icon = R.drawable.ic_paste) { pasteClipboard() }
             }
             Group(stringResource(R.string.level_tab)) {
                 SheetItem(stringResource(R.string.menu_new_tab), icon = R.drawable.ic_add) { onAct { newWindow() } }
@@ -401,6 +750,155 @@ internal fun TermScreen(
                 }
             }
         }
+        Sheet.Palette -> {
+            val paneGroup = stringResource(R.string.level_pane)
+            val tabGroup = stringResource(R.string.level_tab)
+            val sessionGroup = stringResource(R.string.level_session)
+            val phoneGroup = stringResource(R.string.palette_group_phone)
+            val copied = stringResource(R.string.toast_copied)
+            val entries = buildList {
+                fun action(label: String, group: String, rexName: String? = null, run: () -> Unit) =
+                    add(PaletteEntry(label, group, null, PaletteRun(run = run), keywords = rexName))
+                // Actions, in the ⋮ menu's order: Pane, Tab, Session, then the phone's own.
+                if (focused != null) {
+                    if (showHolder) {
+                        action(stringResource(if (state.holder == Holder.Phone) R.string.action_release else R.string.action_take_over), paneGroup) { toggleHolder() }
+                    }
+                }
+                action(stringResource(R.string.menu_split_right), paneGroup, "Split Pane Right pane.split.right") { onAct { split(vertical = false) } }
+                action(stringResource(R.string.menu_split_below), paneGroup, "Split Pane Down pane.split.down") { onAct { split(vertical = true) } }
+                if (focused != null) {
+                    val index = panes.indexOfFirst { it.id == focused.id }
+                    if (panes.size > 1) {
+                        val next = panes[(index + 1) % panes.size]
+                        val previous = panes[(index - 1 + panes.size) % panes.size]
+                        action(stringResource(R.string.palette_next_pane), paneGroup, "Focus Next Pane pane.focus_next") { onAct { focusBlock(next.id) } }
+                        action(stringResource(R.string.palette_previous_pane), paneGroup, "Focus Previous Pane pane.focus_previous") { onAct { focusBlock(previous.id) } }
+                    }
+                    action(stringResource(R.string.menu_rename_pane), paneGroup, "Rename Pane pane.rename") { rename = Rename(Level.Pane, focused.id, focused.label) }
+                    if (panes.size > 1) {
+                        action(stringResource(R.string.menu_close_pane), paneGroup, "Close Pane pane.close") { confirm = Confirm(Level.Pane, focused.id, focused.label) }
+                    }
+                    // Rex's own two Pane actions (client.keymap): the pane's terminal methods.
+                    action(
+                        stringResource(R.string.palette_clear_terminal),
+                        paneGroup,
+                        "Clear Terminal com.superlogical.terminal.clear screen scrollback erase cmd+k ctrl+l",
+                    ) { onAct { clearPane() } }
+                    action(
+                        stringResource(R.string.palette_reset_terminal),
+                        paneGroup,
+                        "Reset Terminal com.superlogical.terminal.reset clear scrollback emulator ris",
+                    ) { onAct { resetPane() } }
+                    // The whole output, screen and scrollback, each line as the program wrote it.
+                    action(stringResource(R.string.palette_copy_output), paneGroup, "Copy Output terminal format text scrollback") {
+                        onAct {
+                            val out = paneText() ?: return@onAct
+                            when {
+                                out.text.isBlank() -> toast(context, context.getString(R.string.toast_output_empty))
+                                else -> {
+                                    clipboardSet(context, out.text)
+                                    // Android 13 and later say a copy was made themselves.
+                                    if (out.cut) {
+                                        toast(context, context.getString(R.string.toast_output_copied_cut))
+                                    } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                                        toast(context, context.getString(R.string.toast_output_copied))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    action(stringResource(R.string.palette_share_output), paneGroup, "Share Output terminal format text scrollback send") {
+                        onAct {
+                            val out = paneText() ?: return@onAct
+                            if (out.text.isBlank()) toast(context, context.getString(R.string.toast_output_empty)) else shareText(context, out.text)
+                        }
+                    }
+                    action(stringResource(R.string.find_title), paneGroup, "Find client.find.show search scrollback ctrl+shift+f") { openFind() }
+                    action(stringResource(R.string.palette_copy_pane_id), paneGroup, "Copy Block ID pane.copy_id") {
+                        clipboardSet(context, focused.id)
+                        toast(context, copied)
+                    }
+                }
+                action(stringResource(R.string.menu_new_tab), tabGroup, "New Tab client.tab.new") { onAct { newWindow() } }
+                if (view != null && tab != null) {
+                    val windows = view.windows
+                    val at = windows.indexOfFirst { it.id == tab.id }
+                    if (windows.size > 1 && at >= 0) {
+                        val next = windows[(at + 1) % windows.size]
+                        val previous = windows[(at - 1 + windows.size) % windows.size]
+                        action(stringResource(R.string.palette_next_tab), tabGroup, "Show Next Tab client.tab.next") { onAct { focusWindow(next.id) } }
+                        action(stringResource(R.string.palette_previous_tab), tabGroup, "Show Previous Tab client.tab.previous") { onAct { focusWindow(previous.id) } }
+                    }
+                    val title = tabTitle(view, tab, state)
+                    action(stringResource(R.string.menu_rename_tab), tabGroup, "Rename Tab client.tab.rename") { rename = Rename(Level.Tab, tab.id, tab.label) }
+                    action(stringResource(R.string.menu_close_tab), tabGroup, "Close Tab client.tab.close") { confirm = Confirm(Level.Tab, tab.id, title) }
+                }
+                action(stringResource(R.string.session_new), sessionGroup, "New Session session.new") { onAct { createShell(null) } }
+                val sessions = state.sessions
+                val here = sessions.indexOfFirst { it.id == state.activeSessionId }
+                if (sessions.size > 1 && here >= 0) {
+                    val next = sessions[(here + 1) % sessions.size]
+                    val previous = sessions[(here - 1 + sessions.size) % sessions.size]
+                    action(stringResource(R.string.palette_next_session), sessionGroup, "Next Session session.next") { onOpenSession(next.id) }
+                    action(stringResource(R.string.palette_previous_session), sessionGroup, "Previous Session session.previous") { onOpenSession(previous.id) }
+                }
+                if (view != null) {
+                    action(stringResource(R.string.menu_rename_session), sessionGroup, "Rename Session session.rename") { rename = Rename(Level.Session, view.sessionId, view.label) }
+                    action(stringResource(R.string.menu_kill_session), sessionGroup, "Close Session session.close") { confirm = Confirm(Level.Session, view.sessionId, view.label) }
+                }
+                if (focused != null) {
+                    action(stringResource(R.string.key_paste), phoneGroup, "Paste into Pane pane.paste") { pasteClipboard() }
+                    if (upload?.running != true) action(stringResource(R.string.upload_attach), phoneGroup, "Insert File pane.insert_file") { filePicker.launch("*/*") }
+                    action(stringResource(if (imeUp) R.string.menu_hide_keyboard else R.string.menu_show_keyboard), phoneGroup, "Show Keyboard client.keyboard.show Hide Keyboard client.keyboard.hide") { toggleKeyboard() }
+                }
+                action(stringResource(if (chrome.fullScreen) R.string.palette_leave_full_screen else R.string.action_full_screen), phoneGroup, "Toggle Full Screen client.window.fullscreen.toggle") { toggleFullScreen() }
+                action(stringResource(R.string.palette_font_bigger), phoneGroup, "Increase Font Size client.font.increase") { onFont(fontScale + FONT_STEP) }
+                action(stringResource(R.string.palette_font_smaller), phoneGroup, "Decrease Font Size client.font.decrease") { onFont(fontScale - FONT_STEP) }
+                action(stringResource(R.string.palette_font_reset), phoneGroup, "Reset Font Size client.font.reset") { onFont(1f) }
+                action(stringResource(R.string.palette_back_home), phoneGroup) { onBack() }
+                action(stringResource(R.string.shortcuts_title), phoneGroup, "Keyboard Shortcuts keys help ctrl+shift+/") { sheet = Sheet.Shortcuts }
+                if (focused != null) {
+                    // Rex's own Compose Input… opens its composer; the phone's sends one paste.
+                    action(stringResource(R.string.composer_title), phoneGroup, "Compose Input client.composer.open prompt message") { openComposer() }
+                    val replyGroup = stringResource(R.string.palette_group_quick_reply)
+                    for (reply in quickReplies) {
+                        add(PaletteEntry(QuickReplies.short(reply), replyGroup, null, PaletteRun { sendQuickReply(reply) }, keywords = "send reply snippet $reply"))
+                    }
+                }
+                // Where to go: the tabs of the session on screen, then of the other sessions the
+                // phone has loaded, then every session.
+                val ordered = listOfNotNull(view) + state.sessions.mapNotNull { s -> state.views[s.id]?.takeIf { it.sessionId != view?.sessionId } }
+                for (v in ordered) {
+                    val sessionLabel = state.sessions.firstOrNull { it.id == v.sessionId }?.label ?: v.label
+                    for (window in v.windows) {
+                        val current = v.sessionId == view?.sessionId && window.id == tab?.id
+                        val word = window.blocks.firstNotNullOfOrNull { state.blockStatus[it.id] }?.let { statusWord(it) }
+                        add(
+                            PaletteEntry(
+                                tabTitle(v, window, state),
+                                tabGroup,
+                                listOfNotNull(sessionLabel, word).joinToString(" · "),
+                                PaletteRun(marked = current) {
+                                    when {
+                                        current -> Unit
+                                        v.sessionId == view?.sessionId -> onAct { focusWindow(window.id) }
+                                        else -> onOpenTab(v.sessionId, window.id)
+                                    }
+                                },
+                                keywords = "Go to Tab client.tab.goto",
+                            ),
+                        )
+                    }
+                }
+                for (s in state.sessions) {
+                    val active = s.id == state.activeSessionId
+                    add(PaletteEntry(s.label, sessionGroup, null, PaletteRun(marked = active) { if (!active) onOpenSession(s.id) }, "Go to Session session.select"))
+                }
+            }
+            CommandPalette(entries, onDismiss = { sheet = null })
+        }
+        Sheet.Shortcuts -> ShortcutsSheet(onDismiss = { sheet = null }, onRun = ::runShortcut)
         Sheet.Navigator -> if (view != null) {
             ActionSheet(onDismiss = { sheet = null }, title = view.label) {
                 Group {
@@ -415,7 +913,7 @@ internal fun TermScreen(
                             detail = window.blocks.size.takeIf { it > 1 }?.let { pluralStringResource(R.plurals.pane_count, it, it) },
                             marked = window.id == tab?.id,
                         ) {
-                            if (window.id != view.activeWindowId) onAct { focusWindow(window.id) }
+                            if (window.id != tab?.id) onAct { focusWindow(window.id) }
                         }
                     }
                 }
@@ -452,6 +950,20 @@ internal fun TermScreen(
                 }
             }
         }
+        is Sheet.Composer -> {
+            val key = PromptDrafts.key(draftHost, open.blockId)
+            PromptComposer(
+                target = open.title,
+                draft = drafts[key],
+                onDraft = { drafts[key] = it },
+                quickReplies = quickReplies,
+                onSend = { text, enter ->
+                    followNewest()
+                    onAct { replyTo(open.sessionId, open.blockId, text, enter) }
+                },
+                onDismiss = { sheet = null },
+            )
+        }
         is Sheet.PaneActions -> {
             val block = tab?.blocks?.firstOrNull { it.id == open.blockId }
             if (tab != null && block != null) {
@@ -481,6 +993,18 @@ internal fun TermScreen(
 
     rename?.let { target ->
         var text by remember(target) { mutableStateOf(target.current) }
+        fun save() {
+            rename = null
+            val label = text.trim()
+            if (label.isEmpty() || label == target.current) return
+            onAct {
+                when (target.kind) {
+                    Level.Tab -> renameWindow(label, target.id)
+                    Level.Pane -> renameBlock(label, target.id)
+                    Level.Session -> renameSession(label)
+                }
+            }
+        }
         AlertDialog(
             onDismissRequest = { rename = null },
             containerColor = Colors.surface,
@@ -494,20 +1018,10 @@ internal fun TermScreen(
                     color = Colors.ink,
                 )
             },
-            text = { Field(stringResource(R.string.field_name), text, autoFocus = true) { text = it } },
+            // Enter on the keyboard saves, as the button does.
+            text = { Field(stringResource(R.string.field_name), text, autoFocus = true, imeAction = ImeAction.Done, onDone = { save() }) { text = it } },
             confirmButton = {
-                TextButton(onClick = {
-                    rename = null
-                    val label = text.trim()
-                    if (label.isEmpty() || label == target.current) return@TextButton
-                    onAct {
-                        when (target.kind) {
-                            Level.Tab -> renameWindow(label, target.id)
-                            Level.Pane -> renameBlock(label, target.id)
-                            Level.Session -> renameSession(label)
-                        }
-                    }
-                }) { Text(stringResource(R.string.action_save), color = Colors.accent) }
+                TextButton(onClick = { save() }) { Text(stringResource(R.string.action_save), color = Colors.accent) }
             },
             dismissButton = {
                 TextButton(onClick = { rename = null }) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
@@ -575,6 +1089,10 @@ private fun SessionTopBar(
     onNavigate: () -> Unit,
     onHolder: () -> Unit,
     onMore: () -> Unit,
+    /** The pane switcher, where a short window puts it: in this row rather than over the pane. */
+    panes: (@Composable () -> Unit)? = null,
+    /** The tab's progress bar, drawn along the bar's foot without taking a row from the pane. */
+    progress: PaneProgress? = null,
 ) {
     val title = when {
         view == null -> state.endpointLabel.ifBlank { stringResource(R.string.app_name) }
@@ -582,61 +1100,188 @@ private fun SessionTopBar(
         else -> view.label
     }
     val path = state.pwd?.takeIf { it.isNotBlank() }?.let { shortPath(it) }
-    Row(
-        Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (showBack) {
-            RoundButton(R.drawable.ic_back, stringResource(R.string.action_back), onBack, plate = Colors.key, size = 40.dp)
-        } else {
-            Spacer(Modifier.width(4.dp))
-        }
+    Box(Modifier.fillMaxWidth().height(TOP_BAR_HEIGHT)) {
         Row(
-            Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(Radius.card))
-                .clickable(enabled = view != null, role = Role.Button, onClickLabel = stringResource(R.string.menu_navigate), onClick = onNavigate)
-                .padding(horizontal = 8.dp),
+            Modifier.fillMaxSize().padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ProgramTile(tab?.focusedBlock()?.id?.let { state.programs[it] }, size = 36.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        title,
-                        color = Colors.ink,
-                        fontSize = TextStyles.body,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    if (path != null) {
+            if (showBack) {
+                RoundButton(R.drawable.ic_back, stringResource(R.string.action_back), onBack, plate = Colors.key, size = 40.dp)
+            } else {
+                Spacer(Modifier.width(4.dp))
+            }
+            Row(
+                Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(Radius.card))
+                    .clickable(enabled = view != null, role = Role.Button, onClickLabel = stringResource(R.string.menu_navigate), onClick = onNavigate)
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ProgramTile(tab?.focusedBlock()?.id?.let { state.programs[it] }, size = 36.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            title,
+                            color = Colors.ink,
+                            fontSize = TextStyles.body,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (path != null) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(path, color = Colors.muted, fontSize = TextStyles.subhead, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Dot(status?.let { statusTint(it) } ?: phaseTint(state.phase), 6.dp)
                         Spacer(Modifier.width(6.dp))
-                        Text(path, color = Colors.muted, fontSize = TextStyles.subhead, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            view?.label ?: phaseText(state),
+                            color = Colors.muted,
+                            fontSize = TextStyles.label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Glyph(R.drawable.ic_expand, Colors.muted, size = 18.dp)
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Dot(status?.let { statusTint(it) } ?: phaseTint(state.phase), 6.dp)
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        view?.label ?: phaseText(state),
-                        color = Colors.muted,
-                        fontSize = TextStyles.label,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    Glyph(R.drawable.ic_expand, Colors.muted, size = 18.dp)
+            }
+            if (panes != null) {
+                panes()
+                Spacer(Modifier.width(8.dp))
+            }
+            // Who holds the pane, while there is one on screen to hold.
+            if (holderShown(state, tab)) {
+                HolderChip(state.holder == Holder.Phone, onHolder)
+                Spacer(Modifier.width(4.dp))
+            }
+            RoundButton(R.drawable.ic_more, stringResource(R.string.action_more), onMore, plate = Colors.key, size = 40.dp)
+        }
+        if (progress != null) {
+            ProgressLine(progress, Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = 2.dp))
+        }
+    }
+}
+
+/**
+ * In place of a pane that was closed elsewhere: what happened, in calm words, and where to go next -
+ * the tab Rex shows now, a new tab when the session has none left, or back to the sessions.
+ */
+@Composable
+private fun ClosedPaneNote(
+    closed: ClosedPane,
+    /** The title of the tab the session shows now; null when it has no tab left. */
+    next: String?,
+    onShowNext: () -> Unit,
+    onNewTab: () -> Unit,
+    /** Null where the list already stands beside the pane. */
+    onSessions: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier.padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Glyph(R.drawable.ic_close, Colors.muted, size = 36.dp)
+        Spacer(Modifier.height(16.dp))
+        Text(
+            stringResource(if (closed.tabClosed) R.string.closed_tab_title else R.string.closed_pane_title),
+            color = Colors.ink,
+            fontSize = TextStyles.title,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 360.dp),
+        )
+        Spacer(Modifier.height(8.dp))
+        val exit = closed.exit
+        Text(
+            when {
+                exit == null -> stringResource(R.string.closed_body_elsewhere)
+                exit.code >= 0 -> stringResource(R.string.closed_body_exited, exit.code)
+                // No code: a signal ended it, and Rex says which.
+                else -> stringResource(R.string.closed_body_ended, exit.error ?: "-1")
+            },
+            color = Colors.muted,
+            fontSize = TextStyles.label,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 360.dp),
+        )
+        Spacer(Modifier.height(24.dp))
+        Column(Modifier.widthIn(max = 360.dp)) {
+            if (next != null) {
+                PrimaryButton(stringResource(R.string.closed_show, next), onClick = onShowNext)
+            } else {
+                PrimaryButton(stringResource(R.string.menu_new_tab), onClick = onNewTab)
+            }
+            if (onSessions != null) {
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(Radius.card))
+                        .clickable(role = Role.Button, onClick = onSessions),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(stringResource(R.string.closed_sessions), color = Colors.accent, fontSize = TextStyles.body)
                 }
             }
         }
-        if (state.phase == Phase.Live) {
-            HolderChip(state.owning, onHolder)
-            Spacer(Modifier.width(4.dp))
-        }
-        RoundButton(R.drawable.ic_more, stringResource(R.string.action_more), onMore, plate = Colors.key, size = 40.dp)
     }
 }
+
+/**
+ * In place of a pane when the session has no tab: Rex keeps a session after its last tab closes, so
+ * opening it from the list lands here. A new tab, or back to the sessions.
+ */
+@Composable
+private fun EmptySessionNote(
+    onNewTab: () -> Unit,
+    /** Null where the list already stands beside the pane. */
+    onSessions: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier.padding(horizontal = 32.dp).testTag(EMPTY_SESSION_TAG),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            stringResource(R.string.empty_session_title),
+            color = Colors.ink,
+            fontSize = TextStyles.title,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 360.dp),
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.empty_session_body),
+            color = Colors.muted,
+            fontSize = TextStyles.label,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 360.dp),
+        )
+        Spacer(Modifier.height(24.dp))
+        Column(Modifier.widthIn(max = 360.dp)) {
+            PrimaryButton(stringResource(R.string.menu_new_tab), onClick = onNewTab)
+            if (onSessions != null) {
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(Radius.card))
+                        .clickable(role = Role.Button, onClick = onSessions),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(stringResource(R.string.closed_sessions), color = Colors.accent, fontSize = TextStyles.body)
+                }
+            }
+        }
+    }
+}
+
+/** The note shown for a session with no tabs. */
+internal const val EMPTY_SESSION_TAG = "empty-session"
 
 /**
  * Who holds the pane, and the one tap that changes it. While the desk holds it the chip is the
@@ -675,9 +1320,12 @@ private fun PaneBar(
     tab: WindowInfo?,
     focused: BlockInfo?,
     status: Map<String, ProgramRecord>,
+    busyPanes: Set<String>,
     programs: Map<String, String>,
     onSelect: (BlockInfo) -> Unit,
     modifier: Modifier = Modifier,
+    /** Each pane's progress bar, under its segment. */
+    progress: Map<String, PaneProgress> = emptyMap(),
 ) {
     val blocks = tab?.blocks.orEmpty()
     val scroll = rememberScrollState()
@@ -689,11 +1337,13 @@ private fun PaneBar(
         blocks.forEachIndexed { index, block ->
             val on = block.id == focused?.id
             val record = status[block.id]
-            val busy = record?.state == "working" || record?.state == "blocked"
+            val busy = block.id in busyPanes
+            val bar = progress[block.id]
+            val barWords = bar?.let { progressWords(it) }
             Box(
                 Modifier.height(48.dp)
                     .clickable(role = Role.Tab) { if (!on) onSelect(block) }
-                    .semantics { if (on) stateDescription = selected }
+                    .semantics { listOfNotNull(selected.takeIf { on }, barWords).takeIf { it.isNotEmpty() }?.let { stateDescription = it.joinToString(", ") } }
                     .padding(vertical = 4.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -714,10 +1364,19 @@ private fun PaneBar(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.widthIn(max = 104.dp),
                     )
-                    if (busy) {
+                    if (busy && record != null) {
                         Spacer(Modifier.width(6.dp))
                         Dot(statusTint(record), 6.dp)
                     }
+                }
+                // Over the segment's plate, along its foot, as wide as the segment.
+                if (bar != null) {
+                    ProgressLine(
+                        bar,
+                        Modifier.matchParentSize().wrapContentHeight(Alignment.Bottom).padding(horizontal = 12.dp),
+                        height = 2.dp,
+                        merged = true,
+                    )
                 }
             }
         }
@@ -758,7 +1417,7 @@ private fun UploadPill(
             )
             if (status.phase == UploadPhase.Failed) {
                 Text(
-                    status.error.orEmpty(),
+                    status.error?.let { uploadErrorText(it) }.orEmpty(),
                     color = Colors.muted,
                     fontSize = TextStyles.label,
                     maxLines = 2,
@@ -801,6 +1460,38 @@ private fun uploadText(status: UploadStatus): String = when (status.phase) {
  * one floating pill - keyboard, Enter, the special keys, the attach key - and the circle that makes
  * a tab. All of it is 56 dp, the same height as the home's floating controls, on the page margin.
  */
+/** Who holds the pane is shown while the session is live and a tab is open: the chip and the menu's row. */
+private fun holderShown(state: PocketState, tab: WindowInfo?): Boolean = state.phase == Phase.Live && tab != null
+
+/**
+ * The key bar's keys that act on the phone rather than send bytes to the program, in the bar's own
+ * order: the ⋮ menu repeats each of them, whatever the bar shows. A key added to the bar has to be
+ * placed here or among the keys that only type.
+ */
+internal val BarKey.actsOnPhone: Boolean
+    get() = when (this) {
+        BarKey.Paste, BarKey.Attach, BarKey.Keyboard, BarKey.FullScreen, BarKey.Compose -> true
+        BarKey.Escape, BarKey.CtrlC, BarKey.Tab, BarKey.Enter, BarKey.Ctrl, BarKey.Shift, BarKey.Alt,
+        BarKey.Slash, BarKey.Arrows -> false
+        // Quick replies type, as the keys do; the palette lists each one too.
+        BarKey.Replies -> false
+        // Group keys open a panel; the rest of the catalogue types.
+        is BarKey.Group, is BarKey.Desk, is BarKey.Arrow, is BarKey.Chord, is BarKey.Typed -> false
+    }
+
+/** The menu's first group: [actsOnPhone] keys, the wide pill's before the small pill's. */
+internal val PHONE_ACTIONS: List<BarKey> = BarKey.catalogue.filter { it.actsOnPhone }
+
+/**
+ * The room the phone's status and navigation bars take while they are shown: their sizes whether
+ * or not they are on screen this moment, which Android keeps up to date as they come and go. See
+ * the bars in TermScreen.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun systemBarsRoom(): WindowInsets =
+    WindowInsets.statusBarsIgnoringVisibility.union(WindowInsets.navigationBarsIgnoringVisibility)
+
 /** Whether the phone keyboard is up, which decides which way the keyboard key points. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -896,3 +1587,10 @@ internal fun shortPath(path: String): String {
 internal const val NOTICE_MS = 4_000L
 
 internal val GENERATED_WINDOW_LABEL = Regex("Window [0-9a-f]{6,}")
+
+/** The pane's place on the terminal screen, and the stack under it, for the screen tests to measure. */
+internal const val PANE_TAG = "terminal-pane"
+internal const val DOCK_TAG = "terminal-dock"
+
+/** The top bar's height, which a short window keeps as room while the bar steps aside. */
+private val TOP_BAR_HEIGHT = 64.dp

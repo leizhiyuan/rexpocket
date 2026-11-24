@@ -1,0 +1,81 @@
+{
+  "name": "session.disown_block",
+  "description": "Give up the calling client's claim on blocks. The result lists each block's owner.",
+  "invoke": {
+    "method": "session.disown_block"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "block_ids": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": "The blocks to give up. Leave it out or empty to give up every block in the session."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "blocks": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "block_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The block's ID."
+            },
+            "owner": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The client that owns the block. Left out when the block has no owner."
+            }
+          },
+          "required": [
+            "block_id"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Each block and its owner after this call."
+      }
+    },
+    "required": [
+      "blocks"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"block_ids\": [\"block:<uuid>\"]\n}",
+  "response_example": "{\n  \"blocks\": [\n    {\n      \"block_id\": \"block:<uuid>\",\n      \"owner\": \"client:<uuid>\"\n    }\n  ]\n}",
+  "validation_notes": [
+    "The calling client must be attached to the session, with `session.attach` or `session.bootstrap`. A connection that only called `session.attach_all` fails with `bad_request`.",
+    "A block the caller owned passes to the next connected client in line for it, or is left with no owner. For a block the caller doesn't own, the caller only leaves the line.",
+    "`blocks` lists each block's owner after the call, in the order of `block_ids`, with a repeated ID listed once. When you give up every block, they are sorted by `block_id`.",
+    "Every change of owner sends `block_owner_changed`. If a block in a window changes owner, the call also sends one `session_view_changed`.",
+    "If any ID in `block_ids` isn't a block in the session, the call fails with `bad_request` and changes nothing."
+  ]
+}

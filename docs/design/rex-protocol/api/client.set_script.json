@@ -1,0 +1,112 @@
+{
+  "name": "client.set_script",
+  "description": "Load Lua scripts for this client, replacing any it loaded before.",
+  "invoke": {
+    "method": "client.set_script"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "scripts": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "A file name to show in error messages and diagnostics, such as init.lua."
+            },
+            "source": {
+              "type": "string",
+              "description": "The Lua code."
+            }
+          },
+          "required": [
+            "source"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Every Lua source to load, run in order. They replace all the scripts loaded before. An empty list unloads them."
+      }
+    },
+    "required": [
+      "scripts"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "all_keys": {
+        "type": "boolean",
+        "description": "Never sent by this server. If an older server sends true, send every key to client.key, not only those in bindings."
+      },
+      "bindings": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "string",
+          "description": "A key binding: modifiers, then a key, joined with +, such as ctrl+n or cmd+left. The modifiers are ctrl, alt, shift, and cmd, always in that order. A bracketed key, as in ctrl+[KeyN], names a key by its position, using its W3C KeyboardEvent code. Other keys follow the keyboard layout."
+        },
+        "description": "The single keys the scripts bind to Lua functions. A key sent alone reaches the scripts only if it's listed here and pressed or repeating. Key sequences aren't listed."
+      },
+      "diagnostics": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "The full name of the action the problem is about, as written, even if misspelled. Left out if it isn't about one action."
+            },
+            "key": {
+              "type": "string",
+              "description": "The key the problem is about, spelled like a binding's keys, with a sequence joined by spaces, such as ctrl+a b. Left out if it isn't about one key."
+            },
+            "message": {
+              "type": "string",
+              "description": "The problem in one sentence, ready to show. Its wording may change, so don't parse it."
+            },
+            "mode": {
+              "type": "string",
+              "description": "The mode the problem is about. Left out if it isn't about a mode."
+            },
+            "severity": {
+              "type": "string",
+              "description": "How serious the problem is: warning, for something the user probably didn't mean, or error, for a part that was skipped. Show a value you don't know as a warning."
+            },
+            "source": {
+              "type": "string",
+              "description": "Where the problem is, as file:line, such as init.lua:22. Left out when it isn't known."
+            }
+          },
+          "required": [
+            "severity",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Problems in the scripts, written to show the user. The server skips each line it can't carry out and loads the rest."
+      }
+    },
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"scripts\": [\n    {\n      \"name\": \"init.lua\",\n      \"source\": \"rex.bind(\\\"ctrl+g\\\", function(ctx, ev)\\n  rex.session.set_label{ label = \\\"work\\\" }\\n  return true\\nend)\\nrex.bind(\\\"ctrl+hoem\\\", \\\"pane.zoom\\\")\"\n    }\n  ]\n}",
+  "response_example": "{\n  \"bindings\": [\"ctrl+g\"],\n  \"diagnostics\": [\n    {\"severity\": \"error\", \"source\": \"init.lua:5\", \"message\": \"unknown key \\\"hoem\\\"\"}\n  ]\n}",
+  "validation_notes": [
+    "The scripts belong to this client and apply in every session it's attached to. A request that includes `session_id` or `client_id` fails with `bad_request`.",
+    "If a script has a syntax error, raises an error, or runs longer than 5 seconds while it loads, the call fails with `bad_request`. The scripts loaded before keep running.",
+    "To see every key and key sequence the scripts bound to a function, call `client.keymap`. It reports each one as a binding for `client.key.forward`.",
+    "The keys that reach the scripts are fixed when they load. A function that a script binds later, while it runs, receives a key only if a function was already bound to that key or sequence when the scripts loaded.",
+    "A successful call can still return `diagnostics`, even with severity `error`. An error marks a part of a script the server skipped, such as a binding to a key it can't read. The rest of the scripts still load.",
+    "Loading scripts changes this client's keymap without a `keymap_changed` event. Call `client.keymap` again after each call to this method."
+  ]
+}

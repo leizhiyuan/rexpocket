@@ -1,0 +1,12 @@
+{
+  "name": "help.all",
+  "description": "Describe every method the server provides, including block methods.",
+  "invoke": {
+    "method": "help.all"
+  },
+  "validation_notes": [
+    "The result has two lists. `methods` describes each method with its arguments, result, examples, and notes. `block_types` lists each creator whose blocks provide methods, with its flavors and those methods.",
+    "The result describes the server you are connected to, so it always matches that server's version.",
+    "Over HTTP, `GET /api/help` returns the same document with an added `http` field, and `/llms.txt` shows it as Markdown."
+  ]
+}

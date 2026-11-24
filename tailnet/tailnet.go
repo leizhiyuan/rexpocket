@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"me.leaver.rexpocket/tailnet/internal/dials"
 	"tailscale.com/ipn"
 	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/net/netmon"
@@ -68,6 +69,7 @@ type Node struct {
 	proxy    net.Listener
 	cancel   context.CancelFunc
 	closed   atomic.Bool
+	dials    dials.Memory
 }
 
 // Start brings the node up with its state in dir - the login lives there, so it survives a
@@ -103,7 +105,7 @@ func Start(dir, hostname, authKey string, platform Platform) (*Node, error) {
 	n.proxy = ln
 	proxy := &socks5.Server{
 		Logf:   func(format string, args ...any) { platform.Log("socks: " + fmt.Sprintf(format, args...)) },
-		Dialer: n.server.Dial,
+		Dialer: n.dial,
 	}
 	go proxy.Serve(ln)
 
@@ -139,8 +141,10 @@ func (n *Node) ProxyPort() int32 {
 	return int32(n.proxy.Addr().(*net.TCPAddr).Port)
 }
 
-// State is the node's state as JSON: {"backendState", "authUrl", "tailnet", "self",
-// "peers": [{"dnsName", "hostName", "ips": [...]}]}.
+// State is the node's state as JSON: {"backendState", "authUrl", "tailnet", "self", "selfInfo",
+// "health", "peers": [...]}; see [state] for every field. The fields the app read first - the
+// backend state, the login URL, the tailnet's name, the node's own MagicDNS name and each peer's
+// names and addresses - keep their names, and every newer field may be missing.
 func (n *Node) State() (string, error) {
 	lc, err := n.server.LocalClient()
 	if err != nil {
@@ -152,22 +156,80 @@ func (n *Node) State() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out := state{BackendState: st.BackendState, AuthURL: st.AuthURL}
+	b, err := json.Marshal(stateOf(st))
+	return string(b), err
+}
+
+// stateOf is what [Node.State] reports for st.
+func stateOf(st *ipnstate.Status) state {
+	out := state{BackendState: st.BackendState, AuthURL: st.AuthURL, Health: st.Health}
 	if st.CurrentTailnet != nil {
 		out.Tailnet = st.CurrentTailnet.Name
 	}
 	if st.Self != nil {
 		out.Self = strings.TrimSuffix(st.Self.DNSName, ".")
+		self := &selfInfo{
+			DNSName:  out.Self,
+			HostName: st.Self.HostName,
+			IPs:      addrs(st.TailscaleIPs),
+			OS:       st.Self.OS,
+			Relay:    st.Self.Relay,
+		}
+		if u, ok := st.User[st.Self.UserID]; ok {
+			self.User = u.LoginName
+		}
+		if st.Self.KeyExpiry != nil && !st.Self.KeyExpiry.IsZero() {
+			self.KeyExpiry = st.Self.KeyExpiry.UTC().Format(time.RFC3339)
+		}
+		out.SelfInfo = self
 	}
 	for _, p := range st.Peer {
-		out.Peers = append(out.Peers, peer{
-			DNSName:  strings.TrimSuffix(p.DNSName, "."),
-			HostName: p.HostName,
-			IPs:      addrs(p.TailscaleIPs),
-		})
+		online := p.Online
+		link, detail := linkOf(p)
+		item := peer{
+			DNSName:    strings.TrimSuffix(p.DNSName, "."),
+			HostName:   p.HostName,
+			IPs:        addrs(p.TailscaleIPs),
+			OS:         p.OS,
+			Online:     &online,
+			Link:       link,
+			LinkDetail: detail,
+		}
+		if !p.LastSeen.IsZero() {
+			item.LastSeen = p.LastSeen.UTC().Format(time.RFC3339)
+		}
+		out.Peers = append(out.Peers, item)
 	}
-	b, err := json.Marshal(out)
-	return string(b), err
+	return out
+}
+
+// linkOf is how traffic to p goes right now, as far as the node knows without a ping: straight to
+// an endpoint, through a peer relay, through its DERP region, or nowhere yet because nothing was sent.
+func linkOf(p *ipnstate.PeerStatus) (string, string) {
+	switch {
+	case p.CurAddr != "":
+		return "direct", p.CurAddr
+	case p.PeerRelay != "":
+		return "peerRelay", p.PeerRelay
+	case p.Active && p.Relay != "":
+		return "derp", p.Relay
+	}
+	return "idle", ""
+}
+
+// DialError is why the last dial to host through the proxy failed, or "" when it worked or was
+// long enough ago not to matter. A SOCKS5 reply only says that a dial failed, and Tailscale's proxy
+// gives every failure the same code; this says why: a port nobody listens on, a name the tailnet
+// does not know, a peer that does not answer.
+func (n *Node) DialError(host string) string {
+	return n.dials.For(host)
+}
+
+// dial dials through the node for the proxy, and remembers how it went.
+func (n *Node) dial(ctx context.Context, network, address string) (net.Conn, error) {
+	conn, err := n.server.Dial(ctx, network, address)
+	n.dials.Record(address, err)
+	return conn, err
 }
 
 // Ping sends one disco ping to ip and reports how it went as JSON: {"latencyMs", "endpoint",
@@ -259,17 +321,38 @@ func (n *Node) watch(ctx context.Context) {
 }
 
 type state struct {
-	BackendState string `json:"backendState"`
-	AuthURL      string `json:"authUrl"`
-	Tailnet      string `json:"tailnet"`
-	Self         string `json:"self"`
-	Peers        []peer `json:"peers"`
+	BackendState string    `json:"backendState"`
+	AuthURL      string    `json:"authUrl"`
+	Tailnet      string    `json:"tailnet"`
+	Self         string    `json:"self"`
+	SelfInfo     *selfInfo `json:"selfInfo,omitempty"`
+	Health       []string  `json:"health,omitempty"`
+	Peers        []peer    `json:"peers"`
 }
 
+// selfInfo is the node itself: its names and addresses, the account it is signed in as, its home
+// DERP region, and when its key expires.
+type selfInfo struct {
+	DNSName   string   `json:"dnsName"`
+	HostName  string   `json:"hostName"`
+	IPs       []string `json:"ips"`
+	OS        string   `json:"os,omitempty"`
+	User      string   `json:"user,omitempty"`
+	Relay     string   `json:"relay,omitempty"`
+	KeyExpiry string   `json:"keyExpiry,omitempty"`
+}
+
+// peer is one peer. Online is whether the control plane sees it, and LastSeen when it went away.
+// Link is "direct", "peerRelay", "derp" or "idle", with its endpoint, relay or region as detail.
 type peer struct {
-	DNSName  string   `json:"dnsName"`
-	HostName string   `json:"hostName"`
-	IPs      []string `json:"ips"`
+	DNSName    string   `json:"dnsName"`
+	HostName   string   `json:"hostName"`
+	IPs        []string `json:"ips"`
+	OS         string   `json:"os,omitempty"`
+	Online     *bool    `json:"online,omitempty"`
+	LastSeen   string   `json:"lastSeen,omitempty"`
+	Link       string   `json:"link,omitempty"`
+	LinkDetail string   `json:"linkDetail,omitempty"`
 }
 
 type ping struct {

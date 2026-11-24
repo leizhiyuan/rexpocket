@@ -1,0 +1,288 @@
+name: device-test
+
+# Runs the instrumented tests (app/src/androidTest) on an x86_64 emulator, with KVM.
+#
+# The app ships arm64-v8a native code only. The x86_64 images' ARM translation (libndk_translation,
+# API 30 to 35) runs libghostty, but not the Go tailnet library: when the Netbird node starts, it executes
+# `mrs x0, midr_el1` (Go CPU-feature detection), which the translator does not implement, and the app
+# dies with SIGILL. A real arm64 kernel traps and answers that read. So the test build here is an
+# x86_64 one: both native libraries are built for x86_64 from the same sources and pinned versions,
+# and -Prexpocket.abi=x86_64 packs them. The release build and the scripts it uses are unchanged; the
+# x86_64 copies of the build scripts below exist only on the runner.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ccr-30ee0e05-w78lcg]
+
+permissions:
+  contents: read
+
+jobs:
+  device-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [30, 34]
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      # The arm64 libghostty is not built: this APK carries the x86_64 one.
+      GRADLE_ARGS: -x :app:buildGhostty -Prexpocket.netbird=true -Prexpocket.abi=x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Allow KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: Install the Android NDK and platform
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.1.0" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Build the Netbird library for x86_64
+        run: |
+          sed 's#-target android/arm64#-target android/amd64#' tools/build-tailnet.sh > tools/build-tailnet-x86_64.sh
+          grep -q 'android/amd64' tools/build-tailnet-x86_64.sh
+          REXPOCKET_NETBIRD=1 sh tools/build-tailnet-x86_64.sh
+          unzip -l app/libs/tailnet-netbird.aar | grep 'jni/'
+
+      # The Netbird add-on's tests run the default build of the app (the one that offers the add-on)
+      # beside the add-on itself, which needs its own library.
+      - name: Build the Netbird add-on's library for x86_64
+        run: |
+          REXPOCKET_NETBIRD=addon sh tools/build-tailnet-x86_64.sh
+          unzip -l netbirdaddon/libs/tailnet-netbird-addon.aar | grep 'jni/'
+
+      - name: Build libghostty for x86_64
+        run: |
+          sed -e 's#aarch64-linux-android#x86_64-linux-android#g' -e 's#prefix-arm64#prefix-x86_64#' \
+              -e 's#jniLibs/arm64-v8a/#jniLibs/x86_64/#' tools/build-ghostty.py > tools/build-ghostty-x86_64.py
+          python3 tools/build-ghostty-x86_64.py
+          file app/src/main/jniLibs/x86_64/libghostty_jni.so
+
+      - name: Build the app and test APKs
+        run: |
+          ./gradlew --no-daemon $GRADLE_ARGS :app:assembleDebug :app:assembleDebugAndroidTest
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep 'lib/'
+
+      - name: Write the test script
+        # Each class runs on its own, so a native crash in one does not hide the results of the rest.
+        run: |
+          cat > "$RUNNER_TEMP/run-tests.sh" <<'SH'
+          set -u
+          adb shell getprop ro.product.cpu.abilist
+          adb shell getprop ro.dalvik.vm.native.bridge
+          adb shell getprop ro.build.version.sdk
+          mkdir -p out
+          status=0
+          for class in \
+              me.leaver.rexpocket.net.TailnetNodeInstrumentedTest \
+              me.leaver.rexpocket.data.FontPreferenceTest \
+              me.leaver.rexpocket.ui.TerminalImeTest \
+              me.leaver.rexpocket.ui.TerminalViewTest \
+              me.leaver.rexpocket.ui.TerminalAccessibilityTest \
+              me.leaver.rexpocket.ui.FollowInputTest \
+              me.leaver.rexpocket.ui.KeyboardShiftTest \
+              me.leaver.rexpocket.ui.FullScreenGridTest \
+              me.leaver.rexpocket.ui.FullScreenTest \
+              me.leaver.rexpocket.ui.KeyBarLayoutInstrumentedTest \
+              me.leaver.rexpocket.ui.ArrangeKeysTest \
+              me.leaver.rexpocket.ui.KeyBarBytesTest \
+              me.leaver.rexpocket.ui.KeyBarStateTest \
+              me.leaver.rexpocket.ui.TerminalControlsTest \
+              me.leaver.rexpocket.ui.AppearanceTest \
+              me.leaver.rexpocket.ui.TermMenuTest \
+              me.leaver.rexpocket.ui.TermFullScreenTest \
+              me.leaver.rexpocket.ui.ClosedPaneTest \
+              me.leaver.rexpocket.ui.PaneHolderTest \
+              me.leaver.rexpocket.ui.LaunchTest \
+              me.leaver.rexpocket.ui.HomeStateTest \
+              me.leaver.rexpocket.ui.ActivityViewTest \
+              me.leaver.rexpocket.ui.EmptySessionTest \
+              me.leaver.rexpocket.ui.TailnetStatusTest \
+              me.leaver.rexpocket.ui.EmptyHomeTest \
+              me.leaver.rexpocket.ui.LargeFontTest \
+              me.leaver.rexpocket.ui.CommandPaletteTest \
+              me.leaver.rexpocket.ui.TermShortcutsTest \
+              me.leaver.rexpocket.ui.ProgressViewTest \
+              me.leaver.rexpocket.ui.TextFieldsTest \
+              me.leaver.rexpocket.ui.HomeManageTest \
+              me.leaver.rexpocket.ui.MultiHostTest \
+              me.leaver.rexpocket.ui.HostImportScreenTest \
+              me.leaver.rexpocket.ui.SettingsBackupScreenTest \
+              me.leaver.rexpocket.ui.HostCheckScreenTest \
+              me.leaver.rexpocket.ui.ShareTest \
+              me.leaver.rexpocket.ui.QuickRepliesScreenTest \
+              me.leaver.rexpocket.ui.TermAgentTest \
+              me.leaver.rexpocket.alerts.BackgroundServiceTest; do
+            adb logcat -c || true
+            if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \
+                -Pandroid.testInstrumentationRunnerArguments.class="$class"; then
+              echo "RESULT $class: passed"
+            else
+              echo "RESULT $class: FAILED"
+              status=1
+            fi
+            mkdir -p "out/$class"
+            cp -r app/build/reports/androidTests "out/$class/" 2>/dev/null || true
+            cp -r app/build/outputs/androidTest-results "out/$class/" 2>/dev/null || true
+            adb logcat -d > "out/$class/logcat.txt" || true
+            grep -E "ndk_translation|SIGILL|SIGSEGV|Fatal signal|FATAL EXCEPTION|UnsatisfiedLinkError" "out/$class/logcat.txt" | head -20 || true
+          done
+          # Background mode across a real boot and a real process death (docs/design/multi-host.md,
+          # "Background"): the app is left with background mode on and a host stored, a boot is
+          # broadcast (as root, the only sender Android takes it from), and the process is killed;
+          # the watch must come back in the foreground on its own (START_STICKY).
+          sh "$RUNNER_TEMP/background.sh" || status=1
+          # The Netbird add-on: installed first, then the default app's add-on tests against it.
+          ADDON_ARGS="-x :app:buildGhostty -Prexpocket.abi=x86_64"
+          adb logcat -c || true
+          if ./gradlew --no-daemon -q $ADDON_ARGS :netbirdaddon:installDebug && \
+             ./gradlew --no-daemon -q $ADDON_ARGS :app:connectedDebugAndroidTest \
+                -Pandroid.testInstrumentationRunnerArguments.package=me.leaver.rexpocket.net.addon; then
+            echo "RESULT me.leaver.rexpocket.net.addon: passed"
+          else
+            echo "RESULT me.leaver.rexpocket.net.addon: FAILED"
+            status=1
+          fi
+          mkdir -p out/addon
+          cp -r app/build/reports/androidTests "out/addon/" 2>/dev/null || true
+          cp -r app/build/outputs/androidTest-results "out/addon/" 2>/dev/null || true
+          adb logcat -d > "out/addon/logcat.txt" || true
+          exit $status
+          SH
+
+      - name: Write the background mode script
+        run: |
+          cat > "$RUNNER_TEMP/background.sh" <<'SH'
+          set -u
+          PKG=me.leaver.rexpocket
+          SVC=$PKG/.alerts.WatchService
+          ./gradlew --no-daemon -q $GRADLE_ARGS :app:installDebug :app:installDebugAndroidTest || exit 1
+          adb root >/dev/null; sleep 3; adb wait-for-device
+          foreground() { adb shell dumpsys activity services "$SVC" | grep -q 'isForeground=true'; }
+          wait_foreground() {
+            i=0
+            while [ $i -lt "$1" ]; do foreground && return 0; sleep 1; i=$((i + 1)); done
+            return 1
+          }
+          fail() { echo "RESULT background $1: FAILED"; adb logcat -d | grep -E "RexPocket|ActivityManager.*$PKG|FGS" | tail -40; exit 1; }
+          # Background mode on, one host stored; the app opened once and left with Home, as a person does.
+          adb shell am instrument -w -e class me.leaver.rexpocket.alerts.BackgroundShellPrep \
+            $PKG.test/androidx.test.runner.AndroidJUnitRunner | tail -3
+          adb logcat -c || true
+          adb shell am start -W -n $PKG/.MainActivity >/dev/null
+          sleep 5; adb shell input keyevent KEYCODE_HOME
+          wait_foreground 30 && echo "RESULT background from the app: passed" || fail "from the app"
+          # The process killed without the battery exemption: recorded, not required (Android 12+ may
+          # refuse a sticky restart's foreground start).
+          pid=$(adb shell pidof $PKG); adb shell kill -9 "$pid"; sleep 3
+          if wait_foreground 90 && [ "$(adb shell pidof $PKG)" != "$pid" ]; then
+            echo "INFO background restart without the battery exemption: came back"
+          else
+            echo "INFO background restart without the battery exemption: did not come back"
+            adb logcat -d | grep -E "RexPocket|FGS|WatchService" | tail -15
+          fi
+          # With the exemption Settings › Background and notifications asks for, it must come back.
+          adb shell dumpsys deviceidle whitelist +$PKG
+          if ! foreground; then
+            adb shell am start -W -n $PKG/.MainActivity >/dev/null; sleep 5; adb shell input keyevent KEYCODE_HOME
+            wait_foreground 30 || fail "restart (not started)"
+          fi
+          pid=$(adb shell pidof $PKG); adb shell kill -9 "$pid"; sleep 3
+          if wait_foreground 90 && [ "$(adb shell pidof $PKG)" != "$pid" ]; then echo "RESULT background restart: passed"; else fail restart; fi
+          # A real reboot, without the exemption: BOOT_COMPLETED from the system starts the watch.
+          # (A boot broadcast sent from the shell carries no exemption on Android 14, so it is not one.)
+          adb shell dumpsys deviceidle whitelist -$PKG >/dev/null
+          mkdir -p out/background; adb logcat -d > out/background/logcat-before-reboot.txt || true
+          adb reboot; sleep 10; adb wait-for-device
+          i=0; until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ] || [ $i -ge 180 ]; do sleep 2; i=$((i + 1)); done
+          adb shell input keyevent 82 || true
+          if wait_foreground 120; then echo "RESULT background boot: passed"; else fail boot; fi
+          adb logcat -d > out/background/logcat.txt || true
+          adb shell settings put global window_animation_scale 0.0
+          adb shell settings put global transition_animation_scale 0.0
+          adb shell settings put global animator_duration_scale 0.0
+          adb shell am force-stop $PKG
+          SH
+
+      - name: Run the instrumented tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: sh "$RUNNER_TEMP/run-tests.sh"
+
+      - name: Keep the test reports
+        if: always()
+        run: |
+          mkdir -p out
+          cp -r app/build/reports/androidTests out/ 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: device-test-reports-api${{ matrix.api-level }}
+          path: out/
+          if-no-files-found: warn
+
+      # The same screen tests on the JVM (Robolectric), and the screenshots for review (Roborazzi):
+      # see docs/design/testing.md. Once per run, not per emulator. Robolectric's Android 15 wants Java 21.
+      - uses: actions/setup-java@v4
+        if: always() && matrix.api-level == 34
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Screen tests and screenshots on the JVM
+        if: always() && matrix.api-level == 34
+        run: |
+          # These tests do not load libghostty, so the host build of it is skipped.
+          mkdir -p native/.build/host
+          ./gradlew --no-daemon $GRADLE_ARGS -x :app:buildGhosttyHost :app:testDebugUnitTest \
+            --tests 'me.leaver.rexpocket.ui.ArrangeKeysTest' \
+            --tests 'me.leaver.rexpocket.ui.TerminalControlsTest' \
+            --tests 'me.leaver.rexpocket.ui.TermMenuTest' \
+            --tests 'me.leaver.rexpocket.ui.TermFullScreenTest' \
+            --tests 'me.leaver.rexpocket.ui.EmptySessionTest' \
+            --tests 'me.leaver.rexpocket.ui.TextFieldsTest' \
+            --tests 'me.leaver.rexpocket.ui.HomeManageTest' \
+            --tests 'me.leaver.rexpocket.ui.MultiHostTest' \
+            --tests 'me.leaver.rexpocket.ui.HostImportScreenTest' \
+            --tests 'me.leaver.rexpocket.ui.SettingsBackupScreenTest' \
+            --tests 'me.leaver.rexpocket.ui.HostCheckScreenTest' \
+            --tests 'me.leaver.rexpocket.ui.ShareTest' \
+            --tests 'me.leaver.rexpocket.ui.ShareIntentTest' \
+            --tests 'me.leaver.rexpocket.ui.TailnetStatusTest' \
+            --tests 'me.leaver.rexpocket.ui.EmptyHomeTest' \
+            --tests 'me.leaver.rexpocket.ui.LargeFontTest' \
+            --tests 'me.leaver.rexpocket.ui.ScreenshotsTest'
+
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.api-level == 34
+        with:
+          name: screenshots
+          path: |
+            app/build/outputs/roborazzi/
+            app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: warn

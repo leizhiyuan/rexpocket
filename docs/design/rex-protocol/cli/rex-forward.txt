@@ -1,0 +1,23 @@
+$ rex forward --help
+Forward TCP ports
+
+Usage:
+  rex forward [command] [flags]
+
+Commands:
+  new       Forward ports until interrupted
+  open      Forward a local port to a server-side target and open it
+  share     Forward a server port to a target on this machine's side
+  ls, list  List forwards
+  close     Close forwards
+
+Options:
+  -h, --help  help for forward
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

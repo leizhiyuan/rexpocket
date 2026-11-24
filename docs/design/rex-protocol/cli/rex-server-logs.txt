@@ -1,0 +1,26 @@
+$ rex server logs --help
+Show logs captured for a server launched by rex server start.
+
+On Windows, the server that rex server install runs as a Windows Service writes to this log too, so this command shows its output as well. As with rex server start, Rex clears that log before it grows past 50MiB.
+
+Servers started by other service managers, such as systemd or launchd, log through that manager instead. For a personal server run by the systemd user unit that the Linux packages and the home-manager module install, run journalctl --user -u rex. For the shared server that the Linux packages and the NixOS module install, run journalctl -u rex.service.
+
+On Unix, rename/create rotation must send SIGHUP to the server after creating the replacement file. Only a server that rex server start launched reopens its log on SIGHUP. See rex server run --help for what the signal does to other servers. Windows uses copy-truncate or --log-max-size. --follow continues across log rotation.
+
+Usage:
+  rex server logs [flags]
+
+Options:
+      --follow         follow appended log output until the server stops
+      --state-dir DIR  read server logs below DIR
+  -n, --lines N        show the newest N log lines (default 200)
+      --all            show the entire available detached log
+  -h, --help           help for logs
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

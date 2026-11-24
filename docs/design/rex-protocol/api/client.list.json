@@ -1,0 +1,204 @@
+{
+  "name": "client.list",
+  "description": "List the clients connected to the server, in the order they connected.",
+  "invoke": {
+    "method": "client.list"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "kinds": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "description": "List only the clients of these kinds, such as app. A client that didn't report a kind matches none."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "List only the clients attached to this session with session.attach or session.bootstrap."
+      }
+    },
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "clients": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "client_id": {
+              "type": "string",
+              "description": "The client's ID. It stays the same when the client reconnects."
+            },
+            "connected_at": {
+              "type": "string",
+              "description": "When the client first connected, as an RFC 3339 timestamp. It doesn't change when the client reconnects."
+            },
+            "connection_lost_at": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "When the server noticed the connection drop, as an RFC 3339 timestamp. Set only while connection_state is lost."
+            },
+            "connection_state": {
+              "type": "string",
+              "description": "Whether the client has a connection: connected, or lost if it dropped and the client may still reconnect. Treat a missing or unknown value as connected."
+            },
+            "info": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "description": "What sort of program the client is: app, cli, agent, or other. Left out if the client didn't say. Treat a kind you don't know as other."
+                },
+                "label": {
+                  "type": "string",
+                  "description": "The client's label, such as studio. Two clients can share a label."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The program's name, such as Rex.app or rex. If it is longer than 256 bytes, the server keeps only the first 256."
+                },
+                "platform": {
+                  "type": "string",
+                  "description": "What the client runs on: macos, ios, linux, windows, freebsd, web, or other. Left out if the client didn't say. Treat a platform you don't know as other."
+                },
+                "version": {
+                  "type": "string",
+                  "description": "The program's version, as the program prints it, such as 1.6.0. If it is longer than 256 bytes, the server keeps only the first 256."
+                }
+              },
+              "description": "What the client says about itself, such as its name and version, for showing to people. Left out if it said nothing.",
+              "additionalProperties": false
+            },
+            "principal": {
+              "type": "object",
+              "properties": {
+                "display": {
+                  "type": "string",
+                  "description": "A readable name for the client, such as uid 501 or alice@example.com. It can be out of date or shared, so compare uid, sid, or user_id instead."
+                },
+                "gid": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "description": "The client's Unix group ID. Only for kind peer."
+                },
+                "kind": {
+                  "type": "string",
+                  "description": "How the server identified the client: 'peer' (Unix socket credentials), 'windows_peer' (named pipe credentials), 'tailscale' (a Tailscale login), or 'anonymous' (not identified). Show a kind you don't know by its name."
+                },
+                "login_name": {
+                  "type": "string",
+                  "description": "The client's Tailscale login name, usually an email address. For display only."
+                },
+                "node": {
+                  "type": "string",
+                  "description": "The name of the client's Tailscale device. Only for kind tailscale."
+                },
+                "path": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The route the client took to this server, for troubleshooting. Entries include 'tailscale' (built-in Tailscale), 'tailnet' and 'tailnet-serve' (the machine's own Tailscale), and 'login-server' (passed on by a login server)."
+                },
+                "pid": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "description": "The client's process ID when it connected, for kind peer or windows_peer, if known. Process IDs are reused, so use it only for debugging."
+                },
+                "remote_addr": {
+                  "type": "string",
+                  "description": "The client's network address. Left out when there is none, such as on a Unix socket."
+                },
+                "sid": {
+                  "type": "string",
+                  "description": "The client's Windows security identifier, which survives account renames. Only for kind windows_peer."
+                },
+                "tags": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The Tailscale tags of the client's device. Any tag means the client is a machine, such as a CI runner, not a person."
+                },
+                "transport": {
+                  "type": "string",
+                  "description": "How the client first reached Rex: 'unix', 'named_pipe', 'tcp', or 'tailscale'. A login server passes it on unchanged."
+                },
+                "uid": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "description": "The client's Unix user ID. Only for kind peer."
+                },
+                "user_id": {
+                  "type": "string",
+                  "description": "The Tailscale user ID that owns the client's device. Only for kind tailscale. Check tags before treating it as a person."
+                }
+              },
+              "description": "Who the client is, as the server identified it when it accepted the connection.",
+              "required": [
+                "kind",
+                "transport",
+                "display"
+              ],
+              "additionalProperties": false
+            },
+            "session_ids": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "The sessions the client attached to with session.attach or session.bootstrap, sorted by ID. Left out if there are none."
+            }
+          },
+          "required": [
+            "client_id",
+            "principal",
+            "connected_at"
+          ],
+          "additionalProperties": false
+        },
+        "description": "The clients, in the order they first connected. An empty list, never null, when none match."
+      }
+    },
+    "required": [
+      "clients"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\"kinds\": [\"app\"]}",
+  "response_example": "{\n  \"clients\": [\n    {\n      \"client_id\": \"client:<uuid>\",\n      \"info\": {\n        \"kind\": \"app\",\n        \"platform\": \"macos\",\n        \"name\": \"Rex.app\",\n        \"version\": \"1.6.0\",\n        \"label\": \"studio\"\n      },\n      \"principal\": {\n        \"kind\": \"peer\",\n        \"transport\": \"unix\",\n        \"display\": \"uid 501\",\n        \"uid\": 501,\n        \"gid\": 20\n      },\n      \"connected_at\": \"2026-09-27T09:30:00Z\",\n      \"connection_state\": \"connected\",\n      \"session_ids\": [\"session:<uuid>\"]\n    }\n  ]\n}",
+  "validation_notes": [
+    "With no arguments, the result lists every connected client, including short-lived ones such as the `rex` CLI.",
+    "`session_id` counts only clients attached to that session with `session.attach` or `session.bootstrap`. A connection that only called `session.attach_all` doesn't count. Any client may use this filter, attached or not.",
+    "In `kinds`, a kind this server doesn't know counts as `other`. A client that didn't report a kind matches no filter, not even `other`.",
+    "If a client's connection drops without closing, the client stays in the list for up to 60 seconds, with `connection_state` set to `lost`, so it can reconnect. A client that wasn't attached to anything and had no scripts leaves at once.",
+    "To keep a copy of this list up to date, call `session.attach_all` with `event_scope` set to `all`. The connection then receives `client_joined`, `client_left`, and `client_changed` events."
+  ]
+}

@@ -7,20 +7,33 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import android.content.res.Configuration
+import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.toArgb
-
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import me.leaver.rexpocket.core.AppTheme
+import me.leaver.rexpocket.core.TerminalColors
+import me.leaver.rexpocket.core.TextSize
 import me.leaver.rexpocket.terminal.TerminalTheme
 
 /**
@@ -190,20 +203,129 @@ object Colors {
     /** True while the night palette is in use. */
     val isDark: Boolean get() = palette.dark
 
-    internal fun use(dark: Boolean) {
+    /**
+     * The terminal's own appearance, which Settings › Appearance can set apart from the app's: a
+     * dark terminal in a light app, or the other way round. Only the pane itself follows it.
+     */
+    private var panePalette by mutableStateOf(Light)
+
+    /** The pane's paper while a terminal is on it: [terminal], or the other appearance's. */
+    val pane: Color get() = panePalette.terminal
+
+    /** Secondary words drawn on [pane], such as the line a pane shows before its first picture. */
+    val paneMuted: Color get() = panePalette.muted
+
+    /** True while the pane draws in the night palette. */
+    val paneDark: Boolean get() = panePalette.dark
+
+    internal fun use(dark: Boolean, paneDark: Boolean = dark) {
         val next = if (dark) Dark else Light
         if (palette != next) palette = next
+        val pane = if (paneDark) Dark else Light
+        if (panePalette != pane) panePalette = pane
+    }
+
+    /** The terminal's default colours for the pane's appearance; see [terminalTheme]. */
+    internal fun paneTheme(): TerminalTheme = TerminalTheme(
+        foreground = panePalette.ink.toArgb(),
+        background = panePalette.terminal.toArgb(),
+        cursor = panePalette.accent.toArgb(),
+        selection = panePalette.line.toArgb(),
+    )
+}
+
+/**
+ * Picks the palette from [appTheme] (the phone's appearance unless Settings › Appearance says
+ * otherwise) and the pane's from [terminalColors], and keeps the system bars in step. Both are
+ * state: a change in settings recomposes every screen in place, with no new activity. The Material
+ * theme under it carries the same colours, so the platform's own pieces - the ripple on a press, a
+ * dialog, a menu - look like the rest of the app.
+ *
+ * [textSize] scales the app's text on top of the phone's font size, live as well: see
+ * [AppTextScale]. The terminal's text is drawn by its own view in its own size and does not follow.
+ */
+@Composable
+fun RexTheme(
+    appTheme: AppTheme = AppTheme.System,
+    terminalColors: TerminalColors = TerminalColors.MatchApp,
+    textSize: TextSize = TextSize.System,
+    content: @Composable () -> Unit,
+) {
+    val fontScale = textSize.fontScale(LocalDensity.current.fontScale)
+    CompositionLocalProvider(LocalTextScale provides fontScale) {
+        AppTextScale { RexColors(appTheme, terminalColors, content) }
     }
 }
 
 /**
- * Picks the palette from the phone's appearance and keeps the system bars in step with it. The
- * Material theme under it carries the same colours, so the platform's own pieces - the ripple on a
- * press, a dialog, a menu - look like the rest of the app.
+ * The font scale the app's text is drawn at: the phone's times Settings › Appearance › Text size,
+ * or null outside [RexTheme].
+ */
+private val LocalTextScale = staticCompositionLocalOf<Float?> { null }
+
+/**
+ * Draws [content]'s text at the app's font scale. [RexTheme] does it for the app's window; a dialog
+ * or a bottom sheet is a window of its own, whose density is the phone's again, so [ActionSheet] and
+ * [AlertDialog] do it once more inside theirs. Doing it twice changes nothing. The density comes from
+ * a configuration with that font scale, so Android 14's non-linear scaling still keeps large text
+ * from growing as fast as small.
  */
 @Composable
-fun RexTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+internal fun AppTextScale(content: @Composable () -> Unit) {
+    val scale = LocalTextScale.current
+    val density = LocalDensity.current
+    val context = LocalContext.current
+    // Always the same provider, whatever the scale, so a change does not throw away the state below.
+    val scaled = if (scale == null || scale == density.fontScale) density else remember(context, scale) {
+        Density(context.createConfigurationContext(Configuration(context.resources.configuration).apply { fontScale = scale }))
+    }
+    CompositionLocalProvider(LocalDensity provides scaled, content = content)
+}
+
+/**
+ * Material's alert dialog with the app's text size inside it (see [AppTextScale]); the screens call
+ * this one, in this package, rather than Material's.
+ */
+@Composable
+internal fun AlertDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    dismissButton: @Composable (() -> Unit)? = null,
+    icon: @Composable (() -> Unit)? = null,
+    title: @Composable (() -> Unit)? = null,
+    text: @Composable (() -> Unit)? = null,
+    shape: Shape = AlertDialogDefaults.shape,
+    containerColor: Color = AlertDialogDefaults.containerColor,
+    iconContentColor: Color = AlertDialogDefaults.iconContentColor,
+    titleContentColor: Color = AlertDialogDefaults.titleContentColor,
+    textContentColor: Color = AlertDialogDefaults.textContentColor,
+    tonalElevation: Dp = AlertDialogDefaults.TonalElevation,
+    properties: DialogProperties = DialogProperties(),
+) {
+    fun scaled(slot: (@Composable () -> Unit)?): (@Composable () -> Unit)? = slot?.let { s -> @Composable { AppTextScale(s) } }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = { AppTextScale(confirmButton) },
+        modifier = modifier,
+        dismissButton = scaled(dismissButton),
+        icon = scaled(icon),
+        title = scaled(title),
+        text = scaled(text),
+        shape = shape,
+        containerColor = containerColor,
+        iconContentColor = iconContentColor,
+        titleContentColor = titleContentColor,
+        textContentColor = textContentColor,
+        tonalElevation = tonalElevation,
+        properties = properties,
+    )
+}
+
+@Composable
+private fun RexColors(appTheme: AppTheme, terminalColors: TerminalColors, content: @Composable () -> Unit) {
+    val dark = appTheme.isDark(isSystemInDarkTheme())
+    val paneDark = terminalColors.isDark(dark)
     val p = if (dark) Dark else Light
     val scheme = if (dark) {
         darkColorScheme(
@@ -222,7 +344,7 @@ fun RexTheme(content: @Composable () -> Unit) {
     }
     val view = LocalView.current
     SideEffect {
-        Colors.use(dark)
+        Colors.use(dark, paneDark)
         val window = view.context.findActivity()?.window ?: return@SideEffect
         WindowCompat.getInsetsController(window, view).apply {
             isAppearanceLightStatusBars = !dark
@@ -232,7 +354,7 @@ fun RexTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = scheme, content = content)
 }
 
-private tailrec fun Context.findActivity(): Activity? = when (this) {
+internal tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
@@ -273,12 +395,8 @@ object TextStyles {
 val labelLeading: TextUnit = 18.sp
 
 /**
- * The terminal's own paper and ink, for the appearance in use: white paper in the day, the page at
- * night. Every palette entry stays the program's; only the defaults a program never sets bend.
+ * The terminal's own paper and ink, for the pane's appearance: white paper in the day, the page at
+ * night, or whichever one Settings › Appearance › Terminal colours holds to. Every palette entry
+ * stays the program's; only the defaults a program never sets bend.
  */
-internal fun terminalTheme(): TerminalTheme = TerminalTheme(
-    foreground = Colors.ink.toArgb(),
-    background = Colors.terminal.toArgb(),
-    cursor = Colors.accent.toArgb(),
-    selection = Colors.line.toArgb(),
-)
+internal fun terminalTheme(): TerminalTheme = Colors.paneTheme()

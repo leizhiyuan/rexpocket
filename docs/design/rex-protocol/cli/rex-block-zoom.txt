@@ -1,0 +1,34 @@
+$ rex block zoom --help
+Zoom a block to fill its window.
+
+Zoom changes only how the block is displayed. It does not change the underlying
+window layout. Without --on or --off, the command toggles the current zoom state.
+Use --on or --off to set the state explicitly.
+
+BLOCK may be passed as an argument or with --block. If BLOCK is omitted, Rex
+uses REX_BLOCK when it identifies a live block. Otherwise, Rex uses the focused
+block in the default window.
+
+Examples:
+  rex block zoom
+  rex block zoom --off
+  rex block zoom -b logs --on
+
+Usage:
+  rex block zoom [BLOCK] [flags]
+
+Options:
+  -b, --block BLOCK     select block BLOCK
+  -s, --session string  scope to session SESSION
+  -w, --window string   scope to window WINDOW
+      --on              enable zoom
+      --off             disable zoom
+  -h, --help            help for zoom
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

@@ -1,0 +1,32 @@
+$ rex forward ls --help
+List the forwards in a session: the tunnel blocks that rex forward new and
+other clients create.
+
+STATE is active while the client carrying the forward is connected, away while
+it is disconnected but may come back, and orphaned once nothing carries it,
+for example after its rex forward new was killed. An orphaned forward that
+listens on the server still accepts connections, which then time out, so
+rex forward ls warns about orphans; close them with rex forward close.
+
+DIRECTION shows where the forward listens and where it connects from:
+client -> server is a -L forward, and server -> client is a -R one. A field
+the client did not report shows -.
+
+Usage:
+  rex forward ls [flags]
+
+Options:
+  -s, --session string  scope to session SESSION
+  -A, --all             list forwards in every session
+      --json            output forwards as JSON
+  -q, --quiet           print IDs only, one per line
+      --short           show short IDs (--short=false shows full IDs) (default true)
+  -h, --help            help for ls
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

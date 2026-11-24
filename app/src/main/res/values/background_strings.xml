@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Background mode: Settings › Background and notifications, and the watch notification. See docs/design/multi-host.md. -->
+<resources>
+    <string name="bg_fix">Fix</string>
+    <string name="bg_group_checks">Let it run in the background</string>
+    <string name="bg_battery">Battery use</string>
+    <string name="bg_battery_ok">Unrestricted</string>
+    <string name="bg_battery_body">Battery optimization pauses the connection while the phone sleeps, and can keep RexPocket from starting again after Android stops it.</string>
+    <string name="bg_restricted">Background activity</string>
+    <string name="bg_restricted_body">Battery use is Restricted: Android stops RexPocket as soon as it leaves the screen. Set it to Unrestricted.</string>
+    <string name="bg_allowed">Allowed</string>
+    <string name="bg_data">Background data</string>
+    <string name="bg_data_body">Data Saver keeps RexPocket off mobile data while it is away.</string>
+    <string name="bg_oem">If your phone still stops it</string>
+    <string name="bg_oem_body">Some phones stop apps on their own, beyond Android\'s settings. dontkillmyapp.com says what to change on yours.</string>
+    <string name="bg_group_hosts">Hosts</string>
+    <string name="bg_host_kept">Stays connected</string>
+    <string name="bg_host_not_kept">Not in the background</string>
+    <string name="bg_host_silent">Silent</string>
+    <string name="bg_stay">Stay connected in the background</string>
+    <string name="bg_stay_body">Off, RexPocket lets this host go a minute after it leaves the screen, and connects it again when you come back.</string>
+    <string name="bg_always">Always connected</string>
+    <string name="bg_always_body">Connects whenever RexPocket starts, also after a restart or a Disconnect, and stays connected in the background.</string>
+    <string name="bg_notify">Notifications from this host</string>
+    <string name="bg_default">%1$s (default)</string>
+    <string name="bg_reset">Use the defaults</string>
+    <string name="bg_stopped_title">Background alerts stopped</string>
+    <string name="bg_stopped_body">Android did not let RexPocket start again in the background. Open it to reconnect; Settings › Background and notifications shows what to allow.</string>
+    <string name="bg_watch_starting">Connecting…</string>
+    <string name="bg_host_live">connected</string>
+    <string name="bg_host_trying">reconnecting</string>
+    <string name="bg_host_failed">not connected</string>
+    <string name="bg_disconnect_host">Disconnect %1$s</string>
+    <plurals name="bg_watch_title">
+        <item quantity="one">Connected to %1$d host</item>
+        <item quantity="other">Connected to %1$d hosts</item>
+    </plurals>
+    <plurals name="alerts_summary">
+        <item quantity="one">%1$d program</item>
+        <item quantity="other">%1$d programs</item>
+    </plurals>
+</resources>

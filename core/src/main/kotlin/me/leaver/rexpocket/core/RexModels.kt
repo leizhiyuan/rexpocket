@@ -59,6 +59,35 @@ data class Welcome(
 
 data class ListedSession(val id: String, val label: String)
 
+/**
+ * Where an item goes in Rex's order when it moves to place [to] (0 is first), as `session.move` and
+ * `session.move_window` take it: the id it is then just before, or null for the end. Null for the
+ * whole answer when it is already there or not in [order], so no call is made for nothing.
+ */
+data class Placement(val before: String?)
+
+fun placement(order: List<String>, id: String, to: Int): Placement? {
+    val from = order.indexOf(id)
+    if (from < 0) return null
+    val target = to.coerceIn(0, order.lastIndex)
+    if (target == from) return null
+    return Placement(order.filter { it != id }.getOrNull(target))
+}
+
+/**
+ * [items] with the one whose id is [id] moved just before [before] (to the end when null), as a
+ * `session_moved` event says. Unchanged when either is not there.
+ */
+fun <T> List<T>.movedBefore(id: String, before: String?, idOf: (T) -> String): List<T> {
+    val item = firstOrNull { idOf(it) == id } ?: return this
+    if (before == id) return this
+    val rest = filter { idOf(it) != id }
+    if (before == null) return rest + item
+    val at = rest.indexOfFirst { idOf(it) == before }
+    if (at < 0) return this
+    return rest.subList(0, at) + item + rest.subList(at, rest.size)
+}
+
 data class BlockInfo(
     val id: String,
     val label: String,
@@ -129,12 +158,32 @@ data class ProgramRecord(
     val title: String?,
     val msg: String?,
     val progress: Int?,
+    /**
+     * When the report arrived, by Rex's clock, in epoch milliseconds: the record's `updated_at`.
+     * Rex 0.1.0-preview.22 sends it at every API revision the app speaks; null if a Rex leaves it out.
+     */
+    val updatedAt: Long? = null,
 )
 
+/**
+ * The order Rex's Activity puts states in, most pressing first: "blocked failed done working idle"
+ * (Show Activity by Priority, Mac Actions reference). A state Rex's reference does not know counts
+ * as idle, as the `program_status_changed` schema says to treat it.
+ */
+private val STATUS_PRIORITY = mapOf("blocked" to 0, "error" to 1, "done" to 2, "working" to 3, "idle" to 4)
+
+/** Where [state] stands in Rex's Activity order; lower is more pressing. */
+fun statusPriority(state: String): Int = STATUS_PRIORITY[state] ?: STATUS_PRIORITY.getValue("idle")
+
+/**
+ * A pane's records summed up to the one that speaks for it: the most pressing in Rex's Activity
+ * order. Rex itself keeps every record and sums nothing up (`program_status` lists them all, root
+ * first), so the order is the one its Activity shows: a pane whose root is working while a child
+ * record is done reads as done, the result waiting to be looked at.
+ */
 fun summarizeStatus(records: List<ProgramRecord>): ProgramRecord? {
     if (records.isEmpty()) return null
-    val rank = mapOf("blocked" to 0, "error" to 1, "working" to 2, "done" to 3, "idle" to 4)
-    return records.minBy { rank[it.state] ?: 9 }
+    return records.minBy { statusPriority(it.state) }
 }
 
 fun parseView(obj: JSONObject): SessionView {
@@ -214,6 +263,7 @@ private fun parseProgramRecord(o: JSONObject, id: String) = ProgramRecord(
     title = o.optNullableString("title"),
     msg = o.optNullableString("msg"),
     progress = if (o.has("progress") && !o.isNull("progress")) o.optInt("progress") else null,
+    updatedAt = o.optNullableString("updated_at")?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() },
 )
 
 /**
@@ -224,6 +274,18 @@ fun applyStatusEvent(records: Map<String, ProgramRecord>, event: JSONObject): Ma
     val id = event.optNullableString("id") ?: ""
     val record = event.optJSONObject("record") ?: return records - id
     return records + (id to parseProgramRecord(record, id))
+}
+
+/**
+ * A pane's status records after Rex's `program_status_removed` [event], which lists the `ids` of
+ * the records it dropped: on a `clear`, or a working or blocked record when the program exits or the
+ * shell prompts again (OSC 7501, "Lifetime"). The root record's id is the empty string, as in
+ * [applyStatusEvent]. An event without `ids` removes them all.
+ */
+fun removeStatusRecords(records: Map<String, ProgramRecord>, event: JSONObject): Map<String, ProgramRecord> {
+    val ids = event.optJSONArray("ids") ?: return emptyMap()
+    val gone = (0 until ids.length()).mapTo(HashSet()) { if (ids.isNull(it)) "" else ids.optString(it) }
+    return records - gone
 }
 
 /**

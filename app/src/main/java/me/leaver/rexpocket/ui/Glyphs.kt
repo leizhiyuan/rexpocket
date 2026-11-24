@@ -26,6 +26,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -38,8 +40,16 @@ import androidx.compose.ui.unit.dp
 /** One icon, tinted; the control around it says what it does. */
 @Composable
 internal fun Glyph(@DrawableRes id: Int, tint: Color, modifier: Modifier = Modifier, size: Dp = 24.dp) {
-    Icon(painterResource(id), contentDescription = null, tint = tint, modifier = modifier.size(size))
+    Icon(painterResource(id), contentDescription = null, tint = tint, modifier = modifier.size(size).semantics { drawable = id })
 }
+
+/**
+ * Which drawable a [Glyph] shows, for the screen tests: an icon is decoration with no words of its
+ * own, so this is how a test sees that a row's icon follows its setting. Merged up into the row, so
+ * a row is matched by its label and its icon together.
+ */
+internal val Drawable = SemanticsPropertyKey<Int>("Drawable", mergePolicy = { parent, child -> parent ?: child })
+internal var SemanticsPropertyReceiver.drawable by Drawable
 
 /**
  * A round control: a [plate] of [size], the icon in it, and a touch target of at least 48 dp

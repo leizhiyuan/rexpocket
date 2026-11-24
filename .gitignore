@@ -11,8 +11,15 @@ captures/
 
 # Built by tools/build-ghostty.py
 native/.build/
+
+# The tailnet library with Netbird: 50 MB or more, built by tools/build-tailnet.sh with REXPOCKET_NETBIRD=1.
+app/libs/tailnet-netbird.aar
+app/libs/*-sources.jar
 app/src/main/jniLibs/
 
 # Release signing key: never committed, see app/build.gradle.kts
 *.keystore
 *.jks
+
+# The Netbird add-on's library, built by tools/build-tailnet.sh with REXPOCKET_NETBIRD=addon.
+netbirdaddon/libs/

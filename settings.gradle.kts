@@ -17,3 +17,6 @@ dependencyResolutionManagement {
 }
 rootProject.name = "rexpocket"
 include(":core", ":app")
+// The Netbird add-on: a separate app that runs a Netbird node for RexPocket, and the interface
+// both sides of its binding share. See docs/design/tailnet-backends.md.
+include(":netbirdaddon", ":netbirdaddon-api")

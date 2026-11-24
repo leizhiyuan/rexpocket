@@ -1,0 +1,37 @@
+$ rex block send-key --help
+Send key presses to a terminal
+
+Each KEY uses Rex's key binding syntax. Join modifiers with +, as in ctrl+c or
+shift+left. A bracketed name such as [Slash] selects a physical key. By default,
+Rex sends a press followed by a release for each key. Use --action to send one
+action instead.
+
+Rex interprets printable keys using a US keyboard layout because send-key does
+not receive physical keyboard input. The generated text and physical key may
+differ on other layouts. Use rex send when exact text matters.
+
+Examples:
+  rex send-key enter
+  rex send-key ctrl+c
+  rex send 'make test' && rex send-key enter
+  rex send-key -b logs ctrl+c
+  rex send-key shift+left shift+left
+  rex send-key --action release ctrl+[KeyQ]
+
+Usage:
+  rex block send-key KEY... [flags]
+
+Options:
+  -b, --block string    send to block BLOCK
+  -s, --session string  scope to session SESSION
+  -w, --window string   scope to window WINDOW
+      --action ACTION   send one ACTION for each key: press, release, or repeat
+  -h, --help            help for send-key
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

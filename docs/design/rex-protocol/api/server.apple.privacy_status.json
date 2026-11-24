@@ -1,0 +1,59 @@
+{
+  "name": "server.apple.privacy_status",
+  "description": "Report the macOS privacy permissions the server and its programs have.",
+  "invoke": {
+    "method": "server.apple.privacy_status"
+  },
+  "local": true,
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "responsible_path": {
+        "type": "string",
+        "description": "The executable macOS holds responsible for the server. Privacy decisions belong to the app that contains it. Left out when the server can't tell."
+      },
+      "services": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "service": {
+              "type": "string",
+              "description": "The protected resource. Later versions of Rex may add services, so skip one you don't know."
+            },
+            "status": {
+              "type": "string",
+              "description": "'granted' if the server may use the resource, 'denied' if the person turned it off or has not turned it on, 'not_determined' if the person has not been asked yet, or 'unknown' if the server could not tell. Treat a value you don't know as 'unknown'."
+            }
+          },
+          "required": [
+            "service",
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        "description": "One entry for each privacy service the server knows. Empty when the server can't read privacy decisions, for example when it doesn't run on macOS."
+      }
+    },
+    "required": [
+      "services"
+    ],
+    "additionalProperties": false
+  },
+  "response_example": "{\n  \"services\": [\n    {\"service\": \"full_disk_access\", \"status\": \"granted\"},\n    {\"service\": \"screen_recording\", \"status\": \"denied\"},\n    {\"service\": \"microphone\", \"status\": \"not_determined\"},\n    {\"service\": \"camera\", \"status\": \"not_determined\"}\n  ],\n  \"responsible_path\": \"/Users/alice/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex\"\n}",
+  "validation_notes": [
+    "macOS decides privacy permissions for the app it holds responsible for a process. Every shell and program the server runs belongs to the server, so they all get the permissions listed here, whatever the app that shows their terminals was allowed.",
+    "Only the server can read its own permissions. A Mac app calls this to show them, and calls it again after the person changes one in System Settings.",
+    "Reading the permissions never makes macOS ask the person anything.",
+    "`responsible_path` is the executable macOS holds responsible for the server. The permissions belong to the app that contains it. When the server was started in the foreground from a terminal app, that is the terminal app.",
+    "Skip a `service` you don't know, and treat a `status` you don't know as `unknown`. A server that isn't running on macOS lists no services.",
+    "The server accepts this method only over its local Unix socket, or its named pipe on Windows. Over any other connection, such as TCP or Tailscale, the call fails with status 403."
+  ]
+}

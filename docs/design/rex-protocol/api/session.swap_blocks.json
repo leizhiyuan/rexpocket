@@ -1,0 +1,58 @@
+{
+  "name": "session.swap_blocks",
+  "description": "Swap the places of two blocks.",
+  "invoke": {
+    "method": "session.swap_blocks"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "One of the two blocks to swap."
+      },
+      "other_block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The other block. The order of the two doesn't matter."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      }
+    },
+    "required": [
+      "session_id",
+      "block_id",
+      "other_block_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the call changed nothing that session.view shows, unless the method's notes say otherwise.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"block_id\": \"block:01234567-89ab-cdef-0123-456789abcde1\",\n  \"other_block_id\": \"block:01234567-89ab-cdef-0123-456789abcde2\"\n}",
+  "response_example": "{\"revision\": 42}",
+  "validation_notes": [
+    "Both blocks must be in a window. They can be in different windows or layers.",
+    "Only the two blocks move. Splits, their sizes and IDs, floating layers, and the window order stay the same.",
+    "If one of the blocks has focus in the active window, focus follows it to its new place, and that place's window becomes active.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If `block_id` and `other_block_id` are the same, it fails with `bad_request`. If either block isn't in any window, including a detached block, it fails with `not_found`."
+  ]
+}

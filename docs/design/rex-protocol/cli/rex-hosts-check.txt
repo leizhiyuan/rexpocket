@@ -1,0 +1,27 @@
+$ rex hosts check --help
+Try to reach each of your hosts, or only the hosts called LABEL, ignoring case. All hosts are tried at once, and each one has up to --timeout to answer.
+
+STATUS is one of:
+
+  reachable                a Rex server answered at ENDPOINT
+  not reachable from here  nothing answered, but the host may work from another network or device
+  down                     a machine answered, but not a Rex server
+
+DETAIL says why a host could not be reached. For a reachable host, it says when the address now leads to a different machine than the one you added.
+
+The check succeeds whatever it finds. Commands that connect to a host try the address that answered first.
+
+Usage:
+  rex hosts check [LABEL...] [flags]
+
+Options:
+      --json  output the results as JSON
+  -h, --help  help for check
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

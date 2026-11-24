@@ -1,0 +1,79 @@
+{
+  "name": "server.config_reload",
+  "description": "Reload the configuration file and tell every client to fetch its keymap again.",
+  "invoke": {
+    "method": "server.config_reload"
+  },
+  "local": true,
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "diagnostics": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "The full name of the action the problem is about, as written, even if misspelled. Left out if it isn't about one action."
+            },
+            "key": {
+              "type": "string",
+              "description": "The key the problem is about, spelled like a binding's keys, with a sequence joined by spaces, such as ctrl+a b. Left out if it isn't about one key."
+            },
+            "message": {
+              "type": "string",
+              "description": "The problem in one sentence, ready to show. Its wording may change, so don't parse it."
+            },
+            "mode": {
+              "type": "string",
+              "description": "The mode the problem is about. Left out if it isn't about a mode."
+            },
+            "severity": {
+              "type": "string",
+              "description": "How serious the problem is: warning, for something the user probably didn't mean, or error, for a part that was skipped. Show a value you don't know as a warning."
+            },
+            "source": {
+              "type": "string",
+              "description": "Where the problem is, as file:line, such as init.lua:22. Left out when it isn't known."
+            }
+          },
+          "required": [
+            "severity",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Problems found in the configuration file, written for people to read. Empty when there are none."
+      },
+      "generation": {
+        "type": "integer",
+        "description": "How many times the server has loaded its configuration file since it started, counting this load. It goes up on every load, even one that fails.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "generation",
+      "diagnostics"
+    ],
+    "additionalProperties": false
+  },
+  "response_example": "{\n  \"generation\": 2,\n  \"diagnostics\": [\n    {\"severity\": \"error\", \"source\": \"init.lua:2\", \"message\": \"rex.bind: expected a string, got table\"}\n  ]\n}",
+  "validation_notes": [
+    "The server reads the same configuration file it read when it started, usually `init.lua`, along with the modules that file loads with `require`.",
+    "The next `client.keymap` result reports the same `generation` in `config.generation`, unless the file is reloaded again first.",
+    "A mistake that stops the file from loading, such as a Lua syntax error, doesn't fail the call. The server keeps the bindings, actions, and hosts from the last load that worked, and `diagnostics` reports the mistake.",
+    "If the file no longer exists, the reload removes the bindings, actions, and hosts it used to declare. That isn't an error.",
+    "`diagnostics` lists only problems in the file itself. A problem that depends on a client, such as a binding to an action that client doesn't have, is reported by `client.keymap` instead.",
+    "After the load, every connected client receives a `keymap_changed` event with the new `generation` and `hash`. A client can keep its keymap if its last `client.keymap` result has the same `hash` and came from the same server process, that is, the same `instance_id`.",
+    "If the reload changes the host list, such as by adding or removing a `rex.host` declaration, every connected client also receives a `hosts_changed` event.",
+    "The server accepts this method only over its local Unix socket, or its named pipe on Windows. Over any other connection, such as TCP or Tailscale, the call fails with status 403."
+  ]
+}

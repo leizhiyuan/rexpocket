@@ -1,0 +1,89 @@
+{
+  "name": "server.apple.grant_file_access",
+  "description": "Let the server, and every program it runs, read files a Mac app was given.",
+  "invoke": {
+    "method": "server.apple.grant_file_access"
+  },
+  "local": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "files": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "The file's absolute path. If it names a directory, access covers everything inside it."
+            },
+            "token": {
+              "type": "string",
+              "description": "A macOS sandbox extension token for path, which the app gets from sandbox_extension_issue_file. The server uses it only if it can't already open path."
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        "description": "The files to make readable, in the order they were dropped or pasted. At most 256."
+      }
+    },
+    "required": [
+      "files"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "files": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "access": {
+              "type": "string",
+              "description": "'readable' if the server could already open the file, 'granted' if it can now because it used the token, or 'denied' if it still can't. Treat a value you don't know as 'denied'."
+            },
+            "message": {
+              "type": "string",
+              "description": "Why access was denied, written for a log. The wording can change, so check access instead."
+            },
+            "path": {
+              "type": "string",
+              "description": "The requested path, unchanged."
+            }
+          },
+          "required": [
+            "path",
+            "access"
+          ],
+          "additionalProperties": false
+        },
+        "description": "One result for each requested file, in the same order as the request."
+      }
+    },
+    "required": [
+      "files"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"files\": [\n    {\"path\": \"/Users/alice/project/README.md\", \"token\": \"<sandbox extension token>\"},\n    {\"path\": \"/var/folders/xy/T/TemporaryItems/Screenshot.png\", \"token\": \"<sandbox extension token>\"}\n  ]\n}",
+  "response_example": "{\n  \"files\": [\n    {\"path\": \"/Users/alice/project/README.md\", \"access\": \"readable\"},\n    {\"path\": \"/var/folders/xy/T/TemporaryItems/Screenshot.png\", \"access\": \"granted\"}\n  ]\n}",
+  "validation_notes": [
+    "A Mac app calls this when a file is dropped on or pasted into a terminal. macOS lets the app open the file, but not always the server, which macOS treats as a different app.",
+    "For each file, the server first tries to open `path`. It uses `token` only if it can't, so most files, such as those in a project, come back `readable` and their tokens go unused.",
+    "A file the server can't open doesn't fail the call. A relative path is always `denied`.",
+    "Access lasts until the server exits. If a file comes back `denied`, or with an `access` value the client doesn't know, copy the file somewhere the server can read instead.",
+    "A request that names more than 256 files fails with `bad_request`.",
+    "The server accepts this method only over its local Unix socket, or its named pipe on Windows. Over any other connection, such as TCP or Tailscale, the call fails with status 403."
+  ]
+}

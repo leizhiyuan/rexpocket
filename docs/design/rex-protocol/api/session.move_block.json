@@ -1,0 +1,102 @@
+{
+  "name": "session.move_block",
+  "description": "Move a block, or place a detached one, in a new split beside another block.",
+  "invoke": {
+    "method": "session.move_block"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "anchor_block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The block to place it beside. It must be placed in a window."
+      },
+      "block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The block to move. It may be detached or placed in any window."
+      },
+      "direction": {
+        "type": [
+          "null",
+          "string"
+        ],
+        "description": "How to divide the anchor's space: 'horizontal' for side by side or 'vertical' for one above the other. Defaults to horizontal.",
+        "enum": [
+          "horizontal",
+          "vertical"
+        ]
+      },
+      "ratio": {
+        "type": "number",
+        "description": "The fraction of the space that the before part gets, greater than 0 and less than 1. Defaults to 0.5."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      },
+      "side": {
+        "type": [
+          "null",
+          "string"
+        ],
+        "description": "Where the moved block goes: 'before' for the left or top part, or 'after' for the right or bottom part. Defaults to after.",
+        "enum": [
+          "before",
+          "after"
+        ]
+      }
+    },
+    "required": [
+      "session_id",
+      "block_id",
+      "anchor_block_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "created_split_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The split created beside the anchor."
+      },
+      "removed_split_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The split that held the block before the move, which the move removed. Left out if no split was removed, such as for a detached block."
+      },
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "created_split_id",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"block_id\": \"block:01234567-89ab-cdef-0123-456789abcde1\",\n  \"anchor_block_id\": \"block:01234567-89ab-cdef-0123-456789abcde2\",\n  \"direction\": \"vertical\"\n}",
+  "response_example": "{\n  \"created_split_id\": \"split:01234567-89ab-cdef-0123-456789abcde1\",\n  \"removed_split_id\": \"split:01234567-89ab-cdef-0123-456789abcde2\",\n  \"revision\": 42\n}",
+  "validation_notes": [
+    "The block and the anchor can be in different windows or layers.",
+    "If the block had focus in its window, focus moves with it and its new window becomes active. A detached block doesn't take focus.",
+    "Zoom ends in every window the move changes.",
+    "If the move empties a floating layer, the server removes it. If it empties a whole window, the server closes the window. A window's layout that empties while the window still has floating layers stays, with the same `layer_id`.",
+    "Apart from the two splits named in the result, every split keeps its ID.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If `block_id` and `anchor_block_id` are the same, or `ratio` is out of range, it fails with `bad_request`. If either block isn't in the session, or the anchor isn't in a window, it fails with `not_found`.",
+    "If the block is detached or in another window, and the anchor's window already has as many blocks as it allows, the call fails with `conflict`."
+  ]
+}

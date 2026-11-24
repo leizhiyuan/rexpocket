@@ -1,0 +1,49 @@
+name: Netbird e2e
+
+# Runs the Netbird node (tailnet/netbird) against a self-hosted Netbird control plane and an
+# SSH peer in Docker: tools/ci/netbird-e2e.
+on:
+  push:
+    branches: [ccr-30ee0e05-w78lcg]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GOTOOLCHAIN: auto
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: tailnet/go.sum
+
+      - name: Build the test
+        working-directory: tailnet
+        run: go test -tags 'netbird e2e' -run '^$' ./netbird/
+
+      - name: Bring up the control plane and the peer
+        run: tools/ci/netbird-e2e/up.sh
+
+      - name: Unit tests
+        working-directory: tailnet
+        run: go test -tags netbird ./netbird/
+
+      - name: End-to-end test
+        working-directory: tailnet
+        env:
+          NETBIRD_E2E_REQUIRED: '1'
+        run: go test -tags 'netbird e2e' -run E2E -v -count=1 ./netbird/
+
+      - name: Container logs
+        if: failure()
+        run: |
+          docker compose -f tools/ci/netbird-e2e/compose.yaml --profile peer ps -a
+          docker compose -f tools/ci/netbird-e2e/compose.yaml --profile peer logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: tools/ci/netbird-e2e/down.sh

@@ -1,0 +1,56 @@
+{
+  "name": "session.focus_direction",
+  "description": "Move focus to the nearest block to the left, right, above, or below.",
+  "invoke": {
+    "method": "session.focus_direction"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "direction": {
+        "type": "string",
+        "description": "Which way to move focus from the focused block in the active window.",
+        "enum": [
+          "left",
+          "right",
+          "up",
+          "down"
+        ]
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      },
+      "wrap": {
+        "type": "boolean",
+        "description": "Whether to continue from the opposite edge when no block lies that way. Defaults to false. Older servers ignore it and always wrap."
+      }
+    },
+    "required": [
+      "session_id",
+      "direction"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the call changed nothing that session.view shows, unless the method's notes say otherwise.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"direction\": \"right\",\n  \"wrap\": true\n}",
+  "response_example": "{\"revision\": 42}",
+  "validation_notes": [
+    "The search starts at the focused block of the active window. It covers every block in that window, floating layers included, by where each appears on screen. When two blocks are equally close, the one in front wins.",
+    "If no block lies in `direction`, focus doesn't change and the call still succeeds. Moving focus ends any zoom in the window.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If the session has no windows, it fails with `conflict`."
+  ]
+}

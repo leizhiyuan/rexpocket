@@ -1,0 +1,61 @@
+{
+  "name": "block.close",
+  "description": "Close a block and end the program running in it.",
+  "invoke": {
+    "method": "block.close"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": "string",
+        "description": "The block to close. It may be a detached block. Send this or window_id, not both."
+      },
+      "keep_last": {
+        "type": "boolean",
+        "description": "If true, fail rather than close the only block left in a window, counting floating layers. Ignored for detached blocks."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session that holds the block."
+      },
+      "window_id": {
+        "type": "string",
+        "description": "The window whose focused block to close. It doesn't have to be the active window. Send this or block_id, not both."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": "string",
+        "description": "The block that closed."
+      },
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the block was detached, because a detached block isn't part of the view.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "block_id",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"block_id\": \"block:<uuid>\"\n}",
+  "response_example": "{\n  \"block_id\": \"block:<uuid>\",\n  \"revision\": 42\n}",
+  "validation_notes": [
+    "Send exactly one of `block_id` and `window_id`. If you send both, or neither, the call fails with `bad_request`.",
+    "The server sends `block_closed` when the block closes. If it was the last block in its window, the window closes too and the server sends `window_closed`.",
+    "If `keep_last` is true and the block is the only one left in its window, counting blocks in floating layers, the call fails with `bad_request` and closes nothing.",
+    "If the block's creator is still placing it, the call returns at once and the block closes when placement finishes.",
+    "On one connection, `block.close` waits for earlier requests that can change focus, such as `session.new_split` and `session.focus_block`, to finish. A close by `window_id` therefore closes the block those requests left focused.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If `block_id` or `window_id` names something that isn't in the session, or the window has no focused block, it fails with `not_found`."
+  ]
+}

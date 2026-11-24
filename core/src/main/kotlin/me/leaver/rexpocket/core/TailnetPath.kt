@@ -27,6 +27,9 @@ sealed interface TailnetPath {
     /** Through a DERP server: a relay over TCP and TLS, often far away, and slow from behind a proxy. */
     data class Derp(val regionId: Int, val regionCode: String, override val latencyMs: Double) : TailnetPath
 
+    /** Through a relay server of the network - Netbird's TURN-style relays, which no peer runs. */
+    data class Relay(val server: String, override val latencyMs: Double) : TailnetPath
+
     /** The ping did not come back. */
     data class Unreachable(val reason: String) : TailnetPath {
         override val latencyMs: Double? get() = null
@@ -44,11 +47,13 @@ sealed interface TailnetPath {
             derpRegionId: Int,
             derpRegionCode: String?,
             error: String?,
+            relayServer: String? = null,
         ): TailnetPath = when {
             !error.isNullOrBlank() -> Unreachable(error)
             !endpoint.isNullOrBlank() -> Direct(endpoint, latencyMs)
             !peerRelay.isNullOrBlank() -> PeerRelay(peerRelay, latencyMs)
             derpRegionId > 0 -> Derp(derpRegionId, derpRegionCode.orEmpty(), latencyMs)
+            !relayServer.isNullOrBlank() -> Relay(relayServer, latencyMs)
             else -> Unreachable("no path reported")
         }
     }

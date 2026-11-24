@@ -7,7 +7,7 @@
 An Android client for [Rex](https://rex.app), the terminal multiplexer. It shows every session on
 your own Rex servers, down to the tab, and opens any pane as a full-screen terminal you type into
 directly. It talks to your Rex and nothing else - on the local network, over your tailnet through a
-Tailscale node built into the app, or through the computer's own SSH daemon.
+Tailscale or Netbird node built into the app, or through the computer's own SSH daemon.
 
 | Home | Terminal | Terminal at night |
 | --- | --- | --- |
@@ -30,12 +30,20 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   programs are exactly as on the desk.
 - **Made for the phone.** Typing goes straight into the pane. A floating dock holds the keyboard,
   Return and a key row: `esc`, `C-c`, arrows that repeat while held, Tab, Return, `ctrl`, paste, a paperclip and `/`.
-  Settings → Terminal can show optional `Shift` and `Alt` keys; both are hidden by default. Hold
+  `Fn` pins a panel of Home, End, PgUp, PgDn, Ins, Del, F1-F12 and the symbols a phone keyboard
+  buries; the row's modifiers apply to them. Settings → Terminal → Arrange keys puts the keys of
+  both pills in any order, adds and removes them - any key of `Fn`, such as F10, can go right on the
+  bar, as can single arrows, `C-d`-style chords, letters and symbols - and chooses what `Fn` holds.
+  **Key groups** are panels like `Fn` with a key of their own: make one empty or from a preset
+  (htop, vim, tmux). Only the keyboard key always stays. The `C-c` key can be made to need a hold
+  while the program is idle (`ctrl` then `c` always sends it). Hold
   `ctrl` for `C-c` `C-d` `C-z` `C-r` `C-l` `C-a` `C-e` `C-w` `C-j`. A split shows one pane at a
   time, with a bar to move between them. **The keyboard never resizes the terminal** - the pane
-  slides up under it by what it covers, so the line being typed into stays in view and a program in
+  slides up under it by what it covers, but never past the cursor's row, and a short screen only as
+  far as its last line needs - so the line being typed into stays in view, even a new shell's prompt
+  on the top row, with the prompts above it - and a program in
   it is never redrawn for the keyboard coming or going - and **a keyboard on the desk takes the dock
-  away**, since it has every key on it. Paste and attach stay in the menu.
+  away**, since it has every key on it. Paste, Send a file, the keyboard and Full screen stay in the menu.
 - **Links.** Long-press a link a program printed, or one it set as a hyperlink, to open, copy or
   share it.
 - **Files and images.** Pick any file on the phone and send it to the pane you are looking at.
@@ -45,8 +53,9 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   program waits for approval, an answer or a login, or fails. Tap the alert to open that pane.
 - **Works beside the desk.** The phone holds only the pane it shows and sizes it to the phone; the
   desktop keeps its own tab. **Release** hands a pane back to the desk until you **Take over**.
-- **Your tailnet, without the Tailscale app.** The app runs its own Tailscale node, so a host is
-  reachable by its MagicDNS name or `100.x` address without taking the phone's VPN slot.
+- **Your tailnet, without the Tailscale or Netbird app.** The app runs its own Tailscale or Netbird
+  node, so a host is reachable by its MagicDNS name or `100.x` address without taking the phone's VPN
+  slot.
 - **Hosts over SSH.** Add `ssh://host` and sign in with an account and a password or a private key;
   the app reaches Rex through the SSH daemon the machine already runs - no Rex port has to be open.
   The host key is shown and pinned on the first connection; a changed one stops the connection
@@ -57,6 +66,21 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   **Stable** takes finished releases only, **Preview** takes the newest published, alphas and betas
   included. A build that has never chosen follows what it came from.
 - **Light and dark,** following the phone, in English and Simplified Chinese.
+
+## Which APK to install
+
+Each run of the [android-apk workflow](.github/workflows/android-apk.yml) leaves three APKs in its
+`rexpocket-debug-apks` artifact, all signed with the same key:
+
+| APK | What it is | Install it |
+| --- | --- | --- |
+| `rexpocket.apk` | The app, with Tailscale built in | The usual choice |
+| `rexpocket-netbird-addon.apk` | The Netbird add-on: a separate app, with no icon, that runs Netbird for `rexpocket.apk` | Beside `rexpocket.apk`, for Netbird |
+| `rexpocket-netbird.apk` | The app with Netbird built in, about 30 MB larger; it does not use the add-on | Instead of `rexpocket.apk` |
+
+`rexpocket.apk` and `rexpocket-netbird.apk` are the same app, so either one installs over the other
+and keeps its hosts. The add-on is an app of its own: take it from the same run or release as
+`rexpocket.apk`, since RexPocket only talks to an add-on signed with its own key.
 
 ## Set up the computer
 
@@ -75,8 +99,12 @@ trust.
 at its MagicDNS name. Nothing has to be opened on the router.
 
 **Over SSH.** Install Rex on the computer, as `rex server install` does, so a non-interactive
-login can run `rex` (the app also looks in `~/.local/bin`). Nothing has to be opened: the app
-reaches the server through the machine's own SSH daemon. How the transport works is described in
+login can run `rex` (the app also looks in `~/.local/bin`, `/usr/local/bin` and `/usr/bin`). A
+non-interactive SSH login does not read the interactive shell's PATH, so on macOS, where Rex lives in
+the app bundle, link it into one of those folders, for example
+`ln -s "<Rex app>/Contents/MacOS/rex" ~/.local/bin/rex`, pointing at the bundle's `Versions/Current`
+so it survives updates. Nothing has to be opened: the app reaches the server through the machine's
+own SSH daemon. How the transport works is described in
 [docs/design/ssh-hosts.md](docs/design/ssh-hosts.md).
 
 ## Use the app
@@ -85,26 +113,61 @@ reaches the server through the machine's own SSH daemon. How the transport works
    - `192.0.2.10` - plaintext on port 7297
    - `192.0.2.10:7300` - another port
    - `my-mac.tail1234.ts.net` or a `100.x` address - through Tailscale, on 443 with TLS
+   - `ssh://my-pc.netbird.cloud`, or `my-pc.netbird.cloud:7297` - through Netbird (a self-hosted
+     Netbird's peers are reached by their `100.x` address). Rex serves TLS on 443 only through
+     Tailscale Serve, and over Netbird it cannot tell callers apart, so Rex's own port there is a
+     plain listener started with `--allow-anonymous` (Rex's Remote Access docs, "Plain HTTP"); over
+     SSH nothing has to be opened
    - `ssh://192.0.2.10` or `ssh://my-mac.tail1234.ts.net` - through that machine's SSH daemon;
      type the account and a password or a private key, and the first connection asks you to
      confirm its host key
 
    The line under the field shows how the app will connect.
-2. **For a tailnet host, join the tailnet.** Settings › Tailscale, give the phone a node name and
-   save. The app opens the sign-in page once; after that the node starts with the app.
+2. **For a tailnet host, join the tailnet.** Settings › Tailnet, pick Tailscale or Netbird (in
+   `rexpocket.apk`, Netbird (add-on), which needs the add-on installed), give the
+   phone a node name and save. Tailscale opens its sign-in page once. Netbird asks for a setup key
+   from its dashboard the first time, and a self-hosted Netbird also needs its management server's
+   address; after that the node starts with the app.
 3. **Open a tab.** Tap a tab on the home screen. The plus beside a session makes a new tab; the
    host's menu starts a new session.
 4. **In the terminal:**
    - Tap the pane to type. Drag to scroll back, pinch to change the font size, long-press to
      select, or long-press a link to open it.
+   - For more room, double-tap the pane, pick Full screen from the ⋮ menu, or scroll the small
+     pill beside the keyboard key to its full-screen key: the top bar, the key bar and the phone's
+     status and navigation bars go away (swipe from the edge to see the phone's bars for a moment).
+     The corner button, another double tap or Back brings them back. In full screen a tap opens the
+     keyboard and a second tap closes it.
+   - **Settings › Terminal controls** chooses what each gesture does and how long it takes: tap
+     (open keyboard, open or close it, nothing), double tap (full screen, keyboard, nothing), long
+     press (select text, full screen, keyboard; a link is always offered), whether a tap waits to
+     see if a second follows (off by default, so a tap acts at once), and the double-tap and
+     long-press times (the phone's own by default). Arrange keys (order, add, remove, key groups,
+     reset) and the `C-c` key's hold are there too. See [docs/design/terminal-controls.md](docs/design/terminal-controls.md).
+   - On a phone held sideways the pane switcher sits in the top bar, and while the keyboard is up
+     the top bar steps aside so the key bar keeps its height; a ⋮ in the corner keeps the menu.
    - Scroll the wide pill to reach more keys. Tap a modifier for the next key, twice quickly to
      lock it, and once again to release it. Hold Return for Shift+Enter. Hold `ctrl` and slide to
      a chord. Locked Shift applies to all repeated arrows; one-shot Shift applies only to the first.
    - Tap the title for the session's tabs and panes, and the list of sessions.
    - Swipe left or right, or use the bar under the pane, to move between the panes of a split.
-   - The menu holds Release / Take over, splitting, renaming and closing.
-5. **On the home screen,** the eye keeps only the tabs with a program working or waiting, and
-   search filters hosts, sessions and tabs.
+   - The ⋮ menu repeats the key bar's phone actions - Paste, Send a file, Show or Hide keyboard,
+     Full screen - whatever the bar shows, then Pane (Release / Take over, new panes, rename, close),
+     Tab (new, rename, close) and Session (sessions, rename, end).
+   - **Command palette** - the ⋮ menu's first row, or Ctrl+Shift+P (Cmd+Shift+P on a Mac keyboard):
+     type to find any of those actions, every tab of the host and every session, as in Rex's own
+     palette (Rex's names, such as "Split Pane Right", find them too). Arrows, Return and Escape work
+     from a keyboard. See [docs/design/command-palette.md](docs/design/command-palette.md).
+5. **On the home screen,** the eye shows the connected host's Activity, as Rex does: the tabs whose
+   program reported its status, grouped Waiting, Failed, Done and Running, each with its session,
+   how long ago the phone saw it change, and the program's message; tap one to open that pane. Search
+   filters hosts, sessions and tabs (or the Activity rows while the eye is on). What comes from Rex
+   and what does not: [docs/design/rex-parity.md](docs/design/rex-parity.md). A folded host or session stays folded - after a trip to
+   a terminal, a rotation or a restart.
+   - At launch the app connects to the host it had open and shows this list. It goes back into the
+     terminal only when Android closed the app while a terminal was on screen, or with
+     **Settings › Reopen the last tab on launch** (off by default) - and never once you have
+     touched anything: whatever you opened meanwhile stays open.
 6. **Background alerts:** Settings › Background alerts, and allow notifications. A quiet
    notification shows while the app watches; its **Stop** turns alerts off. The app does not start
    on its own after a reboot, and Android's battery saving can delay an alert.
@@ -144,12 +207,15 @@ you can read it before you send it.
   `rex __internal dial-stdio`, which joins its input and output to Rex's own Unix socket on that
   machine. The app pins the host key it saw, compares it on every connection, and a changed key
   stops retrying until you confirm the new one. The host is dialed directly, or through the
-  built-in Tailscale node when its address is on the tailnet.
-- **Tailscale.** The node is the official `tailscale.com/tsnet` library running in userspace,
-  with a SOCKS5 proxy on loopback in front of it; only the app's own connections use it. The node's UDP is bound to the phone's Wi-Fi or mobile
-  network, around a proxy VPN such as Clash when the VPN allows apps to bypass it, so a direct
-  path can form. The home screen shows the path to each tailnet host - direct, peer relay or
-  DERP - with its round trip; tap it to measure again.
+  built-in tailnet node when its address is on the tailnet.
+- **Tailnet nodes.** The app runs one node at a time: the official `tailscale.com/tsnet` library, or
+  Netbird's embedded client. Both run in userspace with a SOCKS5 proxy on loopback in front of them,
+  and only the app's own connections use it. The Netbird add-on runs the same Netbird node in its
+  own app, with no proxy: RexPocket binds it through a service only an app signed with its key may
+  bind, and each connection is a socket the add-on hands over. The Tailscale node's UDP is bound to the phone's Wi-Fi
+  or mobile network, around a proxy VPN such as Clash when the VPN allows apps to bypass it, so a
+  direct path can form. The home screen shows the path to each tailnet host - direct, peer relay,
+  DERP or a Netbird relay server - with its round trip; tap it to measure again.
 
 ### A faster tailnet path
 
@@ -173,10 +239,18 @@ Ghostty revision pinned in [native/ghostty/source.json](native/ghostty/source.js
 [tools/build-ghostty.py](tools/build-ghostty.py), which Gradle runs; the first build downloads Zig
 and the Ghostty source, checked against their pinned checksums. To move to a newer Ghostty, change
 the revision and checksum there. `app/libs/tailnet.aar` - the Go module in `tailnet/`, around
-`tailscale.com` at the version its `go.mod` pins - is checked in; to build it again, run
-[tools/build-tailnet.sh](tools/build-tailnet.sh). The integration
+`tailscale.com` at the version its `go.mod` pins, and Netbird's embedded client in `tailnet/netbird` -
+is checked in; to build it again, run [tools/build-tailnet.sh](tools/build-tailnet.sh). Netbird is a build choice: `REXPOCKET_NETBIRD=1
+tools/build-tailnet.sh` writes `app/libs/tailnet-netbird.aar`, and `./gradlew -Prexpocket.netbird=true
+:app:assembleRelease` links it in. It adds about 30 MB to the APK (29 MB to 59 MB), so the default build leaves it
+out and offers Netbird through the add-on instead: `REXPOCKET_NETBIRD=addon tools/build-tailnet.sh`
+writes the add-on's library, `netbirdaddon/libs/tailnet-netbird-addon.aar`, and
+`./gradlew :netbirdaddon:assembleRelease` builds the add-on, signed with the same release key. The integration
 tests in `core` run against a Rex on `127.0.0.1:7297` (set `REX_TEST_HOST` / `REX_TEST_PORT`) and
-are skipped without one. The SSH test runs only when `REX_SSH_HOST` and `REX_SSH_USER` name a
+are skipped without one. The pane lifecycle scenarios - tabs and panes closed on the desk or the
+phone, release and take over, reconnects - run on every build against `ScriptedRex`, a Rex in the
+test JVM, and against a real one as well when it listens; see
+[docs/design/testing.md](docs/design/testing.md#rex-integration). The SSH test runs only when `REX_SSH_HOST` and `REX_SSH_USER` name a
 machine and `REX_SSH_KEY` or `REX_SSH_PASSWORD` gives a credential; `REX_SSH_PORT`,
 `REX_SSH_HOST_KEY`, `REX_SSH_KEY_PASSPHRASE` and `REX_SSH_SOCKS` are optional.
 
@@ -212,6 +286,10 @@ which erases the app's hosts and tailnet login.
   emulator: the app builds its official libghostty-vt library, license in `app/src/main/assets/licenses/Ghostty-MIT.txt`.
 - [Tailscale](https://github.com/tailscale/tailscale), by Tailscale Inc. and contributors, BSD-3-Clause -
   the tsnet library the app's Tailscale node is.
+- [Netbird](https://github.com/netbirdio/netbird), by NetBird GmbH and contributors, BSD-3-Clause - the
+  embedded client the app's Netbird node is. Only its client code is in the app, not its server parts.
+- [go-socks5](https://github.com/things-go/go-socks5), by Things Go and contributors, MIT - the SOCKS5
+  server in front of the Netbird node.
 - [JSch](https://github.com/mwiede/jsch), by JCraft, Inc. and contributors, Revised BSD - the SSH
   client. [eddsa](https://github.com/str4d/ed25519-java), by Str4d and contributors, CC0 - the
   Ed25519 implementation Android's own security providers do not give JSch.

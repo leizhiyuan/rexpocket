@@ -1,5 +1,8 @@
 plugins {
     id("org.jetbrains.kotlin.jvm")
+    // ScriptedRex and Desk live in src/testFixtures, so the app's screen tests can run on the same
+    // fake Rex as the scenarios here. See docs/design/testing.md.
+    `java-test-fixtures`
 }
 
 java {
@@ -21,4 +24,10 @@ dependencies {
     implementation("net.i2p.crypto:eddsa:0.3.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    // A real SSH server for the host dialog's Test connection: host keys, sign-in and the exec channel.
+    testImplementation("org.apache.sshd:sshd-core:2.14.0")
+    testFixturesApi("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testFixturesImplementation("com.squareup.okhttp3:okhttp:4.12.0")
+    testFixturesImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    testFixturesImplementation("org.json:json:20240303")
 }

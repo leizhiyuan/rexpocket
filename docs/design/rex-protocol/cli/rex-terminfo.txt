@@ -1,0 +1,25 @@
+$ rex terminfo --help
+Rex carries its own terminfo entry, xterm-rex, describing what its terminals support.
+
+A terminal claims it wherever this account is set up for it, unless REX_TERM names another entry. Run "rex terminfo setup" once per account, and "rex terminfo status" to see what this machine would decide.
+
+Usage:
+  rex terminfo [command] [flags]
+
+Commands:
+  status  Report the TERM a new terminal would be given, and why
+  setup   Install Rex's terminfo entry and ssh guard
+  remove  Remove the ssh guard, leaving the terminfo entry installed
+  show    Print the terminfo source
+  host    Install Rex's terminfo entry on other machines
+
+Options:
+  -h, --help  help for terminfo
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

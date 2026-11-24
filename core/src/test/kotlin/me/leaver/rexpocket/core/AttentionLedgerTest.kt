@@ -29,10 +29,21 @@ class AttentionLedgerTest {
     }
 
     @Test
-    fun runningAndFinishedAreNeverRaised() {
+    fun runningAndIdleAreNeverRaised() {
         val ledger = AttentionLedger()
-        assertEquals(emptyList<String>(), ledger.observe(mapOf("a" to record("working"), "b" to record("done"))).raised)
-        assertEquals(emptyList<String>(), ledger.observe(mapOf("a" to record("idle"), "b" to record("working"))).raised)
+        assertEquals(emptyList<String>(), ledger.observe(mapOf("a" to record("working"), "b" to record("idle"))).raised)
+        assertEquals(emptyList<String>(), ledger.observe(mapOf("a" to record("idle"), "b" to record("made-up"))).raised)
+    }
+
+    @Test
+    fun aResultReadyIsRaisedAndANewOneAgain() {
+        val ledger = AttentionLedger()
+        ledger.observe(mapOf("a" to record("working")))
+        assertEquals(listOf("a"), ledger.observe(mapOf("a" to record("done", msg = "built"))).raised)
+        assertEquals(emptyList<String>(), ledger.observe(mapOf("a" to record("done", msg = "built"))).raised)
+        assertEquals(listOf("a"), ledger.observe(mapOf("a" to record("done", msg = "tested"))).raised)
+        // Back to work: the result was looked at, or replaced.
+        assertEquals(listOf("a"), ledger.observe(mapOf("a" to record("working"))).settled)
     }
 
     @Test

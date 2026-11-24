@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="find_title">尋找</string>
+    <string name="find_hint">在回捲記錄中尋找</string>
+    <string name="find_count">第 %1$d 個，共 %2$d 個</string>
+    <string name="find_count_many">第 %1$d 個，共 %2$d+ 個</string>
+    <string name="find_none">沒有相符項目</string>
+    <string name="find_next">下一個相符項目</string>
+    <string name="find_previous">上一個相符項目</string>
+    <string name="find_case">區分大小寫</string>
+    <string name="find_close">關閉尋找</string>
+
+    <string name="shortcuts_title">鍵盤快速鍵</string>
+    <string name="shortcuts_group">這些按鍵由應用程式使用；其他按鍵都會傳給程式</string>
+    <string name="shortcut_copy">複製所選內容</string>
+    <string name="shortcut_or">%1$s 或 %2$s</string>
+    <string name="key_meta">Meta</string>
+    <string name="toast_nothing_selected">請先選取要複製的文字</string>
+
+    <string name="progress_normal">進度 %1$d%%</string>
+    <string name="progress_busy">進行中，進度未知</string>
+    <string name="progress_error">在 %1$d%% 處失敗</string>
+    <string name="progress_error_plain">失敗</string>
+    <string name="progress_paused">在 %1$d%% 處暫停</string>
+    <string name="progress_paused_plain">已暫停</string>
+    <string name="notifications_group_progress">進度</string>
+    <string name="notifications_progress">離開時顯示進度列</string>
+    <string name="notifications_progress_body">程式的進度列會以其分頁的通知顯示，直到完成</string>
+    <string name="alerts_channel_progress">進度</string>
+    <string name="alerts_channel_progress_body">RexPocket 在背景時，終端機中程式的進度列。</string>
+</resources>

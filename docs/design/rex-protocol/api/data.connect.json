@@ -1,0 +1,65 @@
+{
+  "name": "data.connect",
+  "description": "Get a one-time ticket for opening a data connection to a block. A data connection streams a block's content as it changes, such as a terminal's output.",
+  "invoke": {
+    "method": "data.connect"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": "string",
+        "description": "The block that provides the data."
+      },
+      "data_ref_id": {
+        "type": "string",
+        "description": "Which of the block's data sources to open, such as terminal."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session that holds the block. The connection must be attached to it with session.attach or session.bootstrap."
+      },
+      "subprotocol": {
+        "type": "string",
+        "description": "The subprotocol the data connection will use, such as rex.data.terminal.v1. If set, the ticket works only on a connection that uses it."
+      }
+    },
+    "required": [
+      "session_id",
+      "block_id",
+      "data_ref_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "expires_in_ms": {
+        "type": "integer",
+        "description": "How long the ticket stays valid after the server issues it, in milliseconds.",
+        "minimum": 0,
+        "maximum": 4294967295
+      },
+      "ticket": {
+        "type": "string",
+        "description": "A single-use ticket to send in the HELLO message that opens the data connection. Only a data connection from the same user can use it."
+      }
+    },
+    "required": [
+      "ticket",
+      "expires_in_ms"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"block_id\": \"block:<uuid>\",\n  \"data_ref_id\": \"terminal\",\n  \"subprotocol\": \"rex.data.terminal.v1\"\n}",
+  "response_example": "{\n  \"ticket\": \"AAECAwQFBgcICQoLDA0ODw\",\n  \"expires_in_ms\": 60000\n}",
+  "validation_notes": [
+    "The connection must be attached to `session_id` with `session.attach` or `session.bootstrap`. `session.attach_all` isn't enough. If the connection isn't attached, the call fails with `conflict`.",
+    "To use the ticket, open a WebSocket to `/api/data` on the server and send the ticket in the HELLO message. A ticket works once, even if the handshake fails, and expires after `expires_in_ms`.",
+    "If another user presents the ticket, the data connection gets REJECT reason 0x01, as it would for an unknown ticket. The ticket is then used up, so your own data connection can't use it either.",
+    "The server checks only that `data_ref_id` is well formed. If the block has no data by that name, the server closes the data connection with WebSocket status 1008 after the handshake.",
+    "Set `subprotocol` to the subprotocol the data connection will use, such as `rex.data.terminal.v1`. The server then refuses a data connection that uses a different one with REJECT reason 0x07, before any data is sent.",
+    "If `subprotocol` is left out, the block checks the subprotocol after the handshake and closes the data connection with status 1008 if it doesn't support it.",
+    "The call fails with `bad_request` if `data_ref_id` or `subprotocol` is malformed, and with `not_found` if the block isn't in the session or has no data to offer."
+  ]
+}

@@ -3,6 +3,7 @@ package me.leaver.rexpocket.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,18 +24,35 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.isWebLink
@@ -84,6 +103,9 @@ internal fun LinkSheet(url: String, onDismiss: () -> Unit, onOpen: () -> Unit, o
     }
 }
 
+/** The content of an open sheet, for the screen tests to read its rows in order. */
+internal const val ACTION_SHEET_TAG = "action-sheet"
+
 /**
  * Lets a sheet row close its sheet. The row's action runs once the sheet has gone: a dialog it opens
  * would otherwise ask for the keyboard while the sheet's window still holds it, and lose it when that
@@ -93,11 +115,12 @@ internal class SheetScope(val close: (() -> Unit) -> Unit)
 
 /**
  * A bottom sheet in the app's colours: rows grouped on cards over the dark background, the same
- * look as the host and session lists.
+ * look as the host and session lists. A page reached from another sheet has [onBack]: an arrow
+ * before its title that goes back up, as swiping the sheet down does.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, content: @Composable SheetScope.() -> Unit) {
+internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, onBack: (() -> Unit)? = null, content: @Composable SheetScope.() -> Unit) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val rows = SheetScope { action ->
@@ -116,12 +139,33 @@ internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, content: 
         dragHandle = {
             Box(Modifier.padding(top = 10.dp, bottom = 4.dp).size(width = 36.dp, height = 5.dp).clip(CircleShape).background(Colors.line))
         },
-    ) {
+    ) { AppTextScale {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
+            Modifier.fillMaxWidth().testTag(ACTION_SHEET_TAG).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
                 .padding(bottom = 12.dp),
         ) {
-            if (title != null) {
+            if (onBack != null) {
+                val back = stringResource(R.string.action_back)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(48.dp).clip(CircleShape)
+                            .clickable(role = Role.Button, onClick = onBack)
+                            .semantics { contentDescription = back },
+                        contentAlignment = Alignment.Center,
+                    ) { Glyph(R.drawable.ic_back, Colors.ink) }
+                    if (title != null) {
+                        Text(
+                            title,
+                            color = Colors.ink,
+                            fontSize = TextStyles.title,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(end = 16.dp),
+                        )
+                    }
+                }
+            } else if (title != null) {
                 Text(
                     title,
                     color = Colors.ink,
@@ -134,7 +178,7 @@ internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, content: 
             }
             rows.content()
         }
-    }
+    } }
 }
 
 /**
@@ -164,40 +208,70 @@ internal fun SheetScope.Group(
     }
 }
 
-/** Lays the rows of a group out with a hairline between each pair. */
+/**
+ * Lays the rows of a group out with a hairline between each pair. A plain layout of the rows as
+ * they are composed: a row that moves (Arrange keys' rows, by key) moves on screen at once. It was a
+ * SubcomposeLayout before, which recomposed a moved row in its slot without measuring the group
+ * again, so the list kept its old order on screen while the setting changed underneath.
+ */
 @Composable
 private fun GroupRows(scope: SheetScope, inset: Dp, content: @Composable SheetScope.() -> Unit) {
-    androidx.compose.ui.layout.SubcomposeLayout { constraints ->
-        val rows = subcompose("rows") { scope.content() }.map { it.measure(constraints.copy(minHeight = 0)) }
+    // Where each hairline goes, from the last layout; drawn behind the rows, in the gaps between them.
+    var lines by remember { mutableStateOf(IntArray(0)) }
+    val color = Colors.line
+    Layout(
+        content = { scope.content() },
+        modifier = Modifier.drawBehind {
+            val start = inset.toPx()
+            val thickness = 1.dp.toPx()
+            val (from, to) = if (layoutDirection == LayoutDirection.Rtl) 0f to size.width - start else start to size.width
+            for (y in lines) drawRect(color, topLeft = Offset(from, y.toFloat()), size = Size(to - from, thickness))
+        },
+    ) { measurables, constraints ->
+        val rows = measurables.map { it.measure(constraints.copy(minHeight = 0)) }
         val line = 1.dp.roundToPx()
         val height = rows.sumOf { it.height } + line * (rows.size - 1).coerceAtLeast(0)
-        val divider = subcompose("lines") {
-            repeat((rows.size - 1).coerceAtLeast(0)) { Box(Modifier.fillMaxWidth().height(1.dp).background(Colors.line)) }
-        }.map { it.measure(constraints.copy(minHeight = 0, minWidth = 0, maxWidth = constraints.maxWidth - inset.roundToPx())) }
         layout(constraints.maxWidth, height) {
+            val at = IntArray((rows.size - 1).coerceAtLeast(0))
             var y = 0
             rows.forEachIndexed { i, row ->
                 if (i > 0) {
-                    divider[i - 1].place(inset.roundToPx(), y)
+                    at[i - 1] = y
                     y += line
                 }
                 row.place(0, y)
                 y += row.height
             }
+            if (!at.contentEquals(lines)) lines = at
         }
     }
 }
+
+/** The most a row's detail takes, so a long one wraps rather than crowding out the label. */
+private val DETAIL_MAX = 152.dp
+
+/** How much of a row that cannot act right now shows: the platform's disabled content. */
+private const val DISABLED_ALPHA = 0.38f
 
 /** Where a row's text starts when it has an icon: the margin, the 24 dp slot and its gap. */
 private val ICON_INSET = 56.dp
 
 /**
  * One row of a sheet: an icon in a 24 dp slot, the label, a detail or a check at the end. The row is
- * 56 dp high, the platform's one-line list item. A group's rows either all have icons or none do,
- * so their labels share one keyline.
+ * at least 56 dp high, the platform's one-line list item, and grows as its text wraps: a label takes
+ * up to three lines and a detail two, so neither is cut off on a narrow phone or with large text.
+ * The detail keeps to the end, at most [DETAIL_MAX] wide, so the label always has the most room.
+ * [supporting] is a line under the label that says what the setting does. A group's rows either all
+ * have icons or none do, so their labels share one keyline.
  *
  * A row that only changes what its own detail shows - a switch, a pick between two - stays open
  * ([keepOpen]): closing the sheet would take away the one place the change is visible.
+ *
+ * A row that [opens] another page or dialog - Terminal controls, Arrange keys, Diagnostics - ends in
+ * a chevron, as "Terminal controls ›"; a row that steps through values or acts at once has none.
+ *
+ * A row that cannot act right now - Send a file while a file is on its way - stays in its place,
+ * greyed out and not [enabled], so the rows around it do not jump as the state changes.
  */
 @Composable
 internal fun SheetScope.SheetItem(
@@ -207,34 +281,73 @@ internal fun SheetScope.SheetItem(
     marked: Boolean = false,
     icon: Int? = null,
     keepOpen: Boolean = false,
+    supporting: String? = null,
+    enabled: Boolean = true,
+    opens: Boolean = false,
     onClick: () -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp)
-            .clickable { if (keepOpen) onClick() else close(onClick) }
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (icon != null) {
-            Glyph(icon, if (color == Colors.ink) Colors.muted else color, size = 24.dp)
-            Spacer(Modifier.width(16.dp))
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // Beside the label while both fit there; under it once the detail would wrap or the label would
+        // have to break a word to make room for it, as large text on a narrow phone makes them.
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val stacked = detail != null && with(density) {
+            val trailing = (if (marked) 32.dp else 0.dp) + (if (opens) 28.dp else 0.dp)
+            val room = maxWidth - 32.dp - (if (icon != null) 40.dp else 0.dp) - trailing
+            val detailWidth = measurer.measure(detail, TextStyle(fontSize = TextStyles.label), maxLines = 1).size.width.toDp()
+            val labelRoom = room - 12.dp - detailWidth
+            val labelStyle = TextStyle(fontSize = TextStyles.body, fontWeight = if (marked) FontWeight.SemiBold else FontWeight.Normal)
+            val widestWord = label.split(' ').maxOf { word -> measurer.measure(word, labelStyle, maxLines = 1).size.width }.toDp()
+            detailWidth > minOf(DETAIL_MAX, room / 2) || widestWord > labelRoom ||
+                measurer.measure(label, labelStyle, constraints = Constraints(maxWidth = labelRoom.roundToPx().coerceAtLeast(1))).lineCount > 3
         }
-        Text(
-            label,
-            color = color,
-            fontSize = TextStyles.body,
-            fontWeight = if (marked) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (detail != null) {
-            Spacer(Modifier.width(12.dp))
-            Text(detail, color = Colors.muted, fontSize = TextStyles.label, maxLines = 1)
-        }
-        if (marked) {
-            Spacer(Modifier.width(12.dp))
-            Glyph(R.drawable.ic_check, Colors.accent, size = 20.dp)
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                .clickable(enabled = enabled) { if (keepOpen) onClick() else close(onClick) }
+                .alpha(if (enabled) 1f else DISABLED_ALPHA)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                Glyph(icon, if (color == Colors.ink) Colors.muted else color, size = 24.dp)
+                Spacer(Modifier.width(16.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    label,
+                    color = color,
+                    fontSize = TextStyles.body,
+                    fontWeight = if (marked) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = if (stacked) Int.MAX_VALUE else 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (supporting != null) {
+                    Text(supporting, color = Colors.muted, fontSize = TextStyles.label, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
+                if (stacked && detail != null) {
+                    Text(detail, color = Colors.muted, fontSize = TextStyles.label)
+                }
+            }
+            if (detail != null && !stacked) {
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    detail,
+                    color = Colors.muted,
+                    fontSize = TextStyles.label,
+                    textAlign = TextAlign.End,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = DETAIL_MAX),
+                )
+            }
+            if (marked) {
+                Spacer(Modifier.width(12.dp))
+                Glyph(R.drawable.ic_check, Colors.accent, size = 20.dp)
+            }
+            if (opens) {
+                Spacer(Modifier.width(8.dp))
+                Glyph(R.drawable.ic_chevron_right, Colors.muted, size = 20.dp)
+            }
         }
     }
 }

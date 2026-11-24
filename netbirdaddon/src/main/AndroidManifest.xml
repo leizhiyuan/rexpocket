@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Only while RexPocket keeps a connection in the background: see NodeService. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- No activity: the add-on has nothing to show. RexPocket starts it by binding its service. -->
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/addon_name"
+        android:supportsRtl="true">
+        <!--
+        Exported only to apps holding the signature permission, which is RexPocket signed with the
+        same key. The node is reached through this binding alone: it listens on no port.
+        -->
+        <service
+            android:name=".NodeService"
+            android:exported="true"
+            android:foregroundServiceType="specialUse"
+            android:permission="me.leaver.rexpocket.netbird.permission.NODE">
+            <intent-filter>
+                <action android:name="me.leaver.rexpocket.netbird.NODE" />
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the Netbird network node that RexPocket reaches the user's own terminal server through running while RexPocket is in the background with its connection kept open." />
+        </service>
+    </application>
+</manifest>

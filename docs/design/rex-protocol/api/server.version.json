@@ -1,0 +1,61 @@
+{
+  "name": "server.version",
+  "description": "Get the version of Rex that the server is running and how it was built.",
+  "invoke": {
+    "method": "server.version"
+  },
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "api_min_revision": {
+        "type": "integer",
+        "description": "The oldest revision of the API the server supports. Left out when it is 0.",
+        "minimum": 0,
+        "maximum": 4294967295
+      },
+      "api_revision": {
+        "type": "integer",
+        "description": "The newest revision of the API the server supports. Left out when it is 0.",
+        "minimum": 0,
+        "maximum": 4294967295
+      },
+      "built_at": {
+        "type": [
+          "null",
+          "string"
+        ],
+        "description": "When the server was built, as an RFC 3339 timestamp. Most builds record the time of their Git commit. Left out when unknown."
+      },
+      "commit": {
+        "type": "string",
+        "description": "The Git commit the server was built from. Left out when unknown."
+      },
+      "dirty": {
+        "type": "boolean",
+        "description": "True if the server was built from source with uncommitted changes."
+      },
+      "platform": {
+        "type": "string",
+        "description": "The operating system and CPU the server was built for, such as darwin_arm64 or linux_amd64."
+      },
+      "rex_version": {
+        "type": "string",
+        "description": "The version of Rex the server runs, as rex version prints it, such as 0.0.1780750825-g9a754d."
+      }
+    },
+    "required": [
+      "rex_version",
+      "platform",
+      "dirty"
+    ],
+    "additionalProperties": false
+  },
+  "response_example": "{\n  \"rex_version\": \"0.0.1780750825-g9a754d\",\n  \"platform\": \"darwin_arm64\",\n  \"commit\": \"9a754d1234567890\",\n  \"built_at\": \"2026-06-06T13:00:25Z\",\n  \"dirty\": false\n}",
+  "validation_notes": [
+    "A missing `api_revision` or `api_min_revision` means 0. Servers from before these fields existed leave both out."
+  ]
+}

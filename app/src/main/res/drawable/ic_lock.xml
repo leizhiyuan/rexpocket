@@ -1,0 +1,10 @@
+<!-- A padlock, drawn for the app: the body, the shackle and a keyhole. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:fillColor="#FF000000"
+      android:pathData="M7,10V7a5,5 0,0 1,10 0v3h0.5A1.5,1.5 0,0 1,19 11.5v8A1.5,1.5 0,0 1,17.5 21h-11A1.5,1.5 0,0 1,5 19.5v-8A1.5,1.5 0,0 1,6.5 10ZM9,10h6V7a3,3 0,0 0,-6 0ZM12,13.5a1.5,1.5 0,0 0,-1 2.6V18h2v-1.9a1.5,1.5 0,0 0,-1 -2.6Z"/>
+</vector>

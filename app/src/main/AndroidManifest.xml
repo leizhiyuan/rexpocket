@@ -9,8 +9,19 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Background mode: starts again after a reboot, and asks to be left out of battery
+         optimization (the app comes from its GitHub releases, not a store that restricts this). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- A bell in the pane on screen buzzes, as the system's notification vibration allows. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- No backup and no device-to-device copy: the tailnet node's key would come back on a second
+         phone (two devices sharing one node), and the Keystore-wrapped secrets could not be decrypted
+         there. Hosts and settings move with the app's own export instead. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
@@ -27,6 +38,31 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Share into RexPocket: text is pasted, images and other files uploaded, after a tap. -->
+        <activity
+            android:name=".ShareActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/share_target"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <!-- "Open with": a rexpocket-hosts/1 file goes to Import hosts, which shows it before anything changes. -->
+            <intent-filter android:label="@string/import_open_with">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/json" />
+            </intent-filter>
+        </activity>
         <!-- The diagnostics report is written to the cache and handed out one file at a time. -->
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -37,14 +73,28 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/diagnostic_paths" />
         </provider>
+        <!-- A notification's Reply and Interrupt; only the app's own notifications reach it. -->
+        <receiver
+            android:name=".alerts.AlertActionReceiver"
+            android:exported="false" />
+        <!-- Background mode after a reboot or an update; not direct-boot aware, see BootReceiver. -->
+        <receiver
+            android:name=".alerts.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <service
             android:name=".alerts.WatchService"
             android:exported="false"
             android:foregroundServiceType="specialUse"
-            android:stopWithTask="true">
+            android:stopWithTask="false">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps the connection to the user's own Rex terminal server open while the app is in the background, to notify when a program in a terminal is waiting for the user." />
+                android:value="Keeps the connections to the user's own Rex terminal servers open while the app is in the background, and after a restart when the user turned background mode on, to notify when a program in a terminal is waiting for the user." />
         </service>
     </application>
 </manifest>

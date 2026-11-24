@@ -1,0 +1,101 @@
+METHOD                          DESCRIPTION
+block.close                     Close a block and end the program running in it.
+block.event                     Send an input event, such as a key press or a paste, to a block.
+block.method                    Call a method that a block provides and return its result.
+block_creator.list              List the creators the server can make blocks with, and their flavors.
+client.action                   Perform an action from the configuration file or a block, as this client.
+client.inspect                  Get one connected client's details, including the actions it offers.
+client.key                      Send a key to a block, giving Lua key bindings the first chance at it.
+client.keymap                   Get what each key does for this client. The result combines the client's own bindings with the configuration file and the client's Lua scripts.
+client.list                     List the clients connected to the server, in the order they connected.
+client.perform                  Ask another client to perform one of its actions and wait for its answer.
+client.reply                    Answer a client_call_requested, client_perform_requested, or client_prompt_requested event.
+client.set_label                Set or remove this client's label.
+client.set_script               Load Lua scripts for this client, replacing any it loaded before.
+data.connect                    Get a one-time ticket for opening a data connection to a block. A data connection streams a block's content as it changes, such as a terminal's output.
+focus_history.reverse           Step back through the focus changes the calling principal made.
+help.all                        Describe every method the server provides, including block methods.
+hosts.list                      List the server's hosts: the other Rex servers you connect to by label.
+hosts.put                       Add a host to the server's host list, or replace the host with the same ID.
+hosts.remove                    Remove a host from the server's host list.
+server.apple.grant_file_access  Let the server, and every program it runs, read files a Mac app was given.
+server.apple.privacy_status     Report the macOS privacy permissions the server and its programs have.
+server.config_reload            Reload the configuration file and tell every client to fetch its keymap again.
+server.status                   Get the server's identity, session count, configuration, and Tailscale status.
+server.stop                     Shut the server down, or with if_idle, only if nothing is using it.
+server.tailscale.disable        Turn off built-in Tailscale, keeping its sign-in for the next enable.
+server.tailscale.enable         Turn on built-in Tailscale so devices on your tailnet can reach the server.
+server.tailscale.login          Ask Tailscale for a sign-in link for the server's Tailscale device.
+server.tailscale.logout         Sign the server out of Tailscale and turn off built-in Tailscale.
+server.tailscale.rename         Change the server's Tailscale device name without signing in again.
+server.version                  Get the version of Rex that the server is running and how it was built.
+server.whoami                   Get how the server identified you, and the account the server runs as.
+session.attach                  Attach to a session: start receiving its events and get its current view.
+session.attach_all              Start receiving events from the whole server and get the list of sessions.
+session.bootstrap               Set up a new connection in one call: receive events, list sessions, and attach.
+session.close_layer             Close a floating layer and every block in it.
+session.close_window            Close a window and every block in it.
+session.create                  Create a session, optionally with its first windows already in it.
+session.describe_block          Get a block's details and the methods, events, and actions it provides.
+session.destroy                 Destroy a session and close every block in it.
+session.detach                  Detach the connection from a session. The connection stays open and the session keeps running.
+session.detach_block            Take a block out of its window without closing it. The block keeps running.
+session.disown_block            Give up the calling client's claim on blocks. The result lists each block's owner.
+session.float_block             Move a block out of its window's layout into a new floating layer.
+session.focus_block             Focus a block, and make its window the active window if it isn't.
+session.focus_direction         Move focus to the nearest block to the left, right, above, or below.
+session.focus_next_pane         Move focus to the next block in the active window.
+session.focus_next_window       Make the next window the active window.
+session.focus_previous_pane     Move focus to the previous block in the active window.
+session.focus_previous_window   Make the previous window the active window.
+session.focus_window            Make a window the active window. Focus goes to the block it last had focused.
+session.help                    Describe the methods this session accepts and the methods its blocks provide.
+session.list                    List the sessions on the server.
+session.list_blocks             List every block in the session, including detached blocks.
+session.list_clients            List the clients attached to the session.
+session.lower_layer             Move a floating layer to the back, or just below another floating layer.
+session.move                    Move a session to another place in the order that session.list returns.
+session.move_block              Move a block, or place a detached one, in a new split beside another block.
+session.move_window             Move a window to another place in the session's window order.
+session.new_block               Create a block without placing it in a window. Place it later with session.move_block.
+session.new_layer               Create blocks in a new floating layer at the front of a window.
+session.new_split               Create blocks in a new split beside an existing block or split.
+session.new_window              Create a window and the blocks in its layout. It becomes the active window by default.
+session.own_block               Claim blocks for the calling client. The result lists each block's owner.
+session.raise_layer             Move a floating layer to the front, or just above another floating layer.
+session.resize_layer            Move or resize a floating layer.
+session.resize_pane             Move the border between two blocks to change their sizes.
+session.set_block_label         Set a block's label.
+session.set_label               Set the session's label.
+session.set_layer_state         Minimize a floating layer or return it to normal, optionally raising and focusing it.
+session.set_window_label        Set a window's label.
+session.swap_blocks             Swap the places of two blocks.
+session.view                    Get the session's windows, their layouts, and their blocks in one snapshot.
+session.zoom_block              Zoom a block to fill its window, or undo the zoom.
+target.complete                 List the labels, window positions, and short IDs that start with a prefix. Use it to complete a name as someone types it.
+target.resolve                  Look up sessions, windows, blocks, or clients by ID, label, or position. Each query gets its own result, which says whether it matched one thing, nothing, or several.
+
+Block methods:
+CREATOR                      METHOD                                    DESCRIPTION
+com.superlogical.onboarding  com.superlogical.onboarding.set_step      Move the walkthrough to another step. Emits step_changed when the step changes.
+com.superlogical.onboarding  com.superlogical.onboarding.state         Return the step the walkthrough is on.
+com.superlogical.terminal    com.superlogical.terminal.blob_read       Read a result that was too large for one reply or event, such as the output of format with max_bytes set, or a selection_copied event without text. The server keeps each result for about five minutes.
+com.superlogical.terminal    com.superlogical.terminal.clear           Clear the screen and scrollback, keeping the current line at the top. It changes nothing while a full-screen program, such as an editor, is running.
+com.superlogical.terminal    com.superlogical.terminal.clipboard_read  Read text that a program in the terminal copied to the clipboard. The server keeps each copy for about a minute, so a client can read text too large to send in an event.
+com.superlogical.terminal    com.superlogical.terminal.download_begin  Open a file on the terminal's machine for download, and get a ticket for the rex.data.bytes.v1 data stream that carries its bytes from the terminal. A relative path is relative to the working directory of the terminal's foreground process. Only regular files can be downloaded.
+com.superlogical.terminal    com.superlogical.terminal.format          Get the screen and scrollback as plain text, HTML, or escape sequences.
+com.superlogical.terminal    com.superlogical.terminal.input_mode      Get how the terminal handles typed input, such as whether it is echoed. On Windows the call fails with not_found.
+com.superlogical.terminal    com.superlogical.terminal.list_dir        List the subdirectories of a directory, and optionally its files. A relative path or ~ is resolved the way a program in the terminal would resolve it.
+com.superlogical.terminal    com.superlogical.terminal.modes           List the terminal modes that programs can turn on, such as the alternate screen, bracketed paste, and mouse reporting, with each mode's name, number, and whether it is on. It doesn't wake an idle terminal.
+com.superlogical.terminal    com.superlogical.terminal.ports           List the TCP ports that programs in the terminal are listening on, such as a development server's, with each port's address and the process that holds it. status is 'partial' when some processes couldn't be looked at, so a port missing from a partial reply may still be open. A truncated reply has an id, and blob_read with that id returns the whole list. It doesn't wake an idle terminal. To follow changes, call it once and then follow the ports_changed event.
+com.superlogical.terminal    com.superlogical.terminal.process         Get the processes running in the terminal and how its program exited.
+com.superlogical.terminal    com.superlogical.terminal.program_status  List the status that programs in the terminal have reported. Programs report a status, such as working or blocked, with OSC 7501 escape sequences.
+com.superlogical.terminal    com.superlogical.terminal.pwd             Get the working directory that a program in the terminal last reported. To find where each process actually is, call process instead.
+com.superlogical.terminal    com.superlogical.terminal.reset           Reset the terminal to its starting state and clear the screen and scrollback. The program keeps running, and the size and default colors stay the same.
+com.superlogical.terminal    com.superlogical.terminal.resize          Request a terminal size in columns and rows. It applies at once if the caller owns the block or no client does, and otherwise when the caller becomes the owner.
+com.superlogical.terminal    com.superlogical.terminal.set_theme       Replace the terminal's default colors. As with resize, they apply at once if the caller owns the block or no client does, and otherwise when the caller becomes the owner.
+com.superlogical.terminal    com.superlogical.terminal.size            Get the terminal's size, its owner, and the size each client last requested.
+com.superlogical.terminal    com.superlogical.terminal.title           Get the terminal's title and the process that set it.
+com.superlogical.terminal    com.superlogical.terminal.upload_begin    Reserve a file to upload to the terminal's machine, such as one the user dropped on the terminal, and get a ticket for the rex.data.bytes.v1 data stream that carries its bytes. Once every file of the batch has arrived, the terminal types their paths as if the user had pasted them.
+com.superlogical.terminal    com.superlogical.terminal.write           Type text into the terminal as if the user had typed it. The call returns once the text is queued, without waiting for the program to read it.
+com.superlogical.tunnel      com.superlogical.tunnel.info              Return what the tunnel forwards and how many connections it is relaying.

@@ -1,0 +1,56 @@
+{
+  "name": "session.move_window",
+  "description": "Move a window to another place in the session's window order.",
+  "invoke": {
+    "method": "session.move_window"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "before_window_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The window to place it just before. Leave it out to move the window to the end."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      },
+      "window_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The window to move."
+      }
+    },
+    "required": [
+      "session_id",
+      "window_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the call changed nothing that session.view shows, unless the method's notes say otherwise.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"window_id\": \"window:01234567-89ab-cdef-0123-456789abcde1\",\n  \"before_window_id\": \"window:01234567-89ab-cdef-0123-456789abcde2\"\n}",
+  "response_example": "{\"revision\": 42}",
+  "validation_notes": [
+    "The window order is the order of `windows` in `session.view` and of the tabs in Rex.app. `session.focus_next_window` and `session.focus_previous_window` follow it.",
+    "The active window, focus, and the windows' blocks don't change. If the window is already in place, the call changes nothing.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If either window isn't in the session, it fails with `not_found`, and if `before_window_id` is the same as `window_id`, it fails with `bad_request`."
+  ]
+}

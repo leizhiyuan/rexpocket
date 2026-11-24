@@ -2,6 +2,8 @@ package me.leaver.rexpocket
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.KeyboardShortcutGroup
+import android.view.Menu
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -10,6 +12,10 @@ import me.leaver.rexpocket.alerts.Alerts
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.ui.RexPocketApp
 import me.leaver.rexpocket.ui.RexViewModel
+import me.leaver.rexpocket.ui.TerminalShortcuts
+import me.leaver.rexpocket.ui.terminalShortcutGroup
+import me.leaver.rexpocket.ui.hostListToOpen
+import me.leaver.rexpocket.ui.readShare
 
 class MainActivity : ComponentActivity() {
     private val model: RexViewModel by viewModels()
@@ -23,12 +29,37 @@ class MainActivity : ComponentActivity() {
         Diagnostics.install(this)
         // A tapped alert opens its pane; a recreated activity has already acted on its intent.
         if (savedInstanceState == null) Alerts.consume(intent)?.let(model::openAlert)
+        // Something shared from another app waits on its sheet for a tap; it is never sent on its own.
+        if (savedInstanceState == null) received(intent)
         setContent { RexPocketApp(model) }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         Alerts.consume(intent)?.let(model::openAlert)
+        received(intent)
+    }
+
+    /**
+     * A settings backup opened with the app or shared to it goes to Settings › Backup, a host list to
+     * Import hosts; each shows what it would change before anything does. Any other share waits on
+     * its sheet for a tap.
+     */
+    private fun received(intent: Intent) {
+        // A settings backup names its own format; anything else opened is a host list, as before.
+        hostListToOpen(this, intent)?.let { uri ->
+            model.settingsBackup.readUri(uri) { model.hostImport.readUri(uri) }
+            return
+        }
+        val share = readShare(this, intent) ?: return
+        val toHosts = { if (!model.hostImport.offerShare(share, intent.type, model::offerShare)) model.offerShare(share) }
+        if (!model.settingsBackup.offerShare(share, intent.type, toHosts)) toHosts()
+    }
+
+    /** Android's keyboard shortcuts helper (Meta+/) lists the terminal screen's keys while it is up. */
+    override fun onProvideKeyboardShortcuts(data: MutableList<KeyboardShortcutGroup>, menu: Menu?, deviceId: Int) {
+        super.onProvideKeyboardShortcuts(data, menu, deviceId)
+        if (TerminalShortcuts.shown > 0) data += terminalShortcutGroup(this)
     }
 
     // Leaving the app is the usual trigger for a tunnel that has to find its way back, so the

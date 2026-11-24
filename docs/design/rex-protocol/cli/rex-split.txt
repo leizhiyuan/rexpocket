@@ -1,0 +1,46 @@
+$ rex split --help
+Create a terminal block for a shell or command.
+
+A COMMAND runs through your login shell's environment but not its interactive
+configuration. Use --interactive to read that configuration too, --shell to
+pick another shell, or --shell=none to start COMMAND directly.
+
+By default, Rex splits the focused block and places the new block on its right.
+Use -b BLOCK to select another anchor or --split to choose another direction.
+Use --focus=false to preserve the current focus. With --wait, Rex writes the
+creation result, then waits and returns the terminal child's exit status. Use
+rex run to place the block in a new window.
+
+Examples:
+  rex split
+  rex split --split=below
+  rex split -b editor --split=left -- lazygit
+  rex split --wait -- make
+  rex split -- htop
+
+Usage:
+  rex split [flags] [-- COMMAND...]
+
+Options:
+      --split DIRECTION  place the new block in DIRECTION relative to the anchor (right, left, above, or below) (default right)
+      --ratio PCT        give the new block PCT percent of the split (default 50)
+  -b, --block BLOCK      use BLOCK as the split anchor (defaults to focused)
+  -s, --session string   scope to session SESSION
+  -w, --window string    scope to window WINDOW
+  -c, --cwd string       working directory for the terminal
+      --keep-open        keep the terminal open after its command exits
+      --shell SHELL      run COMMAND through SHELL's login environment (none starts it directly)
+      --interactive      also read the shell's interactive startup files, such as ~/.zshrc
+      --label TEXT       set the new block label to TEXT
+      --focus            focus the new block (default true)
+      --json             output the creation result as JSON
+      --wait             wait and return the terminal child's exit status
+  -h, --help             help for split
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

@@ -7,6 +7,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import me.leaver.rexpocket.alerts.Alerts
+import me.leaver.rexpocket.core.QuickReplies
+import me.leaver.rexpocket.core.promptStamp
+import me.leaver.rexpocket.core.AlertPrefs
+import me.leaver.rexpocket.core.BackgroundHosts
+import me.leaver.rexpocket.core.HostBackground
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -17,6 +22,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -38,15 +45,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.withContext
@@ -58,6 +66,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -65,104 +74,146 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.leaver.rexpocket.BuildConfig
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.Appearance
 import me.leaver.rexpocket.core.BlockInfo
 import me.leaver.rexpocket.core.HostAddress
 import me.leaver.rexpocket.core.HostAddressParser
+import me.leaver.rexpocket.core.CtrlCKey
+import me.leaver.rexpocket.core.KeyArrangement
+import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.ListedSession
 import me.leaver.rexpocket.core.Phase
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.ProgramRecord
 import me.leaver.rexpocket.core.SessionView
+import me.leaver.rexpocket.core.TailnetBackend
 import me.leaver.rexpocket.core.TailnetPath
+import me.leaver.rexpocket.core.TailnetStage
+import me.leaver.rexpocket.core.ConnectProgress
+import me.leaver.rexpocket.core.Trouble
 import me.leaver.rexpocket.core.UpdateChannel
 import me.leaver.rexpocket.core.WindowInfo
 import me.leaver.rexpocket.data.HostStore
+import me.leaver.rexpocket.data.HomeFolds
+import me.leaver.rexpocket.data.HomeMarks
+import me.leaver.rexpocket.core.seenStamp
+import androidx.compose.material3.SnackbarDuration
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import me.leaver.rexpocket.data.SavedHost
-import me.leaver.rexpocket.data.TailscaleSettings
+import me.leaver.rexpocket.data.TailnetSettings
 import me.leaver.rexpocket.update.UpdateState
 import me.leaver.rexpocket.diagnostics.Diagnostics
-import me.leaver.rexpocket.net.TailscaleStatus
-
-// The hosts, each with its sessions under it and their tabs under those: one list to search, one
-// place to connect from.
-//
-// Everything sits on two keylines, the way the reference lines up: [KEY_MARK] for the host's mark,
-// a session's name and a tab's tile, [KEY_TEXT] for every title. Trailing controls sit in 48 dp
-// slots flush with the right edge, so a menu, a fold and a row's chevron share one centre line.
+import me.leaver.rexpocket.net.TailnetStatus
 
 /** Where the credit for the interface goes; the README carries the long version. */
 private const val SOURCE_URL = "https://github.com/leizhiyuan/rexpocket"
 
-/** The page margin: the cards and the floating controls stand this far from the screen's edge. */
-private val PAGE = 16.dp
-
-/** The first keyline, inside the page margin: marks, session names, tiles. */
-private val KEY_MARK = 16.dp
-
-/** The second keyline, inside the page margin: every title. */
-private val KEY_TEXT = 64.dp
-
-private val TILE = 36.dp
-
-/** One session of a host, with the tabs the phone knows of; [view] is null until it is loaded. */
-private data class HomeSession(
-    val session: ListedSession,
-    val view: SessionView?,
-    val tabs: List<WindowInfo>,
-    val activity: Boolean,
-)
-
-/** A pane that is working or waiting is what the eye filters on. */
-private fun PocketState.activityOf(block: BlockInfo): ProgramRecord? =
-    blockStatus[block.id]?.takeIf { it.state == "working" || it.state == "blocked" }
-
-/** The folds of the list, as one saveable value: which hosts and sessions are open. */
-private val StringSetSaver = Saver<Set<String>, List<String>>(
-    save = { it.toList() },
-    restore = { it.toSet() },
-)
-
 @Composable
 internal fun HomeScreen(
     hosts: List<SavedHost>,
+    /** The focused host: the one the terminal shows, or showed last. */
     connected: SavedHost?,
-    state: PocketState,
+    /** Every connected host, live, by id; a host not in it is not connected. */
+    lives: Map<String, HostLive>,
     /** True while the open pane stands beside this list, so the tab on the right carries a mark. */
     detail: Boolean = false,
-    tailscale: TailscaleSettings,
-    tailscaleStatus: TailscaleStatus,
-    tailnetError: String?,
+    tailnet: TailnetSettings,
+    tailnetStatus: TailnetStatus,
+    tailnetError: TailnetFailure?,
     tailnetPath: TailnetPath?,
+    /** Where the joined node is on its way to the network; see [TailnetStage]. */
+    tailnetStage: TailnetStage = TailnetStage.Off,
+    /** Opens the node's sign-in page. */
+    onSignIn: (String) -> Unit = {},
+    /** Starts the joined node again after it failed to start. */
+    onTailnetRetry: () -> Unit = {},
     opening: Opening?,
     cachedSessions: (String) -> List<ListedSession>,
+    /** Which hosts and sessions are folded: the view model's, so they outlive this screen. */
+    folds: HomeFolds = HomeFolds(),
+    /** Opens or folds a host's sessions: the person's choice, kept for that host from then on. */
+    onHostOpen: (hostId: String, open: Boolean) -> Unit = { _, _ -> },
+    onFoldSession: (hostId: String, sessionId: String, folded: Boolean) -> Unit = { _, _, _ -> },
+    onFoldSessions: (hostId: String, sessionIds: List<String>, folded: Boolean) -> Unit = { _, _, _ -> },
+    /** Every fold at once: Collapse all and Expand all, and their Undo. */
+    onSetFolds: (HomeFolds) -> Unit = {},
+    /** Which list shows: every host's tree, Needs you or Running. */
+    filter: HomeFilter = HomeFilter.All,
+    onHomeFilter: (HomeFilter) -> Unit = {},
+    /** Which done and failed panes were seen, by host and pane ([HomeMarks.key]). */
+    seenMarks: Map<String, String> = emptyMap(),
+    /** Marks panes seen; gives back the marks they had, for the Undo. */
+    onMarkSeen: (hostId: String, blockIds: List<String>) -> Map<String, String?> = { _, _ -> emptyMap() },
+    onRestoreSeen: (Map<String, String?>) -> Unit = {},
+    /** A Needs you row's Reply and Interrupt, on the pane's host. */
+    onReply: (hostId: String, sessionId: String, blockId: String, text: String) -> Unit = { _, _, _, _ -> },
+    onInterrupt: (hostId: String, sessionId: String, blockId: String) -> Unit = { _, _, _ -> },
+    /** A Needs you row's Approve or Deny, for the prompt [stamp] names (see [promptStamp]). */
+    onAnswer: (hostId: String, sessionId: String, windowId: String, blockId: String, stamp: String, approve: Boolean) -> Unit = { _, _, _, _, _, _ -> },
+    /** The composer's send from a Needs you row's Reply: the text, then Return when [enter]. */
+    onSendPrompt: (hostId: String, sessionId: String, blockId: String, text: String, enter: Boolean) -> Unit = { h, s, b, t, _ -> onReply(h, s, b, t) },
+    /** Settings › Quick replies, and Reply's and the composer's chips. */
+    quickReplies: QuickReplies = QuickReplies(),
+    onQuickReplies: (QuickReplies) -> Unit = {},
+    /** The composer's drafts, by host and pane. */
+    drafts: PromptDrafts = remember { PromptDrafts() },
+    /** Moves a host in the phone's own order. */
+    onMoveHost: (hostId: String, to: Int) -> Unit = { _, _ -> },
+    /** Removes a host; gives back what Undo needs. */
+    onRemoveHost: (hostId: String) -> RemovedHost? = { null },
+    onRestoreHost: (RemovedHost) -> Unit = {},
+    /** What the home says of its own accord: an action that failed, a session ended elsewhere. */
+    notices: Flow<HomeNotice> = emptyFlow(),
     onConnect: (SavedHost) -> Unit,
     onOpenSession: (SavedHost, String) -> Unit,
     onOpenTab: (SavedHost, String, String) -> Unit,
+    /** Opens one pane of a tab: an activity row opens the pane whose program reported. */
+    onOpenPane: (SavedHost, String, String, String) -> Unit = { host, session, window, _ -> onOpenTab(host, session, window) },
     onNewSession: (SavedHost) -> Unit,
     onNewTab: (SavedHost, String) -> Unit,
-    onDisconnect: () -> Unit,
-    onRetry: () -> Unit,
-    onProbePath: () -> Unit,
+    /** What the session and tab sheets do, on that host and without attaching. */
+    onManage: (hostId: String, HomeAction) -> Unit = { _, _ -> },
+    onDisconnect: (hostId: String) -> Unit,
+    onRetry: (hostId: String) -> Unit,
+    onProbePath: (hostId: String) -> Unit,
     onSave: (SavedHost) -> Unit,
     onDelete: (String) -> Unit,
-    onTailscale: () -> Unit,
+    onTailnet: () -> Unit,
     alerts: Boolean,
     onAlerts: (Boolean) -> Unit,
-    keyBarShift: Boolean,
-    keyBarAlt: Boolean,
-    onKeyBarShift: (Boolean) -> Unit,
-    onKeyBarAlt: (Boolean) -> Unit,
+    /** The Notifications page's switches: which kinds of alert are on. */
+    alertPrefs: AlertPrefs = AlertPrefs(),
+    onAlertPrefs: (AlertPrefs) -> Unit = {},
+    /** Each host's background choices, on its page under Settings › Background and notifications. */
+    background: BackgroundHosts = BackgroundHosts(),
+    onHostBackground: (String, HostBackground) -> Unit = { _, _ -> },
+    keyArrangement: KeyArrangement,
+    onKeyArrangement: (KeyArrangement) -> Unit,
+    keyBarCtrlC: CtrlCKey,
+    onKeyBarCtrlC: (CtrlCKey) -> Unit,
+    gestures: GestureSettings,
+    onGestures: (GestureSettings) -> Unit,
     /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
     keyBar: Boolean,
     onKeyBar: (Boolean) -> Unit,
@@ -175,6 +226,18 @@ internal fun HomeScreen(
     /** Which builds the updater offers, and the tap on the other one. */
     updateChannel: UpdateChannel,
     onUpdateChannel: (UpdateChannel) -> Unit,
+    /** Whether every launch goes back to the last tab, not only one after Android killed the app. */
+    reopenLastTab: Boolean = false,
+    onReopenLastTab: (Boolean) -> Unit = {},
+    /** Settings › Appearance: the app's theme and the terminal's colours. */
+    appearance: Appearance = Appearance(),
+    onAppearance: (Appearance) -> Unit = {},
+    /** Opens Import hosts: a host list, or a connected Rex's hosts. */
+    onImportHosts: () -> Unit = {},
+    /** Settings › Backup: export and import every setting. */
+    onBackup: () -> Unit = {},
+    /** The host dialog's Test connection; null leaves it out. */
+    hostTester: HostTester? = null,
 ) {
     val context = LocalContext.current
     // Android 13 asks for notifications at run time; alerts come on once the person allows them.
@@ -192,63 +255,181 @@ internal fun HomeScreen(
             else -> onAlerts(true)
         }
     }
-    var editing by remember { mutableStateOf<SavedHost?>(null) }
-    var creating by remember { mutableStateOf(false) }
-    var settings by remember { mutableStateOf(false) }
-    var diagnostics by remember { mutableStateOf(false) }
+    // What the person was looking at survives the window being rebuilt under it, which a rotation
+    // or a resize in a free-form window does, and a trip to the terminal and back (RexApp keeps
+    // this screen's saved state while it is away): the sheet that was open, the search on its
+    // query, the eye, and where the list was scrolled to. The folds are the view model's.
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    val editing = editingId?.let { id -> hosts.firstOrNull { it.id == id } }
+    var creating by rememberSaveable { mutableStateOf(false) }
+    // A device picked in the tailnet sheet: a new host starts from its name and Rex's port.
+    var prefillLabel by rememberSaveable { mutableStateOf<String?>(null) }
+    var prefillAddress by rememberSaveable { mutableStateOf<String?>(null) }
+    var tailnetDetails by rememberSaveable { mutableStateOf(false) }
+    var settings by rememberSaveable { mutableStateOf(false) }
+    var notifications by rememberSaveable { mutableStateOf(false) }
+    var controlsPage by rememberSaveable { mutableStateOf<ControlsPage?>(null) }
+    var appearanceOpen by rememberSaveable { mutableStateOf(false) }
+    var diagnostics by rememberSaveable { mutableStateOf(false) }
     var recording by remember { mutableStateOf(Diagnostics.capture(context) != null) }
-    var menuHost by remember { mutableStateOf<SavedHost?>(null) }
-    // What the person was looking at survives the window being rebuilt under it, which a resize in
-    // a free-form window does: the search stays open on its query, and the folds stay folded.
+    val sheets = rememberSaveable(saver = HomeSheets.Saver) { HomeSheets() }
+    // Sessions of a host that is not live, opened on this screen to see they are there: their
+    // tabs are not known, so they start folded, and the choice is not kept past the screen.
+    var openCached by rememberSaveable { mutableStateOf(emptySet<String>()) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    var activeOnly by rememberSaveable { mutableStateOf(false) }
-    var collapsedHosts by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(emptySet<String>()) }
-    var collapsedSessions by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(emptySet<String>()) }
-    val focus = remember { FocusRequester() }
+    var homeMenu by rememberSaveable { mutableStateOf(false) }
+    var replyTo by remember { mutableStateOf<ReplyTarget?>(null) }
+    // Reply's Compose: the same pane, in the composer, with what Reply had so far.
+    var composeTo by remember { mutableStateOf<ReplyTarget?>(null) }
+    var quickRepliesOpen by rememberSaveable { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    val snackScope = rememberCoroutineScope()
+    // One message at a time, the newest: an Undo belongs to what was just done.
+    fun snack(message: String, action: String? = null, onAction: () -> Unit = {}) {
+        snackScope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            if (snackbar.showSnackbar(message, action, duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) onAction()
+        }
+    }
+    val ops = HomeOps(
+        connect = onConnect,
+        retry = onRetry,
+        cancel = onDisconnect,
+        disconnect = { hostId ->
+            onDisconnect(hostId)
+            hosts.firstOrNull { it.id == hostId }?.let { host ->
+                snack(context.getString(R.string.home_disconnected, host.label), context.getString(R.string.action_reconnect)) { onConnect(host) }
+            }
+        },
+        newSession = onNewSession,
+        newTab = onNewTab,
+        openSession = onOpenSession,
+        openTab = onOpenTab,
+        openPane = onOpenPane,
+        manage = onManage,
+        foldHost = onHostOpen,
+        foldSession = { hostId, sessionId, folded ->
+            val live = lives[hostId]?.state
+            if (live != null && (live.phase == Phase.Live || live.views.containsKey(sessionId))) {
+                onFoldSession(hostId, sessionId, folded)
+            } else {
+                val key = HomeFolds.sessionKey(hostId, sessionId)
+                openCached = if (folded) openCached - key else openCached + key
+            }
+        },
+        foldSessions = { hostId, ids, folded ->
+            if (lives[hostId]?.state?.phase == Phase.Live) {
+                onFoldSessions(hostId, ids, folded)
+            } else {
+                val keys = ids.map { HomeFolds.sessionKey(hostId, it) }.toSet()
+                openCached = if (folded) openCached - keys else openCached + keys
+            }
+        },
+        editHost = { editingId = it },
+        copyAddress = { host ->
+            clipboardSet(context, if (host.viaSsh) "${host.sshUser}@${host.host}:${host.port}" else "${host.host}:${host.port}")
+            toast(context, context.getString(R.string.home_address_copied))
+        },
+        tailnetDetails = { tailnetDetails = true },
+        seen = { hostId, block, record -> seenMarks[HomeMarks.key(hostId, block)] == seenStamp(record) },
+        moveHost = onMoveHost,
+        removeHost = { hostId ->
+            onRemoveHost(hostId)?.let { removed ->
+                snack(context.getString(R.string.home_removed_host, removed.host.label), context.getString(R.string.action_undo)) { onRestoreHost(removed) }
+            }
+        },
+        markSeen = { hostId, blocks ->
+            val before = onMarkSeen(hostId, blocks)
+            snack(context.getString(R.string.home_marked_seen), context.getString(R.string.action_undo)) { onRestoreSeen(before) }
+        },
+    )
+    var picking by rememberSaveable { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val closeSearch: () -> Unit = {
         searchOpen = false
         query = ""
+        focusManager.clearFocus()
         keyboard?.hide()
     }
-
-    LaunchedEffect(searchOpen) {
-        if (searchOpen) {
-            focus.requestFocus()
-            keyboard?.show()
-        }
-    }
     // Back closes the search first, as the platform's search does.
-    BackHandler(enabled = searchOpen, onBack = closeSearch)
+    BackHandler(enabled = searchOpen || query.isNotEmpty(), onBack = closeSearch)
+    // + makes a session where it plainly goes: the one host connected. Otherwise it asks where.
+    val newSession: () -> Unit = {
+        val connectedNow = hosts.filter { it.id in lives }
+        if (connectedNow.size == 1) onNewSession(connectedNow.single()) else picking = true
+    }
 
     if (hosts.isEmpty()) {
-        EmptyHome(onAdd = { creating = true })
+        EmptyHome(
+            tailnet = tailnet,
+            tailnetStage = tailnetStage,
+            tailnetStatus = tailnetStatus,
+            onAdd = { address ->
+                prefillAddress = address
+                creating = true
+            },
+            onJoinTailnet = onTailnet,
+            onTailnetDetails = { tailnetDetails = true },
+            onSignIn = onSignIn,
+            onTailnetRetry = onTailnetRetry,
+            onImport = onImportHosts,
+        )
     } else {
         val q = query.trim().lowercase()
-        val rows = hosts.mapNotNull { host ->
-            val live = connected?.id == host.id
-            val allSessions = if (live && state.phase == Phase.Live) state.sessions else cachedSessions(host.id)
-            val hostMatch = q.isEmpty() || host.label.lowercase().contains(q) || host.host.contains(q)
-            val sessions = allSessions.mapNotNull { session ->
-                val view = if (live) state.views[session.id] else null
-                val tabs = view?.windows.orEmpty()
-                val sessionActivity = tabs.any { window -> window.blocks.any { state.activityOf(it) != null } }
-                if (activeOnly && !sessionActivity) return@mapNotNull null
-                val labelMatch = hostMatch || session.label.lowercase().contains(q)
-                // The eye keeps the tabs that are doing something; search then narrows by name.
-                val activeTabs = if (activeOnly) tabs.filter { window -> window.blocks.any { state.activityOf(it) != null } } else tabs
-                val shownTabs = if (labelMatch || view == null) activeTabs else activeTabs.filter { tabTitle(view, it, state).lowercase().contains(q) }
-                if (!labelMatch && shownTabs.isEmpty()) return@mapNotNull null
-                HomeSession(session, view, shownTabs, sessionActivity)
-            }
-            if (sessions.isEmpty() && (activeOnly || !hostMatch)) return@mapNotNull null
-            host to sessions
-        }
         val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val tree = TreeEnv(
+            hosts = hosts,
+            lives = lives,
+            folds = folds,
+            openCached = openCached,
+            query = q,
+            searching = q.isNotEmpty(),
+            opening = opening,
+            detailHostId = connected?.id?.takeIf { detail },
+            cachedSessions = cachedSessions,
+            ops = ops,
+            sheets = sheets,
+            network = tailnetName(tailnet.backend),
+            stage = tailnetStage,
+            authUrl = tailnetStatus.authUrl,
+            onSignIn = onSignIn,
+            onDevices = { tailnetDetails = true },
+            onTailnet = onTailnet,
+        )
+        val treeRows = tree.rows()
+        // The filters cover every connected host; a host the phone is not connected to has nothing
+        // to list, since only a live connection hears its programs.
+        val connectedHosts = hosts.filter { it.id in lives }
+        fun seenOn(hostId: String): Seen = { block, record -> ops.seen(hostId, block, record) }
+        val needsYou = connectedHosts.sumOf { h -> filterSections(lives.getValue(h.id).state, HomeFilter.NeedsYou, seenOn(h.id)).sumOf { it.items.size } }
+        val running = connectedHosts.sumOf { h -> filterSections(lives.getValue(h.id).state, HomeFilter.Running, seenOn(h.id)).sumOf { it.items.size } }
+        val filtered = if (filter == HomeFilter.All) {
+            emptyMap()
+        } else {
+            connectedHosts.associate { h ->
+                val st = lives.getValue(h.id).state
+                h.id to searched(filterSections(st, filter, seenOn(h.id)), st, query)
+            }
+        }
         Column(Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().imePadding()) {
-            if (searchOpen) {
-                SearchBar(query = query, focus = focus, onQuery = { query = it }, onClose = closeSearch)
+            // The tailnet's card while it is on its way or needs the person; a chip once it is on.
+            val tailnetHosts = hosts.count { it.viaTailscale }
+            val tailnetShown = tailnet.enabled || tailnetHosts > 0
+            val tailnetQuiet = tailnetShown && tailnetStage is TailnetStage.Connected
+            Row(Modifier.fillMaxWidth().padding(start = PAGE, end = PAGE - 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                FilterChips(filter, needsYou, running, onHomeFilter, Modifier.weight(1f))
+                if (tailnetQuiet) {
+                    val network = tailnetName(tailnet.backend)
+                    TailnetChip(
+                        network = network,
+                        said = network + " · " + tailnetStageText(tailnetStage, tailnet.backend),
+                        healthy = tailnetStatus.health.isEmpty(),
+                        onClick = { tailnetDetails = true },
+                    )
+                }
+                RoundButton(R.drawable.ic_more, stringResource(R.string.home_menu), { homeMenu = true }, tint = Colors.muted, size = 48.dp)
             }
             Box(Modifier.weight(1f)) {
                 LazyColumn(
@@ -256,166 +437,282 @@ internal fun HomeScreen(
                     contentPadding = PaddingValues(
                         start = PAGE,
                         end = PAGE,
-                        top = if (searchOpen) 0.dp else 8.dp,
-                        // Clear of the floating controls, so the last tab can be scrolled above them.
-                        bottom = if (searchOpen) 16.dp else navBottom + 104.dp,
+                        top = 8.dp,
+                        bottom = 16.dp,
                     ),
                 ) {
-                    rows.forEachIndexed { index, (host, sessions) ->
-                        val live = connected?.id == host.id
-                        val hostExpanded = host.id !in collapsedHosts || searchOpen
-                        item(key = "host-${host.id}") {
-                            if (index > 0) Spacer(Modifier.height(12.dp))
-                            HostHeader(
-                                host = host,
-                                live = live,
-                                status = if (live) phaseText(state) else null,
-                                phase = if (live) state.phase else null,
-                                sessionCount = sessions.size,
-                                expanded = hostExpanded,
-                                onToggle = {
-                                    if (live) {
-                                        collapsedHosts = if (hostExpanded) collapsedHosts + host.id else collapsedHosts - host.id
-                                    } else {
-                                        onConnect(host)
-                                    }
-                                },
-                                onMenu = { menuHost = host },
+                    // The tailnet's card leads the list it carries while it needs a look.
+                    if (filter == HomeFilter.All && q.isEmpty() && tailnetShown && !tailnetQuiet) {
+                        item(key = "tailnet") {
+                            TailnetStatusCard(
+                                backend = tailnet.backend,
+                                stage = tailnetStage,
+                                status = tailnetStatus,
+                                hostsNeedingTailnet = tailnetHosts,
+                                onDetails = { tailnetDetails = true },
+                                onSignIn = onSignIn,
+                                onSettings = onTailnet,
+                                onRetry = onTailnetRetry,
+                                modifier = Modifier.padding(bottom = 12.dp),
                             )
-                            if (live) HostStatus(state, tailnetPath, onRetry, onProbePath)
-                        }
-                        if (hostExpanded) {
-                            sessions.forEach { row ->
-                                val sessionExpanded = row.session.id !in collapsedSessions || searchOpen
-                                val openingThis = opening == Opening.Existing(row.session.id)
-                                item(key = "session-${row.session.id}") {
-                                    SessionHeader(
-                                        row = row,
-                                        live = live,
-                                        opening = openingThis,
-                                        expanded = sessionExpanded,
-                                        onToggle = {
-                                            if (row.view == null) {
-                                                onOpenSession(host, row.session.id)
-                                            } else {
-                                                collapsedSessions = if (sessionExpanded) collapsedSessions + row.session.id else collapsedSessions - row.session.id
-                                            }
-                                        },
-                                        onNewTab = { onNewTab(host, row.session.id) },
-                                    )
-                                }
-                                if (sessionExpanded) {
-                                    item(key = "tabs-${row.session.id}") {
-                                        if (row.tabs.isEmpty()) {
-                                            EmptyTabs(
-                                                text = when {
-                                                    openingThis -> stringResource(R.string.session_opening)
-                                                    !live -> stringResource(R.string.session_cached)
-                                                    row.view == null -> stringResource(R.string.session_open_to_load)
-                                                    else -> stringResource(R.string.no_tabs)
-                                                },
-                                                canOpen = row.view == null && !openingThis,
-                                                onOpen = { onOpenSession(host, row.session.id) },
-                                            )
-                                        } else {
-                                            TabCard(
-                                                row = row,
-                                                state = state,
-                                                opening = openingThis,
-                                                open = detail && live && state.activeSessionId == row.session.id,
-                                                onOpen = { windowId -> onOpenTab(host, row.session.id, windowId) },
-                                            )
-                                        }
-                                        Spacer(Modifier.height(4.dp))
-                                    }
-                                }
-                            }
                         }
                     }
-                    if (rows.isEmpty()) {
-                        item { NotFound(activeOnly = activeOnly) }
+                    if (filter != HomeFilter.All) {
+                        var shown = 0
+                        for (host in connectedHosts) {
+                            val sections = filtered[host.id].orEmpty()
+                            if (sections.isEmpty()) continue
+                            val ref = HostRef(host, lives[host.id])
+                            val first = shown++ == 0
+                            item(key = "filter-host-${host.id}") {
+                                if (!first) Spacer(Modifier.height(12.dp))
+                                HostItem(tree, ref, treeRows[host.id].orEmpty(), expanded = true, foldable = false)
+                            }
+                            attentionItems(
+                                sections,
+                                ref.state,
+                                keyPrefix = host.id,
+                                ops = AttentionOps(
+                                    open = { item -> onOpenPane(host, item.sessionId, item.window.id, item.block.id) },
+                                    manage = { item -> sheets.sheet = ManageTarget.Tab(host.id, item.sessionId, item.window.id) },
+                                    actionsOf = { item -> tabActions(HostRef(host, lives[host.id]), item.sessionId, item.window.id, ops, sheets).talkBack() },
+                                    reply = if (filter == HomeFilter.NeedsYou) {
+                                        { item -> replyTo = ReplyTarget(host.id, item.sessionId, item.block.id, paneTitle(item.block, item.record, ref.state.programs[item.block.id])) }
+                                    } else {
+                                        null
+                                    },
+                                    interrupt = if (filter == HomeFilter.NeedsYou) {
+                                        { item -> onInterrupt(host.id, item.sessionId, item.block.id) }
+                                    } else {
+                                        null
+                                    },
+                                    answer = if (filter == HomeFilter.NeedsYou) {
+                                        { item, approve -> onAnswer(host.id, item.sessionId, item.window.id, item.block.id, promptStamp(item.record), approve) }
+                                    } else {
+                                        null
+                                    },
+                                ),
+                            )
+                        }
+                        if (shown == 0) {
+                            item(key = "filter-empty") { ActivityEmpty(filter, live = connectedHosts.isNotEmpty(), searching = q.isNotEmpty()) }
+                        }
+                        // What the filter cannot see: the hosts that are not connected, each with its way in.
+                        for (host in hosts.filter { it.id !in lives }) {
+                            item(key = "filter-off-${host.id}") {
+                                NoteRow(
+                                    stringResource(R.string.home_not_connected_line, host.label),
+                                    stringResource(R.string.action_connect) to { onConnect(host) },
+                                    card = false,
+                                )
+                            }
+                        }
+                    } else {
+                        homeTree(tree, treeRows)
                     }
                     // The list is the only place a host is added from, so the way to add one is at
                     // the end of it - above it, there is nothing until a host exists.
-                    if (!searchOpen && hosts.isNotEmpty()) {
+                    if (q.isEmpty() && filter == HomeFilter.All && hosts.isNotEmpty()) {
                         item(key = "add-host") {
                             Spacer(Modifier.height(12.dp))
                             AddHostRow(onClick = { creating = true })
+                            ImportHostsRow(onClick = onImportHosts)
                         }
                     }
                 }
-                if (!searchOpen) {
-                    FloatingControls(
-                        activeOnly = activeOnly,
-                        onSettings = { settings = true },
-                        onEye = { activeOnly = !activeOnly },
-                        onSearch = { searchOpen = true },
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    )
-                }
+                SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
             }
+            HomeBottomBar(
+                query = query,
+                onQuery = { query = it },
+                onFocus = { focused -> searchOpen = focused || query.isNotEmpty() },
+                onSettings = { settings = true },
+                onNew = newSession,
+            )
         }
     }
 
+    if (picking) {
+        RowActionsSheet(stringResource(R.string.session_new), newSessionPicker(hosts, lives) { onNewSession(it) }) { picking = false }
+    }
+
+    if (homeMenu) {
+        RowActionsSheet(
+            null,
+            listOf(
+                ActionGroup(
+                    listOf(
+                        RowAction(stringResource(R.string.home_expand_all), R.drawable.ic_expand) {
+                            val before = folds
+                            onSetFolds(hosts.fold(folds) { f, h -> f.withHost(h.id, true) }.copy(sessions = emptySet()))
+                            snack(context.getString(R.string.home_expanded_all), context.getString(R.string.action_undo)) { onSetFolds(before) }
+                        },
+                        RowAction(stringResource(R.string.home_collapse_all), R.drawable.ic_expand) {
+                            val before = folds
+                            onSetFolds(hosts.fold(folds) { f, h -> f.withHost(h.id, false) })
+                            snack(context.getString(R.string.home_collapsed_all), context.getString(R.string.action_undo)) { onSetFolds(before) }
+                        },
+                    ),
+                ),
+                ActionGroup(
+                    listOf(
+                        RowAction(stringResource(R.string.action_add_host), R.drawable.ic_add) { creating = true },
+                        RowAction(stringResource(R.string.import_hosts_title), R.drawable.ic_host) { onImportHosts() },
+                        RowAction(stringResource(R.string.tailnet_title), R.drawable.ic_tailnet) { onTailnet() },
+                    ),
+                ),
+            ),
+        ) { homeMenu = false }
+    }
+
+    replyTo?.let { target ->
+        ReplyDialog(
+            title = stringResource(R.string.home_reply_title, target.title),
+            onDismiss = { replyTo = null },
+            quickReplies = quickReplies.items,
+            onCompose = { text ->
+                val key = PromptDrafts.key(target.hostId, target.blockId)
+                if (text.isNotBlank()) drafts[key] = joinReply(drafts[key], text)
+                replyTo = null
+                composeTo = target
+            },
+        ) { text ->
+            replyTo = null
+            onReply(target.hostId, target.sessionId, target.blockId, text)
+        }
+    }
+
+    composeTo?.let { target ->
+        val key = PromptDrafts.key(target.hostId, target.blockId)
+        PromptComposer(
+            target = target.title,
+            draft = drafts[key],
+            onDraft = { drafts[key] = it },
+            quickReplies = quickReplies.items,
+            onSend = { text, enter -> onSendPrompt(target.hostId, target.sessionId, target.blockId, text, enter) },
+            onDismiss = { composeTo = null },
+        )
+    }
+
+    if (quickRepliesOpen) {
+        QuickRepliesSheet(quickReplies, onQuickReplies, onDismiss = { quickRepliesOpen = false })
+    }
+
     if (creating || editing != null) {
+        val done = {
+            creating = false
+            editingId = null
+            prefillLabel = null
+            prefillAddress = null
+        }
         HostDialog(
             initial = editing,
-            tailscaleEnabled = tailscale.enabled,
-            onDismiss = { creating = false; editing = null },
-            onDelete = editing?.let { host -> { onDelete(host.id); creating = false; editing = null } },
+            tailnetEnabled = tailnet.enabled,
+            prefillLabel = prefillLabel,
+            prefillAddress = prefillAddress,
+            onDismiss = done,
+            // Remove host is in the host's sheet, with a confirm and an Undo.
+            onDelete = null,
             onSave = {
                 onSave(it)
-                creating = false
-                editing = null
+                done()
             },
             onJoinTailnet = {
-                creating = false
-                editing = null
-                onTailscale()
+                done()
+                onTailnet()
+            },
+            tester = hostTester,
+        )
+    }
+
+    if (tailnetDetails) {
+        TailnetSheet(
+            backend = tailnet.backend,
+            stage = tailnetStage,
+            status = tailnetStatus,
+            hosts = hosts,
+            openHost = connected,
+            path = tailnetPath,
+            onDismiss = { tailnetDetails = false },
+            onSignIn = onSignIn,
+            onSettings = onTailnet,
+            onRetry = onTailnetRetry,
+            onProbe = { connected?.let { onProbePath(it.id) } },
+            onPeer = { peer, saved ->
+                if (saved != null) {
+                    onConnect(saved)
+                } else {
+                    // Rex's own plaintext port: what `rex server start --extra-listen :7297` opens.
+                    prefillLabel = peer.name
+                    prefillAddress = "${peer.dnsName.trimEnd('.').ifBlank { peer.ips.firstOrNull().orEmpty() }}:${HostAddressParser.PLAIN_PORT}"
+                    creating = true
+                }
             },
         )
     }
 
-    menuHost?.let { host ->
-        ActionSheet(onDismiss = { menuHost = null }, title = host.label) {
-            Group {
-                SheetItem(stringResource(R.string.session_new), icon = R.drawable.ic_add) {
-                    menuHost = null
-                    onNewSession(host)
+    HomeSheetsHost(sheets, hosts, lives, folds, cachedSessions, ops) { session, host ->
+        snack(context.getString(R.string.home_ended_elsewhere, session, host))
+    }
+    LaunchedEffect(notices) {
+        notices.collect { notice ->
+            when (notice) {
+                is HomeNotice.Ended -> snack(context.getString(R.string.home_ended_elsewhere, notice.session, notice.host))
+                // Nothing was typed: the pane opens, so the person sees what it asks now. A toast,
+                // as the home it would be a snackbar of goes as the terminal comes up.
+                is HomeNotice.PromptChanged -> {
+                    toast(context, context.getString(R.string.home_prompt_changed))
+                    hosts.firstOrNull { it.id == notice.hostId }?.let { onOpenPane(it, notice.sessionId, notice.windowId, notice.blockId) }
                 }
-                SheetItem(stringResource(R.string.action_edit_host), icon = R.drawable.ic_edit) {
-                    menuHost = null
-                    editing = host
-                }
-                if (connected?.id == host.id) {
-                    SheetItem(stringResource(R.string.action_disconnect), Colors.danger, icon = R.drawable.ic_disconnect) {
-                        menuHost = null
-                        onDisconnect()
-                    }
-                }
+                is HomeNotice.NotAnswered -> snack(context.getString(R.string.home_answer_failed))
+                is HomeNotice.Failed -> snack(
+                    context.getString(failedText(notice.action), notice.detail.ifBlank { context.getString(R.string.status_failed) }),
+                    context.getString(R.string.action_retry),
+                ) { onManage(notice.hostId, notice.action) }
             }
         }
     }
 
     if (settings) {
         SettingsSheet(
-            tailscale = tailscale,
-            tailscaleStatus = tailscaleStatus,
+            tailnet = tailnet,
+            tailnetStatus = tailnetStatus,
             tailnetError = tailnetError,
+            tailnetStage = tailnetStage,
             onDismiss = { settings = false },
-            onTailscale = {
+            onTailnet = {
                 settings = false
-                onTailscale()
+                onTailnet()
             },
             alerts = alerts,
-            onAlerts = toggleAlerts,
-            keyBarShift = keyBarShift,
-            keyBarAlt = keyBarAlt,
-            onKeyBarShift = onKeyBarShift,
-            onKeyBarAlt = onKeyBarAlt,
-            keyBar = keyBar,
-            onKeyBar = onKeyBar,
+            onNotifications = {
+                settings = false
+                notifications = true
+            },
+            onControls = {
+                settings = false
+                controlsPage = ControlsPage.Controls
+            },
+            quickReplies = quickRepliesDetail(quickReplies),
+            onQuickReplies = {
+                settings = false
+                quickRepliesOpen = true
+            },
             onFontSettings = onFontSettings,
+            onAppearance = {
+                settings = false
+                appearanceOpen = true
+            },
+            onImportHosts = {
+                settings = false
+                onImportHosts()
+            },
+            onBackup = {
+                settings = false
+                onBackup()
+            },
+            reopenLastTab = reopenLastTab,
+            onReopenLastTab = onReopenLastTab,
             recording = recording,
             onDiagnostics = {
                 settings = false
@@ -428,6 +725,34 @@ internal fun HomeScreen(
         )
     }
 
+    if (notifications) {
+        NotificationsSheet(
+            onDismiss = { notifications = false },
+            alerts = alerts,
+            onAlerts = toggleAlerts,
+            prefs = alertPrefs,
+            onPrefs = onAlertPrefs,
+            hosts = hosts,
+            background = background,
+            onHostBackground = onHostBackground,
+        )
+    }
+
+    TerminalControlsPages(
+        page = controlsPage,
+        onPage = { controlsPage = it },
+        gestures = gestures,
+        onGestures = onGestures,
+        keyBar = keyBar,
+        onKeyBar = onKeyBar,
+        keyBarCtrlC = keyBarCtrlC,
+        onKeyBarCtrlC = onKeyBarCtrlC,
+        keyArrangement = keyArrangement,
+        onKeyArrangement = onKeyArrangement,
+    )
+
+    if (appearanceOpen) AppearanceSheet(appearance, onAppearance, onDismiss = { appearanceOpen = false })
+
     if (diagnostics) {
         DiagnosticsSheet(
             onDismiss = { diagnostics = false },
@@ -437,393 +762,40 @@ internal fun HomeScreen(
     }
 }
 
-/** The fold's chevron: down while open, turned to point right while folded. */
-@Composable
-private fun FoldChevron(expanded: Boolean) {
-    val turn by animateFloatAsState(if (expanded) 0f else -90f, label = "fold")
-    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-        Glyph(R.drawable.ic_expand, Colors.muted, Modifier.rotate(turn))
-    }
-}
-
-/**
- * One host: its mark, its name with the connection's dot, and what it is doing. Tapping it folds
- * its sessions, or connects it when it is not the one open; the menu edits it.
- */
-@Composable
-private fun HostHeader(
-    host: SavedHost,
-    live: Boolean,
-    status: String?,
-    phase: Phase?,
-    sessionCount: Int,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    onMenu: () -> Unit,
-) {
-    val folded = stringResource(R.string.state_folded)
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(Radius.card))
-            .clickable(onClick = onToggle)
-            .semantics { if (live && !expanded) stateDescription = folded }
-            .padding(start = KEY_MARK),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Glyph(R.drawable.ic_host, if (live) Colors.ink else Colors.muted, size = 24.dp)
-        Spacer(Modifier.width(KEY_TEXT - KEY_MARK - 24.dp))
-        Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    host.label,
-                    color = Colors.ink,
-                    fontSize = TextStyles.title,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (live) {
-                    Spacer(Modifier.width(8.dp))
-                    Dot(phaseTint(phase ?: Phase.Idle), 8.dp)
-                }
-            }
-            Text(
-                (if (live) status.orEmpty() else stringResource(R.string.host_not_connected)) +
-                    if (sessionCount > 0) " · " + pluralStringResource(R.plurals.session_count, sessionCount, sessionCount) else "",
-                color = Colors.muted,
-                fontSize = TextStyles.label,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        RoundButton(R.drawable.ic_more, stringResource(R.string.action_more), onMenu, tint = Colors.muted, size = 48.dp)
-    }
-}
-
-/** The line under a connected host: why it is not live, and how the tailnet carries it. */
-@Composable
-private fun HostStatus(state: PocketState, path: TailnetPath?, onRetry: () -> Unit, onProbe: () -> Unit) {
-    val problem = rememberSettledProblem(state.phase, state.problem.takeIf { state.phase != Phase.Live })
-    if (problem != null) {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(Radius.chip)).clickable(onClick = onRetry)
-                .padding(start = KEY_TEXT, end = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(problemText(problem, state.endpointLabel), color = Colors.danger, fontSize = TextStyles.label, modifier = Modifier.weight(1f))
-            Spacer(Modifier.width(12.dp))
-            Text(stringResource(R.string.action_retry_now), color = Colors.accent, fontSize = TextStyles.label, fontWeight = FontWeight.Medium)
-        }
-    }
-    if (path != null) {
-        val ms = path.latencyMs?.let { " · ${it.toInt()} ms" }.orEmpty()
-        val (text, color) = when (path) {
-            is TailnetPath.Direct -> stringResource(R.string.tailnet_path_direct) + ms to Colors.ok
-            is TailnetPath.PeerRelay -> stringResource(R.string.tailnet_path_peer_relay) + ms to Colors.amber
-            is TailnetPath.Derp ->
-                stringResource(R.string.tailnet_path_derp, path.regionCode.ifBlank { path.regionId.toString() }) + ms to Colors.amber
-            is TailnetPath.Unreachable -> stringResource(R.string.tailnet_path_unreachable, path.reason) to Colors.danger
-        }
-        Text(
-            text,
-            color = color,
-            fontSize = TextStyles.label,
-            modifier = Modifier.padding(start = KEY_TEXT - 8.dp, bottom = 4.dp).clip(RoundedCornerShape(Radius.chip))
-                .clickable(onClick = onProbe).padding(horizontal = 8.dp, vertical = 4.dp),
-        )
-    }
-}
-
-/**
- * A session under its host, as the reference writes it: a quiet group label with its tab count, the
- * plus that makes a tab in it, and the fold. A blue dot says something in it is working.
- */
-@Composable
-private fun SessionHeader(
-    row: HomeSession,
-    live: Boolean,
-    opening: Boolean,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    onNewTab: () -> Unit,
-) {
-    val tabs = row.view?.windows?.size ?: 0
-    val detail = when {
-        opening -> stringResource(R.string.session_opening)
-        row.view != null -> pluralStringResource(R.plurals.session_window_count, tabs, tabs)
-        !live -> stringResource(R.string.session_cached)
-        else -> null
-    }
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.chip)).clickable(onClick = onToggle)
-            .padding(start = KEY_MARK),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                row.session.label,
-                color = Colors.muted,
-                fontSize = TextStyles.subhead,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            if (row.activity) {
-                Spacer(Modifier.width(8.dp))
-                Dot(Colors.accent, 6.dp)
-            }
-            if (detail != null) {
-                Spacer(Modifier.width(8.dp))
-                Text(detail, color = if (opening) Colors.accent else Colors.muted, fontSize = TextStyles.label, maxLines = 1)
-            }
-        }
-        RoundButton(
-            R.drawable.ic_add_circle,
-            stringResource(R.string.menu_new_tab),
-            onNewTab,
-            tint = Colors.muted,
-            size = 48.dp,
-            enabled = !opening,
-        )
-        FoldChevron(expanded || row.view == null)
-    }
-}
-
-/** The tabs of one session, on one card, hairlines between rows from the title's keyline. */
-@Composable
-private fun TabCard(
-    row: HomeSession,
-    state: PocketState,
-    opening: Boolean,
-    /** True for the session whose tab the pane beside the list is showing. */
-    open: Boolean,
-    onOpen: (String) -> Unit,
-) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Colors.surface)) {
-        row.tabs.forEachIndexed { index, window ->
-            if (index > 0) {
-                Box(Modifier.padding(start = KEY_TEXT).fillMaxWidth().height(1.dp).background(Colors.line))
-            }
-            val activity = window.blocks.firstNotNullOfOrNull { state.activityOf(it) }
-            TabRow(
-                title = row.view?.let { tabTitle(it, window, state) } ?: window.label,
-                program = tabProgram(window, state),
-                detail = detailFor(window, activity),
-                busy = activity != null,
-                opening = opening,
-                open = open && window.id == state.view?.activeWindowId,
-                onOpen = { onOpen(window.id) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun detailFor(window: WindowInfo, activity: ProgramRecord?): String {
-    val panes = pluralStringResource(R.plurals.pane_count, window.blocks.size, window.blocks.size)
-    val word = activity?.let { statusWord(it) }
-    return if (word != null) "$panes · $word" else panes
-}
-
-/**
- * One tab: the tile of what runs in it - an agent's mark, or the terminal for a shell - badged blue
- * while a pane in it works, its name, its panes, a chevron.
- */
-@Composable
-private fun TabRow(
-    title: String,
-    program: String?,
-    detail: String,
-    busy: Boolean,
-    opening: Boolean,
-    /** True for the tab the pane beside the list is showing. */
-    open: Boolean,
-    onOpen: () -> Unit,
-) {
-    val selected = stringResource(R.string.state_selected)
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp)
-            .background(if (open) Colors.keyOn else Color.Transparent)
-            .clickable(enabled = !opening, role = Role.Button, onClick = onOpen)
-            .semantics { if (open) stateDescription = selected }
-            .padding(start = KEY_MARK, end = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box {
-            ProgramTile(program, size = TILE)
-            if (busy) Dot(Colors.accent, 8.dp, Modifier.align(Alignment.TopEnd).offset(4.dp, (-4).dp), ring = Colors.surface)
-        }
-        Spacer(Modifier.width(KEY_TEXT - KEY_MARK - TILE))
-        Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
-            Text(
-                title,
-                color = Colors.ink,
-                fontSize = TextStyles.body,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(detail, color = if (busy) Colors.accent else Colors.muted, fontSize = TextStyles.label, maxLines = 1)
-        }
-        Glyph(R.drawable.ic_chevron_right, Colors.muted, size = 24.dp)
-    }
-}
-
-/**
- * The end of the list: the way to add another computer, where the list runs out. It sits under the
- * hosts rather than in the settings, because adding one is a thing to do to this list.
- */
-@Composable
-private fun AddHostRow(onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(Radius.card)).background(Colors.surface)
-            .clickable(role = Role.Button, onClick = onClick).padding(start = 16.dp, end = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Glyph(R.drawable.ic_add, Colors.accent, size = 24.dp)
-        Spacer(Modifier.width(16.dp))
-        Text(
-            stringResource(R.string.action_add_host),
-            color = Colors.accent,
-            fontSize = TextStyles.subhead,
-            fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
-private fun EmptyTabs(text: String, canOpen: Boolean, onOpen: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(Radius.card)).background(Colors.surface)
-            .clickable(enabled = canOpen, onClick = onOpen).padding(start = KEY_MARK, end = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text, color = Colors.muted, fontSize = TextStyles.subhead, modifier = Modifier.weight(1f))
-        if (canOpen) {
-            Text(stringResource(R.string.session_tap_open), color = Colors.accent, fontSize = TextStyles.subhead, fontWeight = FontWeight.Medium)
-        }
-    }
-}
-
-@Composable
-private fun NotFound(activeOnly: Boolean) {
-    Text(
-        stringResource(if (activeOnly) R.string.no_activity else R.string.search_none),
-        color = Colors.muted,
-        fontSize = TextStyles.subhead,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
-        textAlign = TextAlign.Center,
-    )
-}
-
-/**
- * The controls of the reference, floating over the list: a pill with settings and the activity
- * filter at the bottom left, search on its own at the bottom right. Both are 56 dp, the height of
- * the platform's floating action button, and stand on the page margin.
- */
-@Composable
-private fun FloatingControls(
-    activeOnly: Boolean,
-    onSettings: () -> Unit,
-    onEye: () -> Unit,
-    onSearch: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val on = stringResource(R.string.filter_on)
-    val off = stringResource(R.string.filter_off)
-    Box(modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = PAGE, vertical = 16.dp)) {
-        Row(
-            Modifier.align(Alignment.BottomStart).floating(RoundedCornerShape(50)).padding(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RoundButton(R.drawable.ic_settings, stringResource(R.string.settings), onSettings, size = 48.dp, iconSize = 24.dp)
-            Box {
-                RoundButton(
-                    if (activeOnly) R.drawable.ic_eye_filled else R.drawable.ic_eye,
-                    stringResource(R.string.action_show_active),
-                    onEye,
-                    modifier = Modifier.semantics { stateDescription = if (activeOnly) on else off },
-                    tint = if (activeOnly) Colors.accent else Colors.ink,
-                    plate = if (activeOnly) Colors.keyOn else null,
-                    size = 48.dp,
-                    iconSize = 24.dp,
-                )
-            }
-        }
-        RoundButton(
-            R.drawable.ic_search,
-            stringResource(R.string.action_search),
-            onSearch,
-            modifier = Modifier.align(Alignment.BottomEnd).floating(),
-            size = 56.dp,
-            iconSize = 24.dp,
-        )
-    }
-}
-
-/** The platform's search bar: a 56 dp pill, back on the left, clear on the right. */
-@Composable
-private fun SearchBar(
-    query: String,
-    focus: FocusRequester,
-    onQuery: (String) -> Unit,
-    onClose: () -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = PAGE, vertical = 8.dp).height(56.dp)
-            .clip(RoundedCornerShape(50)).background(Colors.surface).padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RoundButton(R.drawable.ic_back, stringResource(R.string.action_back), onClose, size = 48.dp)
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (query.isEmpty()) {
-                Text(stringResource(R.string.search_hint), color = Colors.muted, fontSize = TextStyles.body, maxLines = 1)
-            }
-            BasicTextField(
-                value = query,
-                onValueChange = onQuery,
-                singleLine = true,
-                textStyle = TextStyle(color = Colors.ink, fontSize = TextStyles.body),
-                cursorBrush = SolidColor(Colors.accent),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus),
-            )
-        }
-        if (query.isNotEmpty()) {
-            RoundButton(R.drawable.ic_close, stringResource(R.string.action_clear), { onQuery("") }, tint = Colors.muted, size = 48.dp)
-        }
-    }
-}
 
 @Composable
 private fun SettingsSheet(
-    tailscale: TailscaleSettings,
-    tailscaleStatus: TailscaleStatus,
-    tailnetError: String?,
+    tailnet: TailnetSettings,
+    tailnetStatus: TailnetStatus,
+    tailnetError: TailnetFailure?,
+    tailnetStage: TailnetStage,
     onDismiss: () -> Unit,
-    onTailscale: () -> Unit,
+    onTailnet: () -> Unit,
     alerts: Boolean,
-    onAlerts: () -> Unit,
-    keyBarShift: Boolean,
-    keyBarAlt: Boolean,
-    onKeyBarShift: (Boolean) -> Unit,
-    onKeyBarAlt: (Boolean) -> Unit,
-    /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
-    keyBar: Boolean,
-    onKeyBar: (Boolean) -> Unit,
+    /** Opens Notifications: Background alerts and what they tell. */
+    onNotifications: () -> Unit,
+    /** Opens the terminal's controls: its gestures and its key bar. */
+    onControls: () -> Unit,
     onFontSettings: () -> Unit,
+    /** Opens Appearance: the app's theme and the terminal's colours. */
+    onAppearance: () -> Unit,
+    reopenLastTab: Boolean,
+    onReopenLastTab: (Boolean) -> Unit,
     recording: Boolean,
     onDiagnostics: () -> Unit,
     update: UpdateState,
     onUpdate: () -> Unit,
     channel: UpdateChannel,
     onChannel: (UpdateChannel) -> Unit,
+    /** Import hosts, and export them. */
+    onImportHosts: () -> Unit = {},
+    /** Settings › Backup: every setting to one file, and back. */
+    onBackup: () -> Unit = {},
+    /** The Quick replies row's detail, and the row's tap. */
+    quickReplies: String? = null,
+    onQuickReplies: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    val joined = tailscale.enabled && tailscaleStatus.backendState == "Running"
-    // Said on the tap, because the row's own detail is the only other sign the channel moved.
-    val switchedToStable = stringResource(R.string.update_channel_switched_stable)
-    val switchedToPreview = stringResource(R.string.update_channel_switched_preview)
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.settings)) {
         // Four cards, each one answer to a different question: how the phone reaches a computer,
         // what the terminal looks and feels like, which build it installs, and what the app is. A
@@ -831,63 +803,53 @@ private fun SettingsSheet(
         // all, because the list it belongs to has its own + button.
         Group(stringResource(R.string.settings_group_connection)) {
             SheetItem(
-                label = stringResource(R.string.tailscale_title),
+                label = stringResource(R.string.tailnet_title),
                 icon = R.drawable.ic_tailnet,
-                detail = when {
-                    tailnetError != null -> stringResource(R.string.tailscale_state_failed)
-                    joined -> stringResource(R.string.tailscale_state_running)
-                    tailscale.enabled -> tailnetState(tailscaleStatus)
-                    else -> stringResource(R.string.tailscale_not_joined)
-                },
-                onClick = onTailscale,
+                detail = if (tailnetStage is TailnetStage.Off) stringResource(R.string.tailscale_not_joined)
+                else tailnetName(tailnet.backend) + " · " + tailnetStageText(tailnetStage, tailnet.backend),
+                opens = true,
+                onClick = onTailnet,
             )
             // Alerts are the connection kept up in the background, so they sit with the way in.
             SheetItem(
-                label = stringResource(R.string.alerts_title),
+                label = stringResource(R.string.notifications_title),
                 icon = R.drawable.ic_notifications,
                 detail = stringResource(if (alerts) R.string.alerts_on else R.string.alerts_off),
-                keepOpen = true,
-                onClick = onAlerts,
+                opens = true,
+                onClick = onNotifications,
             )
+            // Many hosts at once, from a list or a connected Rex: the + under the list adds one.
+            SheetItem(stringResource(R.string.import_hosts_title), icon = R.drawable.ic_host, opens = true, onClick = onImportHosts)
         }
         Group(stringResource(R.string.settings_group_terminal)) {
-            SheetItem(
-                label = stringResource(R.string.keybar_title),
-                icon = R.drawable.ic_keyboard,
-                detail = stringResource(if (keyBar) R.string.keybar_always else R.string.keybar_auto),
-                keepOpen = true,
-                onClick = { onKeyBar(!keyBar) },
+            // Gestures and keys have a sheet of their own, so this one stays a list of places to go.
+            SheetItem(stringResource(R.string.controls_title), icon = R.drawable.ic_touch_app, opens = true, onClick = onControls)
+            // What agents are told most, in one tap from a notification, the key bar and the palette.
+            SheetItem(stringResource(R.string.quick_replies_title), icon = R.drawable.ic_return, detail = quickReplies, opens = true, onClick = onQuickReplies)
+            SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_text_fields, opens = true, onClick = onFontSettings)
+            // The app's light or dark, and the terminal's apart from it.
+            SheetItem(stringResource(R.string.appearance_title), icon = R.drawable.ic_contrast, opens = true, onClick = onAppearance)
+            // Off, a fresh start shows this list; Android killing the app on the terminal still
+            // comes back to it, since that is the person's own place rather than a pick.
+            ChoiceRow(
+                label = stringResource(R.string.reopen_last_tab), options = ON_OFF, current = reopenLastTab,
+                choice = ::reopenChoice, icon = R.drawable.ic_history, onPick = onReopenLastTab,
             )
-            SheetItem(
-                label = stringResource(R.string.keybar_shift), icon = R.drawable.ic_keyboard,
-                detail = stringResource(if (keyBarShift) R.string.keybar_visible else R.string.keybar_hidden),
-                keepOpen = true, onClick = { onKeyBarShift(!keyBarShift) },
-            )
-            SheetItem(
-                label = stringResource(R.string.keybar_alt), icon = R.drawable.ic_keyboard,
-                detail = stringResource(if (keyBarAlt) R.string.keybar_visible else R.string.keybar_hidden),
-                keepOpen = true, onClick = { onKeyBarAlt(!keyBarAlt) },
-            )
-            SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
+        }
+        // Everything above, and the hosts, to one file for another phone, and back.
+        Group(stringResource(R.string.settings_group_backup)) {
+            SheetItem(stringResource(R.string.backup_title), icon = R.drawable.ic_backup, opens = true, onClick = onBackup)
         }
         Group(stringResource(R.string.settings_group_version)) {
-            // The channel first: it is what the row under it looks on.
-            SheetItem(
-                label = stringResource(R.string.update_channel),
-                icon = R.drawable.ic_swap,
-                detail = stringResource(
-                    if (channel == UpdateChannel.Preview) R.string.update_channel_preview else R.string.update_channel_stable,
-                ),
-                keepOpen = true,
-                onClick = {
-                    val next = if (channel == UpdateChannel.Preview) UpdateChannel.Stable else UpdateChannel.Preview
-                    onChannel(next)
-                    toast(context, if (next == UpdateChannel.Preview) switchedToPreview else switchedToStable)
-                },
+            // The channel first: it is what the row under it looks on. Its picker says what each
+            // channel offers.
+            ChoiceRow(
+                label = stringResource(R.string.update_channel), options = listOf(UpdateChannel.Stable, UpdateChannel.Preview),
+                current = channel, choice = ::channelChoice, icon = R.drawable.ic_swap, onPick = onChannel,
             )
             SheetItem(
                 label = stringResource(R.string.update_title),
-                icon = R.drawable.ic_arrow_down,
+                icon = R.drawable.ic_system_update,
                 detail = updateDetail(update),
                 keepOpen = true,
                 onClick = onUpdate,
@@ -898,7 +860,8 @@ private fun SettingsSheet(
             SheetItem(
                 label = stringResource(R.string.diagnostics),
                 detail = stringResource(if (recording) R.string.diagnostics_state_on else R.string.diagnostics_state_off),
-                icon = R.drawable.ic_build,
+                icon = R.drawable.ic_bug_report,
+                opens = true,
                 onClick = onDiagnostics,
             )
             SheetItem(stringResource(R.string.settings_source), icon = R.drawable.ic_open_in_new) { openLink(context, SOURCE_URL) }
@@ -921,33 +884,135 @@ private fun SettingsSheet(
     }
 }
 
+/** The tags of the first-run screen's routes, for the screen tests. */
+internal const val EMPTY_ROUTE_SSH_TAG = "empty-route-ssh"
+internal const val EMPTY_ROUTE_TAILNET_TAG = "empty-route-tailnet"
+internal const val EMPTY_ROUTE_LOCAL_TAG = "empty-route-local"
+internal const val EMPTY_COMMAND_TAG = "empty-command"
+
+/** What the local network route asks the computer to run: Rex with a plaintext port, as the README says. */
+internal const val LOCAL_START_COMMAND = "rex server start --extra-listen :7297 --allow-anonymous"
+
+/**
+ * The first run: no hosts yet. It names Rex and offers the three ways to reach it, each a short card
+ * with its one next step - SSH, which opens no port; the tailnet, whose card it becomes once the
+ * phone has joined; the local network, with the command to copy.
+ */
 @Composable
-private fun EmptyHome(onAdd: () -> Unit) {
+private fun EmptyHome(
+    tailnet: TailnetSettings,
+    tailnetStage: TailnetStage,
+    tailnetStatus: TailnetStatus,
+    onAdd: (address: String?) -> Unit,
+    onJoinTailnet: () -> Unit,
+    onTailnetDetails: () -> Unit,
+    onSignIn: (String) -> Unit,
+    onTailnetRetry: () -> Unit,
+    onImport: () -> Unit = {},
+) {
+    val context = LocalContext.current
+    val copied = stringResource(R.string.toast_command_copied)
     Column(
-        Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().navigationBarsPadding().padding(horizontal = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = PAGE, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Glyph(R.drawable.ic_host, Colors.muted, size = 48.dp)
-        Spacer(Modifier.height(16.dp))
         Text(stringResource(R.string.home_no_hosts), color = Colors.ink, fontSize = TextStyles.display, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            stringResource(R.string.home_no_hosts_body),
-            color = Colors.muted,
-            fontSize = TextStyles.label,
-            fontFamily = FontFamily.Monospace,
-            lineHeight = labelLeading,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(32.dp))
-        PrimaryButton(stringResource(R.string.action_add_host), onClick = onAdd)
+        Text(stringResource(R.string.home_no_hosts_body), color = Colors.muted, fontSize = TextStyles.subhead, lineHeight = labelLeading)
+        Spacer(Modifier.height(4.dp))
+        EmptyRoute(
+            icon = R.drawable.ic_lock,
+            title = stringResource(R.string.home_route_ssh),
+            body = stringResource(R.string.home_route_ssh_body),
+            tag = EMPTY_ROUTE_SSH_TAG,
+        ) {
+            RouteButton(stringResource(R.string.action_add_ssh_host)) { onAdd(SSH_PREFILL) }
+            RouteButton(stringResource(R.string.import_hosts_title), onImport)
+        }
+        if (tailnet.enabled && tailnetStage != TailnetStage.Off) {
+            // Joined: the tailnet's own card, which says where the node is and what to do next.
+            TailnetStatusCard(
+                backend = tailnet.backend,
+                stage = tailnetStage,
+                status = tailnetStatus,
+                hostsNeedingTailnet = 0,
+                onDetails = onTailnetDetails,
+                onSignIn = onSignIn,
+                onSettings = onJoinTailnet,
+                onRetry = onTailnetRetry,
+            )
+        } else {
+            EmptyRoute(
+                icon = R.drawable.ic_tailnet,
+                title = stringResource(R.string.home_route_tailnet),
+                body = stringResource(R.string.home_route_tailnet_body),
+                tag = EMPTY_ROUTE_TAILNET_TAG,
+            ) { RouteButton(stringResource(R.string.action_join_tailnet), onClick = onJoinTailnet) }
+        }
+        EmptyRoute(
+            icon = R.drawable.ic_host,
+            title = stringResource(R.string.home_route_local),
+            body = stringResource(R.string.home_route_local_body),
+            tag = EMPTY_ROUTE_LOCAL_TAG,
+        ) {
+            val copyLabel = stringResource(R.string.action_copy_command)
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Colors.bg)
+                    .clickable(onClickLabel = copyLabel, role = Role.Button) {
+                        clipboardSet(context, LOCAL_START_COMMAND)
+                        toast(context, copied)
+                    }
+                    .testTag(EMPTY_COMMAND_TAG)
+                    .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    LOCAL_START_COMMAND,
+                    color = Colors.ink,
+                    fontSize = TextStyles.label,
+                    fontFamily = FontFamily.Monospace,
+                    lineHeight = labelLeading,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Glyph(R.drawable.ic_copy, Colors.muted, size = 20.dp)
+            }
+            RouteButton(stringResource(R.string.action_add_host)) { onAdd(null) }
+        }
     }
 }
 
-/** Tailscale's backend state in the app's own words; empty while nothing is running. */
+/** What the SSH route's Add host starts from: the scheme that makes the dialog ask for an account. */
+private const val SSH_PREFILL = "ssh://"
+
 @Composable
-internal fun tailnetState(status: TailscaleStatus): String = when (status.backendState) {
+private fun EmptyRoute(icon: Int, title: String, body: String, tag: String, actions: @Composable () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.card)).background(Colors.surface)
+            .testTag(tag).padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Glyph(icon, Colors.muted, size = 20.dp)
+            Spacer(Modifier.width(12.dp))
+            Text(title, color = Colors.ink, fontSize = TextStyles.body, fontWeight = FontWeight.SemiBold)
+        }
+        Text(body, color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            actions()
+        }
+    }
+}
+
+@Composable
+private fun RouteButton(label: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick) { Text(label, color = Colors.accent, fontWeight = FontWeight.SemiBold) }
+}
+
+/** The node's backend state in the app's own words; empty while nothing is running. */
+@Composable
+internal fun tailnetState(status: TailnetStatus): String = when (status.backendState) {
     "" -> ""
     "Running" -> stringResource(R.string.tailscale_state_running)
     "Starting" -> stringResource(R.string.tailscale_state_starting)
@@ -957,30 +1022,68 @@ internal fun tailnetState(status: TailscaleStatus): String = when (status.backen
     else -> status.text.ifBlank { status.backendState }
 }
 
+/** The network a backend's node is called in the app's own words. */
+internal fun tailnetName(backend: TailnetBackend): String = backend.displayName
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun TailscaleDialog(
-    initial: TailscaleSettings,
-    status: TailscaleStatus,
-    error: String?,
+internal fun TailnetDialog(
+    initial: TailnetSettings,
+    backends: List<TailnetBackend>,
+    status: TailnetStatus,
+    error: TailnetFailure?,
     onDismiss: () -> Unit,
-    onJoin: (String) -> Unit,
+    onJoin: (TailnetBackend, String, String, String) -> Unit,
     onLeave: () -> Unit,
 ) {
     val context = LocalContext.current
+    var backend by remember { mutableStateOf(initial.backend) }
     var hostname by remember { mutableStateOf(initial.hostname) }
+    var managementUrl by remember { mutableStateOf(initial.managementUrl) }
+    var setupKey by remember { mutableStateOf("") }
+    // The node's own state and login only describe the backend that is joined, not one picked here.
+    val joinedHere = initial.enabled && backend == initial.backend
     val state = tailnetState(status)
+    val netbird = backend == TailnetBackend.Netbird || backend == TailnetBackend.NetbirdAddon
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Colors.surface,
-        title = { Text(stringResource(R.string.tailscale_title), color = Colors.ink) },
+        title = { Text(stringResource(R.string.tailnet_title), color = Colors.ink) },
         text = {
             Column(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                // A choice only when this build has more than one backend.
+                if (backends.size > 1) {
+                    Text(stringResource(R.string.tailnet_backend_label), color = Colors.muted, fontSize = TextStyles.label)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (choice in backends) {
+                            FilterChip(
+                                selected = backend == choice,
+                                onClick = { backend = choice },
+                                label = { Text(tailnetName(choice)) },
+                            )
+                        }
+                    }
+                }
                 Field(stringResource(R.string.tailscale_hostname), hostname) { hostname = it }
-                if (initial.enabled) {
+                if (netbird) {
+                    Field(
+                        stringResource(R.string.netbird_management_url),
+                        managementUrl,
+                        placeholder = stringResource(R.string.netbird_management_placeholder),
+                    ) { managementUrl = it }
+                    if (!joinedHere) {
+                        Field(
+                            stringResource(R.string.netbird_setup_key),
+                            setupKey,
+                            password = true,
+                            placeholder = stringResource(R.string.netbird_setup_key_placeholder),
+                        ) { setupKey = it }
+                    }
+                }
+                if (joinedHere) {
                     Text(
                         listOfNotNull(
                             state.ifBlank { null },
@@ -990,8 +1093,8 @@ internal fun TailscaleDialog(
                         fontSize = TextStyles.label,
                     )
                 }
-                error?.let { Text(it, color = Colors.danger, fontSize = TextStyles.label) }
-                if (status.authUrl.isNotBlank()) {
+                error?.let { Text(tailnetFailureText(it), color = Colors.danger, fontSize = TextStyles.label) }
+                if (joinedHere && status.authUrl.isNotBlank()) {
                     Text(
                         status.authUrl,
                         color = Colors.accent,
@@ -1007,13 +1110,22 @@ internal fun TailscaleDialog(
                     )
                     Text(stringResource(R.string.tailscale_login_hint), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
                 }
-                Text(stringResource(R.string.tailscale_hint), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
+                me.leaver.rexpocket.net.addon.TailnetBackendNote(backend)
+                if (netbird && !joinedHere) {
+                    Text(stringResource(R.string.netbird_need_key), color = Colors.amber, fontSize = TextStyles.label, lineHeight = labelLeading)
+                }
+                Text(
+                    stringResource(if (netbird) R.string.netbird_hint else R.string.tailscale_hint),
+                    color = Colors.muted,
+                    fontSize = TextStyles.label,
+                    lineHeight = labelLeading,
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onJoin(hostname) }) {
+            TextButton(onClick = { onJoin(backend, hostname, managementUrl, setupKey) }) {
                 Text(
-                    stringResource(if (initial.enabled) R.string.action_save else R.string.tailscale_join),
+                    stringResource(if (joinedHere) R.string.action_save else R.string.tailscale_join),
                     color = Colors.accent,
                 )
             }
@@ -1031,25 +1143,31 @@ internal fun TailscaleDialog(
 
 /**
  * Adding a host is a name and an address. The port, the scheme and whether the address has to go
- * through the built-in Tailscale node all follow from the address, and the line under the field
+ * through the built-in tailnet node all follow from the address, and the line under the field
  * says what the app made of it - or, while there is nothing to make of it yet, what can be typed
  * there. `ssh://user@host` adds the account: Rex is then reached through that machine's SSH daemon,
  * with a password or a private key.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun HostDialog(
     initial: SavedHost?,
-    tailscaleEnabled: Boolean,
+    tailnetEnabled: Boolean,
+    /** A new host's name and address to start from, such as a device picked in the tailnet sheet. */
+    prefillLabel: String? = null,
+    prefillAddress: String? = null,
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)?,
     onSave: (SavedHost) -> Unit,
     onJoinTailnet: () -> Unit,
+    /** Test connection; null leaves the button out. */
+    tester: HostTester? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var label by remember { mutableStateOf(initial?.label ?: "") }
+    var label by rememberSaveable { mutableStateOf(initial?.label ?: prefillLabel.orEmpty()) }
     var confirmDelete by remember { mutableStateOf(false) }
-    var address by remember {
+    var address by rememberSaveable {
         mutableStateOf(
             initial?.let { host ->
                 if (host.viaSsh) {
@@ -1058,10 +1176,10 @@ internal fun HostDialog(
                     val scheme = if (host.plaintext) "ws" else "wss"
                     "$scheme://${host.host}:${host.port}"
                 }
-            } ?: "",
+            } ?: prefillAddress.orEmpty(),
         )
     }
-    var sshUser by remember { mutableStateOf(initial?.sshUser.orEmpty()) }
+    var sshUser by rememberSaveable { mutableStateOf(initial?.sshUser.orEmpty()) }
     var password by remember { mutableStateOf(initial?.sshPassword.orEmpty()) }
     var privateKey by remember { mutableStateOf(initial?.sshPrivateKey.orEmpty()) }
     var passphrase by remember { mutableStateOf(initial?.sshPassphrase.orEmpty()) }
@@ -1076,7 +1194,10 @@ internal fun HostDialog(
     val user = parsed?.sshUser?.takeIf { it.isNotBlank() } ?: sshUser.trim()
     val sameSshHost = initial != null && initial.viaSsh && parsed != null &&
         initial.host == parsed.host && initial.port == parsed.port && initial.sshUser == user
-    val pinned = if (sameSshHost) initial.sshHostKey else ""
+    // A host key the person trusted in Test connection, for this account, machine and port only:
+    // Save keeps it as the pinned key. Nothing is written before Save.
+    var trusted by remember(parsed?.host, parsed?.port, user) { mutableStateOf<String?>(null) }
+    val pinned = trusted ?: if (sameSshHost) initial.sshHostKey else ""
     val credentialReady = if (useKey) privateKey.isNotBlank() else password.isNotBlank()
     val identityReady = !ssh || (user.isNotBlank() && credentialReady)
     val canSave = parsed != null && identityReady
@@ -1094,6 +1215,16 @@ internal fun HostDialog(
             sshPassphrase = if (useKey) passphrase else "",
             sshHostKey = pinned,
         )
+    }
+
+    val passwordField = remember { FocusRequester() }
+    val keyField = remember { FocusRequester() }
+
+    /** Saves the host, from the button or Enter on the last field; nothing while it is not ready. */
+    fun save() {
+        val address = parsed ?: return
+        if (!canSave) return
+        savedHost(viaTailscale = address.viaTailscale)?.let(onSave)
     }
 
     val pickKey = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -1131,18 +1262,24 @@ internal fun HostDialog(
                     stringResource(R.string.field_name),
                     label,
                     placeholder = stringResource(R.string.field_name_optional),
+                    imeAction = ImeAction.Next,
                 ) { label = it }
+                // Enter goes on to the next field, and on the last one saves, as the button does.
                 Field(
                     stringResource(R.string.field_address),
                     address,
                     placeholder = stringResource(R.string.field_address_placeholder),
+                    keyboardType = KeyboardType.Uri,
+                    autoCorrect = false,
+                    imeAction = if (ssh) ImeAction.Next else ImeAction.Done,
+                    onDone = { save() },
                 ) { address = it }
                 if (parsed != null) {
                     Text(
                         listOfNotNull(
                             if (ssh && user.isNotBlank()) "$user@${parsed.host}:${parsed.port}" else "${parsed.host}:${parsed.port}",
                             stringResource(if (ssh) R.string.host_transport_ssh else if (parsed.plaintext) R.string.host_transport_plain else R.string.host_transport_tls),
-                            stringResource(R.string.tailscale_title).takeIf { parsed.viaTailscale },
+                            stringResource(R.string.tailnet_title).takeIf { parsed.viaTailscale },
                         ).joinToString(" · "),
                         color = Colors.muted,
                         fontSize = TextStyles.label,
@@ -1161,8 +1298,17 @@ internal fun HostDialog(
                 }
                 if (ssh) {
                     Text(stringResource(R.string.ssh_address_hint), color = Colors.muted, fontSize = TextStyles.label)
-                    Field(stringResource(R.string.ssh_user), sshUser) { sshUser = it }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Field(
+                        stringResource(R.string.ssh_user),
+                        sshUser,
+                        keyboardType = KeyboardType.Ascii,
+                        autoCorrect = false,
+                        imeAction = ImeAction.Next,
+                        // Past the password and key buttons, to the field that is shown.
+                        next = if (useKey) keyField else passwordField,
+                    ) { sshUser = it }
+                    // Flowing, so large text puts the second choice under the first rather than squeezing both.
+                    FlowRow {
                         TextButton(onClick = { useKey = false }) {
                             Text(
                                 stringResource(R.string.ssh_auth_password),
@@ -1179,18 +1325,25 @@ internal fun HostDialog(
                         }
                     }
                     if (useKey) {
-                        Field(stringResource(R.string.ssh_private_key), privateKey, password = true, singleLine = false, minLines = 3) { privateKey = it }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Field(stringResource(R.string.ssh_private_key), privateKey, password = true, singleLine = false, minLines = 3, focusRequester = keyField) { privateKey = it }
+                        FlowRow(verticalArrangement = Arrangement.Center) {
                             TextButton(onClick = { pickKey.launch(arrayOf("*/*")) }) {
                                 Text(stringResource(R.string.ssh_key_file), color = Colors.accent)
                             }
                             if (privateKey.isNotBlank()) {
-                                Text(stringResource(R.string.ssh_key_loaded), color = Colors.ok, fontSize = TextStyles.label)
+                                Text(stringResource(R.string.ssh_key_loaded), color = Colors.ok, fontSize = TextStyles.label, modifier = Modifier.align(Alignment.CenterVertically))
                             }
                         }
-                        Field(stringResource(R.string.ssh_passphrase), passphrase, password = true) { passphrase = it }
+                        Field(stringResource(R.string.ssh_passphrase), passphrase, password = true, imeAction = ImeAction.Done, onDone = { save() }) { passphrase = it }
                     } else {
-                        Field(stringResource(R.string.ssh_password), password, password = true) { password = it }
+                        Field(
+                            stringResource(R.string.ssh_password),
+                            password,
+                            password = true,
+                            imeAction = ImeAction.Done,
+                            onDone = { save() },
+                            focusRequester = passwordField,
+                        ) { password = it }
                     }
                     if (!identityReady) {
                         Text(
@@ -1203,7 +1356,16 @@ internal fun HostDialog(
                         Text(stringResource(R.string.ssh_host_key_trusted, pinned), color = Colors.muted, fontSize = TextStyles.label)
                     }
                 }
-                if (parsed != null && parsed.viaTailscale && !tailscaleEnabled) {
+                // An imported host's other addresses: for the person to see, and to copy into the address.
+                if (!initial?.fallbacks.isNullOrEmpty()) {
+                    Text(
+                        stringResource(R.string.host_fallbacks, initial!!.fallbacks.joinToString(", ")),
+                        color = Colors.muted,
+                        fontSize = TextStyles.label,
+                        lineHeight = labelLeading,
+                    )
+                }
+                if (parsed != null && parsed.viaTailscale && !tailnetEnabled) {
                     Text(
                         stringResource(R.string.tailscale_need_join_host),
                         color = Colors.amber,
@@ -1217,17 +1379,31 @@ internal fun HostDialog(
                 if (parsed?.plaintext == true && !ssh) {
                     Text(stringResource(R.string.field_plaintext_warning), color = Colors.amber, fontSize = TextStyles.label)
                 }
+                if (tester != null) {
+                    val report by tester.report.collectAsState()
+                    DisposableEffect(tester) { onDispose { tester.clear() } }
+                    // A report is for what was typed when it ran: an edit since makes it stale.
+                    val target = parsed?.let { savedHost(viaTailscale = it.viaTailscale)?.checkTarget() }
+                    LaunchedEffect(target) { if (tester.tested != null && tester.tested != target) tester.clear() }
+                    HostCheckPanel(
+                        report = report,
+                        running = report?.finished == false,
+                        enabled = canSave && target != null,
+                        pinned = (if (sameSshHost) initial?.sshHostKey else null)?.ifBlank { null },
+                        trusted = trusted,
+                        onRun = { target?.let(tester::start) },
+                        onCancel = tester::cancel,
+                        onTrust = { key ->
+                            trusted = key
+                            target?.let { tester.start(it.copy(hostKey = key)) }
+                        },
+                    )
+                }
             }
         },
         confirmButton = {
             // Nothing to save until the address says where to connect and how to get in.
-            TextButton(
-                enabled = canSave,
-                onClick = {
-                    val address = parsed ?: return@TextButton
-                    savedHost(viaTailscale = address.viaTailscale)?.let(onSave)
-                },
-            ) { Text(stringResource(R.string.action_save), color = if (canSave) Colors.accent else Colors.muted) }
+            TextButton(enabled = canSave, onClick = { save() }) { Text(stringResource(R.string.action_save), color = if (canSave) Colors.accent else Colors.muted) }
         },
         dismissButton = {
             Row {
@@ -1276,4 +1452,5 @@ internal fun asSavedHost(
     sshPrivateKey = if (parsed.viaSsh) sshPrivateKey else "",
     sshPassphrase = if (parsed.viaSsh) sshPassphrase else "",
     sshHostKey = if (parsed.viaSsh) sshHostKey else "",
+    fallbacks = initial?.fallbacks.orEmpty(),
 )

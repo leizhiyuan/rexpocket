@@ -1,0 +1,25 @@
+{
+  "name": "session.help",
+  "description": "Describe the methods this session accepts and the methods its blocks provide.",
+  "invoke": {
+    "method": "session.help"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\"\n}",
+  "validation_notes": [
+    "The result has the same form as `help.all`, with an added `http` field. It describes only the methods the session answers itself, such as `session.view` and `session.new_split`, and the block methods of the creators that session can use.",
+    "Most clients call `help.all` instead, which describes every method the server provides."
+  ]
+}

@@ -6,7 +6,7 @@
 
 終端機多工器 [Rex](https://rex.app) 的 Android 用戶端。它會把你自己的 Rex 伺服器上的所有工作階段一路列到
 分頁，點開任何窗格就是全螢幕終端機，可以直接輸入。它只跟你的 Rex 通訊，不經過任何第三方——可以走區域網路，
-也可以透過 App 內建的 Tailscale 節點走你的 tailnet，或走電腦自己的 SSH 服務。
+也可以透過 App 內建的 Tailscale 或 Netbird 節點走你的 tailnet，或走電腦自己的 SSH 服務。
 
 | 主頁 | 終端機 | 夜間終端機 |
 | --- | --- | --- |
@@ -25,11 +25,16 @@
 - **真正的終端機。** 窗格由 Ghostty 的終端機模擬器繪製，資料來自 Rex 自己的串流：先是整個終端機的快照，
   之後是即時輸出。顏色、回捲歷史、全螢幕程式都和桌面上完全相同。
 - **為手機而設計。** 輸入直接進窗格。底部浮動的 dock 裡有鍵盤、Enter 和一排快速鍵：`esc`、`C-c`、按住
-  會連發的方向鍵、Tab、對下一個鍵生效的 `ctrl`（Shift / Alt 需在設定中開啟）（快速鍵列和手機鍵盤都適用）、貼上、迴紋針、
-  `/` 和複製。按住 `ctrl` 可選 `C-c` `C-d` `C-z` `C-r` `C-l` `C-a` `C-e` `C-w` `C-j`。分割畫面一次顯示
+  會連發的方向鍵、Tab、對下一個鍵生效的 `ctrl`（Shift / Alt 預設隱藏）（快速鍵列和手機鍵盤都適用）、貼上、迴紋針、
+  `/` 和複製。`Fn` 會固定一塊面板：Home、End、PgUp、PgDn、Ins、Del、F1-F12 和常用符號，按鍵列上的修飾鍵對它們同樣有效。
+  設定 › 終端機控制 › 排列按鍵可以任意調整兩組按鍵的順序、新增和移除按鍵——`Fn` 裡的任何鍵（例如 F10）都能直接放到
+  按鍵列上，單獨的方向鍵、`C-d` 這類組合鍵、字母和符號也可以——並決定 `Fn` 裡放什麼。**按鍵組**是和 `Fn` 一樣
+  有自己按鍵的面板：可以新建空組，或從預設（htop、vim、tmux）建立。只有鍵盤鍵一定保留；`C-c` 鍵可以設為程式閒置時
+  需要長按（`ctrl` 再按 `c` 一定可以送出）。
+  按住 `ctrl` 可選 `C-c` `C-d` `C-z` `C-r` `C-l` `C-a` `C-e` `C-w` `C-j`。分割畫面一次顯示
   一個窗格，用下方的切換列在窗格之間切換。**叫出鍵盤不會改變終端機尺寸**——窗格按鍵盤蓋住的高度往上移，正在
   輸入的那一列留在視野裡，裡面的程式不會因為鍵盤進出而重繪；**接上實體鍵盤時 dock 會收起**，因為那些鍵它本來
-  就有，貼上與傳檔案仍在選單裡。
+  就有，貼上、傳送檔案、鍵盤與全螢幕仍在選單裡。
 - **連結。** 長按程式輸出的連結（包括程式設定的超連結），可以開啟、複製或分享。
 - **檔案和圖片。** 從手機選擇任意檔案，傳送到正在看的窗格。Rex 會把檔案存在電腦上，並自己輸入它的路徑，
   所以截圖可以直接送進 Agent 的提示詞。
@@ -37,15 +42,29 @@
   開啟那個窗格。
 - **和桌面同時使用。** 手機只佔它正在顯示的那個窗格，並以手機尺寸顯示；桌面停在自己的分頁上。
   **交還** 會把窗格還給桌面，直到你再次 **接管**。
-- **不裝 Tailscale 也能上 tailnet。** App 內建一個 Tailscale 節點，用 MagicDNS 名稱或 `100.x` 位址
-  就能連到主機，也不必佔用手機唯一的 VPN 位置。
+- **不裝 Tailscale 或 Netbird 也能上 tailnet。** App 內建一個 Tailscale 或 Netbird 節點，用 MagicDNS
+  名稱或 `100.x` 位址就能連到主機，也不必佔用手機唯一的 VPN 位置。
 - **透過 SSH 新增主機。** 填 `ssh://host`，再填帳號和密碼（或私鑰），就能透過機器本來就在跑的 SSH 服務
   連到 Rex，不必對外開放 Rex 連接埠。第一次連線會顯示並記住主機金鑰；金鑰變了會停下來，等你確認。
   tailnet 位址仍然走 App 內建的節點。
 - **知道自己舊了。** 每天啟動時（以及點設定 › 更新時）向 GitHub releases 查有沒有新版本，有就提示；
-  你不點就不下載，安裝前 Android 只會問一次權限。更新通道決定什麼算新版本：**穩定**只收正式版，**嘗鮮**收
+  你不點就不下載，安裝前 Android 只會問一次權限。更新通道決定什麼算新版本：**穩定版**只收正式版，**預覽版**收
   最新發布的建置，alpha 與 beta 也算；沒選過的安裝跟著自己來源的那條通道走。
-- **淺色與深色** 跟隨手機，介面提供英文與簡體中文。
+- **淺色與深色** 跟隨手機，介面提供英文、簡體中文與繁體中文。
+
+## 要裝哪個 APK
+
+[android-apk 工作流程](.github/workflows/android-apk.yml) 每次執行都會在 `rexpocket-debug-apks` 成品裡留下三個
+APK，用同一把金鑰簽署：
+
+| APK | 是什麼 | 怎麼裝 |
+| --- | --- | --- |
+| `rexpocket.apk` | App 本體，內建 Tailscale | 一般裝這個 |
+| `rexpocket-netbird-addon.apk` | Netbird 附加元件：一個沒有圖示的獨立 App，為 `rexpocket.apk` 執行 Netbird | 要用 Netbird 時與 `rexpocket.apk` 一起裝 |
+| `rexpocket-netbird.apk` | 內建 Netbird 的 App，大約大 30 MB；不使用附加元件 | 取代 `rexpocket.apk` |
+
+`rexpocket.apk` 和 `rexpocket-netbird.apk` 是同一個 App，可以互相覆蓋安裝，主機都會保留。附加元件是另一個
+App：要和 `rexpocket.apk` 來自同一次執行或同一個發布版本，因為 RexPocket 只和用自己金鑰簽署的附加元件溝通。
 
 ## 電腦端設定
 
@@ -63,7 +82,7 @@ rex server start --extra-listen :7297 --allow-anonymous
 路由器上什麼都不用開。
 
 **SSH。** 在電腦上裝好 Rex（`rex server install` 就會裝好），讓非互動登入也能執行 `rex`
-（App 也會到 `~/.local/bin` 找）。路由器上什麼都不用開：App 透過機器自己的 SSH 服務連進去。 傳輸層的完整設計見
+（App 也會到 `~/.local/bin`、`/usr/local/bin` 和 `/usr/bin` 找）。非互動的 SSH 登入不會讀取互動式 shell 的 PATH，所以在 macOS 上 Rex 裝在 App 套件裡，要把它連結到上面某個目錄，例如 `ln -s "<Rex App>/Contents/MacOS/rex" ~/.local/bin/rex`，指向套件裡的 `Versions/Current`，這樣更新後仍然有效。路由器上什麼都不用開：App 透過機器自己的 SSH 服務連進去。 傳輸層的完整設計見
 [docs/design/ssh-hosts.md](docs/design/ssh-hosts.md)。
 
 ## 使用方式
@@ -72,33 +91,42 @@ rex server start --extra-listen :7297 --allow-anonymous
    - `192.0.2.10`——明文，7297 連接埠
    - `192.0.2.10:7300`——換個連接埠
    - `my-mac.tail1234.ts.net` 或 `100.x` 位址——透過 Tailscale，443 連接埠，TLS
+   - `ssh://my-pc.netbird.cloud` 或 `my-pc.netbird.cloud:7297`——透過 Netbird（自架的 Netbird 用 `100.x` 位址連線）。
+     Rex 只有透過 Tailscale Serve 才在 443 連接埠提供 TLS；在 Netbird 上 Rex 分不出來訪者，所以那裡 Rex
+     自己的連接埠是用 `--allow-anonymous` 啟動的明文監聽（見 Rex 遠端存取文件的「Plain HTTP」）；走 SSH
+     則什麼連接埠都不用開
    - `ssh://192.0.2.10` 或 `ssh://my-mac.tail1234.ts.net`——透過那台機器的 SSH 服務，
      填帳號和密碼（或私鑰）；第一次連線會請你確認主機金鑰
 
    輸入框下面那行會顯示 App 打算怎麼連。
-2. **tailnet 主機要先加入 tailnet。** 設定 › Tailscale，給手機一個節點名稱並儲存。App 會開啟一次
-   登入頁，之後節點隨 App 啟動。
+2. **tailnet 主機要先加入 tailnet。** 設定 › Tailnet，選 Tailscale 或 Netbird（`rexpocket.apk` 裡是 Netbird (add-on)，需要先裝附加元件），給手機一個節點名稱並儲存。
+   Tailscale 會開啟一次登入頁。Netbird 第一次需要它後台產生的安裝金鑰；自架的 Netbird 還要填管理伺服器的
+   位址。之後節點隨 App 啟動。
 3. **開啟分頁。** 在主頁點一個分頁。工作階段旁邊的加號會新增分頁，主機的選單可以新增工作階段。
 4. **終端機裡：**
    - 點窗格開始輸入。拖曳可回捲，雙指縮放可改字級，長按可選取；長按連結可以開啟它。
-   - 橫滑快速鍵列查看其餘按鍵。設定 → 終端機可開啟 Shift / Alt，預設隱藏。點一次修飾鍵用於下一鍵，快速點兩次鎖定，再點解除。長按 Enter 換行；按住 Ctrl 滑選組合鍵。
+   - 想要更大的空間，輕觸兩下窗格、在 ⋮ 選單中選擇「全螢幕」，或把鍵盤鍵旁邊的小膠囊橫滑到全螢幕鍵：頂列、按鍵列和手機的狀態列、導覽列都會隱藏（從螢幕邊緣滑動可暫時顯示手機的列）。點角落的按鈕、再輕觸兩下或按返回鍵即可恢復。全螢幕時輕觸開啟鍵盤，再輕觸一次關閉鍵盤。
+   - **設定 › 終端機控制** 可以選擇每個手勢做什麼、需要多久：輕觸（開啟鍵盤、開啟或關閉鍵盤、無動作）、輕觸兩下（全螢幕、鍵盤、無動作）、長按（選取文字、全螢幕、鍵盤；連結一定會跳出）、等待輕觸兩下（預設關閉，輕觸立即生效），以及輕觸兩下的間隔和長按時間（預設跟隨手機）。排列按鍵（順序、新增、移除、按鍵組、恢復預設）和 `C-c` 的長按設定也在這裡。詳見 [docs/design/terminal-controls.md](docs/design/terminal-controls.md)。
+   - 手機橫放時，窗格切換列放進頂列；鍵盤開啟時頂列讓位，按鍵列保持完整高度，角落的 ⋮ 仍可開啟選單。
+   - 橫滑快速鍵列查看其餘按鍵。設定 › 終端機控制 › 排列按鍵可新增 Shift / Alt，預設不在按鍵列上。點一次修飾鍵用於下一鍵，快速點兩次鎖定，再點解除。長按 Enter 換行；按住 Ctrl 滑選組合鍵。
    - 點標題可看目前工作階段的分頁和窗格，以及工作階段清單。
    - 左右滑動，或用窗格下方的切換列，在分割畫面的窗格之間切換。
-   - 選單裡有交還 / 接管、分割、重新命名和關閉。
-5. **主頁上，** 眼睛按鈕只保留有程式在執行或在等你的分頁；搜尋可以過濾主機、工作階段和分頁。
+   - ⋮ 選單重複按鍵列裡作用於手機的操作（貼上、傳送檔案、顯示或隱藏鍵盤、全螢幕），無論按鍵列顯示什麼；其後是窗格（交還 / 接管、新增窗格、重新命名、關閉）、分頁（新增、重新命名、關閉）和工作階段（工作階段列表、重新命名、結束）。
+   - **命令面板**：⋮ 選單的第一列，或 Ctrl+Shift+P（Mac 鍵盤上是 Cmd+Shift+P）。輸入即可搜尋上述所有操作、主機的每個分頁和每個工作階段，與 Rex 自己的命令面板一樣（用 Rex 的名稱，如「Split Pane Right」，也能找到）。外接鍵盤可用方向鍵、Enter 和 Esc。見 [docs/design/command-palette.md](docs/design/command-palette.md)。
+5. **主頁上，** 眼睛按鈕像 Rex 一樣顯示已連線主機的「活動」：回報了狀態的程式所在的分頁，依等待中、失敗、完成、執行中分組，每列附工作階段名稱、手機看到狀態變化以來的時間和程式的訊息；點一列即開啟那個窗格。搜尋可以過濾主機、工作階段和分頁（眼睛開啟時過濾活動列）。
 6. **背景提醒：** 設定 › 背景提醒，並允許通知。監聽期間會有一則靜音通知，點其中的 **停止** 可關閉提醒。
    重新開機後 App 不會自己啟動；Android 的省電策略可能讓提醒延遲。
 
 ## 回報問題
 
-App 會把最近幾小時的日誌留在手機上，所以問題發生之後再回報也沒問題。（介面目前提供英文與簡體中文，
-下面的按鈕名稱以英文介面為準。）
+App 會把最近幾小時的日誌留在手機上，所以問題發生之後再回報也沒問題。（下面的按鈕名稱
+以繁體中文介面為準。）
 
-1. **Settings › Diagnostics。** 行尾顯示 `Off` 時，App 只保留最近幾小時的日誌；顯示 `Recording` 表示
+1. **設定 › 診斷。** 行尾顯示「關閉」時，App 只保留最近幾小時的日誌；顯示「錄製中」表示
    正在錄製。
-2. 問題已經發生過，就點 **Share report**，把檔案附到 issue 裡。只有在操作時才出現的問題，點
-   **Start recording**，重現一次，再回來點 **Stop and share**。
-3. **Open an issue** 會把同一份報告複製到剪貼簿並開啟 issue 頁面：貼進去，寫一下當時在做什麼，
+2. 問題已經發生過，就點 **分享報告**，把檔案附到 issue 裡。只有在操作時才出現的問題，點
+   **開始錄製**，重現一次，再回來點 **停止並分享**。
+3. **回報問題（issue）** 會把同一份報告複製到剪貼簿並開啟 issue 頁面：貼進去，寫一下當時在做什麼，
    如果分享了檔案就一起附上。
 
 報告裡有 App 版本、手機、你的主機、連線做了什麼，以及 App 自己的日誌——最近幾小時的，加上你錄製的那一段。
@@ -118,11 +146,13 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再�
 - **SSH。** 每條 HTTP 或 WebSocket 連線都是一條 SSH exec 通道，裡面執行
   `rex __internal dial-stdio`，把標準輸入輸出接到那台機器上 Rex 自己的 Unix socket。App 記住第一次
   看到的主機金鑰，之後每次連線都比對；金鑰變了就不再重試，等你確認新的。主機直連，位址在 tailnet 上時
-  走內建的 Tailscale 節點。
-- **Tailscale。** 節點是官方的 `tailscale.com/tsnet` 程式庫，跑在使用者空間，前面是回環位址上的 SOCKS5
-  代理，只有 App 自己的連線會走它。節點的 UDP 綁在手機的 Wi-Fi 或行動網路上，在 VPN 允許 App 繞過時會繞開 Clash
-  這類代理 VPN，這樣才打得通直連。主頁會顯示到每台 tailnet 主機的路徑——直連、peer relay 還是
-  DERP——以及往返延遲，點一下可以重新測量。
+  走內建的 tailnet 節點。
+- **tailnet 節點。** 一次只執行一個：官方的 `tailscale.com/tsnet` 程式庫，或 Netbird 的嵌入式用戶端。兩者都跑在
+  使用者空間，前面是回環位址上的 SOCKS5 代理，只有 App 自己的連線會走它。Tailscale 節點的 UDP 綁在手機的 Wi-Fi
+  或行動網路上，在 VPN 允許 App 繞過時會繞開 Clash 這類代理 VPN，這樣才打得通直連。主頁會顯示到每台 tailnet
+  主機的路徑——直連、peer relay、DERP 還是 Netbird 中繼伺服器——以及往返延遲，點一下可以重新測量。
+  Netbird 附加元件在它自己的 App 裡執行同一個 Netbird 節點，沒有代理：RexPocket 透過一個只有同一把金鑰簽署的 App
+  才能繫結的服務連到它，每條連線都是附加元件交過來的一個 socket。
 
 ### 讓 tailnet 更快
 
@@ -139,9 +169,9 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再�
 ```
 
 APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 會建置一個以發布金鑰簽署的版本（見下文「發布」）。只建置
-arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/` 這個 Go 模組建置，`tailscale.com` 的
-版本由其 `go.mod` 鎖定；要重新建置，執行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。`core` 裡的整合測試會連到 `127.0.0.1:7297` 上的 Rex
-（可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），沒有 Rex 時會略過。 SSH 測試需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台機器，並用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 提供憑證才會執行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可選。
+arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/` 這個 Go 模組建置，包含 `tailscale.com` 的 tsnet 程式庫
+（版本由其 `go.mod` 鎖定）和 `tailnet/netbird` 中的 Netbird 嵌入式用戶端；要重新建置，執行 [tools/build-tailnet.sh](tools/build-tailnet.sh)。Netbird 需要另外選擇打包：`REXPOCKET_NETBIRD=1 tools/build-tailnet.sh` 會產生 `app/libs/tailnet-netbird.aar`，再用 `./gradlew -Prexpocket.netbird=true :app:assembleRelease` 連結進 App。它會讓 APK 增加約 30 MB（29 MB 增至 59 MB），所以預設建置不包含它，改由附加元件提供 Netbird：`REXPOCKET_NETBIRD=addon tools/build-tailnet.sh` 產生附加元件的程式庫 `netbirdaddon/libs/tailnet-netbird-addon.aar`，`./gradlew :netbirdaddon:assembleRelease` 建置附加元件，用同一把發布金鑰簽署。`core` 裡的整合測試會連到 `127.0.0.1:7297` 上的 Rex
+（可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），沒有 Rex 時會略過。窗格生命週期情境（在電腦或手機上關閉分頁和窗格、交還與接管、重新連線）每次建置都會對測試 JVM 裡的 `ScriptedRex` 執行，有真實 Rex 在監聽時也會對它執行，見 [docs/design/testing.md](docs/design/testing.md#rex-integration)。 SSH 測試需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台機器，並用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 提供憑證才會執行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可選。
 
 ### 發布
 
@@ -166,6 +196,9 @@ arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/` 
   官方的 libghostty-vt，授權見 `app/src/main/assets/licenses/Ghostty-MIT.txt`。
 - [Tailscale](https://github.com/tailscale/tailscale)，Tailscale Inc. 及貢獻者，BSD-3-Clause——App 內的
   Tailscale 節點就是它的 tsnet 程式庫。
+- [Netbird](https://github.com/netbirdio/netbird)，NetBird GmbH 及貢獻者，BSD-3-Clause——App 內的 Netbird
+  節點就是它的嵌入式用戶端；App 只包含其用戶端部分，不含伺服器部分。
+- [go-socks5](https://github.com/things-go/go-socks5)，Things Go 及貢獻者，MIT——Netbird 節點前面的 SOCKS5 服務。
 - [JSch](https://github.com/mwiede/jsch)，JCraft, Inc. 與貢獻者，Revised BSD——SSH 客戶端。
   [eddsa](https://github.com/str4d/ed25519-java)，Str4d 與貢獻者，CC0——Android 自帶的安全提供者
   沒有給 JSch 的 Ed25519 實作。

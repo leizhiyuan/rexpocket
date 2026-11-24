@@ -1,0 +1,123 @@
+{
+  "name": "client.action",
+  "description": "Perform an action from the configuration file or a block, as this client.",
+  "invoke": {
+    "method": "client.action"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "description": "The full name of the action, such as dev_layout or com.superlogical.terminal.reset. client.keymap lists them."
+      },
+      "args": {
+        "description": "The action's arguments, as a JSON object. Leave it out if there are none, and always for an action a creator declares."
+      },
+      "block_id": {
+        "type": "string",
+        "description": "The block the action applies to. Defaults to the session's focused block, unless server is set. Requires session_id."
+      },
+      "origin": {
+        "type": "string",
+        "description": "What caused the request: key, palette, or api (the default). The action reads it as ctx.origin. Other values count as api, but script makes the call fail with bad_request."
+      },
+      "server": {
+        "type": "string",
+        "description": "The name, from servers, of the server that holds session_id and block_id. Leave it out when they're on the server you're sending this to."
+      },
+      "servers": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Any non-empty value the client uses to recognize the server. It comes back unchanged in client_call_requested events."
+            },
+            "name": {
+              "type": "string",
+              "description": "The name an action uses for the server, in rex.server(name) and ctx.server. It must be unique and not empty."
+            }
+          },
+          "required": [
+            "name",
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Other servers this client is connected to, which a configuration file action can call with rex.server(name). Don't list the server you're sending this to."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session the action applies to. Required for a block action. A configuration file action may leave it out, and then has no default session."
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "client_actions": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "The name of the client action to perform. Ignore a name you don't know."
+            },
+            "args": {
+              "description": "The action's arguments, as a JSON object. Left out if there are none."
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Actions the configuration file action asked this client to perform with rex.client.queue, in order. Perform each one as you would a key binding."
+      },
+      "ordered_after": {
+        "type": "string",
+        "description": "The id of the request this connection ran just before this one, counting only methods that run in order, such as client.key. Left out if there was none."
+      },
+      "result": {
+        "description": "The block method's result, or what the configuration file action returned. Left out if that action returned nothing, nil, or true."
+      }
+    },
+    "required": [
+      "client_actions"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"action\": \"com.superlogical.terminal.reset\",\n  \"origin\": \"key\",\n  \"session_id\": \"session:<uuid>\"\n}",
+  "response_example": "{\n  \"result\": {},\n  \"client_actions\": [],\n  \"ordered_after\": \"key-41\"\n}",
+  "validation_notes": [
+    "`action` decides what runs. A name without a dot, such as `dev_layout`, is an action that the configuration file defines with `rex.action`. A name with a dot, such as `com.superlogical.terminal.reset`, is an action or method of a block, named after its creator. `client.keymap` lists every name in `actions`.",
+    "A block action, such as `com.superlogical.terminal.reset`, has fixed arguments, so a request for one with `args` fails with `bad_request`. A block method, such as `com.superlogical.terminal.write`, takes its arguments from `args`.",
+    "If `args` isn't an object, the call fails with `bad_request`. `null` counts as leaving it out.",
+    "The client's own actions, such as `pane.split`, run in the client and can't be sent here. A request for one, or for any name the server doesn't know, fails with `not_found`.",
+    "On each connection, `client.key`, `client.action`, `block.event`, and the methods that change focus or the layout run one at a time, in the order they arrive. For an action bound to a key, use this method rather than calling the block method by name, such as `com.superlogical.terminal.write`, so the action takes effect after the keys typed before it.",
+    "When `session_id` is set, the connection must be attached to that session, with `session.attach`, `session.bootstrap`, or `session.attach_all`, or the call fails with `conflict`. If `session_id` names no session, the call fails with `session_not_found`. Neither check applies when `server` is set.",
+    "Send `session_id` with any block action or method, and whenever you send `block_id`, or the call fails with `bad_request`. A block action or method runs on `block_id`, or on the session's focused block if you leave that out. If the session has no focused block, the call fails with `conflict`.",
+    "If the block isn't the kind the action or method belongs to, the call fails with `conflict`. If `block_id` names a block that isn't in the session, it fails with `not_found`.",
+    "An action from the configuration file may leave out `session_id`. It then has no `ctx.session_id`, and its `rex.session` calls have no default session. With `session_id`, it sees `block_id`, or the focused block, as `ctx.block_id`.",
+    "If `origin` is `script`, the call fails with `bad_request`, because only `rex.invoke` may report that origin.",
+    "An action from the configuration file may run for 30 seconds, including time spent waiting on other servers. If it runs longer, the call fails with `timeout`. If the file is reloaded while it runs, the call fails with `conflict`.",
+    "If an action from the configuration file raises an error, the call fails with a message that starts with where it happened, such as `init.lua:4: attempt to index a nil value`. However the action fails, part of it may already have run.",
+    "Each entry in `servers` needs a unique, non-empty `name` and a non-empty `id`, and `server` must name one of them. Otherwise the call fails with `bad_request`. The server doesn't interpret either value.",
+    "Set `server` when the session belongs to one of `servers`. The IDs then go to the action unchecked, and the focused block isn't filled in, so send `block_id` yourself. The action's `rex.session`, `rex.block.call`, and `rex.call` calls go to that server.",
+    "When `server` is set, any name with a dot fails with `bad_request`, because a block action must run on the server that holds the block. Send it to that server instead.",
+    "When the action calls another server, this connection receives a `client_call_requested` event. Make the call there and report the outcome with `client.reply`. If no reply comes within 10 seconds, or the reply is an error, the action's call fails and the action keeps running."
+  ]
+}

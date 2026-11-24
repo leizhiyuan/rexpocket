@@ -1,0 +1,33 @@
+$ rex client ls --help
+List the clients connected to the server.
+
+Each client says what it is when it connects. The label is the name a person
+gave it, and two clients may share one. Command line clients such as this one
+are hidden unless --all is given. With --json, the output is the server's full
+reply, including command line clients. Use -s to list only the clients
+attached to one session.
+
+Examples:
+  rex client ls
+  rex client ls -s work
+  rex client ls --all
+  rex client ls -q
+
+Usage:
+  rex client ls [flags]
+
+Options:
+  -s, --session string  scope to session SESSION
+      --all             include command line clients
+      --json            output clients as JSON
+  -q, --quiet           print IDs only, one per line
+      --short           show short IDs (--short=false shows full IDs) (default true)
+  -h, --help            help for ls
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

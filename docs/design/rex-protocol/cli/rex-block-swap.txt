@@ -1,0 +1,26 @@
+$ rex block swap --help
+Swap the layout positions of two visible blocks.
+
+The blocks may be in different windows, but they must belong to the same
+session. Rex resolves both block arguments before changing the layout. The
+surrounding layout is unchanged.
+
+Examples:
+  rex block swap editor logs
+  rex block swap c2a9f3 1bc2a9
+
+Usage:
+  rex block swap BLOCK OTHER [flags]
+
+Options:
+  -s, --session string  scope to session SESSION
+  -w, --window string   scope to window WINDOW
+  -h, --help            help for swap
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

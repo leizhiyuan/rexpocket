@@ -1,0 +1,33 @@
+{
+  "name": "session.detach",
+  "description": "Detach the connection from a session. The connection stays open and the session keeps running.",
+  "invoke": {
+    "method": "session.detach"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "The session to detach from."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\"\n}",
+  "response_example": "{}",
+  "validation_notes": [
+    "The connection's other attachments, and any events it receives through `session.attach_all`, continue as before.",
+    "The client leaves the session. The server sends `client_disconnected`, and each block the client owned passes to the next client in line for it, if there is one.",
+    "If the connection isn't attached to the session, the call succeeds and changes nothing, even if the session doesn't exist.",
+    "A `session.attach` for the same session that is still in progress isn't canceled. This call succeeds without detaching, and the attach completes.",
+    "If the connection attaches to the session again later, its client keeps the same `client_id`."
+  ]
+}

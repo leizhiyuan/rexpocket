@@ -1,0 +1,21 @@
+# Combined NetBird server (management + signal + relay + STUN) for the e2e test.
+# Plain HTTP on :8080, embedded IdP (never used: peers join with a setup key),
+# sqlite store. exposedAddress is the name peers reach it at; it also becomes the
+# network's DNS domain, so peers get FQDNs like peer.netbird.e2e.
+server:
+  listenAddress: ":8080"
+  exposedAddress: "http://netbird.e2e:8080"
+  stunPorts:
+    - 3478
+  healthcheckAddress: ":9000"
+  metricsPort: 9090
+  logLevel: "info"
+  logFile: "console"
+  authSecret: "rexpocket-e2e-relay-secret"
+  dataDir: "/nb/data"
+  disableAnonymousMetrics: true
+  disableGeoliteUpdate: true
+  auth:
+    issuer: "http://localhost:8080/oauth2"
+  store:
+    engine: "sqlite"

@@ -1,5 +1,6 @@
 package me.leaver.rexpocket.terminal
 
+import me.leaver.rexpocket.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -21,6 +22,9 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.widget.OverScroller
+import me.leaver.rexpocket.core.Gesture
+import me.leaver.rexpocket.core.TapGestures
+import me.leaver.rexpocket.core.TapTiming
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -88,11 +92,76 @@ internal class TerminalView(context: Context) : View(context) {
     /** A web link the user long-pressed. */
     var onLink: ((String) -> Unit)? = null
 
+    /** Paste in the selection's menu: what the clipboard holds goes to the program, as the bar's Paste. */
+    var onPaste: (() -> Unit)? = null
+
+    /** Share in the selection's menu: the selected text, offered to another app. */
+    var onShare: ((String) -> Unit)? = null
+
     /** A tap that was not the start of anything else. */
     var onTap: (() -> Unit)? = null
 
+    /**
+     * A second tap soon after a first, in the same place; true when the first one already went out
+     * as a tap, which it does unless [gestureTiming] waits for a second. Null, the default, leaves
+     * every tap a tap, at once, as before there was one.
+     */
+    var onDoubleTap: ((firstTapActed: Boolean) -> Unit)? = null
+        set(value) {
+            field = value
+            applyTiming()
+        }
+
+    /**
+     * A press held still, when it is not to select: a link under the finger is still offered first.
+     * Null, the default, selects the word under it, as a long press always did.
+     */
+    var onLongPress: (() -> Unit)? = null
+
+    /**
+     * How taps, double taps and long presses are told apart: the person's times, or the phone's.
+     * Its double taps count only while [onDoubleTap] listens for them.
+     */
+    var gestureTiming: TapTiming = systemTiming()
+        set(value) {
+            if (field == value) return
+            field = value
+            applyTiming()
+        }
+
     /** A horizontal swipe; true when it went towards the next pane. */
     var onSwipe: ((forward: Boolean) -> Unit)? = null
+
+    /**
+     * Where the cursor's row is, as the pane draws it: its top in this view's pixels, or null once no
+     * cursor has shown for a moment. Called when it changes. The screen reads it to keep that row in
+     * view while the keyboard covers the bottom of the pane.
+     *
+     * A program that hides the cursor only while it redraws would otherwise flick the answer to
+     * null and back, so a cursor that goes away is reported only once it has stayed away for
+     * [CURSOR_GONE_MS]. While the pane is scrolled back into the history nothing is reported: the
+     * cursor is out of view because the person is reading, and the pane stays where it is.
+     */
+    var onCursorRow: ((topPx: Int?) -> Unit)? = null
+
+    /**
+     * The bottom of what the program has drawn on the live screen, in this view's pixels, when that
+     * stops short of the pane's last row: the cursor's row, or a lower one that has something on it.
+     * Null when the drawing reaches the last row, or on the alternate screen, where a full-screen
+     * program owns every row. Reported with [onCursorRow], and not while the pane is scrolled back.
+     * The screen reads it so the keyboard moves a short screen - a new shell, a few prompts - only
+     * as far as its last row needs, and not up to the cursor's row.
+     */
+    var onDrawnBottom: ((bottomPx: Int?) -> Unit)? = null
+
+    private var drawnBottom: Int? = null
+    private var cursorTop: Int? = null
+    private var cursorReported = false
+    private var cursorGonePending = false
+    private val cursorGone = Runnable {
+        cursorGonePending = false
+        reportCursor(null)
+    }
 
     private val regular = Paint(Paint.ANTI_ALIAS_FLAG).apply { isSubpixelText = true }
     private val bold = Paint(regular)
@@ -137,6 +206,69 @@ internal class TerminalView(context: Context) : View(context) {
 
     private enum class Axis { None, Vertical, Horizontal }
 
+    /**
+     * Taps, double taps and long presses, told apart by [TapGestures] from the touches and the
+     * time; the detector below keeps drags and flings. A double tap acts when its second finger
+     * lifts, so a second press held becomes a long press and one that moves is a drag.
+     */
+    private val taps = TapGestures()
+
+    /** True after a long press until the finger lifts: the rest of that touch is not a drag. */
+    private var longPressed = false
+
+    /**
+     * The main thread's handler, not the view's own post: a view not yet in a window holds what is
+     * posted to it until it is, and a gesture's time must pass whether or not it is.
+     */
+    private val tapClock = android.os.Handler(android.os.Looper.getMainLooper())
+
+    private val tapTimer = Runnable {
+        dispatch(taps.timer(SystemClock.uptimeMillis()))
+        scheduleTaps()
+    }
+
+    private fun systemTiming(): TapTiming {
+        val config = android.view.ViewConfiguration.get(context)
+        return TapTiming(
+            doubleTapMs = android.view.ViewConfiguration.getDoubleTapTimeout().toLong(),
+            longPressMs = android.view.ViewConfiguration.getLongPressTimeout().toLong(),
+            touchSlop = config.scaledTouchSlop.toFloat(),
+            doubleTapSlop = config.scaledDoubleTapSlop.toFloat(),
+        )
+    }
+
+    private fun applyTiming() {
+        taps.timing = gestureTiming.copy(doubleTaps = gestureTiming.doubleTaps && onDoubleTap != null)
+    }
+
+    private fun scheduleTaps() {
+        tapClock.removeCallbacks(tapTimer)
+        val at = taps.deadline ?: return
+        tapClock.postDelayed(tapTimer, (at - SystemClock.uptimeMillis() + 1).coerceAtLeast(0))
+    }
+
+    private fun dispatch(gestures: List<Gesture>) {
+        for (gesture in gestures) {
+            when (gesture) {
+                is Gesture.Tap -> {
+                    val frame = currentFrame()
+                    val active = session
+                    // A program that reads the mouse gets its click, whatever the tap does for the app.
+                    if (frame != null && active != null && frame.mouseTracking && frame.atBottom) {
+                        val (column, row) = cellAt(gesture.x, gesture.y)
+                        active.sendRaw(active.encodeClick(column, row, cellWidth.roundToInt(), cellHeight.roundToInt()))
+                    }
+                    onTap?.invoke()
+                }
+                is Gesture.DoubleTap -> onDoubleTap?.invoke(gesture.firstTapActed)
+                is Gesture.LongPress -> {
+                    longPressed = true
+                    longPress(gesture.x, gesture.y)
+                }
+            }
+        }
+    }
+
     private val gestures = GestureDetector(
         context,
         object : GestureDetector.SimpleOnGestureListener() {
@@ -167,20 +299,12 @@ internal class TerminalView(context: Context) : View(context) {
                 return true
             }
 
-            override fun onSingleTapUp(e: MotionEvent): Boolean {
-                val frame = currentFrame()
-                val active = session
-                if (frame != null && active != null && frame.mouseTracking && frame.atBottom) {
-                    val (column, row) = cellAt(e.x, e.y)
-                    active.sendRaw(active.encodeClick(column, row, cellWidth.roundToInt(), cellHeight.roundToInt()))
-                }
-                onTap?.invoke()
-                return true
-            }
-
-            override fun onLongPress(e: MotionEvent) = longPress(e)
         },
-    )
+    ).apply {
+        // Taps, double taps and long presses are TapGestures' own, with the person's times.
+        setOnDoubleTapListener(null)
+        setIsLongpressEnabled(false)
+    }
 
     private val pinch = ScaleGestureDetector(
         context,
@@ -196,14 +320,42 @@ internal class TerminalView(context: Context) : View(context) {
         },
     )
 
+    /** The lines TalkBack reads; see [TerminalAccessibility]. */
+    internal val access = TerminalAccessibility(this)
+
     init {
         // Typing goes through TerminalImeView, which sits under this view: its own input connection
         // would answer the keyboard with no text type at all.
         isFocusable = false
         isFocusableInTouchMode = false
         isLongClickable = true
+        applyTiming()
         measureFont()
+        // TalkBack reads the pane line by line, and the output that comes while it listens there.
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
+        contentDescription = context.getString(R.string.terminal_a11y_label)
+        androidx.core.view.ViewCompat.setAccessibilityDelegate(this, access)
     }
+
+    /** What the pane shows now, for [access]. */
+    internal fun screenFrame(): TerminalFrame? = selection?.frame ?: currentFrame()
+
+    /** How many of [frame]'s rows the pane has room to show, for [access]. */
+    internal fun visibleRows(frame: TerminalFrame): Int =
+        if (height <= 0) 0 else min(frame.rows, ceil(height / cellHeight).toInt())
+
+    /** A row's height in pixels, for [access]. */
+    internal val rowHeight: Float get() = cellHeight
+
+    /** TalkBack's double tap on the pane, or on a line of it: what a tap does. */
+    override fun performClick(): Boolean {
+        super.performClick()
+        onTap?.invoke()
+        return true
+    }
+
+    override fun dispatchHoverEvent(event: MotionEvent): Boolean =
+        access.dispatchHoverEvent(event) || super.dispatchHoverEvent(event)
 
     /**
      * True while a keyboard other than the screen's is attached. The pane then takes the focus - it
@@ -275,12 +427,17 @@ internal class TerminalView(context: Context) : View(context) {
         keepBitmaps(images)
         drawImages(canvas, frame, images, TerminalImage.LAYER_BELOW_BACKGROUND)
         for (row in 0 until rows) drawBackgrounds(canvas, frame, row, columns)
+        drawMatches(canvas, frame, rows)
         drawImages(canvas, frame, images, TerminalImage.LAYER_BELOW_TEXT)
         for (row in 0 until rows) drawText(canvas, frame, row, columns)
         drawImages(canvas, frame, images, TerminalImage.LAYER_ABOVE_TEXT)
-        if (selection == null) drawCursor(canvas, frame)
+        if (selection == null) {
+            drawCursor(canvas, frame)
+            noteCursor(frame)
+        }
         drawHandles(canvas)
         drawScrollbar(canvas, frame)
+        access.screenChanged(frame)
     }
 
     /**
@@ -375,6 +532,34 @@ internal class TerminalView(context: Context) : View(context) {
             }
         }
         flush()
+    }
+
+    /**
+     * Find's matches on the rows in view, under the text: each in a soft amber, the one Find is on
+     * in a strong one with an outline, so it can be told apart without colour too.
+     */
+    private fun drawMatches(canvas: Canvas, frame: TerminalFrame, rows: Int) {
+        val found = session?.highlights ?: return
+        if (found.matches.isEmpty()) return
+        val top = frame.scrollOffset - found.firstRow
+        val bottom = top + rows
+        for ((index, match) in found.matches.withIndex()) {
+            if (match.endRow < top || match.row >= bottom) continue
+            val current = index == found.current
+            for (r in maxOf(match.row, top)..minOf(match.endRow, bottom - 1)) {
+                val span = match.columnsOn(r, frame.columns) ?: continue
+                val y = (r - top) * cellHeight
+                fill.color = if (current) MATCH_CURRENT else MATCH
+                canvas.drawRect(x(span.first), y, x(span.last + 1), y + cellHeight, fill)
+                if (current) {
+                    stroke.color = MATCH_CURRENT_EDGE
+                    stroke.strokeWidth = density.coerceAtLeast(1f)
+                    stroke.style = Paint.Style.STROKE
+                    canvas.drawRect(x(span.first), y, x(span.last + 1), y + cellHeight, stroke)
+                    stroke.style = Paint.Style.FILL
+                }
+            }
+        }
     }
 
     private fun paintFor(flags: Int): Paint = when {
@@ -494,6 +679,38 @@ internal class TerminalView(context: Context) : View(context) {
         if (composing.isNotEmpty()) drawComposing(canvas, left, top)
     }
 
+    private fun noteCursor(frame: TerminalFrame) {
+        if (!frame.atBottom) return
+        val shown = frame.cursorX >= 0 && frame.cursorY >= 0 && frame.cursorY < frame.rows
+        if (shown) {
+            if (cursorGonePending) {
+                tapClock.removeCallbacks(cursorGone)
+                cursorGonePending = false
+            }
+            reportDrawnBottom(frame)
+            reportCursor((frame.cursorY * cellHeight).roundToInt())
+        } else if (cursorTop != null && !cursorGonePending) {
+            cursorGonePending = true
+            tapClock.postDelayed(cursorGone, CURSOR_GONE_MS)
+        }
+    }
+
+    private fun reportDrawnBottom(frame: TerminalFrame) {
+        val visible = min(frame.rows, ceil(height / cellHeight).toInt())
+        val last = max(frame.cursorY, frame.lastDrawnRow(visible))
+        val bottom = if (frame.alternateScreen || last >= visible - 1) null else ((last + 1) * cellHeight).roundToInt()
+        if (bottom == drawnBottom) return
+        drawnBottom = bottom
+        onDrawnBottom?.invoke(bottom)
+    }
+
+    private fun reportCursor(top: Int?) {
+        if (cursorReported && top == cursorTop) return
+        cursorTop = top
+        cursorReported = true
+        onCursorRow?.invoke(top)
+    }
+
     /** What the keyboard is still composing, over the cursor and underlined: it is not input yet. */
     private fun drawComposing(canvas: Canvas, left: Float, top: Float) {
         val width = max(cellWidth, regular.measureText(composing))
@@ -590,6 +807,7 @@ internal class TerminalView(context: Context) : View(context) {
         touchX = event.x
         touchY = event.y
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            longPressed = false
             downX = event.x
             downY = event.y
             val (column, row) = cellAt(event.x, event.y)
@@ -599,10 +817,22 @@ internal class TerminalView(context: Context) : View(context) {
             parent?.requestDisallowInterceptTouchEvent(true)
         }
         pinch.onTouchEvent(event)
+        // Timed by the clock the timer runs on, not the event's own stamp, which a test or an
+        // injected event may take from another clock.
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> dispatch(taps.down(SystemClock.uptimeMillis(), event.x, event.y))
+            MotionEvent.ACTION_MOVE -> dispatch(taps.move(SystemClock.uptimeMillis(), event.x, event.y))
+            MotionEvent.ACTION_UP -> dispatch(taps.up(SystemClock.uptimeMillis(), event.x, event.y))
+            else -> taps.cancel()
+        }
+        scheduleTaps()
         if (pinch.isInProgress) {
             axis = Axis.None
+            taps.cancel()
             return true
         }
+        // A long press that offered a link or acted is the whole of its touch: no drag after it.
+        if (longPressed) return true
         val consumed = gestures.onTouchEvent(event)
         if (event.actionMasked == MotionEvent.ACTION_UP && axis == Axis.Horizontal) {
             val dx = event.x - downX
@@ -612,17 +842,27 @@ internal class TerminalView(context: Context) : View(context) {
         return consumed || super.onTouchEvent(event)
     }
 
-    private fun longPress(e: MotionEvent) {
-        val active = session ?: return
-        val frame = currentFrame() ?: return
-        val (column, row) = cellAt(e.x, e.y)
-        // An agent prints the pull requests and sign-in pages it wants opened: offer them rather than their text.
-        val url = active.hyperlinkAt(column, row)?.let(TerminalLinks::webUrl) ?: TerminalLinks.urlAt(frame, column, row)
+    private fun longPress(x: Float, y: Float) {
+        val active = session
+        val frame = currentFrame()
+        val (column, row) = cellAt(x, y)
+        // An agent prints the pull requests and sign-in pages it wants opened: offer them rather
+        // than their text, whatever a long press is set to do.
+        val url = if (active != null && frame != null) {
+            active.hyperlinkAt(column, row)?.let(TerminalLinks::webUrl) ?: TerminalLinks.urlAt(frame, column, row)
+        } else {
+            null
+        }
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         if (url != null) {
             onLink?.invoke(url)
             return
         }
+        onLongPress?.let {
+            it()
+            return
+        }
+        if (active == null || frame == null) return
         selection = TerminalSelection(frame, column, row).also { it.word() }
         // The finger that held the press carries on, and it moves the end of the word it selected.
         selectionDrag = true
@@ -662,7 +902,9 @@ internal class TerminalView(context: Context) : View(context) {
             object : ActionMode.Callback2() {
                 override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                     menu.add(0, android.R.id.copy, 0, android.R.string.copy).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                    menu.add(0, android.R.id.selectAll, 1, android.R.string.selectAll).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                    if (onShare != null) menu.add(0, android.R.id.shareText, 1, R.string.selection_share).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                    if (onPaste != null) menu.add(0, android.R.id.paste, 2, android.R.string.paste).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                    menu.add(0, android.R.id.selectAll, 3, android.R.string.selectAll).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                     return true
                 }
 
@@ -674,6 +916,17 @@ internal class TerminalView(context: Context) : View(context) {
                         context.getSystemService(ClipboardManager::class.java)
                             ?.setPrimaryClip(ClipData.newPlainText("Terminal selection", text))
                         mode.finish()
+                        true
+                    }
+                    android.R.id.shareText -> {
+                        val text = selection?.text().orEmpty()
+                        mode.finish()
+                        if (text.isNotEmpty()) onShare?.invoke(text)
+                        true
+                    }
+                    android.R.id.paste -> {
+                        mode.finish()
+                        onPaste?.invoke()
                         true
                     }
                     android.R.id.selectAll -> {
@@ -717,9 +970,14 @@ internal class TerminalView(context: Context) : View(context) {
     }
 
     override fun onDetachedFromWindow() {
+        tapClock.removeCallbacks(tapTimer)
+        tapClock.removeCallbacks(cursorGone)
+        cursorGonePending = false
+        taps.cancel()
         clearSelection()
         dropBitmaps()
         scroller.abortAnimation()
+        access.release()
         super.onDetachedFromWindow()
     }
 
@@ -743,7 +1001,17 @@ internal class TerminalView(context: Context) : View(context) {
         invalidate()
     }
 
+    /**
+     * Offered every key from a keyboard before the terminal sees it; true when the screen took it
+     * as its own shortcut, such as the command palette's, so the program never gets it.
+     */
+    var onShortcut: ((KeyEvent) -> Boolean)? = null
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (onShortcut?.invoke(event) == true) {
+            handled.add(keyCode)
+            return true
+        }
         val active = session ?: return false
         if (event.isShiftPressed && (keyCode == KeyEvent.KEYCODE_PAGE_UP || keyCode == KeyEvent.KEYCODE_PAGE_DOWN)) {
             val rows = currentFrame()?.rows ?: return false
@@ -785,7 +1053,13 @@ internal class TerminalView(context: Context) : View(context) {
         const val WHEEL_LINES = 3
         const val FAINT_ALPHA = 150
         const val SCROLLBAR_MS = 900L
+        /** How long the cursor must stay hidden before the pane counts it as gone. */
+        const val CURSOR_GONE_MS = 250L
         const val COMBINING_ACCENT = Int.MIN_VALUE
+        /** Find's highlights: amber for every match, a deep orange with an edge for the current one. */
+        const val MATCH = 0x66FFC107
+        const val MATCH_CURRENT = 0xB3FF6D00.toInt()
+        const val MATCH_CURRENT_EDGE = 0xFFE65100.toInt()
         const val DELETE = 0x7f
     }
 }

@@ -1,0 +1,22 @@
+$ rex api list --help
+List methods exposed by the connected server.
+
+The default output has separate tables for regular API methods and methods
+provided by block creators. Use --quiet to print only method names, one per line.
+Use --json to print the complete help document returned by the server.
+
+Usage:
+  rex api list [flags]
+
+Options:
+  -q, --quiet  print method names only
+      --json   output the API help document as JSON
+  -h, --help   help for list
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

@@ -1,0 +1,23 @@
+$ rex terminfo host --help
+Install xterm-rex on a remote host and record that it is there, so that ssh stops announcing xterm-256color to it.
+
+A record is compared, exactly, against the destination as ssh resolves it, so one machine can be recorded under more than one spelling.
+
+Usage:
+  rex terminfo host [command] [flags]
+
+Commands:
+  install   Install Rex's terminfo entry on a remote host
+  forget    Forget that a host has Rex's terminfo entry
+  ls, list  List the hosts recorded as having Rex's terminfo entry
+
+Options:
+  -h, --help  help for host
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

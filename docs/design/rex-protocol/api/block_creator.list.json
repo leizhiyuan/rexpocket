@@ -1,0 +1,187 @@
+{
+  "name": "block_creator.list",
+  "description": "List the creators the server can make blocks with, and their flavors.",
+  "invoke": {
+    "method": "block_creator.list"
+  },
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "creators": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "api": {
+              "type": "object",
+              "properties": {
+                "events": {
+                  "type": "object",
+                  "description": "The block events, by name. Each value is a JSON Schema for the event's fields.",
+                  "additionalProperties": true
+                },
+                "methods": {
+                  "type": "object",
+                  "description": "The block methods, by short name.",
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "actions": {
+                        "type": [
+                          "null",
+                          "array"
+                        ],
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "args": {
+                              "description": "The fixed arguments the method is called with when the action runs. Left out when there are none."
+                            },
+                            "category": {
+                              "type": "string",
+                              "description": "A group of related actions, such as Pane."
+                            },
+                            "description": {
+                              "type": "string",
+                              "description": "A sentence about what the action does, to show under its title in a menu or command palette."
+                            },
+                            "keywords": {
+                              "type": "string",
+                              "description": "More words to search for the action by, separated by spaces."
+                            },
+                            "name": {
+                              "type": "string",
+                              "description": "The action's short name, such as reset. Its full name, used in key bindings, is the creator's name, a dot, and this name."
+                            },
+                            "repeats": {
+                              "type": "boolean",
+                              "description": "True if holding the key down should run the action again, as holding an arrow key does."
+                            },
+                            "title": {
+                              "type": "string",
+                              "description": "The name to show a person, such as Reset Terminal."
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "title"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "description": "The actions that call this method, in the order the creator declares them."
+                      },
+                      "description": {
+                        "type": "string",
+                        "description": "What the method does."
+                      },
+                      "input_schema": {
+                        "description": "A JSON Schema for the method's arguments."
+                      },
+                      "output_schema": {
+                        "description": "A JSON Schema for the method's result."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "description": "The methods and events that this creator's blocks provide.",
+              "additionalProperties": false
+            },
+            "description": {
+              "type": "string",
+              "description": "A sentence about what the creator's blocks do."
+            },
+            "features": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional features the creator supports. Ignore names you don't know. No names are defined yet."
+            },
+            "flavors": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string",
+                    "description": "A sentence about what this flavor creates."
+                  },
+                  "flavor": {
+                    "type": "string",
+                    "description": "The flavor's full name, such as com.superlogical.terminal.shell. Use it in the flavor field of session.new_block or a layout."
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "The flavor's short name within its creator, such as shell."
+                  },
+                  "options_schema": {
+                    "description": "A JSON Schema for the options this flavor accepts."
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "A short name for people to read, such as Shell."
+                  }
+                },
+                "required": [
+                  "name",
+                  "flavor",
+                  "title",
+                  "description"
+                ],
+                "additionalProperties": false
+              },
+              "description": "The flavors this creator offers."
+            },
+            "host_id": {
+              "type": "string",
+              "description": "Identifies the machine and account its blocks run as. If it equals your local server's host_id, its blocks see the same files you do."
+            },
+            "name": {
+              "type": "string",
+              "description": "The creator's name, such as com.superlogical.terminal."
+            },
+            "title": {
+              "type": "string",
+              "description": "A short name for people to read, such as Terminal."
+            }
+          },
+          "required": [
+            "name",
+            "title",
+            "description",
+            "flavors",
+            "api"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Every creator available, with its flavors and the API its blocks provide."
+      }
+    },
+    "required": [
+      "creators"
+    ],
+    "additionalProperties": false
+  },
+  "response_example": "{\n  \"creators\": [\n    {\n      \"name\": \"com.superlogical.terminal\",\n      \"title\": \"Terminal\",\n      \"description\": \"A terminal that runs a shell or any other command-line program.\",\n      \"flavors\": [\n        {\n          \"name\": \"shell\",\n          \"flavor\": \"com.superlogical.terminal.shell\",\n          \"title\": \"Shell\",\n          \"description\": \"A terminal that runs the user's shell, or a command you choose.\",\n          \"options_schema\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"cwd\": {\"type\": \"string\"}\n            }\n          }\n        }\n      ],\n      \"api\": {\n        \"methods\": {\n          \"reset\": {\n            \"description\": \"Reset the terminal to its starting state and clear the screen and scrollback. The program keeps running, and the size and default colors stay the same.\",\n            \"input_schema\": {\"type\": \"object\"},\n            \"output_schema\": {\"type\": \"object\"},\n            \"actions\": [\n              {\n                \"name\": \"reset\",\n                \"title\": \"Reset Terminal\",\n                \"category\": \"Pane\"\n              }\n            ]\n          },\n          \"title\": {\n            \"description\": \"Get the terminal's title and the process that set it.\",\n            \"input_schema\": {\"type\": \"object\"},\n            \"output_schema\": {\n              \"type\": \"object\",\n              \"properties\": {\n                \"title\": {\"type\": \"string\"}\n              }\n            }\n          }\n        },\n        \"events\": {\n          \"bell\": {\"type\": \"object\"}\n        }\n      }\n    }\n  ]\n}",
+  "validation_notes": [
+    "Creators are sorted by `name`.",
+    "To create a block, pass a flavor's `flavor` to `session.new_block` or in the `block` of a layout, with `options` that match its `options_schema`.",
+    "`api.methods` lists the methods that every block from the creator provides. Call one as `<creator>.<method>`, such as `com.superlogical.terminal.title`, with `session_id`, `block_id`, and its arguments under `args`.",
+    "A method's `actions` are things a person can do with a block, such as choosing an item in Rex.app's command palette or pressing a key. Performing one calls the method with the action's `args`, which are fixed values, not a schema like the `args` that `client.keymap` lists for an action."
+  ]
+}

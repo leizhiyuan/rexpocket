@@ -1,0 +1,49 @@
+$ rex forward new --help
+Forward TCP connections through a Rex server, like ssh -L and ssh -R.
+
+-L ("client's port; server's network")
+[bind_address:]port:host:hostport listens on this machine on <port>, and
+connects each local connection to <host>:<hostport> from the server.
+
+-R ("server's port; client's network")
+[bind_address:]port:host:hostport listens on the server on <port>, and connects
+each remote connection to <host>:<hostport> from this machine.
+
+The bind address defaults to 127.0.0.1; use * for every interface. Port 0 picks
+a free port. Give -L and -R as many times as you like to create multiple
+forwards. They will all be managed by this process and have the same lifetime.
+
+Each forward is a tunnel block in the session chosen with --session, or the
+default session. rex forward new runs in the foreground until interrupted,
+then closes its blocks. It prints nothing while it works unless -v is given.
+
+When the connection to the server drops, rex forward new reconnects and carries
+on with the same blocks. TCP connections that were open when it dropped are
+reset.
+
+A forward whose block is closed, for example with rex forward close, stops.
+rex forward new exits once it has no forwards left. If the session is
+destroyed, it exits with status 3, as for a session that does not exist.
+
+A rex forward new that is killed leaves its forwards' blocks behind. Setting
+up the same forward again from this machine takes over its block instead of
+making a new one, so running the same command again works. A -R forward on
+port 0 always gets a new port. Blocks that a client on another machine may
+still come back for are left alone.
+
+Usage:
+  rex forward new (-L|-R) [bind_address:]port:host:hostport... [flags]
+
+Options:
+  -L, --local stringArray   listen here on port and connect to host:hostport from the server
+  -R, --remote stringArray  listen on the server on port and connect to host:hostport from here
+  -s, --session string      keep the forwards' blocks in session SESSION
+  -h, --help                help for new
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

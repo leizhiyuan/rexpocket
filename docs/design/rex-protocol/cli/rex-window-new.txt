@@ -1,0 +1,32 @@
+$ rex window new --help
+Create a window in the selected session. The new window becomes active
+by default. Use --focus=false to keep the active window and focused block
+unchanged. If the session has no active window, the new window becomes active
+even with --focus=false.
+
+Examples:
+  rex window new
+  rex window new logs -- tail -f app.log
+  rex window new logs --focus=false -- tail -f app.log
+  rex window new -s build tests
+
+Usage:
+  rex window new [-s SESSION] [LABEL] [-- COMMAND...] [flags]
+
+Options:
+  -s, --session string  scope to session SESSION
+  -c, --cwd string      working directory for the terminal
+      --keep-open       keep the terminal open after its command exits
+      --shell SHELL     run COMMAND through SHELL's login environment (none starts it directly)
+      --interactive     also read the shell's interactive startup files, such as ~/.zshrc
+      --focus           make the new window active (--focus=false leaves the current window active) (default true)
+      --json            output the created window as JSON
+  -h, --help            help for new
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

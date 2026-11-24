@@ -1,0 +1,230 @@
+{
+  "name": "target.resolve",
+  "description": "Look up sessions, windows, blocks, or clients by ID, label, or position. Each query gets its own result, which says whether it matched one thing, nothing, or several.",
+  "invoke": {
+    "method": "target.resolve"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "context": {
+        "type": [
+          "null",
+          "object"
+        ],
+        "properties": {
+          "block_id": {
+            "type": "string",
+            "description": "The caller's block, such as the terminal a script runs in. In target.resolve, empty block and window queries default to it and its window."
+          },
+          "client_id": {
+            "type": "string",
+            "description": "The caller's own client. In target.resolve, an empty client query selects it if it's among the clients searched."
+          },
+          "session_id": {
+            "type": "string",
+            "description": "The caller's session. Without scope.session, windows and blocks are searched only in this session, and an empty session query selects it."
+          }
+        },
+        "description": "Where the caller is, such as the terminal a script runs in. IDs in it that no longer exist are ignored.",
+        "additionalProperties": false
+      },
+      "kinds": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "description": "What each query may name: session, window, block, or client. List each kind once, and list client only on its own."
+      },
+      "queries": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "description": "The names to look up. Each is a full ID, a label, a window position, the end of an ID, or an empty string for the default."
+      },
+      "scope": {
+        "type": [
+          "null",
+          "object"
+        ],
+        "properties": {
+          "session": {
+            "type": "string",
+            "description": "The session to search in, named by ID, label, or the end of its ID. A client search then covers only clients attached to it."
+          },
+          "window": {
+            "type": "string",
+            "description": "The window to search in, named by ID, label, position, or the end of its ID. Allowed only when kinds is just block."
+          }
+        },
+        "description": "Limits the search to one session, or a block search to one window. Not allowed when kinds includes session.",
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "kinds",
+      "queries"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "results": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "candidates": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "block_id": {
+                    "type": "string",
+                    "description": "The block's ID. Set only for blocks."
+                  },
+                  "client_id": {
+                    "type": "string",
+                    "description": "The client's ID. Set only for clients."
+                  },
+                  "kind": {
+                    "type": "string",
+                    "description": "What this is: session, window, block, or client. Skip a candidate whose kind you don't know."
+                  },
+                  "label": {
+                    "type": "string",
+                    "description": "Its label, or an empty string if it has none."
+                  },
+                  "ordinal": {
+                    "type": "integer",
+                    "description": "A window's position in its session, counting from 1, in the order session.view lists windows. Left out for everything else."
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "description": "The session's ID, or the ID of the session that holds the window or block. Left out for a client."
+                  },
+                  "where": {
+                    "type": "string",
+                    "description": "Where it is, for showing to a person, such as 'window 2' or 'detached'. For a client, the program, such as 'Rex.app 1.6.0'. May be empty. Don't parse it."
+                  },
+                  "window_id": {
+                    "type": "string",
+                    "description": "The window's ID, or the ID of the window that holds the block. Left out for sessions, clients, and detached blocks."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "label"
+                ],
+                "additionalProperties": false
+              },
+              "description": "When status is ambiguous, the choices for a person to pick from. Check each one's kind."
+            },
+            "query": {
+              "type": "string",
+              "description": "The query this result answers, exactly as sent."
+            },
+            "reason": {
+              "type": "string",
+              "description": "Why the query didn't resolve, for showing to a person. May be empty."
+            },
+            "status": {
+              "type": "string",
+              "description": "Whether the query matched: 'resolved' for one thing, 'not_found' for nothing, or 'ambiguous' for several. Treat a value you don't know as 'not_found'."
+            },
+            "target": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "block_id": {
+                  "type": "string",
+                  "description": "The block's ID. Set only for blocks."
+                },
+                "client_id": {
+                  "type": "string",
+                  "description": "The client's ID. Set only for clients."
+                },
+                "kind": {
+                  "type": "string",
+                  "description": "What this is: session, window, block, or client. Skip a candidate whose kind you don't know."
+                },
+                "label": {
+                  "type": "string",
+                  "description": "Its label, or an empty string if it has none."
+                },
+                "ordinal": {
+                  "type": "integer",
+                  "description": "A window's position in its session, counting from 1, in the order session.view lists windows. Left out for everything else."
+                },
+                "session_id": {
+                  "type": "string",
+                  "description": "The session's ID, or the ID of the session that holds the window or block. Left out for a client."
+                },
+                "where": {
+                  "type": "string",
+                  "description": "Where it is, for showing to a person, such as 'window 2' or 'detached'. For a client, the program, such as 'Rex.app 1.6.0'. May be empty. Don't parse it."
+                },
+                "window_id": {
+                  "type": "string",
+                  "description": "The window's ID, or the ID of the window that holds the block. Left out for sessions, clients, and detached blocks."
+                }
+              },
+              "description": "What the query matched. Set only when status is resolved.",
+              "required": [
+                "kind",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "query",
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        "description": "One result for each query, in the same order as queries."
+      }
+    },
+    "required": [
+      "results"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"kinds\": [\"block\"],\n  \"queries\": [\"shell\", \"build\"],\n  \"scope\": { \"session\": \"work\" }\n}",
+  "response_example": "{\n  \"results\": [\n    {\n      \"query\": \"shell\",\n      \"status\": \"resolved\",\n      \"target\": {\n        \"kind\": \"block\",\n        \"session_id\": \"session:<uuid>\",\n        \"window_id\": \"window:<uuid>\",\n        \"block_id\": \"block:<uuid>\",\n        \"label\": \"shell\",\n        \"where\": \"window 1\"\n      }\n    },\n    {\n      \"query\": \"build\",\n      \"status\": \"not_found\"\n    }\n  ]\n}",
+  "validation_notes": [
+    "List at least one kind in `kinds`, each only once, and `client` only on its own, or the call fails with `bad_request`. A kind the server doesn't know fails the same way, which can happen when the server is older than your client.",
+    "Send at least one query, or the call fails with `bad_request`. Each query gets one entry in `results`, in the same order. A query that matches nothing or several things doesn't fail the call: its `status` is `not_found` or `ambiguous`.",
+    "The server tries each query in four steps and stops at the first step that matches anything: full ID, label (ignoring case), window position, then the end of an ID (4 to 32 hexadecimal digits). So a window labeled `2` wins over the second window. If the winning step matches more than one thing, the result is `ambiguous`.",
+    "A query that starts like a full ID, such as `block:`, is only tried as a full ID. Its result is `not_found` if the ID is malformed, if `kinds` doesn't include that kind, or if nothing has that ID.",
+    "Only windows have positions. `1` is the first window in its session, in the order Rex.app shows them as tabs. When several sessions are searched, a position can match a window in each one.",
+    "When `kinds` lists more than one kind, one query can match different kinds of things, such as a session and a window with the same label. The result is then `ambiguous`, and each candidate's `kind` says what it is.",
+    "Without `scope.session`, windows and blocks are searched only in the session named by `context.session_id`. If that's left out or the session no longer exists, every session is searched. This applies to full IDs too, so the full ID of a block in another session is `not_found`.",
+    "If a scope matches nothing or several things, every result gets that `not_found` or `ambiguous` status, and its `reason` says which scope failed. For an ambiguous scope, `candidates` lists what the scope could mean.",
+    "An empty query, or one of only spaces, asks for a default, such as the block a script runs in. When `kinds` lists several kinds, an empty query gets the default for the most specific one: block, then window, then session.",
+    "An empty session query selects `context.session_id`, or the only session if there's just one. With no sessions it's `not_found`, and with several it's `ambiguous`.",
+    "An empty window query selects the window that holds `context.block_id`, or else the active window of the session being searched. If several sessions are searched, it's `ambiguous` even with `context.block_id` set, and `candidates` lists the sessions to choose from.",
+    "An empty block query selects `context.block_id` if that block is among those searched. Otherwise it selects the focused block of the window an empty window query would choose. With `scope.window`, it ignores `context.block_id` and selects that window's focused block.",
+    "Block searches include detached blocks, which are running but aren't placed in any window. `scope.window` leaves them out. A block's `where` reads `window 2` or `detached`. When several sessions are searched, it names the session too, as in `window 2 of work`, and a window's `where` reads `in work`.",
+    "To look up a connected client, such as Rex.app, set `kinds` to `[\"client\"]`. A client query matches a full ID, a label, or the end of an ID, since clients have no positions. Every connected client is searched, unless `scope.session` limits the search to clients attached to that session.",
+    "An empty client query selects `context.client_id` if that client is among those searched. Otherwise it selects the only client that reported its kind as `app` when it connected, such as Rex.app. With no app it's `not_found`, and with several it's `ambiguous`.",
+    "`scope.window` is looked up among the sessions being searched. The call fails with `bad_request` if `kinds` includes `session` and `scope` is sent, even as an empty object, or if `scope.window` is set and `kinds` isn't just `block`. A query or scope that contains a control character, such as a newline, fails the same way."
+  ]
+}

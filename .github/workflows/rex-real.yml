@@ -1,0 +1,123 @@
+name: rex-real
+
+# The tests that need a real Rex, against a real Rex: the pane lifecycle scenarios, the core
+# integration tests, RexShapeTest (what Rex sends, against the shapes ScriptedRex is held to), the
+# bell, desktop notifications and replies (RealRexPaneSignalsTest), moving sessions and tabs
+# (RealRexOrderTest) and
+# the app's own flows on Robolectric (RealRexAppTest).
+#
+# Rex is proprietary. The job installs the server pinned in tools/rex/pin.env from Superlogical's
+# own apt repository - archive key fingerprint and package checksum checked, see
+# tools/rex/install-rex.sh - and runs it in the foreground on loopback only, as the CI user, with
+# its state in the runner's temporary directory. Nothing of Rex is cached or uploaded: only the
+# test reports are.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ccr-30ee0e05-w78lcg]
+
+permissions:
+  contents: read
+
+jobs:
+  real-rex:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      REX_TEST_HOST: 127.0.0.1
+      REX_TEST_PORT: '7297'
+    steps:
+      - uses: actions/checkout@v4
+
+      # Robolectric's Android 15 wants Java 21; core builds for 17 on it.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install the Android platform
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.1.0" >/dev/null
+
+      - name: Install Rex (pinned, key and checksum checked)
+        run: tools/rex/install-rex.sh
+
+      - name: Start Rex on loopback
+        run: |
+          mkdir -p "$RUNNER_TEMP/rex-state"
+          # Loopback only: the plain-HTTP listener admits anyone who reaches it, with full access.
+          nohup rex server run \
+            --listen "unix://$RUNNER_TEMP/rex.sock" \
+            --extra-listen "http://$REX_TEST_HOST:$REX_TEST_PORT" \
+            --allow-anonymous \
+            --state-dir "$RUNNER_TEMP/rex-state" \
+            --log-level debug > "$RUNNER_TEMP/rex.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/rex.pid"
+          for i in $(seq 1 100); do
+            curl -fs -o /dev/null "http://$REX_TEST_HOST:$REX_TEST_PORT/llms.txt" && break
+            sleep 0.2
+          done
+          rex -S "unix://$RUNNER_TEMP/rex.sock" --autostart=false api call server.status '{}' \
+            | python3 -c 'import json,sys; s=json.load(sys.stdin); print("rex up: api revision", s.get("api_revision"))'
+
+      - name: Core tests against Rex (scenarios, integration, shapes)
+        run: ./gradlew --no-daemon :core:test
+
+      - name: The app's flows against Rex (Robolectric)
+        if: always()
+        run: |
+          # No libghostty on the JVM here: panes have no picture, and these tests do not need one.
+          mkdir -p native/.build/host
+          ./gradlew --no-daemon -x :app:buildGhostty -x :app:buildGhosttyHost :app:testDebugUnitTest \
+            --tests 'me.leaver.rexpocket.ui.RealRexAppTest' \
+            --tests 'me.leaver.rexpocket.ui.EmptySessionTest' \
+            --tests 'me.leaver.rexpocket.ui.ActivityViewTest' \
+            --tests 'me.leaver.rexpocket.ui.LaunchTest' \
+            --tests 'me.leaver.rexpocket.ui.HomeStateTest'
+
+      - name: Every real-Rex test ran
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, sys, xml.etree.ElementTree as ET
+          # Classes that skip without a Rex: here they must have run, every case.
+          want = {"RealRexLifecycleTest", "PocketSessionTest", "RexShapeTest", "ReconnectTest", "ForegroundTest",
+                  "ForegroundStreamTest", "HelloFirstTest", "ResumeTest", "InputPipelineTest", "RealRexAppTest",
+                  "RealRexPaneTextTest", "RealRexPaneSignalsTest", "RealRexPromptAnswerTest", "RealRexOrderTest", "ClientViewProbeTest"}
+          seen, bad = {}, []
+          for f in glob.glob("core/build/test-results/test/*.xml") + glob.glob("app/build/test-results/testDebugUnitTest/*.xml"):
+              for case in ET.parse(f).getroot().iter("testcase"):
+                  cls = case.get("classname").rsplit(".", 1)[-1]
+                  if cls not in want:
+                      continue
+                  verdict = "failed" if case.find("failure") is not None or case.find("error") is not None else "skipped" if case.find("skipped") is not None else "passed"
+                  seen[cls] = seen.get(cls, 0) + 1
+                  print(f"{cls}.{case.get('name')}: {verdict}")
+                  if verdict != "passed":
+                      bad.append(f"{cls}.{case.get('name')}")
+          missing = sorted(want - set(seen))
+          if missing or bad:
+              print("did not run:", missing, "not passed:", bad)
+              sys.exit(1)
+          PY
+
+      - name: Rex's log
+        if: failure()
+        run: tail -n 300 "$RUNNER_TEMP/rex.log"
+
+      - name: Stop Rex
+        if: always()
+        run: |
+          [ -f "$RUNNER_TEMP/rex.pid" ] && kill "$(cat "$RUNNER_TEMP/rex.pid")" 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rex-real-test-reports
+          path: |
+            core/build/reports/tests/test
+            app/build/reports/tests/testDebugUnitTest
+          if-no-files-found: ignore

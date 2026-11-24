@@ -1,0 +1,24 @@
+$ rex server tailscale --help
+Manage the server's Tailscale node
+
+Usage:
+  rex server tailscale [command] [flags]
+
+Commands:
+  on      Serve the API over the tailnet
+  off     Stop serving the API over the tailnet
+  logout  Sign out of Tailscale and stop tailnet serving
+  login   Request a Tailscale sign-in link
+  rename  Rename the enabled Tailscale node
+  pair    Show a QR code to pair another device
+
+Options:
+  -h, --help  help for tailscale
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

@@ -1,0 +1,64 @@
+{
+  "name": "focus_history.reverse",
+  "description": "Step back through the focus changes the calling principal made.",
+  "invoke": {
+    "method": "focus_history.reverse"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "cursor": {
+        "type": "integer",
+        "description": "The cursor from an earlier result, to keep stepping back from where that call stopped. Leave it out to start from where focus is now.",
+        "minimum": 0
+      },
+      "not_session_id": {
+        "type": "string",
+        "description": "Only go back to a block in another session than this one."
+      },
+      "not_window_id": {
+        "type": "string",
+        "description": "Only go back to a block in another window than this one."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "Only go back to a block in this session. The client must be attached to it."
+      },
+      "window_id": {
+        "type": "string",
+        "description": "Only go back to a block in this window."
+      }
+    },
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": "string",
+        "description": "The block focus moved to."
+      },
+      "cursor": {
+        "type": "integer",
+        "description": "Pass this as cursor in the next call to keep stepping back.",
+        "minimum": 0
+      },
+      "reversed": {
+        "type": "boolean",
+        "description": "Whether the call moved focus. False means no place the request allows was left to go back to, and the other fields are left out."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session that holds the block focus moved to. It may not be the session the client is showing."
+      },
+      "window_id": {
+        "type": "string",
+        "description": "The window that holds the block focus moved to. It is that session's active window."
+      }
+    },
+    "required": [
+      "reversed"
+    ],
+    "additionalProperties": false
+  }
+}

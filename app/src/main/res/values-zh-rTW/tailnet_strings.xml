@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tailnet_stage_starting">正在啟動 %1$s…</string>
+    <string name="tailnet_stage_signing_in">登入 %1$s</string>
+    <string name="tailnet_stage_needs_approval">等待核准</string>
+    <string name="tailnet_stage_connecting">正在連線 %1$s…</string>
+    <string name="tailnet_stage_connected">已連線，裝置名 %1$s</string>
+    <string name="tailnet_stage_connected_on">已連線 %2$s，裝置名 %1$s</string>
+    <string name="tailnet_stage_stopped">%1$s 已停止</string>
+    <string name="tailnet_stage_failed">%1$s 啟動失敗</string>
+    <string name="tailnet_stage_off">未加入</string>
+    <string name="tailnet_step">第 %1$d 步，共 %2$d 步</string>
+    <string name="tailnet_sign_in_body">在瀏覽器裡批准這台手機一次，登入狀態會留在應用裡。</string>
+    <string name="tailnet_sign_in_waiting">正在等待登入連結…</string>
+    <string name="tailnet_approval_body">已登入。需要 tailnet 管理員在管理後台批准這台手機。</string>
+    <string name="tailnet_stopped_body">節點在執行但已關閉。重新加入即可開啟。</string>
+    <plurals name="tailnet_hosts_need_join">
+        <item quantity="other">%d 台主機在 tailnet 上，加入後才能連線。</item>
+    </plurals>
+    <string name="tailnet_devices_online">%2$d 台中 %1$d 台線上</string>
+    <plurals name="tailnet_devices">
+        <item quantity="other">%d 台裝置</item>
+    </plurals>
+    <string name="tailnet_open_details">tailnet 詳情</string>
+
+    <string name="action_sign_in">登入</string>
+    <string name="action_copy_link">複製連結</string>
+    <string name="action_join">加入</string>
+    <string name="action_devices">裝置</string>
+    <string name="action_tailnet_settings">tailnet 設定</string>
+    <string name="action_try_again">重試</string>
+
+    <string name="tailnet_section_this_phone">這台手機</string>
+    <string name="tailnet_section_devices">裝置</string>
+    <string name="tailnet_section_devices_count">裝置 · %1$s</string>
+    <string name="tailnet_field_status">狀態</string>
+    <string name="tailnet_field_network">tailnet</string>
+    <string name="tailnet_field_device">裝置名</string>
+    <string name="tailnet_field_user">登入帳號</string>
+    <string name="tailnet_field_addresses">位址</string>
+    <string name="tailnet_field_relay">主中繼</string>
+    <string name="tailnet_field_key_expiry">金鑰到期</string>
+    <string name="tailnet_field_route">到 %1$s 的路徑</string>
+    <string name="tailnet_route_measure">點按測量</string>
+    <string name="tailnet_field_health">節點報告</string>
+    <string name="tailnet_copied">已複製</string>
+    <string name="tailnet_no_devices">這個 tailnet 上還沒有其他裝置。</string>
+    <string name="tailnet_devices_waiting">手機連上之後才會有裝置列表。</string>
+
+    <string name="tailnet_peer_online">線上</string>
+    <string name="tailnet_peer_offline">離線</string>
+    <string name="tailnet_peer_last_seen">離線 · 最後上線 %1$s</string>
+    <string name="tailnet_peer_rex_host">Rex 主機</string>
+    <string name="tailnet_peer_connect">點按連線</string>
+    <string name="tailnet_peer_add">點按新增為主機</string>
+    <string name="tailnet_link_direct">直連</string>
+    <string name="tailnet_link_peer_relay">peer relay</string>
+    <string name="tailnet_link_derp">DERP %1$s</string>
+    <string name="tailnet_link_relay">中繼</string>
+    <string name="tailnet_link_connecting">連線中</string>
+
+    <string name="connect_step_start_tailnet">正在啟動 %1$s…</string>
+    <string name="connect_step_sign_in">正在等待 %1$s 登入…</string>
+    <string name="connect_step_find_peer">正在 %2$s 上查詢 %1$s…</string>
+    <string name="connect_step_reach_tailnet">正在透過 %2$s 連線 %1$s…</string>
+    <string name="connect_step_reach">正在連線 %1$s…</string>
+    <string name="connect_step_rex">Rex 已回應 · 正在讀取會話…</string>
+    <string name="connect_elapsed">%1$.1f 秒</string>
+
+    <string name="problem_tailnet_needs_login">登入 %1$s 後才能連線 %2$s。</string>
+    <string name="problem_tailnet_needs_approval">%1$s 正在等待管理員批准這台手機。</string>
+    <string name="problem_tailnet_peer_unknown">%1$s 上沒有名為 %2$s 的裝置。請在裝置列表裡核對名字。</string>
+    <string name="problem_tailnet_peer_offline">%2$s 在 %1$s 上離線。</string>
+    <string name="problem_tailnet_peer_offline_seen">%2$s 在 %1$s 上離線，最後上線 %3$s。</string>
+    <string name="problem_rex_not_listening">%1$s 有回應，但連接埠 %2$s 上沒有服務在監聽。Rex 是否用 --extra-listen 啟動了？</string>
+</resources>

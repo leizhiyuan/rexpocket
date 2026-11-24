@@ -1,0 +1,41 @@
+{
+  "name": "block.method",
+  "description": "Call a method that a block provides and return its result.",
+  "invoke": {
+    "method": "block.method"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "args": {
+        "description": "The block method's own arguments. Leaving it out is the same as an empty object."
+      },
+      "block_id": {
+        "type": "string",
+        "description": "The block to call the method on."
+      },
+      "method": {
+        "type": "string",
+        "description": "The block method's short name, such as write or format."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session that holds the block."
+      }
+    },
+    "required": [
+      "session_id",
+      "block_id",
+      "method"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"block_id\": \"block:<uuid>\",\n  \"method\": \"write\",\n  \"args\": {\n    \"data\": \"echo hello\\n\"\n  }\n}",
+  "validation_notes": [
+    "Send the block method's short name, such as `write`, in `method`. `help.all` lists the methods each creator's blocks provide under `block_types`, with each method's `args_schema` and `output_schema`.",
+    "Each block method can also be called by its full name, such as `com.superlogical.terminal.write`, with the same `session_id`, `block_id`, and `args`. The full name names the block's creator, so the call works only on a block that creator made. On any other block, it fails with `conflict`.",
+    "The result is the block method's own result, as its `output_schema` describes it. `block.method` has no result schema of its own.",
+    "`block.method` doesn't wait for earlier requests on the same connection, and it can run at the same time as `client.key`. If a call depends on an earlier request, wait for that request's reply first. To call a block method in order with `client.key`, such as from a key binding, use `client.action`.",
+    "If `block_id` is missing, the call fails with `bad_request`. If the session doesn't exist, it fails with `session_not_found`. If `block_id` names a block that isn't in the session, it fails with `not_found`, and if the block has no method named `method`, it fails with `method_not_found`. If `args` is missing a required field or has a value of the wrong type, it fails with `bad_request`."
+  ]
+}

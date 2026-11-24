@@ -29,6 +29,8 @@ class RexClient(
     private val apiRevision: Int = 7,
     /** Why the transport itself failed, when OkHttp reduced it to "exhausted all routes". */
     private val transportFailure: () -> Throwable? = { null },
+    /** What the hello says the client runs on: the phone says `other`; a test's desk may say `macos`. */
+    private val platform: String = "other",
 ) {
     private val ids = AtomicLong(0)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JSONObject>>()
@@ -116,9 +118,19 @@ class RexClient(
         return ws.send(msg.toString())
     }
 
-    fun close() {
+    fun close() = end(frame = true)
+
+    /**
+     * Ends the connection without a close frame, as a network that went away does. Rex then keeps
+     * the client for a minute - its id, its sessions, its panes (handed back when it resumes) and its
+     * streams - for a hello with the reconnect token; a close frame ends the client at once and
+     * closes its streams with 1001 (seen on Rex 0.1.0-preview.22, and its reference says so).
+     */
+    fun drop() = end(frame = false)
+
+    private fun end(frame: Boolean) {
         if (!closed.compareAndSet(false, true)) return
-        socket?.close(1000, "bye")
+        if (frame) socket?.close(1000, "bye") else socket?.cancel()
         failPending(ConnectionDroppedException("Connection closed", null))
         if (!opened.isCompleted) opened.completeExceptionally(IllegalStateException("Connection closed"))
         finish(null)
@@ -134,7 +146,7 @@ class RexClient(
                     "client",
                     JSONObject()
                         .put("kind", "app")
-                        .put("platform", "other")
+                        .put("platform", platform)
                         .put("name", "RexPocket")
                         .put("version", "0.1.0"),
                 )
@@ -200,7 +212,9 @@ class RexClient(
     }
 
     private fun failPending(err: Throwable) {
-        val left = pending.values.toList()
+        // A copy by toArray: toList sizes the list first and then iterates, and a call ending on
+        // another thread in between threw NoSuchElementException on the socket's thread.
+        val left = ArrayList(pending.values)
         pending.clear()
         left.forEach { if (!it.isCompleted) it.completeExceptionally(err) }
     }
@@ -210,12 +224,15 @@ class RexClient(
          * [socksPort] is the loopback port of the app's own Tailscale inbound. OkHttp hands a SOCKS5
          * proxy the hostname unresolved, so a tailnet name is resolved by Tailscale itself.
          */
-        fun defaultHttp(socksPort: Int = 0): OkHttpClient = OkHttpClient.Builder()
+        fun defaultHttp(socksPort: Int = 0, dialer: StreamDialer? = null): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(0, TimeUnit.MILLISECONDS)
             .pingInterval(30, TimeUnit.SECONDS)
             .apply {
-                if (socksPort > 0) {
+                if (dialer != null) {
+                    // A node in another app (the Netbird add-on) dials for the app: the name goes to it unresolved.
+                    proxy(Proxy.NO_PROXY).socketFactory(DialedSocketFactory(dialer)).dns(UnresolvedDns)
+                } else if (socksPort > 0) {
                     proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", socksPort)))
                 }
             }

@@ -21,6 +21,7 @@ import me.leaver.rexpocket.core.UpdateChannel
 import me.leaver.rexpocket.core.defaultChannel
 import me.leaver.rexpocket.core.newestFor
 import me.leaver.rexpocket.diagnostics.Diagnostics
+import me.leaver.rexpocket.net.addon.isUpdateAsset
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -32,7 +33,8 @@ import java.util.concurrent.TimeUnit
 sealed interface UpdateState {
     data object Idle : UpdateState
     data object Checking : UpdateState
-    data object UpToDate : UpdateState
+    /** The last check, at [checkedAt] (epoch ms), found nothing newer on the channel. */
+    data class UpToDate(val checkedAt: Long) : UpdateState
 
     /** A newer release is published; nothing has been downloaded yet. */
     data class Available(val tag: String, val size: Long) : UpdateState
@@ -42,7 +44,38 @@ sealed interface UpdateState {
     }
 
     data class Ready(val tag: String, val file: File) : UpdateState
-    data class Failed(val detail: String) : UpdateState
+
+    /** [detail] is for Diagnostics; [cause] is what the settings row says. */
+    data class Failed(val detail: String, val cause: UpdateFailure = UpdateFailure.Other) : UpdateState
+}
+
+/** Why a check or a download failed, as far as the settings row tells it. */
+enum class UpdateFailure {
+    /** No network, or GitHub could not be reached. */
+    Offline,
+
+    /** GitHub refused for now: its limit on requests without an account (403 or 429). */
+    RateLimited,
+
+    /** The APK was not the size or the SHA-256 the feed gave. */
+    Checksum,
+    Other,
+}
+
+/** GitHub answered [code]. */
+internal class HttpStatusException(val code: Int, what: String) : IOException("$what answered HTTP $code")
+
+/** The download is not the file the feed describes. */
+internal class ChecksumException(message: String) : IOException(message)
+
+/** What [e] means for the person: no network, GitHub's limit, a bad download, or something else. */
+internal fun updateFailure(e: IOException): UpdateFailure = when (e) {
+    is HttpStatusException -> if (e.code == 403 || e.code == 429) UpdateFailure.RateLimited else UpdateFailure.Other
+    is ChecksumException -> UpdateFailure.Checksum
+    is java.net.UnknownHostException, is java.net.SocketException, is java.net.SocketTimeoutException,
+    is javax.net.ssl.SSLException,
+    -> UpdateFailure.Offline
+    else -> UpdateFailure.Other
 }
 
 /** What became of a tap on Install. */
@@ -80,7 +113,9 @@ class Updater(context: Context) {
     /** The release the last check offered, kept so that downloading it needs no second look. */
     private var offered: AppRelease? = null
 
-    private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
+    // A check that found nothing newer is remembered, so a launch that skips today's check still
+    // says when the phone last looked rather than nothing.
+    private val _state = MutableStateFlow<UpdateState>(storedUpToDate() ?: UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
 
     private val _channel = MutableStateFlow(storedChannel())
@@ -120,19 +155,21 @@ class Updater(context: Context) {
         _state.value = UpdateState.Checking
         val release = try {
             val feed = get(FEED)
-            if (!feed.isSuccessful) throw IOException("releases answered HTTP ${feed.code}")
-            AppRelease.parseFeed(feed.body?.string().orEmpty()).newestFor(running, _channel.value)
+            if (!feed.isSuccessful) throw HttpStatusException(feed.code, "releases")
+            AppRelease.parseFeed(feed.body?.string().orEmpty(), ::isUpdateAsset).newestFor(running, _channel.value)
         } catch (e: IOException) {
             // Offline or GitHub is down: nothing to say while it is only the app starting up.
-            Diagnostics.event(TAG, "check failed: ${e.message}")
-            _state.value = UpdateState.Failed(e.message ?: "unreachable")
+            Diagnostics.event(TAG, "check failed: ${e.javaClass.simpleName}: ${e.message}")
+            _state.value = UpdateState.Failed(e.message ?: "unreachable", updateFailure(e))
             return@withContext
         }
-        remember()
+        val now = System.currentTimeMillis()
+        remember(now)
         val apk = release?.apk
         if (release == null || apk == null) {
             Diagnostics.event(TAG, "no build newer than ${running} on ${_channel.value.name}")
-            _state.value = UpdateState.UpToDate
+            prefs.edit().putLong(KEY_UP_TO_DATE_AT, now).apply()
+            _state.value = UpdateState.UpToDate(now)
             return@withContext
         }
         Diagnostics.event(TAG, "found ${release.tag} (${apk.size} bytes) on ${_channel.value.name}")
@@ -180,7 +217,7 @@ class Updater(context: Context) {
         var received = 0L
         try {
             get(apk.url).use { response ->
-                if (!response.isSuccessful) throw IOException("download answered HTTP ${response.code}")
+                if (!response.isSuccessful) throw HttpStatusException(response.code, "download")
                 val body = response.body ?: throw IOException("download has no body")
                 val total = body.contentLength().takeIf { it > 0 } ?: apk.size
                 part.outputStream().use { out ->
@@ -198,10 +235,10 @@ class Updater(context: Context) {
                     }
                 }
             }
-            if (apk.size > 0 && received != apk.size) throw IOException("got $received of ${apk.size} bytes")
+            if (apk.size > 0 && received != apk.size) throw ChecksumException("got $received of ${apk.size} bytes")
             val wanted = apk.sha256?.removePrefix("sha256:")?.lowercase()
             if (wanted != null && digest.digest().joinToString("") { "%02x".format(it) } != wanted) {
-                throw IOException("checksum does not match")
+                throw ChecksumException("checksum does not match")
             }
             val file = File(dir, apk.name)
             if (!part.renameTo(file)) throw IOException("cannot keep the download")
@@ -215,8 +252,8 @@ class Updater(context: Context) {
             throw e
         } catch (e: IOException) {
             part.delete()
-            Diagnostics.event(TAG, "download failed: ${e.message}")
-            _state.value = UpdateState.Failed(e.message ?: "download failed")
+            Diagnostics.event(TAG, "download failed: ${e.javaClass.simpleName}: ${e.message}")
+            _state.value = UpdateState.Failed(e.message ?: "download failed", updateFailure(e))
         }
     }
 
@@ -232,8 +269,17 @@ class Updater(context: Context) {
         return UpdateChannel.entries.firstOrNull { it.name == stored } ?: defaultChannel(current)
     }
 
-    private fun remember() {
-        prefs.edit().putLong(KEY_CHECKED_AT, System.currentTimeMillis()).apply()
+    private fun remember(now: Long) {
+        prefs.edit().putLong(KEY_CHECKED_AT, now).apply()
+    }
+
+    /**
+     * The last check's "nothing newer", while it is the last check there was: one that found a build,
+     * failed to remember, or was on the other channel (switching drops the check's time) says nothing.
+     */
+    private fun storedUpToDate(): UpdateState.UpToDate? {
+        val at = prefs.getLong(KEY_UP_TO_DATE_AT, 0L)
+        return if (at > 0L && at == prefs.getLong(KEY_CHECKED_AT, 0L)) UpdateState.UpToDate(at) else null
     }
 
     private companion object {
@@ -242,6 +288,7 @@ class Updater(context: Context) {
         const val USER_AGENT = "RexPocket"
         const val FEED = "https://api.github.com/repos/leizhiyuan/rexpocket/releases?per_page=10"
         const val KEY_CHECKED_AT = "update.checkedAt"
+        const val KEY_UP_TO_DATE_AT = "update.upToDateAt"
         const val KEY_CHANNEL = "update.channel"
         const val CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
     }

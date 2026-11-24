@@ -1,0 +1,24 @@
+$ rex client --help
+Inspect the clients connected to the server.
+
+A client is one program connected to the server, such as Rex.app or this
+command. Each client says what it is when it connects, and a person may give
+it a label.
+
+Usage:
+  rex client [command] [flags]
+
+Commands:
+  ls, list  List clients
+  inspect   Inspect a client
+
+Options:
+  -h, --help  help for client
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

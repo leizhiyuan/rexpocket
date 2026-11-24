@@ -2,7 +2,9 @@ package me.leaver.rexpocket.ui
 
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -30,9 +32,15 @@ internal fun rememberHardwareKeyboard(): Boolean {
  */
 internal fun keyBarShown(hardwareKeyboard: Boolean, always: Boolean): Boolean = always || !hardwareKeyboard
 
-/** How tall the keyboard covering the window is right now, in pixels; 0 while it is closed. */
+/**
+ * How much of the pane the keyboard covers right now, in pixels; 0 while it is closed. The screen
+ * already keeps the navigation bar clear of the pane, and the keyboard's inset counts that bar too,
+ * so it is taken off: the dock rises by the rest, and so must the pane, or a gap opens between them
+ * and a row more is pushed out at the top.
+ */
 @Composable
-internal fun imeHeight(): Int = WindowInsets.ime.getBottom(LocalDensity.current)
+internal fun imeCover(): Int =
+    WindowInsets.ime.exclude(WindowInsets.navigationBars).getBottom(LocalDensity.current)
 
 /**
  * How far the pane slides up while the keyboard covers it. The terminal is not resized for the
@@ -40,11 +48,30 @@ internal fun imeHeight(): Int = WindowInsets.ime.getBottom(LocalDensity.current)
  * moved instead: up by what the keyboard covers, which puts the bottom of the terminal - the
  * prompt, the composer, the status line - back where it was, above the dock.
  *
- * What has to stay visible is the bottom of the grid, not the cursor: a full-screen program draws
- * its own cursor and hides the terminal's (`pi`, `htop`, Claude Code all do), and the rows it draws
- * below the cursor are part of what is being typed into.
+ * What has to stay visible is the bottom of the grid, as long as that keeps the cursor on screen: a
+ * full-screen program draws its own cursor and hides the terminal's (`pi`, `htop`, Claude Code all
+ * do), and the rows it draws below the cursor are part of what is being typed into. But a new
+ * shell, or any program whose cursor is near the top, would have the row being typed into slid
+ * out under the top bar, where no scrolling reaches it - it is the live screen, not history. So
+ * the pane never slides past the top of the cursor's row: it moves less, the cursor stays in view,
+ * and what the keyboard then covers is the rows under the cursor, which such a screen has yet to fill.
+ *
+ * And the bottom of the grid only matters when something is drawn there. A short screen - a new
+ * shell, a few prompts, the screen after a clear - ends at the cursor's row with nothing under it,
+ * so the pane moves only as far as that last drawn row needs to clear the keyboard: not at all
+ * while it is already above it. Sliding it by the cursor's row alone put the cursor on the top
+ * line and the prompts above it out of view, for empty rows the keyboard could have covered.
+ *
+ * [cursorTopPx] is the top of the cursor's row in the pane, or null when no cursor shows.
+ * [drawnBottomPx] is the bottom of the last drawn row, at or under the cursor's, or null when the
+ * drawing reaches the last row of the grid (or a full-screen program owns it).
  */
-internal fun imeShift(imePx: Int, paneHeightPx: Int): Float {
+internal fun imeShift(imePx: Int, paneHeightPx: Int, cursorTopPx: Int? = null, drawnBottomPx: Int? = null): Float {
     if (imePx <= 0 || paneHeightPx <= 0) return 0f
-    return minOf(imePx, paneHeightPx).toFloat()
+    val full = minOf(imePx, paneHeightPx)
+    if (cursorTopPx == null) return full.toFloat()
+    val toCursor = minOf(full, maxOf(0, cursorTopPx))
+    if (drawnBottomPx == null) return toCursor.toFloat()
+    val needed = drawnBottomPx - (paneHeightPx - imePx)
+    return minOf(toCursor, maxOf(0, needed)).toFloat()
 }

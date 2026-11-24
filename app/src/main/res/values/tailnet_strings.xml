@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The tailnet's status on the home screen, its details sheet, and the steps of a connection. -->
+<resources>
+    <!-- %1$s is the network: Tailscale or Netbird. -->
+    <string name="tailnet_stage_starting">Starting %1$s…</string>
+    <string name="tailnet_stage_signing_in">Sign in to %1$s</string>
+    <string name="tailnet_stage_needs_approval">Waiting for approval</string>
+    <string name="tailnet_stage_connecting">Connecting to %1$s…</string>
+    <!-- %1$s is this phone's device name. -->
+    <string name="tailnet_stage_connected">Connected as %1$s</string>
+    <!-- %1$s is this phone's device name, %2$s the tailnet's name. -->
+    <string name="tailnet_stage_connected_on">Connected as %1$s on %2$s</string>
+    <string name="tailnet_stage_stopped">%1$s is stopped</string>
+    <string name="tailnet_stage_failed">%1$s could not start</string>
+    <string name="tailnet_stage_off">Not joined</string>
+    <string name="tailnet_step">Step %1$d of %2$d</string>
+    <string name="tailnet_sign_in_body">Approve this phone once in the browser. The login stays in the app.</string>
+    <string name="tailnet_sign_in_waiting">Waiting for the sign-in link…</string>
+    <string name="tailnet_approval_body">Signed in. An admin of the tailnet has to approve this phone in its admin console.</string>
+    <string name="tailnet_stopped_body">The node is up but switched off. Join again to turn it on.</string>
+    <plurals name="tailnet_hosts_need_join">
+        <item quantity="one">%d host is on a tailnet. Join it to reach that host.</item>
+        <item quantity="other">%d hosts are on a tailnet. Join it to reach them.</item>
+    </plurals>
+    <!-- %1$d devices online of %2$d. -->
+    <string name="tailnet_devices_online">%1$d of %2$d online</string>
+    <plurals name="tailnet_devices">
+        <item quantity="one">%d device</item>
+        <item quantity="other">%d devices</item>
+    </plurals>
+    <string name="tailnet_open_details">Tailnet details</string>
+
+    <string name="action_sign_in">Sign in</string>
+    <string name="action_copy_link">Copy link</string>
+    <string name="action_join">Join</string>
+    <string name="action_devices">Devices</string>
+    <string name="action_tailnet_settings">Tailnet settings</string>
+    <string name="action_try_again">Try again</string>
+
+    <string name="tailnet_section_this_phone">This phone</string>
+    <string name="tailnet_section_devices">Devices</string>
+    <!-- %1$s is how many are online, as tailnet_devices_online says it. -->
+    <string name="tailnet_section_devices_count">Devices · %1$s</string>
+    <string name="tailnet_field_status">Status</string>
+    <string name="tailnet_field_network">Tailnet</string>
+    <string name="tailnet_field_device">Device name</string>
+    <string name="tailnet_field_user">Signed in as</string>
+    <string name="tailnet_field_addresses">Addresses</string>
+    <string name="tailnet_field_relay">Home relay</string>
+    <string name="tailnet_field_key_expiry">Key expires</string>
+    <!-- %1$s is the open host's name. -->
+    <string name="tailnet_field_route">Route to %1$s</string>
+    <string name="tailnet_route_measure">Tap to measure</string>
+    <string name="tailnet_field_health">Reported by the node</string>
+    <string name="tailnet_copied">Copied</string>
+    <string name="tailnet_no_devices">No other devices on this tailnet yet.</string>
+    <string name="tailnet_devices_waiting">The device list comes once the phone is connected.</string>
+
+    <string name="tailnet_peer_online">Online</string>
+    <string name="tailnet_peer_offline">Offline</string>
+    <!-- %1$s is a relative time, such as "2 hours ago". -->
+    <string name="tailnet_peer_last_seen">Offline · last seen %1$s</string>
+    <string name="tailnet_peer_rex_host">Rex host</string>
+    <string name="tailnet_peer_connect">Tap to connect</string>
+    <string name="tailnet_peer_add">Tap to add as a host</string>
+    <string name="tailnet_link_direct">direct</string>
+    <string name="tailnet_link_peer_relay">peer relay</string>
+    <!-- %1$s is the DERP region, such as fra. -->
+    <string name="tailnet_link_derp">DERP %1$s</string>
+    <string name="tailnet_link_relay">relayed</string>
+    <string name="tailnet_link_connecting">connecting</string>
+
+    <!-- The steps of a connection to a host. %1$s is the network, Tailscale or Netbird. -->
+    <string name="connect_step_start_tailnet">Starting %1$s…</string>
+    <string name="connect_step_sign_in">Waiting for the %1$s sign-in…</string>
+    <!-- %1$s is the host, %2$s the network. -->
+    <string name="connect_step_find_peer">Looking for %1$s on %2$s…</string>
+    <string name="connect_step_reach_tailnet">Reaching %1$s over %2$s…</string>
+    <!-- %1$s is the host. -->
+    <string name="connect_step_reach">Reaching %1$s…</string>
+    <string name="connect_step_rex">Rex answered · loading sessions…</string>
+    <!-- Seconds the step has taken so far. -->
+    <string name="connect_elapsed">%1$.1f s</string>
+
+    <!-- %1$s is the network, %2$s the host. -->
+    <string name="problem_tailnet_needs_login">Sign in to %1$s to reach %2$s.</string>
+    <string name="problem_tailnet_needs_approval">%1$s is waiting for an admin to approve this phone.</string>
+    <string name="problem_tailnet_peer_unknown">%1$s has no device named %2$s. Check the name in its device list.</string>
+    <string name="problem_tailnet_peer_offline">%2$s is offline on %1$s.</string>
+    <!-- %3$s is a relative time, such as "2 hours ago". -->
+    <string name="problem_tailnet_peer_offline_seen">%2$s is offline on %1$s, last seen %3$s.</string>
+    <!-- %1$s is the host, %2$s the port. -->
+    <string name="problem_rex_not_listening">%1$s answered, but nothing listens on port %2$s. Is Rex running there with --extra-listen?</string>
+</resources>

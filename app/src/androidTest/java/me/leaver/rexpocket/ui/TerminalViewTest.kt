@@ -9,6 +9,10 @@ import android.view.View
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import me.leaver.rexpocket.core.DeskKey
+import me.leaver.rexpocket.core.KeyModifiers
+import me.leaver.rexpocket.core.Mod
+import me.leaver.rexpocket.core.metaState
 import me.leaver.rexpocket.terminal.TerminalFrame
 import me.leaver.rexpocket.terminal.TerminalSession
 import me.leaver.rexpocket.terminal.TerminalTheme
@@ -150,6 +154,116 @@ class TerminalViewTest {
     }
 
     @Test
+    fun aDoubleTapIsOneTapAtOnceAndThenTheDoubleTap() {
+        var tapped = 0
+        var doubled = 0
+        onMain {
+            view.onTap = { tapped++ }
+            view.onDoubleTap = { doubled++ }
+        }
+        tap(40f, 40f)
+        // The first tap does not wait to see whether a second follows.
+        assertEquals(1, tapped)
+        Thread.sleep(DOUBLE_TAP_GAP_MS)
+        tap(42f, 41f)
+        assertEquals("the second tap is the double tap, not another tap", 1, tapped)
+        assertEquals(1, doubled)
+
+        // Taps far enough apart in time are two taps again.
+        Thread.sleep(android.view.ViewConfiguration.getDoubleTapTimeout() + 200L)
+        tap(40f, 40f)
+        assertEquals(2, tapped)
+        assertEquals(1, doubled)
+    }
+
+    @Test
+    fun withNoDoubleTapListenedForEveryTapIsATap() {
+        var tapped = 0
+        onMain { view.onTap = { tapped++ } }
+        tap(40f, 40f)
+        Thread.sleep(DOUBLE_TAP_GAP_MS)
+        tap(40f, 40f)
+        assertEquals(2, tapped)
+    }
+
+    @Test
+    fun aSecondPressThatIsHeldSelectsInsteadOfBeingADoubleTap() {
+        feed("alpha beta gamma")
+        var doubled = 0
+        onMain { view.onDoubleTap = { doubled++ } }
+        tap(3f, 10f)
+        Thread.sleep(DOUBLE_TAP_GAP_MS)
+        longPress(x = 3f, y = 10f)
+        val down = SystemClock.uptimeMillis()
+        touch(MotionEvent.ACTION_UP, down, 3f, 10f)
+
+        assertEquals(0, doubled)
+        assertEquals("alpha", session.selectionText())
+    }
+
+    @Test
+    fun waitingForADoubleTapHoldsATapUntilItsTimeHasPassed() {
+        var tapped = 0
+        val doubles = mutableListOf<Boolean>()
+        onMain {
+            view.gestureTiming = view.gestureTiming.copy(waitForDoubleTap = true, doubleTapMs = 250)
+            view.onTap = { tapped++ }
+            view.onDoubleTap = { doubles += it }
+        }
+        tap(40f, 40f)
+        assertEquals("a tap waits to see whether a second follows", 0, tapped)
+        Thread.sleep(250L + 300L)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        assertEquals(1, tapped)
+
+        // The first tap of a double tap never acts on its own.
+        tap(40f, 40f)
+        Thread.sleep(DOUBLE_TAP_GAP_MS)
+        tap(41f, 40f)
+        Thread.sleep(250L + 300L)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        assertEquals(1, tapped)
+        assertEquals(listOf(false), doubles)
+    }
+
+    @Test
+    fun theLongPressTimeIsThePersons() {
+        feed("alpha beta gamma")
+        onMain { view.gestureTiming = view.gestureTiming.copy(longPressMs = 1_400) }
+        // Held for less than the person's time: still a press, nothing selected yet.
+        val down = SystemClock.uptimeMillis()
+        touch(MotionEvent.ACTION_DOWN, down, 3f, 10f)
+        Thread.sleep(800)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        assertEquals("", session.selectionText())
+        Thread.sleep(1_000)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        assertEquals("alpha", session.selectionText())
+        touch(MotionEvent.ACTION_UP, down, 3f, 10f)
+    }
+
+    @Test
+    fun aLongPressSetToActDoesThatButStillOffersALink() {
+        feed("alpha beta gamma")
+        var pressed = 0
+        var link: String? = null
+        onMain {
+            view.onLongPress = { pressed++ }
+            view.onLink = { link = it }
+        }
+        longPress(x = 3f, y = 10f)
+        touch(MotionEvent.ACTION_UP, SystemClock.uptimeMillis(), 3f, 10f)
+        assertEquals("the long press acted", 1, pressed)
+        assertEquals("and selected nothing", "", session.selectionText())
+
+        feed("\u001b[2J\u001b[Hopen https://example.com/pull/7 now")
+        longPress(x = 12f * 8, y = 10f)
+        touch(MotionEvent.ACTION_UP, SystemClock.uptimeMillis(), 12f * 8, 10f)
+        assertEquals("https://example.com/pull/7", link)
+        assertEquals("a link is offered, not acted on", 1, pressed)
+    }
+
+    @Test
     fun draggingOverAProgramThatReadsTheMouseSendsItsWheel() {
         feed("\u001b[?1049h\u001b[?1000h\u001b[?1006h")
         drag(fromY = 600f, toY = 100f)
@@ -203,6 +317,70 @@ class TerminalViewTest {
         assertEquals("\u001b[A\u001bOA", sent.toString())
     }
 
+    /**
+     * The key bar's Fn panel: each desk key comes out of libghostty-vt as a desk keyboard's would,
+     * with the modifiers the key row holds, and in the cursor mode the program set.
+     */
+    @Test
+    fun theFnPanelsKeysAreEncodedAsADeskKeyboardsAre() {
+        val plain = mapOf(
+            DeskKey.Home to "\u001b[H", DeskKey.End to "\u001b[F", DeskKey.PageUp to "\u001b[5~",
+            DeskKey.PageDown to "\u001b[6~", DeskKey.Insert to "\u001b[2~", DeskKey.Delete to "\u001b[3~",
+            DeskKey.F1 to "\u001bOP", DeskKey.F2 to "\u001bOQ", DeskKey.F3 to "\u001bOR", DeskKey.F4 to "\u001bOS",
+            DeskKey.F5 to "\u001b[15~", DeskKey.F6 to "\u001b[17~", DeskKey.F7 to "\u001b[18~", DeskKey.F8 to "\u001b[19~",
+            DeskKey.F9 to "\u001b[20~", DeskKey.F10 to "\u001b[21~", DeskKey.F11 to "\u001b[23~", DeskKey.F12 to "\u001b[24~",
+        )
+        assertEquals(DeskKey.entries.toSet(), plain.keys)
+        for ((key, bytes) in plain) assertEquals(key.name, bytes, encode(key, KeyModifiers()))
+
+        val shift = KeyModifiers().tap(Mod.Shift, 1_000)
+        val ctrl = KeyModifiers().tap(Mod.Ctrl, 1_000)
+        assertEquals("\u001b[1;2F", encode(DeskKey.End, shift))
+        assertEquals("\u001b[15;5~", encode(DeskKey.F5, ctrl))
+        assertEquals("\u001b[3;5~", encode(DeskKey.Delete, ctrl))
+
+        feed("\u001b[?1h")
+        assertEquals("\u001bOH", encode(DeskKey.Home, KeyModifiers()))
+    }
+
+    @Test
+    fun theCursorsRowIsReportedSoTheKeyboardNeverHidesIt() {
+        val tops = java.util.Collections.synchronizedList(mutableListOf<Int?>())
+        onMain { view.onCursorRow = { tops += it } }
+        render()
+        assertEquals("a new terminal's cursor is on the top row: $tops", 0, tops.last())
+
+        feed("one\r\ntwo\r\nthree")
+        render()
+        val two = requireNotNull(tops.last())
+        assertTrue("the cursor moved down two rows: $tops", two > 0)
+        feed("\r\n")
+        render()
+        assertEquals("one row further, one row's height further: $tops", two * 1.5, requireNotNull(tops.last()).toDouble(), 1.0)
+
+        // A program that hides the cursor only while it redraws does not move the pane.
+        val before = tops.size
+        feed("\u001b[?25l")
+        render()
+        feed("\u001b[?25h")
+        render()
+        assertEquals("a cursor hidden for a moment is not reported: $tops", before, tops.size)
+
+        // One that keeps it hidden is, once it has stayed hidden: the pane then keeps the bottom of
+        // the grid in view instead.
+        feed("\u001b[?25l")
+        render()
+        val deadline = SystemClock.uptimeMillis() + 2_000
+        while (tops.last() != null && SystemClock.uptimeMillis() < deadline) {
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            Thread.sleep(20)
+        }
+        assertEquals(null, tops.last())
+    }
+
+    private fun encode(key: DeskKey, mods: KeyModifiers): String =
+        String(requireNotNull(session.encodeKey(key.keyCode, false, mods.metaState(), null)) { key.name }, Charsets.UTF_8)
+
     // ---- Gestures -----------------------------------------------------------------------
 
     private fun key(code: Int) = android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code)
@@ -254,5 +432,7 @@ class TerminalViewTest {
         // 12sp at the density of a test device is some 30-50 px wide; a probe this size sits inside one.
         const val CELL_PROBE_W = 6
         const val CELL_PROBE_H = 12
+        // Between the platform's shortest and longest gap for a double tap (40 and 300 ms).
+        const val DOUBLE_TAP_GAP_MS = 120L
     }
 }

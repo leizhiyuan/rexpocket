@@ -1,0 +1,121 @@
+name: android-apk
+
+# Builds the debug APKs for testing on a phone, all signed with the kept debug key:
+#   rexpocket.apk                 the app, Tailscale built in, and Netbird through the add-on
+#   rexpocket-netbird-addon.apk   the Netbird add-on, a separate app (me.leaver.rexpocket.netbird)
+#   rexpocket-netbird.apk         the app with Netbird embedded; it replaces rexpocket.apk
+# Download them from the run's Artifacts section.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ccr-30ee0e05-w78lcg]
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Install the Android NDK and platform
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.1.0" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      # One debug key for every run, so each APK installs over the last as an update. Gradle signs
+      # debug builds with ~/.android/debug.keystore; the first run makes it, later runs restore it.
+      # A key for the phone builds only: anyone with it could sign a build this one accepts as an update.
+      - name: Restore the debug signing key
+        id: debug-key
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: rexpocket-debug-keystore-v1
+
+      - name: Make the debug signing key
+        if: steps.debug-key.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.android
+          keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android \
+            -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Keep the debug signing key
+        if: steps.debug-key.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: rexpocket-debug-keystore-v1
+
+      - name: Signing key fingerprint
+        run: keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 "SHA256:"
+
+      - name: Build the default debug APK
+        run: ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" :app:assembleDebug
+
+      - name: Keep the default APK aside
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket.apk
+
+      - name: Build the Netbird add-on's library
+        run: REXPOCKET_NETBIRD=addon sh tools/build-tailnet.sh
+
+      - name: Build the Netbird add-on
+        run: |
+          ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" :netbirdaddon:assembleDebug
+          cp netbirdaddon/build/outputs/apk/debug/netbirdaddon-debug.apk out/rexpocket-netbird-addon.apk
+
+      - name: Build the Netbird library
+        run: REXPOCKET_NETBIRD=1 sh tools/build-tailnet.sh
+
+      - name: Build the debug APK with Netbird
+        run: ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" -Prexpocket.netbird=true :app:assembleDebug
+
+      - name: Keep the Netbird APK aside
+        run: cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket-netbird.apk
+
+      - name: Check the APKs carry the kept key, and which one offers the add-on
+        run: |
+          WANT=$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 "SHA256:" | awk '{print $2}' | tr -d ':' | tr 'A-F' 'a-f')
+          for apk in out/rexpocket.apk out/rexpocket-netbird-addon.apk out/rexpocket-netbird.apk; do
+            GOT=$("$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --print-certs "$apk" | grep -m1 "SHA-256 digest" | awk '{print $NF}')
+            echo "$apk $GOT"
+            [ "$GOT" = "$WANT" ] || { echo "signed with another key than the kept one"; exit 1; }
+          done
+          AAPT2="$ANDROID_HOME/build-tools/36.1.0/aapt2"
+          # The default app asks for the add-on's permission; the embedded one has nothing of the add-on.
+          "$AAPT2" dump xmltree --file AndroidManifest.xml out/rexpocket.apk | grep -q 'me.leaver.rexpocket.netbird.permission.NODE'
+          if "$AAPT2" dump xmltree --file AndroidManifest.xml out/rexpocket-netbird.apk | grep -q 'me.leaver.rexpocket.netbird'; then
+            echo "rexpocket-netbird.apk offers the add-on"; exit 1
+          fi
+          [ "$("$AAPT2" dump packagename out/rexpocket-netbird-addon.apk)" = me.leaver.rexpocket.netbird ]
+
+      - name: Sizes
+        run: |
+          for apk in out/*.apk; do
+            echo "$(basename "$apk"): $(stat -c %s "$apk") bytes"
+            unzip -l "$apk" | awk '$4 ~ /^lib\/.*\.so$/ { print "  " $4 ": " $1 " bytes" }'
+          done | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rexpocket-debug-apks
+          path: out/*.apk
+          if-no-files-found: error

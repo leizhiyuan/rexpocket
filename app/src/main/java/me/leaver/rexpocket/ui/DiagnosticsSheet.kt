@@ -69,14 +69,14 @@ internal fun DiagnosticsSheet(
                         toast(context, context.getString(R.string.diagnostics_report_failed))
                     }
                 }
-                SheetItem(stringResource(R.string.diagnostics_stop), icon = R.drawable.ic_close) {
+                SheetItem(stringResource(R.string.diagnostics_stop), icon = R.drawable.ic_stop) {
                     stop("stopped by the person")
                     toast(context, context.getString(R.string.diagnostics_stopped))
                 }
             }
         } else {
             Group {
-                SheetItem(stringResource(R.string.diagnostics_start)) {
+                SheetItem(stringResource(R.string.diagnostics_start), icon = R.drawable.ic_record) {
                     Diagnostics.start(context)
                     capture = Diagnostics.capture(context)
                     onRecordingChanged(true)

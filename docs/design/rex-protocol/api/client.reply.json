@@ -1,0 +1,63 @@
+{
+  "name": "client.reply",
+  "description": "Answer a client_call_requested, client_perform_requested, or client_prompt_requested event.",
+  "invoke": {
+    "method": "client.reply"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "call_id": {
+        "type": "string",
+        "description": "The call_id of the event you're answering."
+      },
+      "error": {
+        "type": [
+          "null",
+          "object"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The kind of failure, as an error code such as not_found, refused, or internal."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, written for people. In client.reply, a message longer than 4096 bytes is shortened and ends with an ellipsis."
+          }
+        },
+        "description": "Why the call failed, the action wasn't performed, or the prompt couldn't be shown. Set this or result, not both.",
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "result": {
+        "description": "The call's result, what the action returned, or the prompt's answer. For a call or action with no output, use null. For a prompt, send a prompt result: text, ids, or cancelled. Set this or error, not both."
+      }
+    },
+    "required": [
+      "call_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"call_id\": \"1\",\n  \"result\": {\"revision\": 7}\n}",
+  "response_example": "{}",
+  "validation_notes": [
+    "A `client_call_requested` event asks this client to make one call on another server, for a `client.action` request that is still running. Reply to every one, even when the call fails. Send the event's `call_id`, on the connection that received the event.",
+    "A `client_perform_requested` event asks this client to perform one of its own actions for another client's `client.perform` request. Reply the same way. `result` is what the action returned, or `null`.",
+    "A `client_prompt_requested` event asks this client to put a question to the person using it, for an action that called `rex.ui`. Reply once the person answers, with `result` set to `{\"text\": \"...\"}` for typed text, `{\"ids\": [\"...\"]}` for chosen items, or `{\"cancelled\": true}` if they closed the prompt. A result the prompt doesn't accept, such as an ID it didn't offer, fails with `bad_request` and leaves the prompt waiting. If you can't show the prompt, set `error.code` to `not_supported`.",
+    "The server sends a prompt to every connected app that can show it, so the same prompt may be open on several devices. The first answer ends it on all of them, and so does a cancel. Every other app then receives a `client_prompt_ended` event with its own `call_id`. Close the prompt whatever the event's `reason` is. A reply after that fails with `not_found`.",
+    "A reply that sets both `result` and `error`, or neither, fails with `bad_request`. For a call with no result, send `\"result\": null`.",
+    "For a call that failed, use the code and message the other server returned, or explain why you couldn't make the call. The waiting action sees only the message.",
+    "For an action you didn't perform, set `error.code` to `not_supported`, `refused`, or `internal`. The client that sent `client.perform` gets that code unchanged. An empty code is sent as `internal`.",
+    "If `error.message` is longer than 4096 bytes, the server shortens it and ends it with an ellipsis (\u2026). The reply is still accepted.",
+    "A reply runs as soon as it arrives. It doesn't wait behind this connection's earlier `client.key` and `client.action` requests, because a `client.action` request that is waiting for the reply holds that line.",
+    "A `call_id` that nothing is waiting for fails with `not_found`. That includes a call that was already answered and one that timed out."
+  ]
+}

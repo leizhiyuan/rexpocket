@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Netbird add-on, offered by the default build: see docs/design/tailnet-backends.md. -->
+<resources>
+    <string name="netbird_addon_installed">Netbird 在 RexPocket Netbird 附加元件中執行，這是與本 App 並列的另一個 App。加入網路時由 RexPocket 啟動它。</string>
+    <string name="netbird_addon_missing">尚未安裝 Netbird 附加元件。請從與本 App 相同的發布版本或 CI 執行中安裝 %1$s：兩者必須使用同一把金鑰簽署。</string>
+    <string name="netbird_addon_get">取得附加元件</string>
+    <string name="netbird_addon_not_allowed">RexPocket 無法使用 Netbird 附加元件：兩者使用了不同的金鑰簽署。請從同一個發布版本或 CI 執行中安裝兩者。</string>
+    <string name="netbird_addon_no_answer">Netbird 附加元件沒有回應。</string>
+    <string name="netbird_addon_version">Netbird 附加元件使用第 %1$d 版介面，而此 RexPocket 使用第 %2$d 版。請從同一個發布版本或 CI 執行中安裝兩者。</string>
+    <string name="netbird_addon_restarting">Netbird 附加元件已停止。RexPocket 正在重新啟動它。</string>
+</resources>

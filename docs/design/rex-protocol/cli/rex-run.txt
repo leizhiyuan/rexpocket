@@ -1,0 +1,49 @@
+$ rex run --help
+Run a command in a new terminal block.
+
+COMMAND runs through your login shell's environment but not its interactive
+configuration, so profile variables and PATH apply and aliases do not. Use
+--interactive to read that configuration too, such as ~/.zshrc, for a program
+whose directory is added to PATH there. Use --shell to pick another shell, or
+--shell=none to start COMMAND directly.
+
+By default, Rex places the block in a new window. Use --split to place it beside
+an existing block. Use --focus=false to preserve the active window. With --wait,
+Rex writes the creation result, then waits and returns the terminal child's exit
+status.
+
+Examples:
+  rex run -- htop
+  rex run --wait -- go test ./...
+  rex run --split=below --ratio 30 -- tail -f app.log
+  rex run -b editor --split=left -- lazygit
+  rex run -s build -- make
+  rex run --interactive -- opencode
+  rex run --shell=none -- /opt/tool/bin/x
+
+Usage:
+  rex run [flags] -- COMMAND...
+
+Options:
+      --split DIRECTION  place the new block in DIRECTION relative to the anchor (right, left, above, or below)
+      --ratio PCT        give the new block PCT percent of the split (default 50)
+  -b, --block BLOCK      use BLOCK as the split anchor (defaults to focused)
+  -s, --session string   scope to session SESSION
+  -w, --window string    scope to window WINDOW
+  -c, --cwd string       working directory for the terminal
+      --keep-open        keep the terminal open after its command exits
+      --shell SHELL      run COMMAND through SHELL's login environment (none starts it directly)
+      --interactive      also read the shell's interactive startup files, such as ~/.zshrc
+      --label TEXT       set the new block label to TEXT
+      --focus            focus the new block (default true)
+      --json             output the creation result as JSON
+      --wait             wait and return the terminal child's exit status
+  -h, --help             help for run
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

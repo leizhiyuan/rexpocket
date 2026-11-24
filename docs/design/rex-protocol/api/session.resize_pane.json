@@ -1,0 +1,74 @@
+{
+  "name": "session.resize_pane",
+  "description": "Move the border between two blocks to change their sizes.",
+  "invoke": {
+    "method": "session.resize_pane"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "after_block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "A block on the right of the border, or below it when direction is vertical."
+      },
+      "before_block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "A block on the left of the border, or above it when direction is vertical."
+      },
+      "direction": {
+        "type": "string",
+        "description": "The kind of split between the two blocks: 'horizontal' for a border between left and right, or 'vertical' for one between top and bottom.",
+        "enum": [
+          "horizontal",
+          "vertical"
+        ]
+      },
+      "ratio": {
+        "type": "number",
+        "description": "The fraction of the split's space that the before part gets, greater than 0 and less than 1."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      }
+    },
+    "required": [
+      "session_id",
+      "direction",
+      "before_block_id",
+      "after_block_id",
+      "ratio"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call. It is unchanged if the call changed nothing that session.view shows, unless the method's notes say otherwise.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"direction\": \"horizontal\",\n  \"before_block_id\": \"block:01234567-89ab-cdef-0123-456789abcde1\",\n  \"after_block_id\": \"block:01234567-89ab-cdef-0123-456789abcde2\",\n  \"ratio\": 0.65\n}",
+  "response_example": "{\"revision\": 42}",
+  "validation_notes": [
+    "The two blocks pick the border. The server finds the innermost split in `direction` that has `before_block_id` on its left or top side and `after_block_id` on its right or bottom side. The blocks don't need to touch.",
+    "`ratio` has no default. Unlike in `session.new_split`, 0 doesn't mean an even split.",
+    "The blocks can be in any window, active or not. Focus doesn't change.",
+    "The call always raises `revision` and sends `session_view_changed`, even if the border was already where you asked.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If the two block IDs are the same, or `ratio` is out of range, it fails with `bad_request`, and if either block isn't in any window, it fails with `not_found`.",
+    "If the blocks are in different windows or layers, or no split between them matches, the call fails with `bad_request`."
+  ]
+}

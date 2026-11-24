@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="addon_name">RexPocket Netbird 附加元件</string>
+    <string name="addon_channel">RexPocket 的 Netbird</string>
+    <string name="addon_running_title">Netbird 正在為 RexPocket 執行</string>
+    <string name="addon_running_text">RexPocket 在背景透過這個 Netbird 節點保持連線。</string>
+</resources>

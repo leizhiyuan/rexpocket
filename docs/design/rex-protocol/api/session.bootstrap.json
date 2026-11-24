@@ -1,0 +1,911 @@
+{
+  "name": "session.bootstrap",
+  "description": "Set up a new connection in one call: receive events, list sessions, and attach.",
+  "invoke": {
+    "method": "session.bootstrap"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "attach_session_ids": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "description": "The sessions to attach to, in order. Unknown and repeated IDs are skipped, and an empty list attaches none. Leave it out to let the server pick one."
+      },
+      "data_tickets": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "creator_name": {
+              "type": "string",
+              "description": "Issue tickets for blocks whose creator_name is this, such as com.superlogical.terminal. Required."
+            },
+            "data_ref_id": {
+              "type": "string",
+              "description": "Which of each block's data sources the ticket opens, such as terminal."
+            },
+            "subprotocol": {
+              "type": "string",
+              "description": "The subprotocol the data connection will use, such as rex.data.terminal.v1. If set, each ticket works only on a connection that uses it."
+            }
+          },
+          "required": [
+            "creator_name",
+            "data_ref_id"
+          ],
+          "additionalProperties": false
+        },
+        "description": "The kinds of block to issue data tickets for. The response has a ticket for each visible block in an attached session that matches one. At most 8 entries."
+      },
+      "event_scope": {
+        "type": "string",
+        "description": "Which events to receive. 'session' sends every session's events except block_event, plus session_created, session_destroyed, session_moved, and tailscale_status_changed. 'all' also sends block_event and the client events, such as client_joined."
+      },
+      "preferred_session_id": {
+        "type": "string",
+        "description": "The session to attach to, if it exists. Otherwise the server attaches the first session it can. Ignored when attach_session_ids is set."
+      }
+    },
+    "required": [
+      "event_scope"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "attach_all": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "description": "The session's label."
+                },
+                "session_id": {
+                  "type": "string",
+                  "description": "The session's ID."
+                }
+              },
+              "required": [
+                "session_id",
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Every session on the server when this connection started receiving events."
+          }
+        },
+        "description": "What session.attach_all returns: every session on the server when this connection started receiving events.",
+        "required": [
+          "sessions"
+        ],
+        "additionalProperties": false
+      },
+      "attached_sessions": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "description": "The session's label."
+                },
+                "session_id": {
+                  "type": "string",
+                  "description": "The session's ID."
+                }
+              },
+              "description": "The session's entry from attach_all.",
+              "required": [
+                "session_id",
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "view": {
+              "type": "object",
+              "properties": {
+                "active_window_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The window the session shows. Left out when the session has no windows."
+                },
+                "label": {
+                  "type": "string",
+                  "description": "The session's label."
+                },
+                "revision": {
+                  "type": "integer",
+                  "description": "The view's revision. A larger revision is a newer view of the session, even across a server restart. It goes up by one with each change, and jumps ahead when a restarted server restores the session.",
+                  "minimum": 0
+                },
+                "session_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The session's ID."
+                },
+                "windows": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "focused_block_id": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "The window's focused block, which receives typing while the window is active. Left out if the window has none."
+                      },
+                      "label": {
+                        "type": "string",
+                        "description": "The window's label."
+                      },
+                      "layers": {
+                        "type": [
+                          "null",
+                          "array"
+                        ],
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "blocks": {
+                              "type": [
+                                "null",
+                                "array"
+                              ],
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "block_id": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "description": "The block's ID."
+                                  },
+                                  "creator_name": {
+                                    "type": "string",
+                                    "description": "The creator that made the block, such as com.superlogical.terminal."
+                                  },
+                                  "flavor": {
+                                    "type": "string",
+                                    "description": "The flavor the block was made from, such as com.superlogical.terminal.shell."
+                                  },
+                                  "host_id": {
+                                    "type": "string",
+                                    "description": "Identifies the machine and account the block runs as. If it equals your local server's host_id, the block sees the same files you do. Otherwise treat the block as remote."
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "description": "The block's label."
+                                  },
+                                  "owner": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "description": "The client that owns the block. Left out when the block has no owner."
+                                  }
+                                },
+                                "required": [
+                                  "block_id"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "description": "The blocks in the layer, in layout order. The layout field says where each one sits."
+                            },
+                            "bounds": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "description": "Where the layer sits, as [x, y, w, h] fractions of the window's width and height.",
+                              "minItems": 4,
+                              "maxItems": 4
+                            },
+                            "kind": {
+                              "type": "string",
+                              "description": "How the layer is placed: 'tiled' for the layer that fills the window, or 'floating' for a floating layer. Draw a kind you don't know as 'floating'."
+                            },
+                            "layer_id": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "The layer's ID."
+                            },
+                            "layout": {
+                              "type": [
+                                "object",
+                                "null"
+                              ],
+                              "properties": {
+                                "block_id": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "description": "The block at this node. Set only when split isn't."
+                                },
+                                "rect": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "description": "Where this node sits, as [x, y, w, h] fractions of the window's width and height.",
+                                  "minItems": 4,
+                                  "maxItems": 4
+                                },
+                                "split": {
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ],
+                                  "properties": {
+                                    "after": {
+                                      "$ref": "#view-layout-node",
+                                      "description": "The node on the right or bottom."
+                                    },
+                                    "before": {
+                                      "$ref": "#view-layout-node",
+                                      "description": "The node on the left or top."
+                                    },
+                                    "direction": {
+                                      "type": "string",
+                                      "description": "How the space is divided: 'horizontal' puts before on the left and after on the right, and 'vertical' puts before above after. Draw a direction you don't know as 'horizontal'.",
+                                      "enum": [
+                                        "horizontal",
+                                        "vertical"
+                                      ]
+                                    },
+                                    "ratio": {
+                                      "type": "number",
+                                      "description": "The fraction of the space that before gets, between 0 and 1."
+                                    },
+                                    "split_id": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ],
+                                      "description": "The split's ID. It stays the same while the split exists, so you can match splits across views."
+                                    }
+                                  },
+                                  "description": "How this node divides in two. Set only when block_id isn't.",
+                                  "required": [
+                                    "split_id",
+                                    "direction",
+                                    "ratio",
+                                    "before",
+                                    "after"
+                                  ]
+                                }
+                              },
+                              "$anchor": "view-layout-node",
+                              "description": "How the layer divides its space between blocks, as a tree of splits. Null when the layer is empty.",
+                              "required": [
+                                "rect"
+                              ]
+                            },
+                            "state": {
+                              "type": "string",
+                              "description": "How the layer is presented: 'minimized' means don't draw it, though its blocks keep running, and only a floating layer can be minimized. Left out for a normal layer. Draw a state you don't know as normal."
+                            }
+                          },
+                          "required": [
+                            "layer_id",
+                            "kind",
+                            "bounds",
+                            "layout",
+                            "blocks"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "description": "The window's layers, from back to front. The first is the tiled layer, which holds the window's layout and fills the window."
+                      },
+                      "window_id": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "The window's ID."
+                      },
+                      "zoomed_block_id": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "The block zoomed to fill the window, if any. Layouts keep their normal sizes, so draw this block over the whole window."
+                      }
+                    },
+                    "required": [
+                      "window_id",
+                      "layers"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "The session's windows, in order. Rex.app shows them as tabs in this order."
+                }
+              },
+              "description": "The session's view, read after the connection started receiving its events. Apply it first, then the events whose seq is higher than the response's.",
+              "required": [
+                "revision",
+                "session_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "session",
+            "view"
+          ],
+          "additionalProperties": false
+        },
+        "description": "The sessions attached from attach_session_ids, in the order requested. Sessions that don't exist are left out, and so may be sessions that are being destroyed."
+      },
+      "client_id": {
+        "type": "string",
+        "description": "This connection's client ID, the same one session.attach returns. Present even when no session is attached."
+      },
+      "data_tickets": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "block_id": {
+              "type": "string",
+              "description": "The block the ticket opens."
+            },
+            "data_ref_id": {
+              "type": "string",
+              "description": "The data source the ticket opens."
+            },
+            "expires_in_ms": {
+              "type": "integer",
+              "description": "How long the ticket stays valid after the server issues it, in milliseconds.",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "session_id": {
+              "type": "string",
+              "description": "The session that holds the block."
+            },
+            "subprotocol": {
+              "type": "string",
+              "description": "The subprotocol the ticket is bound to. Left out if the request named none."
+            },
+            "ticket": {
+              "type": "string",
+              "description": "A single-use ticket to send in the HELLO message that opens the data connection. Only a data connection from the same user can use it."
+            }
+          },
+          "required": [
+            "session_id",
+            "block_id",
+            "data_ref_id",
+            "ticket",
+            "expires_in_ms"
+          ],
+          "additionalProperties": false
+        },
+        "description": "A data ticket for each visible block in the returned views that matches an entry of the request's data_tickets. Call data.connect for a block that has none."
+      },
+      "selected_session": {
+        "type": [
+          "null",
+          "object"
+        ],
+        "properties": {
+          "session": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "The session's label."
+              },
+              "session_id": {
+                "type": "string",
+                "description": "The session's ID."
+              }
+            },
+            "description": "The session's entry from attach_all.",
+            "required": [
+              "session_id",
+              "label"
+            ],
+            "additionalProperties": false
+          },
+          "view": {
+            "type": "object",
+            "properties": {
+              "active_window_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The window the session shows. Left out when the session has no windows."
+              },
+              "label": {
+                "type": "string",
+                "description": "The session's label."
+              },
+              "revision": {
+                "type": "integer",
+                "description": "The view's revision. A larger revision is a newer view of the session, even across a server restart. It goes up by one with each change, and jumps ahead when a restarted server restores the session.",
+                "minimum": 0
+              },
+              "session_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The session's ID."
+              },
+              "windows": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "focused_block_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "The window's focused block, which receives typing while the window is active. Left out if the window has none."
+                    },
+                    "label": {
+                      "type": "string",
+                      "description": "The window's label."
+                    },
+                    "layers": {
+                      "type": [
+                        "null",
+                        "array"
+                      ],
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "blocks": {
+                            "type": [
+                              "null",
+                              "array"
+                            ],
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "block_id": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "description": "The block's ID."
+                                },
+                                "creator_name": {
+                                  "type": "string",
+                                  "description": "The creator that made the block, such as com.superlogical.terminal."
+                                },
+                                "flavor": {
+                                  "type": "string",
+                                  "description": "The flavor the block was made from, such as com.superlogical.terminal.shell."
+                                },
+                                "host_id": {
+                                  "type": "string",
+                                  "description": "Identifies the machine and account the block runs as. If it equals your local server's host_id, the block sees the same files you do. Otherwise treat the block as remote."
+                                },
+                                "label": {
+                                  "type": "string",
+                                  "description": "The block's label."
+                                },
+                                "owner": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "description": "The client that owns the block. Left out when the block has no owner."
+                                }
+                              },
+                              "required": [
+                                "block_id"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "description": "The blocks in the layer, in layout order. The layout field says where each one sits."
+                          },
+                          "bounds": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "description": "Where the layer sits, as [x, y, w, h] fractions of the window's width and height.",
+                            "minItems": 4,
+                            "maxItems": 4
+                          },
+                          "kind": {
+                            "type": "string",
+                            "description": "How the layer is placed: 'tiled' for the layer that fills the window, or 'floating' for a floating layer. Draw a kind you don't know as 'floating'."
+                          },
+                          "layer_id": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "The layer's ID."
+                          },
+                          "layout": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "block_id": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "The block at this node. Set only when split isn't."
+                              },
+                              "rect": {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "description": "Where this node sits, as [x, y, w, h] fractions of the window's width and height.",
+                                "minItems": 4,
+                                "maxItems": 4
+                              },
+                              "split": {
+                                "type": [
+                                  "object",
+                                  "null"
+                                ],
+                                "properties": {
+                                  "after": {
+                                    "$ref": "#view-layout-node",
+                                    "description": "The node on the right or bottom."
+                                  },
+                                  "before": {
+                                    "$ref": "#view-layout-node",
+                                    "description": "The node on the left or top."
+                                  },
+                                  "direction": {
+                                    "type": "string",
+                                    "description": "How the space is divided: 'horizontal' puts before on the left and after on the right, and 'vertical' puts before above after. Draw a direction you don't know as 'horizontal'.",
+                                    "enum": [
+                                      "horizontal",
+                                      "vertical"
+                                    ]
+                                  },
+                                  "ratio": {
+                                    "type": "number",
+                                    "description": "The fraction of the space that before gets, between 0 and 1."
+                                  },
+                                  "split_id": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "description": "The split's ID. It stays the same while the split exists, so you can match splits across views."
+                                  }
+                                },
+                                "description": "How this node divides in two. Set only when block_id isn't.",
+                                "required": [
+                                  "split_id",
+                                  "direction",
+                                  "ratio",
+                                  "before",
+                                  "after"
+                                ]
+                              }
+                            },
+                            "$anchor": "view-layout-node",
+                            "description": "How the layer divides its space between blocks, as a tree of splits. Null when the layer is empty.",
+                            "required": [
+                              "rect"
+                            ]
+                          },
+                          "state": {
+                            "type": "string",
+                            "description": "How the layer is presented: 'minimized' means don't draw it, though its blocks keep running, and only a floating layer can be minimized. Left out for a normal layer. Draw a state you don't know as normal."
+                          }
+                        },
+                        "required": [
+                          "layer_id",
+                          "kind",
+                          "bounds",
+                          "layout",
+                          "blocks"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "description": "The window's layers, from back to front. The first is the tiled layer, which holds the window's layout and fills the window."
+                    },
+                    "window_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "The window's ID."
+                    },
+                    "zoomed_block_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "The block zoomed to fill the window, if any. Layouts keep their normal sizes, so draw this block over the whole window."
+                    }
+                  },
+                  "required": [
+                    "window_id",
+                    "layers"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "The session's windows, in order. Rex.app shows them as tabs in this order."
+              }
+            },
+            "description": "The session's view, read after the connection started receiving its events. Apply it first, then the events whose seq is higher than the response's.",
+            "required": [
+              "revision",
+              "session_id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "description": "The session the server chose and attached. Null if you sent attach_session_ids, or if no session could be attached.",
+        "required": [
+          "session",
+          "view"
+        ],
+        "additionalProperties": false
+      },
+      "server_status": {
+        "type": "object",
+        "properties": {
+          "api_min_revision": {
+            "type": "integer",
+            "description": "The oldest revision of the API the server supports. Left out when it is 0.",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "api_revision": {
+            "type": "integer",
+            "description": "The newest revision of the API the server supports. Left out when it is 0.",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "generation": {
+                "type": "integer",
+                "description": "How many times the server has loaded its configuration file since it started, counting from 1. It goes up on every load, even one that fails.",
+                "minimum": 0
+              },
+              "hash": {
+                "type": "string",
+                "description": "The SHA-256 of the configuration file and the modules it requires while it loads, in lowercase hexadecimal. Empty if there's no file or it couldn't be read."
+              }
+            },
+            "description": "The configuration file the server loaded most recently. Always present, even when there is no file.",
+            "required": [
+              "generation",
+              "hash"
+            ],
+            "additionalProperties": false
+          },
+          "exit_empty": {
+            "type": "boolean",
+            "description": "True if the server stops on its own soon after its last session and last connection close."
+          },
+          "host_id": {
+            "type": "string",
+            "description": "Identifies the machine and account the server runs as. Servers that see the same files report the same value. Left out when the server has no state directory."
+          },
+          "instance_id": {
+            "type": "string",
+            "description": "A random ID for this run of the server. A new value means a new server process, even if pid is the same."
+          },
+          "listeners": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "addresses": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The addresses the listener is bound to, such as a socket path or 127.0.0.1:54321. They show the port that an endpoint like 127.0.0.1:0 got. Left out when the server can't tell."
+                },
+                "admission": {
+                  "type": "string",
+                  "description": "Which callers the listener lets in: 'peer_credentials', 'anonymous', 'tailscale_owner', 'tailscale_identified', or 'login_server'. Left out when the server can't tell. Show a value you don't know as it is."
+                },
+                "endpoint": {
+                  "type": "string",
+                  "description": "The endpoint the listener was configured with, such as unix:///run/rex.sock, 127.0.0.1:7297, or tailnet://:7297."
+                },
+                "primary": {
+                  "type": "boolean",
+                  "description": "True for the server's primary endpoint, where commands such as rex server status and rex server stop look for the server. Left out for the other listeners."
+                },
+                "transport": {
+                  "type": "string",
+                  "description": "How the listener identifies its callers: 'unix', 'named_pipe', 'tcp', or 'tailscale'. Show a value you don't know as it is."
+                }
+              },
+              "required": [
+                "endpoint",
+                "transport"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Each endpoint the server accepts connections on, primary first. Servers older than API revision 12 leave it out. Doesn't include built-in Tailscale, which the tailscale member describes."
+          },
+          "pid": {
+            "type": "integer",
+            "description": "The server's process ID."
+          },
+          "session_count": {
+            "type": "integer",
+            "description": "How many sessions the server has."
+          },
+          "started_at": {
+            "type": "string",
+            "description": "When the server started, as an RFC 3339 timestamp."
+          },
+          "tailscale": {
+            "type": "object",
+            "properties": {
+              "account": {
+                "type": "object",
+                "properties": {
+                  "login_name": {
+                    "type": "string",
+                    "description": "The Tailscale login name, usually an email address. For display only, because it can change."
+                  }
+                },
+                "description": "The Tailscale account that signed the device in. Left out until Tailscale reports it.",
+                "required": [
+                  "login_name"
+                ],
+                "additionalProperties": false
+              },
+              "allow_tailnet_members": {
+                "type": "boolean",
+                "description": "True if anyone your tailnet's access rules allow may connect. False lets in only the Tailscale user who signed the device in."
+              },
+              "auth_url": {
+                "type": "string",
+                "description": "The link to open to sign the device in to Tailscale. Present while state is needs_login, once Tailscale has made the link."
+              },
+              "control_url": {
+                "type": "string",
+                "description": "The control server the device uses, such as a Headscale server. Left out for Tailscale's own, while built-in Tailscale is off, and by older servers."
+              },
+              "dns_name": {
+                "type": "string",
+                "description": "The device's MagicDNS name, such as rex.tail1234.ts.net. Left out until known."
+              },
+              "error": {
+                "type": "string",
+                "description": "Why built-in Tailscale turned off after its HTTPS listener failed. The next enable clears it."
+              },
+              "https": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "description": "'pending' until the HTTPS listener is ready, then 'available'. The server is reachable over the tailnet only when available. Treat a value you don't know as 'pending'."
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "The server's address on the tailnet, such as https://rex.tail1234.ts.net. Present once HTTPS is available and the device's name is known."
+                  }
+                },
+                "description": "The state of the device's HTTPS listener. Left out while built-in Tailscale is off, and by older servers.",
+                "required": [
+                  "state"
+                ],
+                "additionalProperties": false
+              },
+              "state": {
+                "type": "string",
+                "description": "'disabled' (off), 'starting', 'needs_login' (see auth_url), 'needs_machine_approval' (a tailnet admin must approve the device), or 'running' (on the tailnet). Treat a value you don't know as 'starting'."
+              },
+              "tags": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "description": "The Tailscale tags the device has, such as tag:rex. A tagged device has no owner. Left out when it has none."
+              },
+              "tailnet_name": {
+                "type": "string",
+                "description": "The tailnet's display name, or its domain if it has none. Left out until known."
+              }
+            },
+            "description": "The status of built-in Tailscale. Present only when the server can run it.",
+            "required": [
+              "state",
+              "allow_tailnet_members"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "description": "The server's status, as server.status returns it.",
+        "required": [
+          "pid",
+          "instance_id",
+          "started_at",
+          "exit_empty",
+          "session_count",
+          "config"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "client_id",
+      "server_status",
+      "attach_all",
+      "selected_session"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"event_scope\": \"session\",\n  \"preferred_session_id\": \"session:<uuid>\"\n}",
+  "response_example": "{\n  \"client_id\": \"client:<uuid>\",\n  \"server_status\": {\n    \"pid\": 4242,\n    \"instance_id\": \"7d7e9aca-9a92-41b1-b849-418e76d8f84b\",\n    \"host_id\": \"0e9d6c1f-4a3b-4a52-9c85-2f6d3f6f2f10\",\n    \"started_at\": \"2026-10-17T09:00:00Z\",\n    \"exit_empty\": false,\n    \"session_count\": 1,\n    \"config\": {\n      \"generation\": 1,\n      \"hash\": \"a3f1c0de5b7e2a94c6d8f0e1b2a3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5\"\n    }\n  },\n  \"attach_all\": {\n    \"sessions\": [\n      {\n        \"session_id\": \"session:<uuid>\",\n        \"label\": \"work\"\n      }\n    ]\n  },\n  \"selected_session\": {\n    \"session\": {\n      \"session_id\": \"session:<uuid>\",\n      \"label\": \"work\"\n    },\n    \"view\": {\n      \"revision\": 3,\n      \"session_id\": \"session:<uuid>\",\n      \"label\": \"work\",\n      \"active_window_id\": \"window:<uuid>\",\n      \"windows\": [\n        {\n          \"window_id\": \"window:<uuid>\",\n          \"label\": \"editor\",\n          \"focused_block_id\": \"block:<uuid>\",\n          \"layers\": [\n            {\n              \"layer_id\": \"layer:<uuid>\",\n              \"kind\": \"tiled\",\n              \"bounds\": [0, 0, 1, 1],\n              \"layout\": {\n                \"rect\": [0, 0, 1, 1],\n                \"block_id\": \"block:<uuid>\"\n              },\n              \"blocks\": [\n                {\n                  \"block_id\": \"block:<uuid>\",\n                  \"label\": \"shell\",\n                  \"creator_name\": \"com.superlogical.terminal\",\n                  \"flavor\": \"com.superlogical.terminal.shell\",\n                  \"host_id\": \"0e9d6c1f-4a3b-4a52-9c85-2f6d3f6f2f10\"\n                }\n              ]\n            }\n          ]\n        }\n      ]\n    }\n  }\n}",
+  "validation_notes": [
+    "Send it as the first request on a new connection. Apply its result first, then each event whose `seq` is higher than the response's `seq`, even one that arrived before the response.",
+    "`event_scope` works as it does for `session.attach_all`, and the connection can then call methods on any session. A value other than `session` or `all` fails with `bad_request`.",
+    "If `attach_session_ids` is left out, the server attaches one session and returns it in `selected_session`, which is null when the server has no sessions.",
+    "If `attach_session_ids` is set, even to an empty array, the server returns the sessions it attached in `attached_sessions` and leaves `selected_session` null.",
+    "A session in `attach_session_ids` that is destroyed during the call is left out of `attached_sessions`. If the session chosen for `selected_session` is destroyed during the call, the call fails with `session_not_found`. Any other failure to attach also fails the whole call.",
+    "If the connection falls more than 8 MiB of events behind, the server closes it rather than skip events. Open a new connection and call `session.bootstrap` again.",
+    "If the call fails, close the connection and open a new one before you try again. Part of the setup may already have taken effect."
+  ]
+}

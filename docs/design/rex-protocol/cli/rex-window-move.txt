@@ -1,0 +1,33 @@
+$ rex window move --help
+Move a window within its session's tab order.
+
+Exactly one of --before, --after, or --index is required. Window positions are
+numbered from one in the same order shown by window ls. An index past the end
+moves the window last.
+
+If WINDOW is omitted, Rex uses the window containing REX_BLOCK when available.
+Otherwise, Rex uses the active window in the default session.
+
+Examples:
+  rex window move logs --before editor
+  rex window move 3 --after 1
+  rex window move --index 1
+  rex window move -s work build --index 99
+
+Usage:
+  rex window move [WINDOW] (--before W | --after W | --index N) [-s SESSION] [flags]
+
+Options:
+      --before W        move immediately before window W
+      --after W         move immediately after window W
+      --index N         move to one-based position N
+  -s, --session string  scope to session SESSION
+  -h, --help            help for move
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

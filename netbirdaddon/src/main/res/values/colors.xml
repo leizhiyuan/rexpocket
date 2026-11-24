@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's icon background (app/src/main/res/values/colors.xml): the add-on wears its icon. -->
+    <color name="ic_bg">#0A1027</color>
+</resources>

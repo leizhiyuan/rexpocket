@@ -1,0 +1,131 @@
+{
+  "name": "session.new_layer",
+  "description": "Create blocks in a new floating layer at the front of a window.",
+  "invoke": {
+    "method": "session.new_layer"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "bounds": {
+        "description": "Where the new floating layer sits, as [x, y, w, h] fractions of the window's width and height. It must fit inside the window.",
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "A rectangle as [x, y, w, h]. x and y place its top-left corner and w and h give its size, each as a fraction of the window's width or height.",
+            "minItems": 4,
+            "maxItems": 4
+          },
+          {
+            "type": "object",
+            "properties": {
+              "h": {
+                "type": "number",
+                "description": "The height, as a fraction of the window's height."
+              },
+              "w": {
+                "type": "number",
+                "description": "The width, as a fraction of the window's width."
+              },
+              "x": {
+                "type": "number",
+                "description": "The left edge, as a fraction of the window's width."
+              },
+              "y": {
+                "type": "number",
+                "description": "The top edge, as a fraction of the window's height."
+              }
+            },
+            "description": "The same rectangle as an object, the form that earlier clients send.",
+            "required": [
+              "x",
+              "y",
+              "w",
+              "h"
+            ]
+          }
+        ]
+      },
+      "focus": {
+        "type": "boolean",
+        "description": "Whether to make the window active and focus the first new block. Defaults to false."
+      },
+      "layout": {
+        "type": [
+          "null",
+          "object"
+        ],
+        "description": "The blocks to create in the floating layer and how to arrange them. Each node holds either block, with a flavor and optional options and label, or split, with direction, before, after, and an optional ratio."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      },
+      "window_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The window to add the floating layer to. Leave it out to use the active window."
+      }
+    },
+    "required": [
+      "session_id",
+      "bounds",
+      "layout"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "block_ids": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": "The new blocks' IDs, in layout order: each split's before side comes ahead of its after side."
+      },
+      "layer_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The new floating layer's ID."
+      },
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "layer_id",
+      "block_ids",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"bounds\": [0.1, 0.1, 0.8, 0.6],\n  \"layout\": {\n    \"block\": {\n      \"flavor\": \"com.superlogical.terminal.shell\",\n      \"label\": \"shell\"\n    }\n  },\n  \"focus\": true\n}",
+  "response_example": "{\n  \"layer_id\": \"layer:<uuid>\",\n  \"block_ids\": [\"block:<uuid>\"],\n  \"revision\": 42\n}",
+  "validation_notes": [
+    "`bounds` is measured from the window's top-left corner. Its width and height must be greater than 0.",
+    "A `block` node in `layout` starts one new block from a `flavor`, such as `com.superlogical.terminal.shell`. A `split` node divides its space in two and holds another node in each of `before` and `after`.",
+    "In a `split` node, `direction` is `horizontal` to put `before` on the left of `after`, or `vertical` to put it on top. `ratio` is the fraction of the space that `before` gets, greater than 0 and less than 1. It defaults to 0.5.",
+    "`layout` always starts new blocks. To move a block that is already in a window's layout into a floating layer, use `session.float_block`.",
+    "The new layer starts in front of every other floating layer in the window.",
+    "Either the whole layout is created or none of it is. If a block fails to start, the server closes the blocks it already started, and the call fails.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If `window_id` names a window that isn't in the session, or no creator provides a `flavor`, it fails with `not_found`. Bad `bounds`, or a malformed `layout` or `flavor`, fail with `bad_request`.",
+    "If `window_id` is left out and the session has no windows, the call fails with `conflict`.",
+    "If the call would go past a limit on blocks per window or blocks on the server, it fails with `conflict`."
+  ]
+}

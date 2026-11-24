@@ -1,0 +1,63 @@
+{
+  "name": "session.new_block",
+  "description": "Create a block without placing it in a window. Place it later with session.move_block.",
+  "invoke": {
+    "method": "session.new_block"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "flavor": {
+        "type": "string",
+        "description": "The flavor of block to create, such as com.superlogical.terminal.shell. block_creator.list lists them."
+      },
+      "label": {
+        "type": "string",
+        "description": "The block's label, up to 128 characters. Defaults to the flavor's short name, such as shell."
+      },
+      "options": {
+        "description": "Settings for the block's creator, in the shape of the flavor's options_schema from block_creator.list."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      }
+    },
+    "required": [
+      "session_id",
+      "flavor"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The new block's ID. The block is detached until you place it with session.move_block."
+      },
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision. Creating a detached block doesn't change it.",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "block_id",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"flavor\": \"com.superlogical.terminal.shell\",\n  \"label\": \"logs\"\n}",
+  "response_example": "{\n  \"block_id\": \"block:<uuid>\",\n  \"revision\": 7\n}",
+  "validation_notes": [
+    "The server passes `options` to the flavor's creator unchanged.",
+    "The block starts detached: it runs, sends events, and answers method calls, but no window shows it. `session.move_block` can place it beside a block that is in a window.",
+    "If the calling client is attached to the session, it becomes the block's owner. Otherwise the block has no owner until an attached client claims it with `session.own_block`.",
+    "A malformed `flavor` or `label` fails with `bad_request`. A flavor that no creator provides fails with `not_found`.",
+    "If the server already has as many blocks as it allows, the call fails with `conflict`."
+  ]
+}

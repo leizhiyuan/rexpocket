@@ -1,11 +1,11 @@
 package me.leaver.rexpocket.ui
 
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.update.UpdateFailure
 import me.leaver.rexpocket.update.UpdateState
 
 /** What the settings row says: the version offered, how far the download got, or that it is up to date. */
@@ -13,11 +13,20 @@ import me.leaver.rexpocket.update.UpdateState
 internal fun updateDetail(state: UpdateState): String? = when (state) {
     UpdateState.Idle -> null
     UpdateState.Checking -> stringResource(R.string.update_checking)
-    UpdateState.UpToDate -> stringResource(R.string.update_current)
+    // When it last looked, so a row with nothing new still says the phone is looking.
+    is UpdateState.UpToDate -> upToDateText(state.checkedAt, System.currentTimeMillis())
     is UpdateState.Available -> stringResource(R.string.update_available, state.tag)
     is UpdateState.Downloading -> stringResource(R.string.update_downloading, state.tag, state.percent)
     is UpdateState.Ready -> stringResource(R.string.update_ready, state.tag)
-    is UpdateState.Failed -> stringResource(R.string.update_failed)
+    // The cause in a few words, and that a tap tries again; the detail is in Diagnostics.
+    is UpdateState.Failed -> stringResource(
+        when (state.cause) {
+            UpdateFailure.Offline -> R.string.update_failed_offline
+            UpdateFailure.RateLimited -> R.string.update_failed_rate_limited
+            UpdateFailure.Checksum -> R.string.update_failed_checksum
+            UpdateFailure.Other -> R.string.update_failed
+        },
+    )
 }
 
 /**
@@ -60,3 +69,9 @@ internal fun UpdateOfferDialog(
         },
     )
 }
+
+/** "Up to date · checked 2 hr. ago"; a check within the last minute was just now. */
+@Composable
+internal fun upToDateText(checkedAt: Long, now: Long): String =
+    if (now - checkedAt < android.text.format.DateUtils.MINUTE_IN_MILLIS) stringResource(R.string.update_current_just_now)
+    else stringResource(R.string.update_current_checked, relativeTime(checkedAt, now))

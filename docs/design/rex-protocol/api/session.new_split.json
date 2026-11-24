@@ -1,0 +1,132 @@
+{
+  "name": "session.new_split",
+  "description": "Create blocks in a new split beside an existing block or split.",
+  "invoke": {
+    "method": "session.new_split"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "anchor_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The block or split whose space to split. A block ID splits that one block. A split ID puts the new blocks beside that split and everything under it. Leave it out to split the focused block of window_id, or of the active window. Don't send it with window_id."
+      },
+      "direction": {
+        "type": "string",
+        "description": "How to divide the anchor's space: 'horizontal' for side by side or 'vertical' for one above the other.",
+        "enum": [
+          "horizontal",
+          "vertical"
+        ]
+      },
+      "focus": {
+        "type": "boolean",
+        "description": "Whether to make the anchor's window active and focus the first new block. Defaults to false."
+      },
+      "layout": {
+        "type": [
+          "null",
+          "object"
+        ],
+        "description": "The blocks to create beside the anchor and how to arrange them. Each node holds either block, with a flavor and optional options and label, or split, with direction, before, after, and an optional ratio."
+      },
+      "ratio": {
+        "type": "number",
+        "description": "The fraction of the space that the before part gets, greater than 0 and less than 1. Defaults to 0.5."
+      },
+      "session_id": {
+        "type": "string",
+        "description": "The session to act on."
+      },
+      "side": {
+        "type": "string",
+        "description": "Where the new blocks go: 'before' for the left or top part, or 'after' for the right or bottom part.",
+        "enum": [
+          "before",
+          "after"
+        ]
+      },
+      "window_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The window whose focused block to split. Send it only when anchor_id is left out."
+      }
+    },
+    "required": [
+      "session_id",
+      "direction",
+      "side",
+      "layout"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "anchor_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The block or split whose space was split. If the request didn't name one, this is the focused block the server used."
+      },
+      "block_ids": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": "The new blocks' IDs, in layout order: each split's before side comes ahead of its after side."
+      },
+      "revision": {
+        "type": "integer",
+        "description": "The session's revision after this call.",
+        "minimum": 0
+      },
+      "split_ids": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": "The IDs of the splits this call created: first the one at the anchor, then the new layout's own splits in layout order."
+      }
+    },
+    "required": [
+      "anchor_id",
+      "block_ids",
+      "split_ids",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\",\n  \"anchor_id\": \"block:01234567-89ab-cdef-0123-456789abcde1\",\n  \"direction\": \"horizontal\",\n  \"side\": \"after\",\n  \"layout\": {\n    \"block\": {\n      \"flavor\": \"com.superlogical.terminal.shell\",\n      \"label\": \"logs\"\n    }\n  },\n  \"focus\": true\n}",
+  "response_example": "{\n  \"anchor_id\": \"block:01234567-89ab-cdef-0123-456789abcde1\",\n  \"block_ids\": [\"block:01234567-89ab-cdef-0123-456789abcde2\"],\n  \"split_ids\": [\"split:<uuid>\"],\n  \"revision\": 42\n}",
+  "validation_notes": [
+    "The server picks the block to split before it starts the new blocks, so a focus change while they start doesn't move the split.",
+    "A `block` node in `layout` starts one new block from a `flavor`, such as `com.superlogical.terminal.shell`. A `split` node divides its space in two and holds another node in each of `before` and `after`.",
+    "In a `split` node, `direction` is `horizontal` to put `before` on the left of `after`, or `vertical` to put it on top. `ratio` is the fraction of the space that `before` gets, greater than 0 and less than 1. It defaults to 0.5.",
+    "Any zoom in the window ends, whether or not `focus` is set.",
+    "If `anchor_id` is a split ID, the new split takes that split's place. The old split, with everything under it, goes on one side and `layout` on the other. Anchoring a layer's top split makes the new blocks span the whole layer. A layer with one block has no split, so anchor its block instead.",
+    "Splits that already existed keep their IDs.",
+    "Either the whole layout is created or none of it is. If a block fails to start, the server closes the blocks it already started, and the call fails.",
+    "If the session doesn't exist, the call fails with `session_not_found`. If `window_id` names a window that isn't in the session, or no creator provides a `flavor`, it fails with `not_found`. Sending both `anchor_id` and `window_id`, a bad `ratio`, or a malformed `layout` or `flavor` fail with `bad_request`.",
+    "If `anchor_id` names a block that isn't in a window, including a detached block, or a split that isn't in any window, the call fails with `not_found`. If both `anchor_id` and `window_id` are left out and the session has no windows, it fails with `conflict`.",
+    "If the call would go past a limit on blocks per window or blocks on the server, it fails with `conflict`."
+  ]
+}

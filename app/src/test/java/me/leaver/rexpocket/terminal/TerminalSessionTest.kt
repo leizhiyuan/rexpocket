@@ -204,6 +204,90 @@ class TerminalSessionTest {
         assertArrayEquals("\u001bOA".toByteArray(), application.encodeKey(KeyEvent.KEYCODE_DPAD_UP, false, 0, null))
     }
 
+    /**
+     * A desk keyboard's keys reach the program as a desk terminal sends them: the keys a phone has
+     * none of, with and without modifiers, and the chords of Ctrl, Alt and Meta. The terminal
+     * screen takes only its own shortcuts before this (ShortcutsTest, TermShortcutsTest).
+     */
+    @Test
+    fun aDeskKeyboardsKeysReachTheProgramAsADeskTerminalSendsThem() {
+        val plain = terminal(10, 3)
+        fun key(code: Int, meta: Int = 0, text: String? = null) = plain.encodeKey(code, false, meta, text)?.let { String(it) }
+        assertEquals("\u001b", key(KeyEvent.KEYCODE_ESCAPE))
+        assertEquals("\t", key(KeyEvent.KEYCODE_TAB))
+        assertEquals("\u001b[Z", key(KeyEvent.KEYCODE_TAB, KeyEvent.META_SHIFT_ON))
+        assertEquals("\u001b[H", key(KeyEvent.KEYCODE_MOVE_HOME))
+        assertEquals("\u001b[F", key(KeyEvent.KEYCODE_MOVE_END))
+        assertEquals("\u001b[5~", key(KeyEvent.KEYCODE_PAGE_UP))
+        assertEquals("\u001b[6~", key(KeyEvent.KEYCODE_PAGE_DOWN))
+        assertEquals("\u001b[2~", key(KeyEvent.KEYCODE_INSERT))
+        assertEquals("\u001b[3~", key(KeyEvent.KEYCODE_FORWARD_DEL))
+        assertEquals("\u001bOP", key(KeyEvent.KEYCODE_F1))
+        assertEquals("\u001b[15~", key(KeyEvent.KEYCODE_F5))
+        assertEquals("\u001b[24~", key(KeyEvent.KEYCODE_F12))
+        assertEquals("\u001b[B", key(KeyEvent.KEYCODE_DPAD_DOWN))
+        assertEquals("\u001b[D", key(KeyEvent.KEYCODE_DPAD_LEFT))
+        // Modifiers on those keys, xterm's way: 5 is Ctrl, 3 Alt, 2 Shift.
+        assertEquals("\u001b[1;5D", key(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.META_CTRL_ON))
+        assertEquals("\u001b[1;3C", key(KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.META_ALT_ON))
+        assertEquals("\u001b[5;5~", key(KeyEvent.KEYCODE_PAGE_UP, KeyEvent.META_CTRL_ON))
+        assertEquals("\u001b[1;2H", key(KeyEvent.KEYCODE_MOVE_HOME, KeyEvent.META_SHIFT_ON))
+        assertEquals("\u001b[15;5~", key(KeyEvent.KEYCODE_F5, KeyEvent.META_CTRL_ON))
+        // Control characters and Alt's escape prefix.
+        assertEquals("\u0001", key(KeyEvent.KEYCODE_A, KeyEvent.META_CTRL_ON, "a"))
+        assertEquals("\u001a", key(KeyEvent.KEYCODE_Z, KeyEvent.META_CTRL_ON, "z"))
+        assertEquals("\u0000", key(KeyEvent.KEYCODE_SPACE, KeyEvent.META_CTRL_ON, " "))
+        assertEquals("\u001b\u0001", key(KeyEvent.KEYCODE_A, KeyEvent.META_CTRL_ON or KeyEvent.META_ALT_ON, "a"))
+        assertEquals("\u001bf", key(KeyEvent.KEYCODE_F, KeyEvent.META_ALT_ON, "f"))
+        assertEquals("\u001b\u007f", key(KeyEvent.KEYCODE_DEL, KeyEvent.META_ALT_ON))
+        // Ctrl+Shift+- is how a keyboard types C-_, and the program gets it.
+        assertEquals("\u001f", key(KeyEvent.KEYCODE_MINUS, KeyEvent.META_CTRL_ON or KeyEvent.META_SHIFT_ON, "_"))
+        // With the Kitty keyboard protocol on, Meta (Super) is sent too: `CSI 102;9u` is Super+f.
+        val kitty = terminal(10, 3, "\u001b[>1u")
+        assertEquals("\u001b[102;9u", kitty.encodeKey(KeyEvent.KEYCODE_F, false, 0x10000, "f")?.let { String(it) })
+    }
+
+    @Test
+    fun findReadsTheWholeScrollbackAndPutsTheViewportBack() {
+        val session = terminal(12, 4, (1..60).joinToString("\r\n") { "line $it" })
+        session.scroll(-10)
+        val before = session.frameOf()
+        val back = requireNotNull(session.scrollbackRows())
+        assertEquals(0, back.firstRow)
+        assertEquals(60, back.totalRows)
+        assertEquals(60, back.rows.size)
+        assertEquals("line 1", back.rows.first().cells.joinToString("").trimEnd())
+        assertEquals("line 60", back.rows.last().cells.joinToString("").trimEnd())
+        val after = session.frameOf()
+        assertEquals("the viewport is where it was", before.scrollOffset, after.scrollOffset)
+
+        val matches = me.leaver.rexpocket.core.searchScrollback(back.rows, "line 2")
+        // line 2 and line 20 to 29.
+        assertEquals(11, matches.size)
+        session.scrollToRow(matches.first().row)
+        val shown = session.frameOf()
+        assertTrue((0 until shown.rows).any { shown.rowText(it).trimEnd() == "line 2" })
+
+        // At the bottom, it stays at the bottom.
+        session.scrollToBottom()
+        session.scrollbackRows()
+        assertTrue(session.frameOf().atBottom)
+        // And only the newest rows when asked for fewer.
+        val newest = requireNotNull(session.scrollbackRows(maxRows = 10))
+        assertEquals(50, newest.firstRow)
+        assertEquals("line 51", newest.rows.first().cells.joinToString("").trimEnd())
+        assertEquals(10, newest.rows.size)
+    }
+
+    @Test
+    fun findSearchesALineTheTerminalWrappedAsOne() {
+        val session = terminal(5, 3, "xx panic here")
+        val back = requireNotNull(session.scrollbackRows())
+        val match = me.leaver.rexpocket.core.searchScrollback(back.rows, "panic").single()
+        assertEquals(0, match.row)
+        assertEquals(1, match.endRow)
+    }
+
     @Test
     fun aKeyTheTerminalDoesNotNameIsLeftToTheCaller() {
         assertNull(terminal(10, 3).encodeKey(KeyEvent.KEYCODE_SHIFT_LEFT, false, 0, null))

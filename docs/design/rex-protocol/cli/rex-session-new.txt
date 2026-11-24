@@ -1,0 +1,22 @@
+$ rex session new --help
+Create a session
+
+Usage:
+  rex session new [LABEL] [-- COMMAND...] [flags]
+
+Options:
+  -c, --cwd string     working directory for the terminal
+      --keep-open      keep the terminal open after its command exits
+      --shell SHELL    run COMMAND through SHELL's login environment (none starts it directly)
+      --interactive    also read the shell's interactive startup files, such as ~/.zshrc
+      --window string  label for the first window
+      --json           output the created session as JSON
+  -h, --help           help for new
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)

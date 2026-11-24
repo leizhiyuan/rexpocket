@@ -59,6 +59,8 @@ ssh://my-mac.tail1234.ts.net # tailnet 地址
 
 App 不会自动接受未知主机密钥，也不会静默接受变化后的密钥。
 
+也可以一次导入多台主机，并预先固定各自的主机密钥（第一次连接即被校验，不再询问），格式与信任规则见 [host-import.md](host-import.md)。
+
 ### 2.4 凭据存储
 
 密码、私钥和 passphrase 使用 Android Keystore 中的 AES-256-GCM 密钥加密，再写入 App 的 SharedPreferences。存储格式带 `v1:` 前缀，内容为 `IV + ciphertext` 的 Base64。

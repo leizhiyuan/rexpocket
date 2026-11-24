@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The home list: its rows, filters, sheets and snackbars. See docs/design/home.md. -->
+<resources>
+    <string name="home_count_waiting">%1$d waiting</string>
+    <string name="home_count_failed">%1$d failed</string>
+    <string name="home_count_done">%1$d done</string>
+    <string name="home_count_running">%1$d running</string>
+    <string name="home_pane_line">pane %1$s %2$s</string>
+    <string name="home_action_collapse">Collapse</string>
+    <string name="home_action_expand">Expand</string>
+    <string name="home_action_open">Open</string>
+    <string name="home_collapse_sessions">Collapse all sessions</string>
+    <string name="home_expand_sessions">Expand all sessions</string>
+    <string name="home_copy_address">Copy address</string>
+    <string name="home_address_copied">Address copied</string>
+    <string name="home_tailnet_details">Tailnet details</string>
+    <string name="home_needs_connect">Connect first</string>
+    <string name="home_rename">Rename…</string>
+    <string name="home_end_session">End session…</string>
+    <string name="home_close_tab">Close tab…</string>
+    <string name="home_no_sessions">No sessions</string>
+    <string name="home_loading">Loading…</string>
+    <string name="home_cached_note">Sessions from the last connection</string>
+    <string name="home_tabs_load">Tabs load when opened</string>
+    <string name="home_connect_to_see">Connect %1$s to see tabs</string>
+    <string name="filter_all">All</string>
+    <string name="filter_needs_you">Needs you %1$d</string>
+    <string name="filter_running">Running %1$d</string>
+    <string name="filter_needs_you_none">Nothing needs you</string>
+    <string name="filter_running_none">Nothing is running</string>
+    <string name="home_not_connected_line">%1$s not connected</string>
+    <string name="home_mark_seen">Mark as seen</string>
+    <string name="home_mark_all_seen">Mark all as seen</string>
+    <string name="home_marked_seen">Marked as seen</string>
+    <string name="home_menu">Home actions</string>
+    <string name="home_expand_all">Expand all</string>
+    <string name="home_collapse_all">Collapse all</string>
+    <string name="home_collapsed_all">Collapsed all</string>
+    <string name="home_expanded_all">Expanded all</string>
+    <string name="action_undo">Undo</string>
+    <string name="home_reply_title">Reply to %1$s</string>
+    <string name="home_reply_send">Send</string>
+    <string name="home_connect_and_create">Connect &amp; create</string>
+    <string name="home_remove_host">Remove host…</string>
+    <string name="home_confirm_remove">Remove %1$s?</string>
+    <string name="home_remove">Remove</string>
+    <string name="home_removed_host">Removed %1$s</string>
+    <string name="home_disconnected">Disconnected %1$s</string>
+    <string name="action_reconnect">Reconnect</string>
+    <string name="home_ended_elsewhere">%1$s was ended on %2$s</string>
+    <string name="home_failed_rename">Couldn\'t rename: %1$s</string>
+    <string name="home_failed_new_tab">Couldn\'t make a tab: %1$s</string>
+    <string name="home_failed_end">Couldn\'t end the session: %1$s</string>
+    <string name="home_failed_close">Couldn\'t close the tab: %1$s</string>
+    <string name="home_failed_move">Couldn\'t move it: %1$s</string>
+</resources>

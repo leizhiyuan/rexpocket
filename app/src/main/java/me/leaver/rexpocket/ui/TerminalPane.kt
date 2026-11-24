@@ -28,7 +28,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import me.leaver.rexpocket.R
+import me.leaver.rexpocket.core.DoubleTapAction
+import me.leaver.rexpocket.core.GestureSettings
+import me.leaver.rexpocket.core.LongPressAction
 import me.leaver.rexpocket.core.TerminalFeed
+import me.leaver.rexpocket.core.keyboardAfterDoubleTap
+import me.leaver.rexpocket.core.keyboardAfterTap
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.terminal.TerminalSession
 import me.leaver.rexpocket.terminal.TerminalView
@@ -65,14 +70,29 @@ internal fun TerminalPane(
     onTyped: (ByteArray, () -> Unit) -> Boolean = { _, _ -> false },
     /** A link the user long-pressed in the pane: a hyperlink the program set, or a URL in its text. */
     onLink: (String) -> Unit = {},
+    /** Paste and Share in the menu over a selection. */
+    onPaste: () -> Unit = {},
+    onShare: (String) -> Unit = {},
     onSession: (TerminalSession?) -> Unit = {},
     /** The pane's editor, which is what raises and drops the keyboard for it. */
     onKeyboard: (TerminalImeView?) -> Unit = {},
+    /** The top of the cursor's row in the pane, in pixels, or null while it shows none; see TerminalView.onCursorRow. */
+    onCursorTop: (Int?) -> Unit = {},
+    /** The bottom of what is drawn on a short screen, or null when it reaches the last row; see TerminalView.onDrawnBottom. */
+    onDrawnBottom: (Int?) -> Unit = {},
     /** True while a keyboard other than the screen's is attached: the pane keeps the focus then. */
     hardwareKeyboard: Boolean = false,
     /** A horizontal swipe across the pane: forward means towards the next pane. */
     onSwipe: ((forward: Boolean) -> Unit)? = null,
+    /** What a tap, a double tap and a long press on the pane do, and their times. */
+    gestures: GestureSettings = GestureSettings(),
+    /** True in full screen, where there is no keyboard key: a tap that opens the keyboard closes it too. */
+    fullScreen: Boolean = false,
+    /** Goes in or out of full screen, for a gesture set to do that. */
+    onFullScreen: () -> Unit = {},
     onError: (Exception) -> Unit = {},
+    /** A key from a keyboard, offered before the terminal gets it; true when the screen took it. */
+    onShortcut: (android.view.KeyEvent) -> Boolean = { false },
 ) {
     val context = LocalContext.current
     // Replaced when Rex sends a new snapshot: a reconnect, or a pane whose stream started over.
@@ -82,10 +102,15 @@ internal fun TerminalPane(
     val currentInput = rememberUpdatedState(onInput)
     val currentTyped = rememberUpdatedState(onTyped)
     val currentLink = rememberUpdatedState(onLink)
+    val currentPaste = rememberUpdatedState(onPaste)
+    val currentShare = rememberUpdatedState(onShare)
     val currentResize = rememberUpdatedState(onResize)
     val currentSwipe = rememberUpdatedState(onSwipe)
     val currentKeyboard = rememberUpdatedState(onKeyboard)
     val currentFont = rememberUpdatedState(onFont)
+    val currentCursor = rememberUpdatedState(onCursorTop)
+    val currentDrawn = rememberUpdatedState(onDrawnBottom)
+    val currentShortcut = rememberUpdatedState(onShortcut)
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
 
     LaunchedEffect(blockId, attempt) {
@@ -124,10 +149,14 @@ internal fun TerminalPane(
             throw e
         } catch (e: Exception) {
             onError(e)
+        } catch (e: LinkageError) {
+            // libghostty is not there to draw: a JVM test on a computer that did not build it, or a
+            // broken install. The pane stays blank rather than taking the app down with it.
+            Diagnostics.event(CONN_TAG, "pane $blockId: no emulator to draw it: ${e.message}")
         }
     }
 
-    val theme = remember(Colors.isDark) { terminalTheme() }
+    val theme = remember(Colors.paneDark) { terminalTheme() }
     // The keyboard types into this, not into the pane: see TerminalImeView for why the pane cannot
     // hold it itself. It sits under the terminal, so every gesture still lands on the pane.
     val keyboard = remember(context) { TerminalImeView(context) }
@@ -137,9 +166,15 @@ internal fun TerminalPane(
             // A long press on a link offers it instead of selecting its text: agents print the pull
             // requests and sign-in pages they want you to open.
             view.onLink = { currentLink.value(it) }
+            view.onPaste = { currentPaste.value() }
+            view.onShare = { currentShare.value(it) }
             // A horizontal swipe moves between the panes of a split, which is what the dots under
             // the card promise. Vertical drags stay the pane's own: history, or the program's wheel.
             view.onSwipe = { forward -> currentSwipe.value?.invoke(forward) }
+            // The screen keeps the cursor's row in view while the keyboard is up.
+            view.onCursorRow = { currentCursor.value(it) }
+            view.onDrawnBottom = { currentDrawn.value(it) }
+            view.onShortcut = { currentShortcut.value(it) }
         }
     }
     // With a keyboard on the desk the pane holds the focus itself, so its keys reach the program
@@ -148,11 +183,44 @@ internal fun TerminalPane(
     LaunchedEffect(hardwareKeyboard) {
         if (hardwareKeyboard && !keyboard.hasFocus()) pane.requestFocus()
     }
-    // A tap on the pane is a tap on its text: it raises the keyboard, which the pane never asks for
-    // itself - it is no text editor, and its input connection would answer with no text type at all.
+    // A tap on the pane is a tap on its text: by default it raises the keyboard, which the pane
+    // never asks for itself - it is no text editor, and its input connection would answer with no
+    // text type at all. What each gesture does is the person's choice; see terminal-controls.md.
+    //
+    // Unless the person asked to wait, a tap acts at once even when a double tap is listened for, so
+    // the first tap of a double tap may have moved the keyboard by the time the second lands; the
+    // double tap then sets it from where it was before that first tap.
+    val taps = remember { TapMemory() }
+    val currentFullScreen = rememberUpdatedState(onFullScreen)
+    val currentGestures = rememberUpdatedState(gestures)
+    val inFullScreen = rememberUpdatedState(fullScreen)
+    val viewConfig = remember(context) { android.view.ViewConfiguration.get(context) }
     SideEffect {
         keyboard.pane = pane
-        pane.onTap = { keyboard.showIme() }
+        pane.gestureTiming = gestures.timing(
+            systemDoubleTapMs = android.view.ViewConfiguration.getDoubleTapTimeout(),
+            systemLongPressMs = android.view.ViewConfiguration.getLongPressTimeout(),
+            touchSlop = viewConfig.scaledTouchSlop.toFloat(),
+            doubleTapSlop = viewConfig.scaledDoubleTapSlop.toFloat(),
+        )
+        pane.onTap = {
+            val up = keyboard.imeUp()
+            taps.keyboardUpBeforeTap = up
+            keyboardAfterTap(currentGestures.value.tap, up, inFullScreen.value)?.let { keyboard.setIme(it) }
+        }
+        pane.onDoubleTap = if (gestures.doubleTap == DoubleTapAction.Nothing) null else {
+            { firstTapActed ->
+                val action = currentGestures.value.doubleTap
+                val before = if (firstTapActed) taps.keyboardUpBeforeTap else keyboard.imeUp()
+                keyboard.setIme(keyboardAfterDoubleTap(before, action))
+                if (action == DoubleTapAction.FullScreen) currentFullScreen.value()
+            }
+        }
+        pane.onLongPress = when (gestures.longPress) {
+            LongPressAction.Select -> null
+            LongPressAction.FullScreen -> { { currentFullScreen.value() } }
+            LongPressAction.Keyboard -> { { keyboard.setIme(!keyboard.imeUp()) } }
+        }
     }
     // Published before the terminal view exists, so the key row can raise the keyboard at once.
     LaunchedEffect(keyboard) { currentKeyboard.value(keyboard) }
@@ -191,6 +259,12 @@ internal fun TerminalPane(
     }
 }
 
+/** What the pane remembers from one tap to the next; plain fields, since nothing draws from them. */
+private class TapMemory {
+    /** Whether the keyboard was up before the last tap moved it. */
+    var keyboardUpBeforeTap = false
+}
+
 /** Sends what the emulator produces, and reports its grid, through the screen's callbacks. */
 private fun bind(
     session: TerminalSession,
@@ -225,7 +299,7 @@ private fun WaitingForPane(blockId: String, onRetry: () -> Unit, modifier: Modif
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 stringResource(if (waited) R.string.pane_no_picture else R.string.pane_reading),
-                color = Colors.muted,
+                color = Colors.paneMuted,
                 fontSize = TextStyles.label,
             )
             if (waited) {
@@ -312,4 +386,9 @@ private class InputBatcher(private val send: (ByteArray) -> Unit) {
          */
         const val WINDOW_MS = 16L
     }
+}
+
+/** Raises the keyboard for the pane, or puts it away. */
+private fun TerminalImeView.setIme(up: Boolean) {
+    if (up) showIme() else hideIme()
 }

@@ -1,0 +1,514 @@
+{
+  "name": "client.keymap",
+  "description": "Get what each key does for this client. The result combines the client's own bindings with the configuration file and the client's Lua scripts.",
+  "invoke": {
+    "method": "client.keymap"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "actions": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "args": {
+              "description": "A JSON Schema of the arguments the action takes. Left out when the action doesn't describe any."
+            },
+            "category": {
+              "type": "string",
+              "description": "A group of related actions, such as Layouts. Configuration file actions without one are filed under Actions."
+            },
+            "description": {
+              "type": "string",
+              "description": "A sentence about what the action does, to show under its title in a menu or command palette."
+            },
+            "keywords": {
+              "type": "string",
+              "description": "More words to search for the action by, separated by spaces."
+            },
+            "kind": {
+              "type": "string",
+              "description": "What performs the action: client (the client itself), lua (a rex.action in the configuration file), or block (a block of the creator that the name starts with)."
+            },
+            "name": {
+              "type": "string",
+              "description": "The name that bindings use for the action, such as pane.split. Names from the configuration file never contain a dot."
+            },
+            "repeats": {
+              "type": "boolean",
+              "description": "True if holding the key down should run the action again, as holding an arrow key does."
+            },
+            "source": {
+              "type": "string",
+              "description": "Where the action is defined, as file:line, such as init.lua:12. Left out when there's no location, as for every action a client declares."
+            },
+            "title": {
+              "type": "string",
+              "description": "The name to show a person, such as Split Pane."
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "description": "The actions the client performs itself. Leave it out to skip the checks for unknown actions and wrong arguments. The server keeps the list for client.inspect and client.perform."
+      },
+      "defaults": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "bindings": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "description": "The name of the action to run."
+                  },
+                  "args": {
+                    "description": "The arguments to run the action with, as a JSON object, exactly as the user wrote them. Left out if there are none."
+                  },
+                  "keys": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "The keys that trigger the binding, such as cmd+k, or cmd+[KeyK] for a key by its position. A key sequence has one element per key, in the order pressed."
+                  },
+                  "mode": {
+                    "type": "string",
+                    "description": "The mode the binding belongs to, such as resize. The binding applies only while that mode is active. Left out for a binding outside every mode."
+                  },
+                  "source": {
+                    "type": "string",
+                    "description": "Where the binding came from: a layer name, such as default, or a file:line, such as init.lua:12. Ignored in a request."
+                  }
+                },
+                "required": [
+                  "keys",
+                  "action"
+                ],
+                "additionalProperties": false
+              },
+              "description": "What the layer binds, in the order it bound them. A later binding sits above an earlier one on the same key."
+            },
+            "name": {
+              "type": "string",
+              "description": "The layer's name, such as default or settings, which its bindings report as their source. Unique in the request, with no colon."
+            },
+            "removals": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "description": "The one action to take off the keys, such as pane.split. Leave it out to clear the keys whatever is bound to them."
+                  },
+                  "keys": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "The keys to clear, spelled like a binding's keys. Only the same spelling matches. Empty, with mode set, to remove that whole mode."
+                  },
+                  "mode": {
+                    "type": "string",
+                    "description": "The mode to remove the keys from. Leave it out for keys outside every mode. With empty keys, it removes the whole mode."
+                  }
+                },
+                "required": [
+                  "keys"
+                ],
+                "additionalProperties": false
+              },
+              "description": "What the layer takes off the layers beneath it. Removals never touch the layer's own bindings."
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "description": "The client's built-in layers, lowest first. They sit beneath the configuration file. Problems found only in them aren't reported, because the user can't edit them."
+      },
+      "overrides": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "bindings": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "description": "The name of the action to run."
+                  },
+                  "args": {
+                    "description": "The arguments to run the action with, as a JSON object, exactly as the user wrote them. Left out if there are none."
+                  },
+                  "keys": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "The keys that trigger the binding, such as cmd+k, or cmd+[KeyK] for a key by its position. A key sequence has one element per key, in the order pressed."
+                  },
+                  "mode": {
+                    "type": "string",
+                    "description": "The mode the binding belongs to, such as resize. The binding applies only while that mode is active. Left out for a binding outside every mode."
+                  },
+                  "source": {
+                    "type": "string",
+                    "description": "Where the binding came from: a layer name, such as default, or a file:line, such as init.lua:12. Ignored in a request."
+                  }
+                },
+                "required": [
+                  "keys",
+                  "action"
+                ],
+                "additionalProperties": false
+              },
+              "description": "What the layer binds, in the order it bound them. A later binding sits above an earlier one on the same key."
+            },
+            "name": {
+              "type": "string",
+              "description": "The layer's name, such as default or settings, which its bindings report as their source. Unique in the request, with no colon."
+            },
+            "removals": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "description": "The one action to take off the keys, such as pane.split. Leave it out to clear the keys whatever is bound to them."
+                  },
+                  "keys": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "The keys to clear, spelled like a binding's keys. Only the same spelling matches. Empty, with mode set, to remove that whole mode."
+                  },
+                  "mode": {
+                    "type": "string",
+                    "description": "The mode to remove the keys from. Leave it out for keys outside every mode. With empty keys, it removes the whole mode."
+                  }
+                },
+                "required": [
+                  "keys"
+                ],
+                "additionalProperties": false
+              },
+              "description": "What the layer takes off the layers beneath it. Removals never touch the layer's own bindings."
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Layers of shortcuts a person recorded in the client, lowest first. They sit above the configuration file and this client's scripts. Problems in them come back as warnings."
+      },
+      "server_actions": {
+        "type": "string",
+        "description": "Which of the server's actions the reply lists: all (the default), configured (only the configuration file's), or none. An unknown value means all."
+      }
+    },
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "actions": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "args": {
+              "description": "A JSON Schema of the arguments the action takes. Left out when the action doesn't describe any."
+            },
+            "category": {
+              "type": "string",
+              "description": "A group of related actions, such as Layouts. Configuration file actions without one are filed under Actions."
+            },
+            "description": {
+              "type": "string",
+              "description": "A sentence about what the action does, to show under its title in a menu or command palette."
+            },
+            "keywords": {
+              "type": "string",
+              "description": "More words to search for the action by, separated by spaces."
+            },
+            "kind": {
+              "type": "string",
+              "description": "What performs the action: client (the client itself), lua (a rex.action in the configuration file), or block (a block of the creator that the name starts with)."
+            },
+            "name": {
+              "type": "string",
+              "description": "The name that bindings use for the action, such as pane.split. Names from the configuration file never contain a dot."
+            },
+            "repeats": {
+              "type": "boolean",
+              "description": "True if holding the key down should run the action again, as holding an arrow key does."
+            },
+            "source": {
+              "type": "string",
+              "description": "Where the action is defined, as file:line, such as init.lua:12. Left out when there's no location, as for every action a client declares."
+            },
+            "title": {
+              "type": "string",
+              "description": "The name to show a person, such as Split Pane."
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "description": "The server's actions that keys can be bound to: the configuration file's, then each creator's, by creator name. Left out when there are none."
+      },
+      "bindings": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "The name of the action to run."
+            },
+            "args": {
+              "description": "The arguments to run the action with, as a JSON object, exactly as the user wrote them. Left out if there are none."
+            },
+            "keys": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "The keys that trigger the binding, such as cmd+k, or cmd+[KeyK] for a key by its position. A key sequence has one element per key, in the order pressed."
+            },
+            "mode": {
+              "type": "string",
+              "description": "The mode the binding belongs to, such as resize. The binding applies only while that mode is active. Left out for a binding outside every mode."
+            },
+            "source": {
+              "type": "string",
+              "description": "Where the binding came from: a layer name, such as default, or a file:line, such as init.lua:12. Ignored in a request."
+            }
+          },
+          "required": [
+            "keys",
+            "action"
+          ],
+          "additionalProperties": false
+        },
+        "description": "The resolved bindings, in the order to try them. When several share a key, run the first one whose action is available."
+      },
+      "config": {
+        "type": "object",
+        "properties": {
+          "exists": {
+            "type": "boolean",
+            "description": "True if the file existed when the server last read it."
+          },
+          "generation": {
+            "type": "integer",
+            "description": "How many times the server has loaded its configuration file since it started, counting from 1. It goes up even when the file didn't change, so compare hash and instance_id, not this, to tell whether a keymap you kept is current.",
+            "minimum": 0
+          },
+          "hash": {
+            "type": "string",
+            "description": "The SHA-256 of the configuration file and the modules it requires while it loads, in lowercase hexadecimal. Empty if there's no file or it couldn't be read."
+          },
+          "instance_id": {
+            "type": "string",
+            "description": "The ID of the server process, as server.status reports it. A new value means the server restarted, so send your client.set_script scripts again."
+          },
+          "path": {
+            "type": "string",
+            "description": "The absolute path of the configuration file, whether or not it exists."
+          }
+        },
+        "description": "The configuration file the keymap came from. Present even when the file doesn't exist, so you can tell the user where to create it.",
+        "required": [
+          "path",
+          "exists",
+          "generation",
+          "instance_id",
+          "hash"
+        ],
+        "additionalProperties": false
+      },
+      "diagnostics": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "The full name of the action the problem is about, as written, even if misspelled. Left out if it isn't about one action."
+            },
+            "key": {
+              "type": "string",
+              "description": "The key the problem is about, spelled like a binding's keys, with a sequence joined by spaces, such as ctrl+a b. Left out if it isn't about one key."
+            },
+            "message": {
+              "type": "string",
+              "description": "The problem in one sentence, ready to show. Its wording may change, so don't parse it."
+            },
+            "mode": {
+              "type": "string",
+              "description": "The mode the problem is about. Left out if it isn't about a mode."
+            },
+            "severity": {
+              "type": "string",
+              "description": "How serious the problem is: warning, for something the user probably didn't mean, or error, for a part that was skipped. Show a value you don't know as a warning."
+            },
+            "source": {
+              "type": "string",
+              "description": "Where the problem is, as file:line, such as init.lua:22. Left out when it isn't known."
+            }
+          },
+          "required": [
+            "severity",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Problems to show the user, such as a binding to an action that doesn't exist. Empty when there are none."
+      },
+      "modes": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "blocked": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "description": "Keys that must not reach the bindings outside the mode while it's active. If the mode also binds one, that binding still runs. Each is spelled like a binding's keys."
+            },
+            "exclusive": {
+              "type": "boolean",
+              "description": "True if keys the mode doesn't bind are ignored while it's active. If false, they do what they do outside the mode."
+            },
+            "name": {
+              "type": "string",
+              "description": "The mode's name, such as resize. Its bindings have it as their mode, and client.mode.enter takes it as its name argument."
+            }
+          },
+          "required": [
+            "name",
+            "exclusive"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Every mode in the keymap, sorted by name. Left out when there are none. The client decides which mode is active."
+      }
+    },
+    "required": [
+      "bindings",
+      "diagnostics",
+      "config"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"actions\": [\n    {\"name\": \"pane.split\", \"kind\": \"client\", \"title\": \"Split Pane\"},\n    {\"name\": \"pane.close\", \"kind\": \"client\", \"title\": \"Close Pane\"}\n  ],\n  \"defaults\": [\n    {\"name\": \"default\", \"bindings\": [\n      {\"keys\": [\"cmd+d\"], \"action\": \"pane.split\", \"args\": {\"direction\": \"right\"}}\n    ]}\n  ],\n  \"overrides\": [\n    {\"name\": \"settings\",\n     \"bindings\": [{\"keys\": [\"cmd+e\"], \"action\": \"pane.split\"}],\n     \"removals\": [{\"keys\": [\"cmd+d\"], \"action\": \"pane.split\"}]}\n  ]\n}",
+  "response_example": "{\n  \"bindings\": [\n    {\"keys\": [\"cmd+e\"], \"action\": \"pane.split\", \"source\": \"settings\"},\n    {\"keys\": [\"cmd+d\"], \"action\": \"pane.close\", \"source\": \"init.lua:14\"}\n  ],\n  \"diagnostics\": [],\n  \"actions\": [\n    {\"name\": \"dev_layout\", \"kind\": \"lua\", \"title\": \"Open Dev Layout\",\n     \"category\": \"Actions\", \"source\": \"init.lua:3\"},\n    {\"name\": \"com.superlogical.terminal.reset\", \"kind\": \"block\",\n     \"title\": \"Reset Terminal\", \"category\": \"Pane\"}\n  ],\n  \"config\": {\n    \"path\": \"/Users/alice/.config/rex/init.lua\",\n    \"exists\": true,\n    \"generation\": 1,\n    \"instance_id\": \"0b6f2c1e-6d0a-4c4e-9a53-2f7c0d8e5b41\",\n    \"hash\": \"a52ebcbcb5986024409b0550c7ac36eb59f4c40d3e2bd3de5ed2212c949b469b\"\n  }\n}",
+  "validation_notes": [
+    "Bindings stack in layers, from bottom to top: your `defaults`, then the account's configuration file, then the scripts this client loaded with `client.set_script`, then your `overrides`.",
+    "A layer's `name` becomes the `source` of its bindings and of warnings about it. If a name is empty, contains a colon, or is used by another layer in either list, the call fails with `bad_request`.",
+    "The keymap is always the calling client's, so a request that includes `client_id` fails with `bad_request`. So does a top-level `bindings` list, which older servers accepted. Send those bindings as a layer in `defaults` instead.",
+    "A key sequence such as ctrl+b followed by c is `[\"ctrl+b\", \"c\"]` in `keys`. The configuration file writes it as `ctrl+b>c`, but the result always lists the keys separately. The server doesn't split an element such as `ctrl+b>c`. It treats it as a key it can't read.",
+    "Keys the server can read come back in their standard spelling. `cmd+d` and `cmd+[KeyD]` are still different keys: the first follows the keyboard layout and the second names a physical key.",
+    "A key spelling the server can't read is kept as written, in either list, so a newer client keeps its keys. Only a removal with the same spelling can take it off. A sequence with any such key is kept the same way.",
+    "A sequence sits on the stack of its first key, in order among that key's other bindings. If the top binding a client can perform is a sequence, the client waits for the next key. The server keeps no state between keys, so waiting is the client's job.",
+    "A key bound to a Lua function, in the configuration file or this client's scripts, comes back as a binding for `client.key.forward`. To perform it, send the key to `client.key`. Treat it as always available: the bindings below it on that key never run, even when no function takes the key.",
+    "For a sequence bound to a function, send its last key to `client.key` with the earlier keys in `prefix`. The binding ends the stack only for that exact sequence, so other sequences that start with the same key still work.",
+    "A key can't both run a binding of its own and start a sequence, so the higher of the two wins. The server keeps both and adds one warning per key, with the `source`, `action`, and `key` of the binding that can't run. It warns even about a binding in `defaults`, unless the one above it is in `defaults` too.",
+    "A removal matches keys in full. Removing `[\"ctrl+b\"]` leaves every sequence that starts with ctrl+b, and removing `[\"ctrl+b\", \"c\"]` leaves ctrl+b.",
+    "A removal that removes nothing gets a warning, unless it's in `defaults`, names a key the server can't read, or blocks a key in a mode.",
+    "A binding or removal with a `mode` belongs to that mode, a set of bindings the client uses only while the mode is active. If a mode name contains anything but lowercase letters, digits, `_`, and `-`, or is `root`, the call fails with `bad_request`.",
+    "Bindings in a mode stack and are checked like any others. A key in a mode never hides the same key outside it, and a removal affects only its own mode. The configuration file writes a key in a mode as `resize/left`.",
+    "`modes` lists a mode if any layer binds a key in it, blocks a key in it, or declares it with `rex.mode`.",
+    "A removal in a mode that names no `action` always blocks its key, so the key is listed in the mode's `blocked`, whether or not anything was removed. A removal that names an action never blocks.",
+    "A removal with a `mode` and no `keys` removes the whole mode: its bindings, its blocked keys, and its declarations in the layers beneath. If it also names an `action`, the call fails with `bad_request`.",
+    "Above a removed mode, a layer that binds, blocks, or declares a key in the mode brings the mode back, with only what that layer and the ones above it say. Otherwise the mode isn't in `modes`.",
+    "The client decides which mode is active, with its own `client.mode.enter`, `client.mode.exit`, and `client.mode.exit_all` actions. The server keeps no mode state.",
+    "The server warns about a `client.mode.enter` binding whose `name` argument isn't a mode in the keymap, and about a declared mode with nothing bound in it.",
+    "An empty request returns the bindings of the configuration file and this client's scripts, without checking for unknown actions or wrong arguments.",
+    "When `actions` isn't empty, the server adds its own actions before checking: those the configuration file defines with `rex.action`, every block method, and every block action. A binding to one of these is never reported as unknown.",
+    "A binding with wrong arguments is kept, with a warning. A binding to a block method must pass arguments that match the method's input schema, and passing none counts as `{}`. A binding to a block action, or to a method with no input schema, must pass no arguments.",
+    "A binding to an action from the configuration file must match the `args` schema the action declares, if it declares one. The client's own actions aren't checked, because the client checks their arguments itself.",
+    "`actions` in the result lists the configuration file's actions in the order it defines them, then each creator's methods and block actions, sorted by creator and then by method name. It doesn't repeat the actions you sent.",
+    "A block method in `actions` has no `title`, and its `args` is its input schema. Bind it, but don't show it in a menu. A block action has a `title` and no `args`.",
+    "`server_actions` changes only what `actions` lists in the result, not which actions bindings are checked against.",
+    "To show a diagnostic next to the binding it's about, match its `action`, `key`, and `mode` to the binding's.",
+    "A client can keep using a stored result while its request is unchanged and `config.instance_id` and `config.hash` both match. Call this method again after every `client.set_script` call, and after every `keymap_changed` event whose `hash` differs from the stored one."
+  ]
+}

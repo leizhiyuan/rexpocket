@@ -1,0 +1,282 @@
+{
+  "name": "session.attach",
+  "description": "Attach to a session: start receiving its events and get its current view.",
+  "invoke": {
+    "method": "session.attach"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "The session to attach to."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "client_id": {
+        "type": "string",
+        "description": "This connection's client ID. It's the same for every session the connection attaches to."
+      },
+      "view": {
+        "type": "object",
+        "properties": {
+          "active_window_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The window the session shows. Left out when the session has no windows."
+          },
+          "label": {
+            "type": "string",
+            "description": "The session's label."
+          },
+          "revision": {
+            "type": "integer",
+            "description": "The view's revision. A larger revision is a newer view of the session, even across a server restart. It goes up by one with each change, and jumps ahead when a restarted server restores the session.",
+            "minimum": 0
+          },
+          "session_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The session's ID."
+          },
+          "windows": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "focused_block_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The window's focused block, which receives typing while the window is active. Left out if the window has none."
+                },
+                "label": {
+                  "type": "string",
+                  "description": "The window's label."
+                },
+                "layers": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "blocks": {
+                        "type": [
+                          "null",
+                          "array"
+                        ],
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "block_id": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "The block's ID."
+                            },
+                            "creator_name": {
+                              "type": "string",
+                              "description": "The creator that made the block, such as com.superlogical.terminal."
+                            },
+                            "flavor": {
+                              "type": "string",
+                              "description": "The flavor the block was made from, such as com.superlogical.terminal.shell."
+                            },
+                            "host_id": {
+                              "type": "string",
+                              "description": "Identifies the machine and account the block runs as. If it equals your local server's host_id, the block sees the same files you do. Otherwise treat the block as remote."
+                            },
+                            "label": {
+                              "type": "string",
+                              "description": "The block's label."
+                            },
+                            "owner": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "The client that owns the block. Left out when the block has no owner."
+                            }
+                          },
+                          "required": [
+                            "block_id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "description": "The blocks in the layer, in layout order. The layout field says where each one sits."
+                      },
+                      "bounds": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "description": "Where the layer sits, as [x, y, w, h] fractions of the window's width and height.",
+                        "minItems": 4,
+                        "maxItems": 4
+                      },
+                      "kind": {
+                        "type": "string",
+                        "description": "How the layer is placed: 'tiled' for the layer that fills the window, or 'floating' for a floating layer. Draw a kind you don't know as 'floating'."
+                      },
+                      "layer_id": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "The layer's ID."
+                      },
+                      "layout": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "block_id": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "The block at this node. Set only when split isn't."
+                          },
+                          "rect": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "description": "Where this node sits, as [x, y, w, h] fractions of the window's width and height.",
+                            "minItems": 4,
+                            "maxItems": 4
+                          },
+                          "split": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "after": {
+                                "$ref": "#view-layout-node",
+                                "description": "The node on the right or bottom."
+                              },
+                              "before": {
+                                "$ref": "#view-layout-node",
+                                "description": "The node on the left or top."
+                              },
+                              "direction": {
+                                "type": "string",
+                                "description": "How the space is divided: 'horizontal' puts before on the left and after on the right, and 'vertical' puts before above after. Draw a direction you don't know as 'horizontal'.",
+                                "enum": [
+                                  "horizontal",
+                                  "vertical"
+                                ]
+                              },
+                              "ratio": {
+                                "type": "number",
+                                "description": "The fraction of the space that before gets, between 0 and 1."
+                              },
+                              "split_id": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "The split's ID. It stays the same while the split exists, so you can match splits across views."
+                              }
+                            },
+                            "description": "How this node divides in two. Set only when block_id isn't.",
+                            "required": [
+                              "split_id",
+                              "direction",
+                              "ratio",
+                              "before",
+                              "after"
+                            ]
+                          }
+                        },
+                        "$anchor": "view-layout-node",
+                        "description": "How the layer divides its space between blocks, as a tree of splits. Null when the layer is empty.",
+                        "required": [
+                          "rect"
+                        ]
+                      },
+                      "state": {
+                        "type": "string",
+                        "description": "How the layer is presented: 'minimized' means don't draw it, though its blocks keep running, and only a floating layer can be minimized. Left out for a normal layer. Draw a state you don't know as normal."
+                      }
+                    },
+                    "required": [
+                      "layer_id",
+                      "kind",
+                      "bounds",
+                      "layout",
+                      "blocks"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "The window's layers, from back to front. The first is the tiled layer, which holds the window's layout and fills the window."
+                },
+                "window_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The window's ID."
+                },
+                "zoomed_block_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The block zoomed to fill the window, if any. Layouts keep their normal sizes, so draw this block over the whole window."
+                }
+              },
+              "required": [
+                "window_id",
+                "layers"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The session's windows, in order. Rex.app shows them as tabs in this order."
+          }
+        },
+        "description": "The session's view, read after the connection started receiving its events. Apply it first, then the events whose seq is higher than the response's.",
+        "required": [
+          "revision",
+          "session_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "client_id",
+      "view"
+    ],
+    "additionalProperties": false
+  },
+  "request_example": "{\n  \"session_id\": \"session:<uuid>\"\n}",
+  "response_example": "{\n  \"client_id\": \"client:<uuid>\",\n  \"view\": {\n    \"revision\": 3,\n    \"session_id\": \"session:<uuid>\",\n    \"label\": \"work\",\n    \"active_window_id\": \"window:<uuid>\",\n    \"windows\": [\n      {\n        \"window_id\": \"window:<uuid>\",\n        \"label\": \"editor\",\n        \"focused_block_id\": \"block:<uuid>\",\n        \"layers\": [\n          {\n            \"layer_id\": \"layer:<uuid>\",\n            \"kind\": \"tiled\",\n            \"bounds\": [0, 0, 1, 1],\n            \"layout\": {\n              \"rect\": [0, 0, 1, 1],\n              \"block_id\": \"block:<uuid>\"\n            },\n            \"blocks\": [\n              {\n                \"block_id\": \"block:<uuid>\",\n                \"label\": \"shell\",\n                \"creator_name\": \"com.superlogical.terminal\",\n                \"flavor\": \"com.superlogical.terminal.shell\",\n                \"host_id\": \"0e9d6c1f-4a3b-4a52-9c85-2f6d3f6f2f10\"\n              }\n            ]\n          }\n        ]\n      }\n    ]\n  }\n}",
+  "validation_notes": [
+    "The connection starts receiving every event from the session, including `block_event`, before the server reads `view`. Apply `view` first, then each event whose `seq` is higher than the response's `seq`, even one that arrived before the response.",
+    "Most methods that take a `session_id` work only on a connection attached to that session, with this method, `session.bootstrap`, or `session.attach_all`. On a connection that isn't attached, they fail with `conflict`.",
+    "Attaching makes the connection's client one of the session's clients. The server sends `client_connected`, and `session.list_clients` lists the client.",
+    "`data.connect`, `session.own_block`, and `session.disown_block` need this kind of attachment. Attaching with `session.attach_all` isn't enough for them.",
+    "Calling it again for the same session is safe. It returns the same `client_id` and a fresh `view`.",
+    "If `session_id` names no session, the call fails with `session_not_found`."
+  ]
+}

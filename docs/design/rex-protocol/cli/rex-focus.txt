@@ -1,0 +1,35 @@
+$ rex focus --help
+Focus a block or window.
+
+The directions left, right, up, and down move between blocks by position. Next
+and prev move through the blocks in layout order. Focus stops at the edge of
+the layout or the end of the order. Use --wrap to continue from the other side.
+
+A target can be a block or window ID, label, or ID suffix. A positive integer
+selects a window by its one-based position. If a target matches both a block
+and a window, use a full ID to select the intended resource.
+
+Examples:
+  rex focus left
+  rex focus left --wrap
+  rex focus next --wrap
+  rex focus 2
+  rex focus logs
+  rex focus -s build editor
+
+Usage:
+  rex focus TARGET|DIRECTION [flags]
+
+Options:
+  -s, --session string  scope to session SESSION
+  -w, --window string   scope to window WINDOW
+      --wrap            continue from the other side at the edge
+  -h, --help            help for focus
+
+Global options:
+  -S, --server SERVER     connect to SERVER, a host's label or a server address (a value with a port is always an address)
+  -C, --client CLIENT     act on client CLIENT, given as a label or ID
+      --autostart         start a missing local server (default true)
+      --timeout DURATION  limit each connection and nonstreaming request to DURATION (default 10s)
+      --color WHEN        set color WHEN to auto, always, or never (default auto)
+  -v, --verbose count     increase diagnostic verbosity (repeatable)
