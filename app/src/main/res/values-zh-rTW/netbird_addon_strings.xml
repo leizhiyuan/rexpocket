@@ -6,6 +6,17 @@
     <string name="netbird_addon_get">取得附加元件</string>
     <string name="netbird_addon_not_allowed">RexPocket 無法使用 Netbird 附加元件：兩者使用了不同的金鑰簽署。請從同一個發布版本或 CI 執行中安裝兩者。</string>
     <string name="netbird_addon_no_answer">Netbird 附加元件沒有回應。</string>
-    <string name="netbird_addon_version">Netbird 附加元件使用第 %1$d 版介面，而此 RexPocket 使用第 %2$d 版。請從同一個發布版本或 CI 執行中安裝兩者。</string>
+    <string name="netbird_addon_version">Netbird 附加元件比此 RexPocket 舊：它使用第 %1$d 版介面，RexPocket 使用第 %2$d 版。請更新附加元件。</string>
     <string name="netbird_addon_restarting">Netbird 附加元件已停止。RexPocket 正在重新啟動它。</string>
+    <string name="netbird_addon_version_newer">Netbird 附加元件比此 RexPocket 新：它使用第 %1$d 版介面，RexPocket 使用第 %2$d 版。請更新 RexPocket。</string>
+    <string name="netbird_addon_accounts_update">此 Netbird 附加元件版本太舊，不支援第二個帳號。請更新附加元件，或使用第一個帳號。</string>
+    <string name="netbird_addon_outdated">Netbird 附加元件（%1$s）比此 RexPocket（%2$s）舊。</string>
+    <string name="netbird_addon_outdated_accounts">更新後即可保留多個 Netbird 帳號。</string>
+    <string name="netbird_addon_update">更新附加元件</string>
+    <string name="netbird_addon_update_checking">正在尋找附加元件…</string>
+    <string name="netbird_addon_update_downloading">正在下載附加元件… %1$d%%</string>
+    <string name="netbird_addon_update_installing">請在開啟的視窗中安裝附加元件。RexPocket 會自動重新連線到它。</string>
+    <string name="netbird_addon_update_permission">請允許 RexPocket 安裝 App，然後再次輕觸「更新附加元件」。</string>
+    <string name="netbird_addon_update_none">沒有發布版本為此版本提供附加元件：已開啟發布頁面。</string>
+    <string name="netbird_addon_update_failed">無法下載附加元件：%1$s</string>
 </resources>

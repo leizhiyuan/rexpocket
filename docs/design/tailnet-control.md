@@ -107,7 +107,8 @@ nobody tests. Instead each account has **a state directory of its own**: the fir
 are `files/tailscale-profiles/<id>`. A switch stops the node and starts it on the other directory;
 nothing changes in Go or in `tailnet.aar`. Any backend whose node takes a state directory gets
 accounts the same way (`TailnetBox.directoryFor`); one that cannot says so with
-`TailnetBackend.accounts = false`, and its page shows no Accounts group. A backend that joins with
+`TailnetBackend.accounts = false`, or, when it depends on something outside the app, with its
+node's `TailnetNode.keepsAccounts`, and its page shows no Accounts group meanwhile. A backend that joins with
 a key (no sign-in) has a new account joined with its key in Tailnet settings, as the first one.
 
 **One at a time per backend.** Two accounts of one backend at once would be two nodes of it in one

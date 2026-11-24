@@ -62,7 +62,7 @@ class NetbirdAddonDeviceTest {
     fun bindConfigureAndStateGoThroughTheBinding() {
         assertEquals(AddonClient.STOPPED, client.state())
         try {
-            client.start("ci-addon", "", "")
+            client.start("", "ci-addon", "", "")
             fail("a node that never joined must not start without a setup key")
         } catch (e: TailnetException) {
             assertTrue("message was: ${e.message}", e.message.orEmpty().contains("setup key"))
@@ -75,6 +75,30 @@ class NetbirdAddonDeviceTest {
         } catch (e: IOException) {
             assertTrue("message was: ${e.message}", e.message.orEmpty().contains("not running"))
         }
+    }
+
+    @Test
+    fun theAddonSpeaksThisRevisionAndKeepsAccounts() {
+        // Read from its package before any binding, then from the binding itself.
+        assertEquals(NetbirdAddon.REVISION, inspectAddon(context).revision)
+        assertTrue("the add-on is signed with this app's key", inspectAddon(context).trusted)
+        assertTrue(client.keepsAccounts())
+        try {
+            client.start("netbird-addon-device", "ci-addon", "", "")
+            fail("a new account must not start without a setup key")
+        } catch (e: TailnetException) {
+            assertTrue("message was: ${e.message}", e.message.orEmpty().contains("setup key"))
+        }
+        assertEquals(NetbirdAddon.REVISION, client.revision())
+        // A name that would leave the add-on's accounts directory is refused by the add-on itself.
+        try {
+            client.start("../..", "ci-addon", "", "")
+            fail("the add-on took a name outside its accounts")
+        } catch (e: TailnetException) {
+            assertTrue("message was: ${e.message}", e.message.orEmpty().contains("not an account name"))
+        }
+        // Removing an account the add-on never ran is no failure, and leaves the binding free.
+        client.forget("netbird-addon-device")
     }
 
     @Test
@@ -91,7 +115,7 @@ class NetbirdAddonDeviceTest {
 
     @Test
     fun theAddonsProcessEndingIsNoticedAndItIsBoundAgain() {
-        runCatching { client.start("ci-addon", "", "") }
+        runCatching { client.start("", "ci-addon", "", "") }
         assertTrue(client.connected)
         val crashed = shell("am crash ${NetbirdAddon.PACKAGE}")
         assumeTrue("this Android has no am crash: $crashed", !crashed.contains("Unknown command"))

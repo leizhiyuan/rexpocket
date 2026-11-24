@@ -26,6 +26,17 @@ services:
         ipv4_address: 172.29.83.10
         aliases: [netbird.e2e]
 
+  # A name server for the Android emulator (the add-on's job in the workflow): the emulator asks
+  # it, not the host's /etc/hosts, so it answers netbird.e2e as the peers know it and passes the
+  # rest on.
+  dns:
+    image: alpine:3.20
+    profiles: [emulator]
+    command: ["sh", "-c", "apk add --no-cache dnsmasq >/dev/null && exec dnsmasq -k --no-resolv --server=8.8.8.8 --address=/netbird.e2e/172.29.83.10 --log-facility=-"]
+    networks:
+      nb:
+        ipv4_address: 172.29.83.53
+
   peer:
     # Built by up.sh from Dockerfile.peer.
     image: rexpocket/netbird-e2e-peer:0.83.2

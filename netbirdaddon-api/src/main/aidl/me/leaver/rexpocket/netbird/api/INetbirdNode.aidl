@@ -5,7 +5,11 @@ import me.leaver.rexpocket.netbird.api.INetbirdNodeListener;
 /**
  * The Netbird node the add-on runs for RexPocket. Bound through NetbirdAddon.ACTION and guarded by
  * NetbirdAddon.PERMISSION. A failure is an IllegalStateException carrying the node's own reason.
- * Every call but version() may block; RexPocket makes them off its main thread.
+ * Every call but version() and revision() may block; RexPocket makes them off its main thread.
+ *
+ * The calls keep their order: each one's place is its transaction code, so a call is only ever
+ * appended, and an older add-on answers a call it does not have with nothing. NetbirdAddon says how
+ * the two sides tell what the other speaks.
  */
 interface INetbirdNode {
     /** NetbirdAddon.VERSION of the add-on. RexPocket checks it before any other call. */
@@ -44,4 +48,25 @@ interface INetbirdNode {
      * foreground service, as long as its node runs.
      */
     void keepRunning(boolean background);
+
+    // Revision 2 (NetbirdAddon.REVISION_ACCOUNTS): accounts.
+
+    /**
+     * NetbirdAddon.REVISION of the add-on; clientRevision is the caller's, for the add-on's log. An
+     * add-on of revision 1 has no such call: the caller reads its empty answer, 0, as 1.
+     */
+    int revision(int clientRevision);
+
+    /**
+     * start() for account profile: its registration is kept in a directory of its own, so each
+     * account joins once. NetbirdAddon.FIRST_PROFILE is the registration start() runs. A running
+     * node of another account stops first. Refused for a name NetbirdAddon.profileDirectory rejects.
+     */
+    void startProfile(String profile, String hostname, String setupKey, String managementUrl);
+
+    /**
+     * Deletes account profile's registration, the account was removed. Refused for the account
+     * running and for the first one; an account with nothing kept is no failure.
+     */
+    void forgetProfile(String profile);
 }

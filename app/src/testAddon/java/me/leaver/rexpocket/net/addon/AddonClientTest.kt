@@ -25,11 +25,16 @@ class AddonClientTest {
         notAllowed = "not allowed",
         noAnswer = "no answer",
         restarting = "restarting",
-        versionMismatch = { addon, app -> "add-on $addon, app $app" },
+        addonOlder = { addon, app -> "add-on $addon older than app $app" },
+        addonNewer = { addon, app -> "add-on $addon newer than app $app" },
+        accountsNeedUpdate = "update for accounts",
     )
 
-    /** The add-on's node: it records what it was asked. */
-    private class FakeNode(val version: Int = NetbirdAddon.VERSION) : INetbirdNode {
+    /**
+     * The add-on's node: it records what it was asked. An add-on of [revision] 1 answers a later
+     * call with nothing, as Binder does for a call the add-on does not have: 0, and nothing done.
+     */
+    private class FakeNode(val version: Int = NetbirdAddon.VERSION, val revision: Int = NetbirdAddon.REVISION) : INetbirdNode {
         val calls = mutableListOf<String>()
         var told: INetbirdNodeListener? = null
         var state = """{"backendState":"Running","peers":[]}"""
@@ -57,18 +62,34 @@ class AddonClientTest {
             told = listener
         }
         override fun keepRunning(background: Boolean) = call("keepRunning $background")
+        var refuseForget: String? = null
+        override fun revision(clientRevision: Int): Int {
+            if (revision < 2) return 0
+            call("revision $clientRevision")
+            return revision
+        }
+        override fun startProfile(profile: String, hostname: String, setupKey: String, managementUrl: String) {
+            if (revision < 2) return
+            call("startProfile $profile $hostname '$setupKey' $managementUrl")
+        }
+        override fun forgetProfile(profile: String) {
+            if (revision < 2) return
+            call("forgetProfile $profile")
+            refuseForget?.let { throw IllegalStateException(it) }
+        }
         override fun asBinder(): IBinder? = null
     }
 
     /** The binding: it connects at once to [node], unless told otherwise. */
-    private class FakeLink(var node: FakeNode?, var installed: Boolean = true) : AddonLink {
+    private class FakeLink(var node: FakeNode?, var installed: Boolean = true, var trusted: Boolean = true) : AddonLink {
         var events: AddonLink.Events? = null
         var binds = 0
         var unbinds = 0
         var refuse: Exception? = null
         var connectAtOnce = true
 
-        override fun installed() = installed
+        override fun inspect() = if (!installed) AddonPackage.MISSING
+        else AddonPackage(installed = true, trusted = trusted, versionName = "0.1.3", revision = node?.revision ?: 1)
 
         override fun bind(events: AddonLink.Events): Boolean {
             refuse?.let { throw it }
@@ -83,8 +104,10 @@ class AddonClientTest {
         }
     }
 
+    private val forgets = ForgetQueue.InMemory()
+
     private fun client(link: FakeLink, timeoutMs: Long = 2_000) =
-        AddonClient(link, texts, connectTimeoutMs = timeoutMs, background = { it() })
+        AddonClient(link, texts, connectTimeoutMs = timeoutMs, background = { it() }, forgets = forgets)
 
     @Test
     fun startBindsChecksTheVersionAndStartsTheNode() {
@@ -93,8 +116,8 @@ class AddonClientTest {
         val client = client(link)
         var told = 0
         client.onStateChanged = { told++ }
-        client.start("phone", "KEY", "https://nb.example")
-        assertEquals(listOf("listener true", "start phone 'KEY' https://nb.example"), node.calls)
+        client.start("", "phone", "KEY", "https://nb.example")
+        assertEquals(listOf("revision ${NetbirdAddon.REVISION}", "listener true", "start phone 'KEY' https://nb.example"), node.calls)
         assertEquals(node.state, client.state())
         node.told!!.stateChanged()
         assertTrue(told >= 2)
@@ -104,7 +127,7 @@ class AddonClientTest {
     fun aMissingAddonSaysSoAndIsNotBound() {
         val link = FakeLink(FakeNode(), installed = false)
         try {
-            client(link).start("phone", "", "")
+            client(link).start("", "phone", "", "")
             fail("started without the add-on")
         } catch (e: TailnetException) {
             assertEquals("not installed", e.message)
@@ -113,23 +136,128 @@ class AddonClientTest {
     }
 
     @Test
-    fun anAddonOfAnotherVersionIsNotUsed() {
-        val node = FakeNode(version = NetbirdAddon.VERSION + 1)
-        val client = client(FakeLink(node))
+    fun anAddonOfAnotherVersionIsNotUsedAndTheMessageSaysWhichToUpdate() {
+        val newer = FakeNode(version = NetbirdAddon.VERSION + 1)
         try {
-            client.start("phone", "", "")
+            client(FakeLink(newer)).start("", "phone", "", "")
             fail("started an add-on of another version")
         } catch (e: TailnetException) {
-            assertEquals("add-on ${NetbirdAddon.VERSION + 1}, app ${NetbirdAddon.VERSION}", e.message)
+            assertEquals("add-on ${NetbirdAddon.VERSION + 1} newer than app ${NetbirdAddon.VERSION}", e.message)
         }
-        assertTrue("nothing is asked of it", node.calls.isEmpty())
+        assertTrue("nothing is asked of it", newer.calls.isEmpty())
+        val older = FakeNode(version = NetbirdAddon.VERSION - 1)
+        try {
+            client(FakeLink(older)).start("", "phone", "", "")
+            fail("started an add-on of another version")
+        } catch (e: TailnetException) {
+            assertEquals("add-on ${NetbirdAddon.VERSION - 1} older than app ${NetbirdAddon.VERSION}", e.message)
+        }
+    }
+
+    @Test
+    fun anAddonOfRevisionOneRunsTheFirstAccountAndNoOther() {
+        val node = FakeNode(revision = 1)
+        val client = client(FakeLink(node))
+        client.start("", "phone", "KEY", "")
+        assertEquals(1, client.revision())
+        assertFalse(client.keepsAccounts())
+        assertTrue(node.calls.contains("start phone 'KEY' "))
+        try {
+            client.start("netbird-addon-work", "phone", "KEY", "")
+            fail("ran a second account on an add-on without accounts")
+        } catch (e: TailnetException) {
+            assertEquals("update for accounts", e.message)
+        }
+        assertFalse("the call it would take for nothing is never made", node.calls.any { it.startsWith("startProfile") })
+    }
+
+    @Test
+    fun anAccountRunsOnItsOwnRegistrationAndComesBackOnIt() {
+        val first = FakeNode()
+        val link = FakeLink(first)
+        val client = client(link)
+        assertTrue(client.keepsAccounts())
+        client.start("netbird-addon-work", "phone", "KEY", "")
+        assertTrue(first.calls.contains("startProfile netbird-addon-work phone 'KEY' "))
+        link.events!!.disconnected()
+        val second = FakeNode()
+        link.events!!.connected(second)
+        assertTrue(second.calls.contains("startProfile netbird-addon-work phone '' "))
+    }
+
+    @Test
+    fun aRemovedAccountsRegistrationIsDeletedByTheAddonAndTheBindingLetGo() {
+        val node = FakeNode()
+        val link = FakeLink(node)
+        val client = client(link)
+        client.forget("netbird-addon-work")
+        assertEquals(listOf("revision ${NetbirdAddon.REVISION}", "listener true", "forgetProfile netbird-addon-work"), node.calls)
+        assertTrue(forgets.all().isEmpty())
+        assertEquals("bound for the removal only", 1, link.unbinds)
+        // The first account is never removed.
+        client.forget("")
+        assertEquals(1, node.calls.count { it.startsWith("forgetProfile") })
+    }
+
+    @Test
+    fun aRemovalWhileTheAddonIsAwayIsDoneOnceItIsBack() {
+        val link = FakeLink(FakeNode(), installed = false)
+        val client = client(link)
+        client.forget("netbird-addon-work")
+        assertEquals(setOf("netbird-addon-work"), forgets.all())
+        link.installed = true
+        val node = FakeNode()
+        link.node = node
+        client.start("", "phone", "", "")
+        assertTrue(node.calls.contains("forgetProfile netbird-addon-work"))
+        assertTrue(forgets.all().isEmpty())
+    }
+
+    @Test
+    fun aRemovalTheAddonRefusesIsNotAskedAgain() {
+        val node = FakeNode().apply { refuseForget = "the account is running" }
+        val client = client(FakeLink(node))
+        client.forget("netbird-addon-work")
+        assertTrue(forgets.all().isEmpty())
+    }
+
+    @Test
+    fun anAddonSignedWithAnotherKeyIsNeverBound() {
+        val link = FakeLink(FakeNode(), trusted = false)
+        try {
+            client(link).start("", "phone", "KEY", "")
+            fail("bound an add-on of another key")
+        } catch (e: TailnetException) {
+            assertEquals("not allowed", e.message)
+        }
+        assertEquals(0, link.binds)
+        assertFalse(client(link).keepsAccounts())
+    }
+
+    @Test
+    fun anOlderAddonWantsUpdating() {
+        assertTrue(AddonPackage(installed = true, versionName = "0.1.3", revision = 1).olderThan("0.1.3"))
+        assertTrue(AddonPackage(installed = true, versionName = "0.1.2", revision = NetbirdAddon.REVISION).olderThan("0.1.3"))
+        assertFalse(AddonPackage(installed = true, versionName = "0.1.3", revision = NetbirdAddon.REVISION).olderThan("0.1.3"))
+        assertFalse(AddonPackage(installed = true, versionName = "0.1.4", revision = NetbirdAddon.REVISION).olderThan("0.1.3"))
+        // The first add-on was 1.0, revision 1: older by its revision, whatever its name says.
+        assertTrue(AddonPackage(installed = true, versionName = "1.0", revision = 1).olderThan("0.1.3"))
+        assertFalse(AddonPackage.MISSING.olderThan("0.1.3"))
+        assertFalse(AddonPackage(installed = true, trusted = false, revision = 1).olderThan("0.1.3"))
+    }
+
+    @Test
+    fun theFirstAccountIsTheAddonsFirst() {
+        assertEquals(NetbirdAddon.FIRST_PROFILE, addonProfile(""))
+        assertEquals(NetbirdAddon.FIRST_PROFILE, addonProfile(TailnetBackend.NetbirdAddon.storageKey))
+        assertEquals("netbird-addon-work", addonProfile("netbird-addon-work"))
     }
 
     @Test
     fun anAddonSignedWithAnotherKeyIsNotAllowed() {
         val link = FakeLink(FakeNode()).apply { refuse = SecurityException("Not allowed to bind") }
         try {
-            client(link).start("phone", "", "")
+            client(link).start("", "phone", "", "")
             fail("bound without the permission")
         } catch (e: TailnetException) {
             assertEquals("not allowed", e.message)
@@ -140,7 +268,7 @@ class AddonClientTest {
     fun anAddonThatNeverAnswersTimesOut() {
         val link = FakeLink(FakeNode()).apply { connectAtOnce = false }
         try {
-            client(link, timeoutMs = 100).start("phone", "", "")
+            client(link, timeoutMs = 100).start("", "phone", "", "")
             fail("started an add-on that never bound")
         } catch (e: TailnetException) {
             assertEquals("no answer", e.message)
@@ -152,7 +280,7 @@ class AddonClientTest {
         val first = FakeNode()
         val link = FakeLink(first)
         val client = client(link)
-        client.start("phone", "KEY", "")
+        client.start("", "phone", "KEY", "")
         first.dead = true
         link.events!!.disconnected()
         assertTrue(client.state().contains("restarting"))
@@ -167,7 +295,7 @@ class AddonClientTest {
         // Android binds it again: the node starts with the same settings, without the setup key.
         val second = FakeNode()
         link.events!!.connected(second)
-        assertEquals(listOf("listener true", "start phone '' "), second.calls)
+        assertEquals(listOf("revision ${NetbirdAddon.REVISION}", "listener true", "start phone '' "), second.calls)
         assertEquals(second.state, client.state())
     }
 
@@ -176,7 +304,7 @@ class AddonClientTest {
         val first = FakeNode()
         val link = FakeLink(first)
         val client = client(link)
-        client.start("phone", "", "")
+        client.start("", "phone", "", "")
         val second = FakeNode()
         link.node = second
         link.events!!.died()
@@ -190,7 +318,7 @@ class AddonClientTest {
         val first = FakeNode()
         val link = FakeLink(first)
         val client = client(link)
-        client.start("phone", "", "")
+        client.start("", "phone", "", "")
         client.stop()
         assertTrue(first.calls.contains("stop"))
         assertEquals(1, link.unbinds)
@@ -204,7 +332,7 @@ class AddonClientTest {
     fun aFailedDialCarriesTheNodesReason() {
         val node = FakeNode().apply { dialFailure = "no route to mac" }
         val client = client(FakeLink(node))
-        client.start("phone", "", "")
+        client.start("", "phone", "", "")
         try {
             client.dial("mac", 7297, 1000)
             fail("dialed")
@@ -218,7 +346,7 @@ class AddonClientTest {
         val node = FakeNode()
         val link = FakeLink(node)
         val client = client(link)
-        client.start("phone", "", "")
+        client.start("", "phone", "", "")
         client.keepInBackground(true)
         assertTrue(node.calls.contains("keepRunning true"))
         val again = FakeNode()
@@ -238,6 +366,7 @@ class AddonClientTest {
     @Test
     fun theAddonIsItsOwnBackend() {
         assertFalse(TailnetBackend.NetbirdAddon.signsIn)
+        assertTrue("accounts, once the add-on has them", TailnetBackend.NetbirdAddon.accounts)
         assertEquals(TailnetBackend.NetbirdAddon, TailnetBackend.fromStorage("netbird-addon"))
     }
 }

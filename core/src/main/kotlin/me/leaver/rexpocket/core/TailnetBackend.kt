@@ -20,8 +20,11 @@ enum class TailnetBackend(
     Tailscale("tailscale", "Tailscale"),
     Netbird("netbird", "Netbird", signsIn = false),
 
-    /** Netbird run by the Netbird add-on, a separate app, for the build without Netbird built in. */
-    NetbirdAddon("netbird-addon", "Netbird (add-on)", signsIn = false, accounts = false);
+    /**
+     * Netbird run by the Netbird add-on, a separate app, for the build without Netbird built in. Its
+     * accounts need an add-on of the revision that has them; the app's node says so.
+     */
+    NetbirdAddon("netbird-addon", "Netbird (add-on)", signsIn = false);
 
     companion object {
         /** The stored name; anything unknown is Tailscale, the backend the app shipped with. */

@@ -1,7 +1,9 @@
 name: Netbird e2e
 
 # Runs the Netbird node (tailnet/netbird) against a self-hosted Netbird control plane and an
-# SSH peer in Docker: tools/ci/netbird-e2e.
+# SSH peer in Docker: tools/ci/netbird-e2e. The `addon` job does the same for the Netbird add-on's
+# path on an Android emulator: RexPocket's default build binding the add-on, its accounts, the
+# add-on's process killed and back, and add-ons of an older revision and of another version.
 on:
   push:
     branches: [ccr-30ee0e05-w78lcg]
@@ -43,6 +45,146 @@ jobs:
         run: |
           docker compose -f tools/ci/netbird-e2e/compose.yaml --profile peer ps -a
           docker compose -f tools/ci/netbird-e2e/compose.yaml --profile peer logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: tools/ci/netbird-e2e/down.sh
+
+  addon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      GOTOOLCHAIN: auto
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      # x86_64 for the emulator (see device-test.yml); no libghostty: these tests open no terminal.
+      ADDON_ARGS: -x :app:buildGhostty -x :app:buildGhosttyHost -Prexpocket.abi=x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: tailnet/go.sum
+
+      - name: Allow KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install the Android NDK and platform
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.1.0" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Build the Netbird add-on's library for x86_64
+        run: |
+          sed 's#-target android/arm64#-target android/amd64#' tools/build-tailnet.sh > "$RUNNER_TEMP/build-tailnet-x86_64.sh"
+          grep -q 'android/amd64' "$RUNNER_TEMP/build-tailnet-x86_64.sh"
+          cp "$RUNNER_TEMP/build-tailnet-x86_64.sh" tools/build-tailnet-x86_64.sh
+          REXPOCKET_NETBIRD=addon sh tools/build-tailnet-x86_64.sh
+
+      - name: The add-on's and its client's unit tests
+        run: |
+          mkdir -p native/.build/host
+          ./gradlew --no-daemon $ADDON_ARGS :netbirdaddon-api:testDebugUnitTest :netbirdaddon:testDebugUnitTest \
+            :app:testDebugUnitTest --tests 'me.leaver.rexpocket.net.addon.*'
+
+      # Three add-ons: this one, one of revision 1 (the first add-on's interface: no accounts) and
+      # one of another base version. All are signed with this runner's debug key, as the app is.
+      - name: Build the app, its tests and three add-ons
+        run: |
+          mkdir -p out
+          ./gradlew --no-daemon $ADDON_ARGS :app:assembleDebug :app:assembleDebugAndroidTest :netbirdaddon:assembleDebug
+          cp netbirdaddon/build/outputs/apk/debug/netbirdaddon-debug.apk out/addon-current.apk
+          ./gradlew --no-daemon $ADDON_ARGS -Prexpocket.addonRevision=1 :netbirdaddon:assembleDebug
+          cp netbirdaddon/build/outputs/apk/debug/netbirdaddon-debug.apk out/addon-revision1.apk
+          ./gradlew --no-daemon $ADDON_ARGS -Prexpocket.addonVersion=2 :netbirdaddon:assembleDebug
+          cp netbirdaddon/build/outputs/apk/debug/netbirdaddon-debug.apk out/addon-version2.apk
+          cp app/build/outputs/apk/debug/app-debug.apk out/app.apk
+          cp app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk out/app-test.apk
+
+      - name: Bring up the control plane, the peer and the emulator's name server
+        run: |
+          tools/ci/netbird-e2e/up.sh
+          docker compose -f tools/ci/netbird-e2e/compose.yaml --profile emulator up -d dns
+          for i in $(seq 1 60); do
+            dig +short @172.29.83.53 netbird.e2e | grep -q 172.29.83.10 && break
+            [ "$i" = 60 ] && { docker compose -f tools/ci/netbird-e2e/compose.yaml --profile emulator logs dns; exit 1; }
+            sleep 1
+          done
+
+      - name: Write the test script
+        run: |
+          cat > "$RUNNER_TEMP/addon-e2e.sh" <<'SH'
+          set -u
+          T=me.leaver.rexpocket.net.addon.NetbirdAddonE2ETest
+          status=0
+          mkdir -p out/logs
+          adb install -r -g out/app.apk && adb install -r out/app-test.apk || exit 1
+          # One run of the test class's methods against the add-on in $1.
+          run() {
+            apk=$1; shift
+            adb install -r "out/$apk.apk" || { echo "RESULT $apk: install FAILED"; status=1; return; }
+            for method in "$@"; do
+              adb logcat -c || true
+              result=$(adb shell am instrument -w -r \
+                -e class "$T#$method" \
+                -e netbirdManagement "$NETBIRD_E2E_MANAGEMENT_URL" \
+                -e netbirdSetupKey "$NETBIRD_E2E_SETUP_KEY" \
+                -e netbirdPeer "$NETBIRD_E2E_PEER" \
+                -e netbirdPeerIp "$NETBIRD_E2E_PEER_IP" \
+                me.leaver.rexpocket.test/androidx.test.runner.AndroidJUnitRunner)
+              echo "$result" | tail -25
+              adb logcat -d > "out/logs/$apk-$method.txt" || true
+              if echo "$result" | grep -q '^OK (1 test)'; then
+                echo "RESULT $apk $method: passed"
+              else
+                echo "RESULT $apk $method: FAILED"
+                grep -E "RexPocketNetbird|RexPocketTS|AndroidRuntime" "out/logs/$apk-$method.txt" | tail -40 || true
+                status=1
+              fi
+            done
+          }
+          run addon-current accountsEachKeepTheirRegistration theAddonKilledComesBackWithItsNode
+          # Installed over the current add-on, as an older one would be: its registration stays.
+          run addon-revision1 anAddonOfRevisionOneRunsTheFirstAccountOnly
+          run addon-version2 anAddonOfAnotherVersionIsRefusedWithAnUpdate
+          # Updated back: the binding that died is made again, and the accounts are there once more.
+          run addon-current accountsEachKeepTheirRegistration
+          exit $status
+          SH
+
+      - name: The add-on's path on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -dns-server 172.29.83.53
+          script: sh "$RUNNER_TEMP/addon-e2e.sh"
+
+      - name: Container logs
+        if: failure()
+        run: |
+          docker compose -f tools/ci/netbird-e2e/compose.yaml --profile peer --profile emulator ps -a
+          docker compose -f tools/ci/netbird-e2e/compose.yaml --profile peer --profile emulator logs --no-color
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: netbird-addon-e2e-logs
+          path: out/logs/
+          if-no-files-found: ignore
 
       - name: Tear down
         if: always()

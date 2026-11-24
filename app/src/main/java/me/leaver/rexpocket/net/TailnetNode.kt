@@ -63,6 +63,9 @@ data class NetbirdConfig(
 
 class TailnetException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
+/** [TailnetNode.keepsAccounts] of a node whose accounts are its own: always. */
+private val AlwaysKeepsAccounts: StateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(true)
+
 /**
  * A network node the app runs itself, and the SOCKS5 proxy on loopback that dials through it. The
  * Rex connection of a host on the tailnet is pointed at that proxy. Tailscale and Netbird both
@@ -111,6 +114,12 @@ interface TailnetNode {
 
     /** Deletes the login of account [profile], which is not running: the account was removed. */
     fun forgetProfile(profile: String) = Unit
+
+    /**
+     * Whether the node can keep several accounts right now, beside [TailnetBackend.accounts]: a
+     * node run by another app keeps them only once that app is of a version that does.
+     */
+    val keepsAccounts: StateFlow<Boolean> get() = AlwaysKeepsAccounts
 
     /**
      * How the host dialog's Test connection goes through this node, once [start] gave [port]: the

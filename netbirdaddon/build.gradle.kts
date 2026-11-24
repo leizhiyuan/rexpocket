@@ -16,6 +16,17 @@ val localProperties = Properties().apply {
 fun signingSetting(name: String): String? =
     providers.gradleProperty(name).orNull ?: System.getenv(name) ?: localProperties.getProperty(name)
 
+// The add-on carries RexPocket's version, so a release's add-on and app match by name and the app
+// can tell an add-on older than itself (docs/design/tailnet-backends.md, "Versions").
+val appBuild = rootProject.file("app/build.gradle.kts").readText()
+val appVersionName = Regex("""versionName = "([^"]+)"""").find(appBuild)?.groupValues?.get(1) ?: "0"
+val appVersionCode = Regex("""versionCode = (\d+)""").find(appBuild)?.groupValues?.get(1)?.toInt() ?: 1
+
+// What the add-on speaks (NetbirdAddon.VERSION and REVISION). Only the device tests set these, to
+// build an add-on of an older revision or another version and check how RexPocket meets it.
+val addonVersion = (findProperty("rexpocket.addonVersion") as String?)?.toInt()
+val addonRevision = (findProperty("rexpocket.addonRevision") as String?)?.toInt()
+
 android {
     namespace = "me.leaver.rexpocket.netbird"
     compileSdk = 36
@@ -25,8 +36,12 @@ android {
         applicationId = "me.leaver.rexpocket.netbird"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
+        buildConfigField("int", "ADDON_VERSION", addonVersion?.toString() ?: "me.leaver.rexpocket.netbird.api.NetbirdAddon.VERSION")
+        buildConfigField("int", "ADDON_REVISION", addonRevision?.toString() ?: "me.leaver.rexpocket.netbird.api.NetbirdAddon.REVISION")
+        // The revision RexPocket reads without binding: the service's meta-data.
+        manifestPlaceholders["addonRevision"] = (addonRevision ?: 2).toString()
         // As the app: arm64 only, unless the device tests ask for x86_64.
         ndk.abiFilters += (findProperty("rexpocket.abi") as String?) ?: "arm64-v8a"
     }
@@ -70,6 +85,10 @@ android {
     packaging {
         jniLibs.useLegacyPackaging = false
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 kotlin {
@@ -93,4 +112,5 @@ tasks.named("preBuild") { dependsOn(checkNetbirdLibrary) }
 dependencies {
     implementation(project(":netbirdaddon-api"))
     implementation(files(netbirdLibrary))
+    testImplementation("junit:junit:4.13.2")
 }

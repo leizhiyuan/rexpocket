@@ -1217,6 +1217,9 @@ internal fun TailnetDialog(
     val joinedHere = initial.enabled && backend == initial.backend
     val state = tailnetState(status)
     val netbird = backend == TailnetBackend.Netbird || backend == TailnetBackend.NetbirdAddon
+    // A setup key joins: a node not joined yet, or one that failed to start, such as a new account,
+    // which has no registration of its own.
+    val wantsKey = netbird && (!joinedHere || error != null)
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Colors.surface,
@@ -1246,7 +1249,7 @@ internal fun TailnetDialog(
                         managementUrl,
                         placeholder = stringResource(R.string.netbird_management_placeholder),
                     ) { managementUrl = it }
-                    if (!joinedHere) {
+                    if (wantsKey) {
                         Field(
                             stringResource(R.string.netbird_setup_key),
                             setupKey,
@@ -1283,7 +1286,7 @@ internal fun TailnetDialog(
                     Text(stringResource(R.string.tailscale_login_hint), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
                 }
                 me.leaver.rexpocket.net.addon.TailnetBackendNote(backend)
-                if (netbird && !joinedHere) {
+                if (wantsKey) {
                     Text(stringResource(R.string.netbird_need_key), color = Colors.amber, fontSize = TextStyles.label, lineHeight = labelLeading)
                 }
                 Text(

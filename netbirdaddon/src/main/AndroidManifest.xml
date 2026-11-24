@@ -24,6 +24,10 @@
             <intent-filter>
                 <action android:name="me.leaver.rexpocket.netbird.NODE" />
             </intent-filter>
+            <!-- The revision of INetbirdNode this add-on speaks: RexPocket reads it without binding. -->
+            <meta-data
+                android:name="me.leaver.rexpocket.netbird.REVISION"
+                android:value="${addonRevision}" />
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps the Netbird network node that RexPocket reaches the user's own terminal server through running while RexPocket is in the background with its connection kept open." />
