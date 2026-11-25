@@ -10,6 +10,8 @@
     <string name="security_lock_body">Asks for your fingerprint, face or screen lock when you come back to the app</string>
     <string name="security_lock_no_screen_lock">Set a screen lock in Android\'s settings first: the app lock asks for it.</string>
     <string name="security_lock_not_confirmed">The phone did not confirm you, so the lock stays off.</string>
+    <string name="security_lock_failed">The phone could not ask who you are, so the lock stays off: %1$s</string>
+    <string name="security_prompt_failed">The phone could not ask who you are: %1$s</string>
     <string name="security_lock_after">Lock after</string>
     <string name="security_lock_after_now">At once</string>
     <string name="security_lock_after_minutes">%1$d min away</string>

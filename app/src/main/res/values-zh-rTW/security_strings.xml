@@ -9,6 +9,8 @@
     <string name="security_lock_body">回到應用程式時要求指紋、臉部或螢幕鎖定</string>
     <string name="security_lock_no_screen_lock">請先在 Android 設定中設定螢幕鎖定：應用程式鎖需要用它驗證。</string>
     <string name="security_lock_not_confirmed">手機未確認你的身分，應用程式鎖保持關閉。</string>
+    <string name="security_lock_failed">手機無法驗證你的身分，應用程式鎖保持關閉：%1$s</string>
+    <string name="security_prompt_failed">手機無法驗證你的身分：%1$s</string>
     <string name="security_lock_after">鎖定時間</string>
     <string name="security_lock_after_now">立即</string>
     <string name="security_lock_after_minutes">離開 %1$d 分鐘</string>

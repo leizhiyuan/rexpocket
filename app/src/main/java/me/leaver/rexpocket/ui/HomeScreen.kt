@@ -1090,7 +1090,7 @@ internal fun HomeScreen(
             onPrefs = onSecurity,
             onDismiss = { securityOpen = false },
             authenticate = rememberDeviceAuthenticator(),
-            deviceSecure = remember(securityOpen) { AppLockGate.deviceSecure(context) },
+            problem = { AppLockGate.problem(context) },
         )
     }
 

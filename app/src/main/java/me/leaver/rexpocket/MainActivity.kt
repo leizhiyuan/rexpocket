@@ -20,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import me.leaver.rexpocket.core.HostLink
 import me.leaver.rexpocket.ui.LockGate
+import me.leaver.rexpocket.ui.AuthResult
 import me.leaver.rexpocket.ui.rememberDeviceAuthenticator
 import me.leaver.rexpocket.diagnostics.Diagnostics
 import me.leaver.rexpocket.ui.RexPocketApp
@@ -57,7 +58,7 @@ class MainActivity : ComponentActivity() {
                 locked = locked,
                 authenticate = rememberDeviceAuthenticator(),
                 onAsking = model::lockAsking,
-                onResult = { ok -> if (ok) model.unlocked() else model.lockNotConfirmed() },
+                onResult = { result -> if (result == AuthResult.Confirmed) model.unlocked() else model.lockNotConfirmed() },
             ) { RexPocketApp(model) }
         }
     }

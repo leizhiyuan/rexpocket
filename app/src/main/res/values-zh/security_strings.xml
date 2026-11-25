@@ -9,6 +9,8 @@
     <string name="security_lock_body">回到应用时要求指纹、面容或锁屏密码</string>
     <string name="security_lock_no_screen_lock">请先在 Android 设置中设置锁屏：应用锁需要用它验证。</string>
     <string name="security_lock_not_confirmed">手机未确认你的身份，应用锁保持关闭。</string>
+    <string name="security_lock_failed">手机无法验证你的身份，应用锁保持关闭：%1$s</string>
+    <string name="security_prompt_failed">手机无法验证你的身份：%1$s</string>
     <string name="security_lock_after">锁定时间</string>
     <string name="security_lock_after_now">立即</string>
     <string name="security_lock_after_minutes">离开 %1$d 分钟</string>

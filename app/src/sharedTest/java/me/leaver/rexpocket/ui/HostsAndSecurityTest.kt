@@ -226,11 +226,11 @@ class HostsAndSecurityTest {
         var answer = false
         val fake = Authenticate { onResult ->
             asks++
-            onResult(answer)
+            onResult(if (answer) AuthResult.Confirmed else AuthResult.Cancelled)
         }
         compose.setContent {
             RexTheme {
-                LockGate(locked = locked, authenticate = fake, onAsking = {}, onResult = { ok -> if (ok) locked = false }) {
+                LockGate(locked = locked, authenticate = fake, onAsking = {}, onResult = { result -> if (result == AuthResult.Confirmed) locked = false }) {
                     androidx.compose.material3.Text("the app")
                 }
             }
@@ -254,7 +254,7 @@ class HostsAndSecurityTest {
         var answer = false
         compose.setContent {
             RexTheme {
-                SecuritySheet(prefs = prefs, onPrefs = { prefs = it }, onDismiss = {}, authenticate = { it(answer) }, deviceSecure = true)
+                SecuritySheet(prefs = prefs, onPrefs = { prefs = it }, onDismiss = {}, authenticate = { it(if (answer) AuthResult.Confirmed else AuthResult.Cancelled) }, problem = { null })
             }
         }
         compose.waitForIdle()

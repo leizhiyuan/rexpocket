@@ -32,13 +32,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.first
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.SecurityPrefs
+import me.leaver.rexpocket.diagnostics.Diagnostics
 
 // Settings › Security: the app lock, the screen that stands in for the app while it is locked, and
 // the screenshot block. See docs/design/app-lock.md.
@@ -48,62 +52,112 @@ internal const val UNLOCK_TAG = "app-unlock"
 internal const val SECURITY_LOCK_TAG = "security-lock"
 internal const val SECURITY_SCREENSHOTS_TAG = "security-screenshots"
 
-/** Asks the phone who is there: its fingerprint, face or screen lock. [onResult] says whether it said yes. */
+/**
+ * What the phone's prompt said: the person confirmed, the person put it away (Cancel, Back, a tap
+ * outside), or it could not ask at all, and why, in the phone's words where it gave any.
+ */
+internal sealed interface AuthResult {
+    data object Confirmed : AuthResult
+
+    data object Cancelled : AuthResult
+
+    data class Failed(val reason: String, val cause: Throwable? = null) : AuthResult
+}
+
+/** Asks the phone who is there: its fingerprint, face or screen lock. */
 internal fun interface Authenticate {
-    fun ask(onResult: (Boolean) -> Unit)
+    fun ask(onResult: (AuthResult) -> Unit)
 }
 
 internal object AppLockGate {
     /** Whether the phone has a screen lock: without one there is nothing for the app lock to ask. */
     fun deviceSecure(context: Context): Boolean =
         context.getSystemService(KeyguardManager::class.java)?.isDeviceSecure == true
+
+    /** Why the lock cannot be turned on on this phone, in words for the person; null when it can. */
+    fun problem(context: Context): String? =
+        if (deviceSecure(context)) null else context.getString(R.string.security_lock_no_screen_lock)
+
+    /**
+     * The prompt's error as a result: the person putting it away is a no; anything else is the
+     * phone failing to ask, said in its own words ([errString]).
+     */
+    fun resultOf(errorCode: Int, errString: CharSequence?): AuthResult = when (errorCode) {
+        BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED, BiometricPrompt.BIOMETRIC_ERROR_CANCELED, BIOMETRIC_ERROR_NEGATIVE_BUTTON -> AuthResult.Cancelled
+        else -> AuthResult.Failed(errString?.toString()?.takeIf { it.isNotBlank() } ?: "error $errorCode")
+    }
+
+    /** BiometricPrompt.BIOMETRIC_ERROR_NEGATIVE_BUTTON, from Android 10's SDK; the prompt here has no such button. */
+    private const val BIOMETRIC_ERROR_NEGATIVE_BUTTON = 13
+
+    /**
+     * The framework's biometric prompt (Android 10 on), with the screen lock as its fallback:
+     * `BIOMETRIC_WEAK | DEVICE_CREDENTIAL` from Android 11, which takes no negative button, and
+     * `setDeviceCredentialAllowed` on 10. Needs USE_BIOMETRIC in the manifest, without which
+     * Android refuses it outright. A refusal or an error comes back as [AuthResult.Failed].
+     */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
+    fun prompt(context: Context, title: String, subtitle: String, cancel: CancellationSignal, onResult: (AuthResult) -> Unit) {
+        try {
+            val builder = BiometricPrompt.Builder(context).setTitle(title).setSubtitle(subtitle)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                builder.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+            } else {
+                @Suppress("DEPRECATION")
+                builder.setDeviceCredentialAllowed(true)
+            }
+            builder.build().authenticate(
+                cancel,
+                context.mainExecutor,
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onResult(AuthResult.Confirmed)
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        val outcome = resultOf(errorCode, errString)
+                        if (outcome is AuthResult.Failed) Diagnostics.event(LOCK_TAG, "the phone's prompt failed: $errorCode ${outcome.reason}")
+                        onResult(outcome)
+                    }
+                },
+            )
+        } catch (e: Exception) {
+            Diagnostics.event(LOCK_TAG, "the phone's prompt could not open: ${e.javaClass.simpleName}: ${e.message}")
+            onResult(AuthResult.Failed(e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName, e))
+        }
+    }
+
+    private const val LOCK_TAG = "RexPocketLock"
 }
 
 /**
- * The phone's own prompt. From Android 10 that is the biometric prompt, which falls back to the
- * screen lock's PIN, pattern or password; before it, the screen lock's own confirm screen.
+ * The phone's own prompt. From Android 10 that is the biometric prompt ([AppLockGate.prompt]),
+ * which falls back to the screen lock's PIN, pattern or password; before it, the screen lock's own
+ * confirm screen.
  */
 @Composable
 internal fun rememberDeviceAuthenticator(): Authenticate {
     val context = LocalContext.current
     val title = stringResource(R.string.security_prompt_title)
     val subtitle = stringResource(R.string.security_prompt_body)
-    var pending by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
+    var pending by remember { mutableStateOf<((AuthResult) -> Unit)?>(null) }
     val confirm = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        pending?.invoke(result.resultCode == Activity.RESULT_OK)
+        pending?.invoke(if (result.resultCode == Activity.RESULT_OK) AuthResult.Confirmed else AuthResult.Cancelled)
         pending = null
     }
     return remember(context, title, subtitle) {
         Authenticate { onResult ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val builder = BiometricPrompt.Builder(context).setTitle(title).setSubtitle(subtitle)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    builder.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
-                } else {
-                    @Suppress("DEPRECATION")
-                    builder.setDeviceCredentialAllowed(true)
-                }
-                val prompt = runCatching { builder.build() }.getOrNull() ?: return@Authenticate onResult(false)
-                runCatching {
-                    prompt.authenticate(
-                        CancellationSignal(),
-                        context.mainExecutor,
-                        object : BiometricPrompt.AuthenticationCallback() {
-                            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onResult(true)
-                            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = onResult(false)
-                        },
-                    )
-                }.onFailure { onResult(false) }
+                AppLockGate.prompt(context, title, subtitle, CancellationSignal(), onResult)
             } else {
                 @Suppress("DEPRECATION")
                 val intent = context.getSystemService(KeyguardManager::class.java)?.createConfirmDeviceCredentialIntent(title, subtitle)
                 if (intent == null) {
-                    onResult(false)
+                    onResult(AuthResult.Failed(context.getString(R.string.security_lock_no_screen_lock)))
                 } else {
                     pending = onResult
-                    runCatching { confirm.launch(intent) }.onFailure {
+                    try {
+                        confirm.launch(intent)
+                    } catch (e: Exception) {
                         pending = null
-                        onResult(false)
+                        onResult(AuthResult.Failed(e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName, e))
                     }
                 }
             }
@@ -114,14 +168,16 @@ internal fun rememberDeviceAuthenticator(): Authenticate {
 /**
  * The app, or the lock screen in its place while [locked]. The app is left out of the composition
  * rather than covered, so no sheet or dialog of it floats over the lock; its saved state comes back
- * with it. The prompt opens by itself once per lock, and Unlock opens it again.
+ * with it. The prompt opens by itself once per lock, as soon as the app is in front (Android
+ * refuses a prompt from an app that is not, which a cold start's first frame may not yet be), and
+ * Unlock opens it again. A prompt that could not ask says why on the lock screen.
  */
 @Composable
 internal fun LockGate(
     locked: Boolean,
     authenticate: Authenticate,
     onAsking: () -> Unit,
-    onResult: (Boolean) -> Unit,
+    onResult: (AuthResult) -> Unit,
     content: @Composable () -> Unit,
 ) {
     val saved = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
@@ -130,21 +186,28 @@ internal fun LockGate(
         return
     }
     var asked by rememberSaveable { mutableStateOf(false) }
+    var problem by remember { mutableStateOf<String?>(null) }
     val ask = {
+        problem = null
         onAsking()
-        authenticate.ask(onResult)
+        authenticate.ask { result ->
+            if (result is AuthResult.Failed) problem = result.reason
+            onResult(result)
+        }
     }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(Unit) {
         if (!asked) {
+            lifecycle.currentStateFlow.first { it.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) }
             asked = true
             ask()
         }
     }
-    LockScreen(onUnlock = ask)
+    LockScreen(onUnlock = ask, problem = problem)
 }
 
 @Composable
-internal fun LockScreen(onUnlock: () -> Unit) {
+internal fun LockScreen(onUnlock: () -> Unit, problem: String? = null) {
     val unlock = stringResource(R.string.security_unlock_description)
     Column(
         Modifier.fillMaxSize().background(Colors.bg).padding(horizontal = 32.dp).testTag(LOCK_SCREEN_TAG),
@@ -170,6 +233,17 @@ internal fun LockScreen(onUnlock: () -> Unit) {
             textAlign = TextAlign.Center,
             modifier = Modifier.widthIn(max = 360.dp),
         )
+        if (problem != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.security_prompt_failed, problem),
+                color = Colors.danger,
+                fontSize = TextStyles.label,
+                lineHeight = labelLeading,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 360.dp).semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
         Spacer(Modifier.height(16.dp))
         TextButton(
             onClick = onUnlock,
@@ -189,7 +263,9 @@ internal fun lockAfterText(seconds: Int): String = when {
 /**
  * Settings › Security: Lock with the phone's screen lock, how long away before it asks, and Block
  * screenshots. Turning the lock on asks the phone first, so a person who cannot answer it is never
- * locked out; a phone with no screen lock says to set one.
+ * locked out. A tap that cannot go ahead says why, on the row and out loud (a toast TalkBack reads):
+ * no screen lock, a no, or the phone failing to ask. [problem] is asked at each tap, so a screen
+ * lock set meanwhile counts.
  */
 @Composable
 internal fun SecuritySheet(
@@ -197,34 +273,45 @@ internal fun SecuritySheet(
     onPrefs: (SecurityPrefs) -> Unit,
     onDismiss: () -> Unit,
     authenticate: Authenticate,
-    deviceSecure: Boolean,
+    problem: () -> String?,
 ) {
+    val context = LocalContext.current
     var pickWait by remember { mutableStateOf(false) }
-    var notConfirmed by remember { mutableStateOf(false) }
+    // What the last tap could not do, said on the row until the next one.
+    var said by remember { mutableStateOf<String?>(null) }
+    val firstProblem = remember { problem() }
     val on = stringResource(R.string.alerts_on)
     val off = stringResource(R.string.alerts_off)
+    fun say(text: String) {
+        said = text
+        toast(context, text)
+    }
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.security_title)) {
         Group {
             SheetItem(
                 label = stringResource(R.string.security_lock),
                 icon = R.drawable.ic_lock,
-                supporting = when {
-                    !deviceSecure && !prefs.lock -> stringResource(R.string.security_lock_no_screen_lock)
-                    notConfirmed -> stringResource(R.string.security_lock_not_confirmed)
-                    else -> stringResource(R.string.security_lock_body)
-                },
+                supporting = said ?: firstProblem?.takeIf { !prefs.lock } ?: stringResource(R.string.security_lock_body),
                 detail = if (prefs.lock) on else off,
                 keepOpen = true,
-                enabled = prefs.lock || deviceSecure,
                 modifier = Modifier.testTag(SECURITY_LOCK_TAG),
             ) {
                 if (prefs.lock) {
+                    said = null
                     onPrefs(prefs.copy(lock = false))
-                } else {
-                    // The person shows they can answer the prompt before it guards the app.
-                    authenticate.ask { ok ->
-                        notConfirmed = !ok
-                        if (ok) onPrefs(prefs.copy(lock = true))
+                    return@SheetItem
+                }
+                val why = problem()
+                if (why != null) return@SheetItem say(why)
+                // The person shows they can answer the prompt before it guards the app.
+                authenticate.ask { result ->
+                    when (result) {
+                        AuthResult.Confirmed -> {
+                            said = null
+                            onPrefs(prefs.copy(lock = true))
+                        }
+                        AuthResult.Cancelled -> say(context.getString(R.string.security_lock_not_confirmed))
+                        is AuthResult.Failed -> say(context.getString(R.string.security_lock_failed, result.reason))
                     }
                 }
             }

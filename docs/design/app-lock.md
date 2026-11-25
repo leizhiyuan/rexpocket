@@ -11,7 +11,8 @@ phone says yes.
 - **Turning it on** asks the phone first. A person who cannot answer the prompt is never locked
   out by their own switch; a "no" leaves the lock off and says so. A phone with no screen lock
   cannot turn it on: the row says to set one in Android's settings first. Turning it off asks
-  nothing.
+  nothing. The whole row takes the tap, and a tap that cannot go ahead always says why, on the row
+  and in a toast TalkBack reads: no screen lock, a no, or the phone failing to ask (in its words).
 - **Lock after**: at once, or after 1, 5 or 15 minutes or an hour away (a minute at first, so a
   trip to the file picker or the share sheet does not lock it). "Away" is the app's activity
   stopped: another app on screen, the screen off. A process start with the lock on starts locked.
@@ -19,8 +20,10 @@ phone says yes.
   (`android.hardware.biometrics.BiometricPrompt`), with the screen lock as its fallback
   (`BIOMETRIC_WEAK | DEVICE_CREDENTIAL` from Android 11, `setDeviceCredentialAllowed` on 10);
   before that, the keyguard's own confirm screen (`createConfirmDeviceCredentialIntent`). Both are
-  the framework's, so no library is added. The prompt opens by itself once per lock; Unlock opens
-  it again. While it is up, the activity stopping for its PIN screen is not counted as leaving.
+  the framework's, so no library is added; the prompt needs `USE_BIOMETRIC` in the manifest, without
+  which Android refuses it before anything shows (what a phone found: the switch did nothing). The
+  prompt opens by itself once per lock, once the activity is resumed (Android refuses a prompt from
+  an app not in front); Unlock opens it again, and a prompt that could not ask says why there. While it is up, the activity stopping for its PIN screen is not counted as leaving.
 - **The lock screen** stands in for the whole app: the app is left out of the composition rather
   than drawn over, so none of its sheets or dialogs (each a window of its own) float above the lock,
   and its saved state comes back with it. The view model, and so every connection, is untouched.
@@ -47,6 +50,9 @@ only on a phone with a screen lock; otherwise it stays off and the app says why.
 - `app/…/ui/Security.kt`: `LockGate`, `LockScreen`, `rememberDeviceAuthenticator`, `SecuritySheet`.
   `MainActivity` wraps the app in `LockGate`, follows `blockScreenshots` with `FLAG_SECURE`, and tells
   the view model when it stops and starts. `HostStore.security`.
+- `AppLockScreenTest` (JVM and emulator): the permission, the real prompt not refused on the
+  emulator, a cold start locked, the wait, a yes unlocking. `AppLockRowTest` (JVM, keyguard
+  shadowed): a tap without a screen lock says why; a prompt that cannot ask says its reason.
 - `HostsAndSecurityTest` (JVM and emulator): the lock stands in for the app until the prompt says
   yes; the sheet turns the lock on only after a yes, and blocks screenshots; a backup's lock stays
   off on a phone without a screen lock.
