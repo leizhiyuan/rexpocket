@@ -372,6 +372,20 @@ internal fun HomeScreen(
                 page = null
                 notifications = true
             }
+            // The widget's tap or a host's notifications: the Activity view, not a sheet left open over it.
+            HomeRequest.Activity -> {
+                settings = false
+                notifications = false
+                page = null
+                tailnetDetails = false
+                appearanceOpen = false
+                securityOpen = false
+                controlsPage = null
+                quickRepliesOpen = false
+                diagnostics = false
+                homeMenu = false
+                sheets.sheet = null
+            }
             // A rexpocket://add link: Add host, filled in, for the person to check and save.
             is HomeRequest.AddHost -> {
                 editingId = null

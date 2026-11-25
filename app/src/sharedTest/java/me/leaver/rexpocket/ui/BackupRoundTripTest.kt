@@ -191,4 +191,20 @@ class BackupRoundTripTest {
         assertEquals(listOf("Logs"), m.launchTemplates.value[restored.id].orEmpty().map { it.name })
         assertEquals("the second box's tile is not the first's", null, TileStore(app).of(1))
     }
+
+    /** A backup that unmutes a tab says so in its preview: the host's row is not the same words twice. */
+    @Test
+    fun thePreviewShowsATabTheBackupUnmutes() {
+        val m = tailnetModel(compose, FakeTailnetNode(), listOf(box), joined = false)
+        model = m
+        compose.setContent { RexPocketApp(m) }
+        compose.runOnUiThread { m.setHostBackground(box.id, me.leaver.rexpocket.core.HostBackground(stay = false)) }
+        val text = SettingsFormat.write(m.settingsBackup.snapshot(withSecrets = false)).text
+        compose.runOnUiThread { m.muteTab(box.id, "@7", true) }
+        compose.runOnUiThread { m.settingsBackup.offerShare(ShareRequest(text, emptyList()), "text/plain") {} }
+        compose.awaitThat { seen(string(R.string.backup_preview_title)) }
+        assertTrue(seen(string(R.string.backup_setting_host_background, "box")))
+        val muted = compose.activity.resources.getQuantityString(R.plurals.bg_tabs_muted, 1, 1)
+        assertTrue("the row names the muted tab", compose.onAllNodes(hasText(muted, substring = true)).fetchSemanticsNodes().isNotEmpty())
+    }
 }

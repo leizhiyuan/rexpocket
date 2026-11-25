@@ -1199,6 +1199,7 @@ class RexViewModel @JvmOverloads constructor(
         openedFromAlert = true
         route.value = Route.Home
         setHomeFilter(HomeFilter.Activity)
+        homeRequest.value = HomeRequest.Activity
     }
 
     /** An alert of a host that was removed since: it says so and its notifications go. */
@@ -1219,6 +1220,7 @@ class RexViewModel @JvmOverloads constructor(
         openedFromAlert = true
         route.value = Route.Home
         setHomeFilter(HomeFilter.Activity)
+        homeRequest.value = HomeRequest.Activity
     }
 
     /** Settings › Background and notifications, from a notification or the background tile. */
@@ -1913,6 +1915,9 @@ sealed interface HomeRequest {
 
     /** Settings › Background and notifications. */
     data object Notifications : HomeRequest
+
+    /** The Activity view itself, from the widget or a host's notifications: no sheet left over it. */
+    data object Activity : HomeRequest
 
     /** The Add host dialog, filled in from a `rexpocket://add` link, waiting for the person's Save. */
     data class AddHost(val name: String?, val address: String) : HomeRequest
