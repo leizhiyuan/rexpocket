@@ -5,13 +5,21 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
-// The terminal's text size, as a share of its 12 sp base: the default for new tabs (Settings ›
+// The terminal's text size, as a share of its 12 sp base ([TextScale.BASE_SP]): the default for new tabs (Settings ›
 // Appearance, and the Terminal font dialog) and each tab's own, which a pinch, the ⋮ menu's Text
 // size row, the palette and Ctrl+= / Ctrl+- / Ctrl+0 change. See terminal-controls.md, "Text size".
 
 object TextScale {
-    const val MIN = 0.7f
-    const val MAX = 1.8f
+    /** The size 100% is, in sp. */
+    const val BASE_SP = 12f
+
+    /**
+     * The pinch's range, 6 to 40 sp, and so the range of every other way to set it: a size
+     * pinched to 250% shows as 250%, and + and − step from there rather than back into a narrower
+     * range. The pane's pinch reads its ends from here.
+     */
+    const val MIN = 6f / BASE_SP
+    const val MAX = 40f / BASE_SP
 
     /** What − and + change it by. */
     const val STEP = 0.1f

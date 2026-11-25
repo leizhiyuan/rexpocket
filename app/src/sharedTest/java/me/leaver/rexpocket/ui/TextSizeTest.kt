@@ -106,6 +106,27 @@ class TextSizeTest {
         assertTrue(model.textSizes.sizes.sizes.isEmpty())
     }
 
+    /**
+     * A size pinched past the old 70-180% stays what it is on the row, and + and − step from it:
+     * one range everywhere, the pinch's (6-40 sp). The default for new tabs takes it too.
+     */
+    @Test
+    fun aPinchedSizeShowsAsItIsAndStepsFromThere() {
+        // What the pane's pinch hands the screen: its new size in sp, over the 12 sp base.
+        compose.runOnUiThread { model.textSizes.sizes = model.textSizes.sizes.with(buildKey, 30f / 12f, 1f) }
+        openMenu()
+        rowSays(250)
+        compose.onNodeWithTag(TEXT_SIZE_BIGGER_TAG).performClick()
+        compose.waitForIdle()
+        rowSays(260)
+        compose.onNodeWithTag(TEXT_SIZE_SMALLER_TAG).performClick()
+        compose.onNodeWithTag(TEXT_SIZE_SMALLER_TAG).performClick()
+        compose.waitForIdle()
+        rowSays(240)
+        compose.runOnUiThread { model.setFont(30f / 12f) }
+        assertEquals(2.5f, model.fontScale.value, 0.001f)
+    }
+
     @Test
     fun anotherTabFollowsTheDefaultWhileThisOneKeepsItsOwn() {
         openMenu()

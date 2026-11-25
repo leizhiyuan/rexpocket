@@ -1081,8 +1081,9 @@ internal class TerminalView(context: Context) : View(context) {
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = handled.remove(keyCode)
 
     private companion object {
-        const val MIN_FONT_SP = 6f
-        const val MAX_FONT_SP = 40f
+        // The app's one text size range (TextScale): the row, Settings and the keys step within it.
+        const val MIN_FONT_SP = me.leaver.rexpocket.core.TextScale.MIN * me.leaver.rexpocket.core.TextScale.BASE_SP
+        const val MAX_FONT_SP = me.leaver.rexpocket.core.TextScale.MAX * me.leaver.rexpocket.core.TextScale.BASE_SP
         const val PINCH_STEP_SP = 0.25f
         const val SWIPE_DP = 72f
         const val HORIZONTAL_RATIO = 1.5f

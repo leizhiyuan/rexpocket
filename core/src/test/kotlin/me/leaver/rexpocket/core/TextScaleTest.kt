@@ -32,4 +32,36 @@ class TextScaleTest {
         assertEquals(emptyMap<String, Float>(), sizes.reset(a).sizes)
         assertEquals(TextScale.MAX, sizes.with(a, 9f, 1f).of(a, 1f), 0.001f)
     }
+
+    /**
+     * One range everywhere, the pinch's: 6 to 40 sp of the 12 sp base. A size pinched to 250% is
+     * 250%, and + and − step from it to 260% and 240%, never back into a narrower range.
+     */
+    @Test
+    fun theRangeIsThePinchsAndAStepNeverNarrowsIt() {
+        assertEquals(6f, TextScale.MIN * 12f, 0.001f)
+        assertEquals(40f, TextScale.MAX * 12f, 0.001f)
+        val pinched = 30f / 12f
+        assertEquals(250, TextScale.percent(pinched))
+        assertEquals(2.5f, TextScale.clamp(pinched), 0.001f)
+        assertEquals(2.6f, TextScale.bigger(pinched), 0.001f)
+        assertEquals(2.4f, TextScale.smaller(pinched), 0.001f)
+        val key = TabTextSizes.key("h", "s", "a")
+        assertEquals(2.5f, TabTextSizes().with(key, pinched, 1f).of(key, 1f), 0.001f)
+        // The ends are the pinch's ends, and a step past them stays there.
+        assertEquals(0.5f, TextScale.smaller(0.6f), 0.001f)
+        assertEquals(TextScale.MAX, TextScale.bigger(3.3f), 0.001f)
+        assertEquals(333, TextScale.percent(TextScale.MAX))
+    }
+
+    /** A backup takes any size the app can show, a pinched 250% too. */
+    @Test
+    fun aBackupTakesTheWholeRange() {
+        val text = org.json.JSONObject().put("format", SettingsFormat.FORMAT)
+            .put("terminal", org.json.JSONObject().put("fontScale", 2.5)).toString()
+        when (val p = SettingsFormat.parse(text)) {
+            is SettingsParse.Parsed -> assertEquals(2.5f, p.backup.terminalFontScale!!, 0.001f)
+            is SettingsParse.Failed -> throw AssertionError("refused: ${p.problem}")
+        }
+    }
 }

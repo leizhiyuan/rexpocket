@@ -24,8 +24,8 @@ object SettingsFormat {
 
     const val MAX_PASSWORD = 1024
     const val MAX_PRIVATE_KEY = 16 * 1024
-    const val MIN_FONT_SCALE = 0.7f
-    const val MAX_FONT_SCALE = 1.8f
+    const val MIN_FONT_SCALE = TextScale.MIN
+    const val MAX_FONT_SCALE = TextScale.MAX
 
     /** The longest tab (window) id a muted tab may have in a file. */
     const val MAX_TAB_ID = 128

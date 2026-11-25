@@ -168,7 +168,7 @@ internal fun TerminalPane(
     val keyboard = remember(context) { TerminalImeView(context) }
     val pane = remember(context) {
         TerminalView(context).also { view ->
-            view.onFontSizeChanged = { currentFont.value(it / 12f) }
+            view.onFontSizeChanged = { currentFont.value(it / me.leaver.rexpocket.core.TextScale.BASE_SP) }
             // A long press on a link offers it instead of selecting its text: agents print the pull
             // requests and sign-in pages they want you to open.
             view.onLink = { currentLink.value(it) }
@@ -243,7 +243,7 @@ internal fun TerminalPane(
                 // here, so a pane never flips from the app's paper to a white one after a reconnect.
                 view.theme = theme
                 view.typeface = terminalTypeface
-                view.fontSizeSp = 12f * fontScale
+                view.fontSizeSp = me.leaver.rexpocket.core.TextScale.BASE_SP * fontScale
                 view.hardwareKeys = hardwareKeyboard
                 view.session = session
             },

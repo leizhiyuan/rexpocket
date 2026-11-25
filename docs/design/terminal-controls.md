@@ -338,7 +338,11 @@ its preset; key size and a second row.
 
 ### 4.2 Text size
 
-The terminal draws at 12 sp times a scale from 70% to 180%. There are two of them:
+The terminal draws at 12 sp times a scale from 50% to 333%: the pinch's own range, 6 to 40 sp
+(`TextScale.MIN` and `MAX`, which the pane's pinch reads too). Every way to set it shares that
+range - the pinch, the row, Settings, the palette, the keys and a backup - so a size pinched to
+250% shows as 250% and + and − step to 260% and 240% from it. (It was 70-180% for the row and
+Settings, which clamped a pinched size back the moment a step touched it.) There are two of them:
 
 - **The default**, for every tab that has not set its own: Settings › Appearance › Terminal text
   size (a dialog with − / +, a step of 10%, and Reset to 100%), and the same line in the Terminal
