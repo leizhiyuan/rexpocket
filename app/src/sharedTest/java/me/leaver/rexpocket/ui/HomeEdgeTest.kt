@@ -1,6 +1,9 @@
 package me.leaver.rexpocket.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -138,5 +141,62 @@ class HomeEdgeTest {
         compose.onNodeWithTag(COMPOSER_ENTER_TAG).performClick()
         compose.waitForIdle()
         assertTrue(m.drafts.enterAfter(desk.host.id))
+    }
+
+    /** The labels of the open sheet's items that can act now, top to bottom. */
+    private fun enabledSheetItems(): List<String> =
+        compose.onAllNodes(hasClickAction() and inASheet).fetchSemanticsNodes()
+            .filter { SemanticsProperties.Disabled !in it.config }
+            .sortedBy { it.boundsInRoot.top }
+            .map { it.config[SemanticsProperties.Text].first().text }
+
+    private fun talkBackOf(node: SemanticsNodeInteraction) = node.fetchSemanticsNode().config[SemanticsActions.CustomActions].map { it.label }
+
+    /**
+     * A host that is not connected still lists the sessions it had, folded. A session's sheet then
+     * offers Expand, as its row's TalkBack actions do, and Expand opens it; the host's sheet and
+     * its TalkBack actions agree on Expand or Collapse too, also in a filtered list.
+     */
+    @Test
+    fun aDisconnectedHostsSheetsMatchTheirRowsAndExpandOpensTheSession() {
+        val m = start()
+        val label = m.pocket.value.sessions.first { it.id == other }.label
+        compose.runOnUiThread { m.disconnect(desk.host.id) }
+        compose.awaitThat { m.lives.value[desk.host.id] == null }
+        compose.waitForIdle()
+        // Not connected, the host is folded: opened, its sessions show, each folded.
+        compose.onNode(hasContentDescription(string(R.string.manage_actions_for, desk.host.label)) and hasClickAction() and !inASheet).performClick()
+        compose.waitForIdle()
+        inSheet(string(R.string.home_action_expand)).performScrollTo().performClick()
+        compose.waitForIdle()
+        val row = compose.onNode(hasText(label) and hasClickAction() and !inASheet)
+        val rowActions = talkBackOf(row)
+        assertTrue(rowActions.toString(), string(R.string.home_action_expand) in rowActions)
+        compose.onNode(hasContentDescription(string(R.string.manage_actions_for, label)) and hasClickAction() and !inASheet).performClick()
+        compose.waitForIdle()
+        assertEquals(rowActions, enabledSheetItems())
+        inSheet(string(R.string.home_action_expand)).performClick()
+        compose.waitForIdle()
+        compose.awaitThat { talkBackOf(compose.onNode(hasText(label) and hasClickAction() and !inASheet)).contains(string(R.string.home_action_collapse)) }
+
+        // The host folded in the tree, then a filter that lists it: its header's TalkBack actions are its sheet's.
+        compose.runOnUiThread { m.connect(desk.host) }
+        compose.awaitLive(m, shown)
+        val block = m.pocket.value.views.getValue(other).windows[0].blocks[0].id
+        desk.rex.report(block, "blocked", kind = "question", msg = "What next?", app = "claude")
+        compose.awaitThat { m.pocket.value.blockStatus[block]?.state == "blocked" }
+        compose.onNode(hasContentDescription(string(R.string.manage_actions_for, desk.host.label)) and hasClickAction() and !inASheet).performClick()
+        compose.waitForIdle()
+        inSheet(string(R.string.home_action_collapse)).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(filterChipTag(HomeFilter.NeedsYou)).performClick()
+        compose.waitForIdle()
+        val header = compose.onNode(hasContentDescription(string(R.string.manage_actions_for, desk.host.label)) and hasClickAction() and !inASheet)
+        header.performClick()
+        compose.waitForIdle()
+        val sheet = enabledSheetItems()
+        val hostRow = compose.onAllNodes(hasText(desk.host.label) and !inASheet).fetchSemanticsNodes()
+            .first { SemanticsActions.CustomActions in it.config }.config[SemanticsActions.CustomActions].map { it.label }
+        assertEquals(sheet, hostRow)
     }
 }

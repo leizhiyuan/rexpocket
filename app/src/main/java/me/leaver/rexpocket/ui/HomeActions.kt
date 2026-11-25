@@ -481,6 +481,8 @@ internal fun HomeSheetsHost(
     ops: HomeOps,
     /** A session whose sheet or dialog was open was ended elsewhere: its name, and its host's. */
     onEndedElsewhere: (session: String, host: String) -> Unit = { _, _ -> },
+    /** Whether a session is open by the person's choice, as its row has it ([sessionUnfolded]). */
+    sessionOpen: (HostRef, sessionId: String) -> Boolean = { ref, sid -> sessionUnfolded(folds, emptySet(), ref, sid) },
 ) {
     // The last name each open session was seen by, for saying which one went.
     val labels = androidx.compose.runtime.remember { HashMap<String, String>() }
@@ -513,7 +515,7 @@ internal fun HomeSheetsHost(
                 }
             } else {
                 labels[HomeFolds.sessionKey(target.hostId, session.id)] = ref.state.views[session.id]?.label ?: session.label
-                val expanded = HomeFolds.sessionKey(ref.host.id, session.id) !in folds.sessions
+                val expanded = sessionOpen(ref, session.id)
                 val title = ref.state.views[session.id]?.label ?: session.label
                 RowActionsSheet(title, sessionActions(ref, session, expanded, ops, sheets)) { sheets.sheet = null }
             }

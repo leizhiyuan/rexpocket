@@ -782,11 +782,17 @@ internal class TreeEnv(
     fun ref(host: SavedHost) = HostRef(host, lives[host.id])
 
     /** Whether a session's tabs show: its fold on a live host, this screen's choice on one that is not. */
-    fun sessionOpen(ref: HostRef, sessionId: String): Boolean {
-        if (searching) return true
-        val key = HomeFolds.sessionKey(ref.host.id, sessionId)
-        return if (ref.isLive || ref.state.views.containsKey(sessionId)) key !in folds.sessions else key in openCached
-    }
+    fun sessionOpen(ref: HostRef, sessionId: String): Boolean = searching || sessionUnfolded(folds, openCached, ref, sessionId)
+}
+
+/**
+ * Whether a session is open by the person's choice, whatever the search shows: a live one (or one
+ * whose tabs are known) unless folded, one only cached when opened on this screen. Its sheet and
+ * its row's TalkBack actions offer Expand or Collapse by this.
+ */
+internal fun sessionUnfolded(folds: HomeFolds, openCached: Set<String>, ref: HostRef, sessionId: String): Boolean {
+    val key = HomeFolds.sessionKey(ref.host.id, sessionId)
+    return if (ref.isLive || ref.state.views.containsKey(sessionId)) key !in folds.sessions else key in openCached
 }
 
 /** Each host's rows, as the search narrows them, by host id; null for a host the search leaves nothing of. */
@@ -856,7 +862,8 @@ internal fun LazyListScope.homeTree(env: TreeEnv, rowsByHost: Map<String, List<H
             val sessionExpanded = env.sessionOpen(ref, row.session.id)
             val openingThis = env.opening == Opening.Existing(row.session.id, host.id)
             item(key = "session-${host.id}-${row.session.id}") {
-                val groups = sessionActions(ref, row.session, sessionExpanded, env.ops, env.sheets)
+                // As the session's sheet has them: by the person's fold, not the search's.
+                val groups = sessionActions(ref, row.session, sessionUnfolded(env.folds, env.openCached, ref, row.session.id), env.ops, env.sheets)
                 SessionHeader(
                     row = row,
                     opening = openingThis,
@@ -901,7 +908,8 @@ internal fun HostItem(env: TreeEnv, ref: HostRef, rows: List<HomeSession>, expan
         else -> (env.parked(host)?.let { parkedText(it) } ?: stringResource(R.string.host_not_connected)) +
             if (sessions.isNotEmpty()) " · " + pluralStringResource(R.plurals.session_count, sessions.size, sessions.size) else ""
     }
-    val groups = hostActions(ref, expanded, sessions, env.folds, env.ops, env.hosts.indexOfFirst { it.id == host.id }, env.hosts.size, env.sheets)
+    // As the host's sheet has them: Expand or Collapse by the person's fold, whatever a search or a filter shows.
+    val groups = hostActions(ref, env.folds.hostOpen(host.id, ref.connected), sessions, env.folds, env.ops, env.hosts.indexOfFirst { it.id == host.id }, env.hosts.size, env.sheets)
     // Connected, or trying, at one of the host's other addresses: which one.
     val other = otherAddressInUse(host, state).takeIf { live != null }
     HostHeader(

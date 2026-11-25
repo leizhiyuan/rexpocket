@@ -878,9 +878,11 @@ internal fun HomeScreen(
         )
     }
 
-    HomeSheetsHost(sheets, hosts, lives, folds, cachedSessions, ops) { session, host ->
-        snack(context.getString(R.string.home_ended_elsewhere, session, host))
-    }
+    HomeSheetsHost(
+        sheets, hosts, lives, folds, cachedSessions, ops,
+        onEndedElsewhere = { session, host -> snack(context.getString(R.string.home_ended_elsewhere, session, host)) },
+        sessionOpen = { ref, sid -> sessionUnfolded(folds, openCached, ref, sid) },
+    )
     TemplateSheetsHost(
         sheets = templateSheets,
         hosts = hosts,
