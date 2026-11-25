@@ -1,24 +1,39 @@
 package me.leaver.rexpocket.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.DirListing
 import me.leaver.rexpocket.core.DirStatus
 import me.leaver.rexpocket.core.LIST_DIR_LIMIT
+import me.leaver.rexpocket.core.PathCrumb
 import me.leaver.rexpocket.core.shellPath
 
 // Insert path: the host's folders as the pane's program sees them, over Rex's `list_dir`, and the
@@ -27,6 +42,9 @@ import me.leaver.rexpocket.core.shellPath
 internal const val INSERT_PATH_HERE_TAG = "insert-path-here"
 internal const val INSERT_PATH_UP_TAG = "insert-path-up"
 internal fun insertPathEntryTag(name: String) = "insert-path-entry-$name"
+internal const val INSERT_PATH_CRUMBS_TAG = "insert-path-crumbs"
+internal const val INSERT_PATH_RETRY_TAG = "insert-path-retry"
+internal fun insertPathCrumbTag(path: String) = "insert-path-crumb-$path"
 
 /** What the browser shows: a folder being read, one read, or why it could not be. */
 internal sealed interface FolderView {
@@ -49,22 +67,35 @@ internal fun InsertPathSheet(
 ) {
     var path by rememberSaveable { mutableStateOf("") }
     var hidden by rememberSaveable { mutableStateOf(false) }
+    // The home of the last folder read, so a folder being read, or one that failed, still shows
+    // where it is the way the others do.
+    var home by rememberSaveable { mutableStateOf("") }
+    var attempt by remember { mutableIntStateOf(0) }
     var view by remember { mutableStateOf<FolderView>(FolderView.Loading) }
-    LaunchedEffect(path) {
+    LaunchedEffect(path, attempt) {
         view = FolderView.Loading
         view = runCatching { list(path) }.getOrNull()?.let { FolderView.Shown(it) } ?: FolderView.Failed
     }
     val listing = (view as? FolderView.Shown)?.listing
-    ActionSheet(onDismiss = onDismiss, title = listing?.let { displayPath(it.path, it.home) } ?: stringResource(R.string.insert_path)) {
+    listing?.home?.let { if (it.isNotEmpty()) home = it }
+    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.insert_path)) {
+        // Where it is, the whole way: a long path wraps rather than losing its end to an ellipsis.
+        Crumbs(DirListing.crumbs(listing?.path ?: path, home)) { path = it }
         when (val v = view) {
             FolderView.Loading -> Note(stringResource(R.string.insert_path_loading))
             FolderView.Failed -> {
                 Note(stringResource(R.string.insert_path_failed))
-                // Back to the folder it was opened from, which could be read.
-                DirListing.parentOf(path)?.takeIf { path.isNotEmpty() }?.let { up ->
-                    Group {
+                Group {
+                    SheetItem(
+                        stringResource(R.string.action_retry),
+                        icon = R.drawable.ic_restart,
+                        keepOpen = true,
+                        modifier = Modifier.testTag(INSERT_PATH_RETRY_TAG),
+                    ) { attempt++ }
+                    // Back to the folder it was opened from, which could be read.
+                    DirListing.parentOf(path)?.takeIf { path.isNotEmpty() }?.let { up ->
                         SheetItem(
-                            stringResource(R.string.insert_path_up, up),
+                            stringResource(R.string.insert_path_up, displayPath(up, home)),
                             icon = R.drawable.ic_arrow_up,
                             keepOpen = true,
                             modifier = Modifier.testTag(INSERT_PATH_UP_TAG),
@@ -107,7 +138,10 @@ internal fun InsertPathSheet(
                     DirStatus.Unknown -> Note(stringResource(R.string.insert_path_failed))
                 }
                 val shown = l.shown(hidden)
-                if (l.status == DirStatus.Ok && shown.isEmpty()) Note(stringResource(R.string.insert_path_empty))
+                if (l.status == DirStatus.Ok && shown.isEmpty()) {
+                    // Show hidden is right above: "nothing" would not be true.
+                    Note(stringResource(if (l.entries.isEmpty()) R.string.insert_path_empty else R.string.insert_path_only_hidden))
+                }
                 if (shown.isNotEmpty()) {
                     Group {
                         for (entry in shown) {
@@ -126,6 +160,59 @@ internal fun InsertPathSheet(
                     }
                 }
                 if (l.truncated) Note(stringResource(R.string.insert_path_truncated, LIST_DIR_LIMIT))
+            }
+        }
+    }
+}
+
+/**
+ * The way to the folder on screen, from the home (`~`) or the root: each folder above it a button
+ * that opens it, the folder itself last, as the sheet's heading. It wraps over as many lines as a
+ * long path needs.
+ */
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun Crumbs(crumbs: List<PathCrumb>, onOpen: (String) -> Unit) {
+    if (crumbs.isEmpty()) return
+    val home = crumbs.first().takeIf { it.name == "~" }?.path.orEmpty()
+    FlowRow(Modifier.fillMaxWidth().padding(horizontal = 4.dp).testTag(INSERT_PATH_CRUMBS_TAG)) {
+        crumbs.forEachIndexed { i, crumb ->
+            if (i > 0) {
+                Text(
+                    "›",
+                    color = Colors.muted,
+                    fontSize = TextStyles.body,
+                    modifier = Modifier.align(Alignment.CenterVertically).padding(horizontal = 2.dp).clearAndSetSemantics {},
+                )
+            }
+            val last = i == crumbs.lastIndex
+            val whole = displayPath(crumb.path, home)
+            if (last) {
+                Text(
+                    crumb.name,
+                    color = Colors.ink,
+                    fontSize = TextStyles.body,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.align(Alignment.CenterVertically).heightIn(min = 48.dp).wrapContentHeight()
+                        .padding(horizontal = 4.dp)
+                        .semantics {
+                            heading()
+                            contentDescription = whole
+                        },
+                )
+            } else {
+                val open = stringResource(R.string.insert_path_open, whole)
+                Text(
+                    crumb.name,
+                    color = Colors.accent,
+                    fontSize = TextStyles.body,
+                    modifier = Modifier.align(Alignment.CenterVertically).heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.chip))
+                        .clickable(role = Role.Button) { onOpen(crumb.path) }
+                        .semantics { contentDescription = open }
+                        .testTag(insertPathCrumbTag(crumb.path))
+                        .wrapContentHeight()
+                        .padding(horizontal = 4.dp),
+                )
             }
         }
     }

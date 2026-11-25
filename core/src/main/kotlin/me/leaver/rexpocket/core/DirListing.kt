@@ -9,6 +9,9 @@ import org.json.JSONObject
 /** Whether a folder could be read: Rex's `status`. */
 enum class DirStatus { Ok, Missing, NotDir, Denied, Unknown }
 
+/** One folder of the way to another: its [name] as shown (`~` for the home) and its [path]. */
+data class PathCrumb(val name: String, val path: String)
+
 /** One entry of a folder: [file] is anything that is not a folder (or a link to one). */
 data class DirEntry(val name: String, val file: Boolean = false, val symlink: Boolean = false) {
     /** Dot files: listed after the rest, and only when the person asks for them. */
@@ -60,6 +63,26 @@ data class DirListing(
         /** Folders first, then files; by name, ignoring case; dot entries after the others of their kind. */
         fun sorted(entries: List<DirEntry>): List<DirEntry> =
             entries.sortedWith(compareBy<DirEntry>({ it.file }, { it.hidden }, { it.name.lowercase() }, { it.name }))
+
+        /**
+         * The folders from the home (`~`), or else the root (`/`), down to [path], each with its
+         * own path: the browser's breadcrumbs. A path that is not absolute is one crumb.
+         */
+        fun crumbs(path: String, home: String): List<PathCrumb> {
+            if (path.isEmpty()) return emptyList()
+            if (!path.startsWith("/")) return listOf(PathCrumb(path, path))
+            val p = path.trimEnd('/')
+            val h = home.trimEnd('/')
+            val (first, rest) = when {
+                h.isNotEmpty() && (p == h || p.startsWith("$h/")) -> PathCrumb("~", h) to p.removePrefix(h)
+                else -> PathCrumb("/", "/") to p
+            }
+            var at = first.path.trimEnd('/')
+            return listOf(first) + rest.split('/').filter { it.isNotEmpty() }.map { name ->
+                at = "$at/$name"
+                PathCrumb(name, at)
+            }
+        }
 
         fun parentOf(path: String): String? {
             val p = path.trimEnd('/')

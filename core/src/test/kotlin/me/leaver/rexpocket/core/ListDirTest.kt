@@ -129,6 +129,25 @@ class DirListingTest {
         assertEquals("/usr", DirListing.parentOf("/usr/lib/"))
     }
 
+    /** The browser's breadcrumbs: each folder from the home (`~`) or the root down, with its path. */
+    @Test
+    fun breadcrumbsStartAtTheHomeOrTheRoot() {
+        assertEquals(
+            listOf(PathCrumb("~", "/home/me"), PathCrumb("src", "/home/me/src"), PathCrumb("my app", "/home/me/src/my app")),
+            DirListing.crumbs("/home/me/src/my app/", "/home/me/"),
+        )
+        assertEquals(listOf(PathCrumb("~", "/home/me")), DirListing.crumbs("/home/me", "/home/me"))
+        assertEquals(
+            listOf(PathCrumb("/", "/"), PathCrumb("var", "/var"), PathCrumb("log", "/var/log")),
+            DirListing.crumbs("/var/log", "/home/me"),
+        )
+        assertEquals(listOf(PathCrumb("/", "/")), DirListing.crumbs("/", ""))
+        // Only a whole folder name is the home; and a path Rex gave relative stays as one crumb.
+        assertEquals("/", DirListing.crumbs("/home/meg", "/home/me").first().name)
+        assertEquals(listOf(PathCrumb("odd", "odd")), DirListing.crumbs("odd", ""))
+        assertEquals(emptyList<PathCrumb>(), DirListing.crumbs("", "/home/me"))
+    }
+
     @Test
     fun pathsAreQuotedOnlyWhenTheyNeedIt() {
         assertEquals("/usr/lib/x-1.2_a+b", shellPath("/usr/lib/x-1.2_a+b"))

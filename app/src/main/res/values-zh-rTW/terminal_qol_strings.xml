@@ -38,6 +38,7 @@
     <string name="insert_path">插入路徑</string>
     <string name="insert_path_here">插入此資料夾</string>
     <string name="insert_path_up">回到上層 %1$s</string>
+    <string name="insert_path_open">開啟 %1$s</string>
     <string name="insert_path_show_hidden">顯示隱藏項目</string>
     <string name="insert_path_hide_hidden">不顯示隱藏項目</string>
     <string name="insert_path_loading">正在讀取資料夾…</string>
@@ -46,5 +47,6 @@
     <string name="insert_path_denied">Rex 無權讀取此資料夾</string>
     <string name="insert_path_failed">無法列出此資料夾</string>
     <string name="insert_path_empty">此資料夾是空的</string>
+    <string name="insert_path_only_hidden">這裡只有隱藏項目</string>
     <string name="insert_path_truncated">只列出了前 %1$d 項</string>
 </resources>

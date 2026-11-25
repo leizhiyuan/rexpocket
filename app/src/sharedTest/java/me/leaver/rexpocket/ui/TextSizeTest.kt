@@ -259,11 +259,12 @@ class InsertPathTest {
     private fun string(id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
     private val folders = mapOf(
-        "" to DirListing("/home/me/src", "/home/me", DirStatus.Ok, DirListing.sorted(listOf(DirEntry("app"), DirEntry("gone"), DirEntry("denied"), DirEntry("my notes.txt", file = true), DirEntry(".git"))), false),
+        "" to DirListing("/home/me/src", "/home/me", DirStatus.Ok, DirListing.sorted(listOf(DirEntry("app"), DirEntry("gone"), DirEntry("denied"), DirEntry("slow"), DirEntry("dots"), DirEntry("my notes.txt", file = true), DirEntry(".git"))), false),
         "/home/me/src/denied" to DirListing("/home/me/src/denied", "/home/me", DirStatus.Denied, emptyList(), false),
         "/home/me/src/app" to DirListing("/home/me/src/app", "/home/me", DirStatus.Ok, emptyList(), false),
         "/home/me" to DirListing("/home/me", "/home/me", DirStatus.Ok, listOf(DirEntry("src")), false),
         "/home/me/src" to DirListing("/home/me/src", "/home/me", DirStatus.Ok, listOf(DirEntry("app")), false),
+        "/home/me/src/dots" to DirListing("/home/me/src/dots", "/home/me", DirStatus.Ok, listOf(DirEntry(".cache"), DirEntry(".env", file = true)), false),
     )
     private val asked = mutableListOf<String>()
     private val inserted = mutableListOf<String>()
@@ -275,7 +276,12 @@ class InsertPathTest {
             RexTheme {
                 if (open) {
                     InsertPathSheet(
-                        list = { path -> asked += path; folders[path] },
+                        list = { path ->
+                            asked += path
+                            // A folder Rex is slow to read: the browser waits on it.
+                            if (path.endsWith("/slow")) kotlinx.coroutines.awaitCancellation()
+                            folders[path]
+                        },
                         onInsert = { inserted += it },
                         onDismiss = { open = false },
                     )
@@ -288,7 +294,7 @@ class InsertPathTest {
     @Test
     fun itStartsWhereTheProgramIsAndTypesAFileQuoted() {
         assertEquals("", asked.first())
-        compose.onNodeWithText("~/src").assertExists()
+        crumbIs("~", "src")
         // Dot entries wait for Show hidden.
         assertTrue(compose.onAllNodes(hasTestTag(insertPathEntryTag(".git"))).fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText(string(R.string.insert_path_show_hidden)).performScrollTo().performClick()
@@ -304,7 +310,8 @@ class InsertPathTest {
     fun aFolderOpensInPlaceAndItsPathIsInserted() {
         compose.onNodeWithTag(insertPathEntryTag("app")).performScrollTo().performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("~/src/app").assertExists()
+        // The folder on screen is the heading, said whole.
+        compose.onNode(hasContentDescription("~/src/app")).assertExists()
         compose.onNodeWithText(string(R.string.insert_path_empty)).assertExists()
         compose.onNodeWithTag(INSERT_PATH_UP_TAG).performClick()
         compose.waitForIdle()
@@ -325,6 +332,62 @@ class InsertPathTest {
         compose.waitForIdle()
         assertEquals("/home/me/src", asked.last())
         compose.onNodeWithTag(insertPathEntryTag("app")).assertExists()
+    }
+
+    /** The breadcrumbs under the title, the folder on screen last: [names] and nothing else. */
+    private fun crumbIs(vararg names: String) {
+        val shown = compose.onAllNodes(hasTestTag(INSERT_PATH_CRUMBS_TAG), useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(1, shown.size)
+        for (name in names) {
+            compose.onNode(hasAnyAncestor(hasTestTag(INSERT_PATH_CRUMBS_TAG)) and hasText(name), useUnmergedTree = true).assertExists()
+        }
+    }
+
+    @Test
+    fun theWholeWayShowsAndAnyFolderOnItOpens() {
+        compose.onNodeWithTag(insertPathEntryTag("app")).performScrollTo().performClick()
+        compose.waitForIdle()
+        crumbIs("~", "src", "app")
+        // The folder on screen is the heading, not a button; the ones above it open.
+        compose.onNodeWithTag(insertPathCrumbTag("/home/me/src/app")).assertDoesNotExist()
+        compose.onNodeWithTag(insertPathCrumbTag("/home/me")).performClick()
+        compose.waitForIdle()
+        assertEquals("/home/me", asked.last())
+        crumbIs("~")
+    }
+
+    @Test
+    fun aFolderBeingReadKeepsItsPlace() {
+        compose.onNodeWithTag(insertPathEntryTag("slow")).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(string(R.string.insert_path_loading)).assertExists()
+        crumbIs("~", "src", "slow")
+    }
+
+    @Test
+    fun aFolderThatFailedCanBeTriedAgain() {
+        compose.onNodeWithTag(insertPathEntryTag("gone")).performScrollTo().performClick()
+        compose.waitForIdle()
+        crumbIs("~", "src", "gone")
+        // Up names the folder as the rest of the sheet does, the home as ~.
+        compose.onNodeWithText(string(R.string.insert_path_up, "~/src")).assertExists()
+        val before = asked.size
+        compose.onNodeWithTag(INSERT_PATH_RETRY_TAG).performClick()
+        compose.waitForIdle()
+        assertEquals(before + 1, asked.size)
+        assertEquals("/home/me/src/gone", asked.last())
+    }
+
+    @Test
+    fun aFolderOfOnlyHiddenItemsSaysSoRatherThanEmpty() {
+        compose.onNodeWithTag(insertPathEntryTag("dots")).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(string(R.string.insert_path_only_hidden)).assertExists()
+        assertTrue(compose.onAllNodes(hasText(string(R.string.insert_path_empty))).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText(string(R.string.insert_path_show_hidden)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(insertPathEntryTag(".cache")).assertExists()
+        assertTrue(compose.onAllNodes(hasText(string(R.string.insert_path_only_hidden))).fetchSemanticsNodes().isEmpty())
     }
 
     @Test

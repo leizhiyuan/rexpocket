@@ -1,6 +1,7 @@
 package me.leaver.rexpocket.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -52,7 +53,7 @@ class TermEdgeTest {
     }
 
     /**
-     * Insert path from the ⋮ menu: it starts at the program's folder (the home here, its title
+     * Insert path from the ⋮ menu: it starts at the program's folder (the home here, its heading
      * `~`), opens a folder with a quote and a space in its name, goes Up and back, and types a file
      * whose name has a space and a `$` as one shell word: under the home with `~/`, the rest
      * single-quoted, a quote in it as `'\''`. Nothing is run: it is a paste, no Return. (Names past
@@ -71,13 +72,13 @@ class TermEdgeTest {
         compose.onNodeWithContentDescription(string(R.string.action_more)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(string(R.string.insert_path)).performScrollTo().performClick()
-        compose.awaitThat { compose.onAllNodes(hasText("~")).fetchSemanticsNodes().isNotEmpty() && compose.onAllNodes(androidx.compose.ui.test.hasTestTag(insertPathEntryTag(root.name))).fetchSemanticsNodes().isNotEmpty() }
+        compose.awaitThat { compose.onAllNodes(hasContentDescription("~")).fetchSemanticsNodes().isNotEmpty() && compose.onAllNodes(androidx.compose.ui.test.hasTestTag(insertPathEntryTag(root.name))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(insertPathEntryTag(root.name)).performScrollTo().performClick()
-        compose.awaitThat { compose.onAllNodes(hasText("~/${root.name}")).fetchSemanticsNodes().isNotEmpty() }
+        compose.awaitThat { compose.onAllNodes(hasContentDescription("~/${root.name}")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(insertPathEntryTag("it's here")).performScrollTo().performClick()
-        compose.awaitThat { compose.onAllNodes(hasText("~/${root.name}/it's here")).fetchSemanticsNodes().isNotEmpty() }
+        compose.awaitThat { compose.onAllNodes(hasContentDescription("~/${root.name}/it's here")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(INSERT_PATH_UP_TAG).performClick()
-        compose.awaitThat { compose.onAllNodes(hasText("~/${root.name}")).fetchSemanticsNodes().isNotEmpty() }
+        compose.awaitThat { compose.onAllNodes(hasContentDescription("~/${root.name}")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(insertPathEntryTag("it's here")).performScrollTo().performClick()
         compose.awaitThat { compose.onAllNodes(androidx.compose.ui.test.hasTestTag(insertPathEntryTag("my \$file.txt"))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(insertPathEntryTag("my \$file.txt")).performScrollTo().performClick()

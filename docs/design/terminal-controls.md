@@ -389,14 +389,20 @@ keys offers it under The bar's keys, and a group may hold it.
   what is not a folder and `symlink` for a link (a link leading nowhere is left out), `truncated`.
   The phone sorts them - folders first, then files, by name ignoring case - and keeps dot entries
   back until Show hidden. At most 1000 are listed; past that it says so.
-- The sheet's title is the folder, the home as `~`. Its rows: Insert this folder; Up to the parent;
-  Show / Hide hidden; then the folders, which open in place, and the files, which are typed.
+- The sheet's title is Insert path; under it, the way to the folder (`DirListing.crumbs`): from the
+  home as `~`, or the root, each folder above a button that opens it ("Open ~/src" to TalkBack),
+  the folder on screen last, in bold, as the heading. It wraps, so a deep path or a long name shows
+  its end rather than losing it to an ellipsis, and it stays while a folder is read or after one
+  failed. Its rows: Insert this folder; Up to the parent; Show / Hide hidden items; then the
+  folders, which open in place, and the files, which are typed.
+- A folder with only dot entries says "Only hidden items here", not "Nothing in this folder", with
+  Show hidden items just above.
 - What is typed is one shell word (`shellPath`, core): as it is when every character is one no
   shell treats specially, otherwise in single quotes, a quote inside as `'\''`; a path under the
   home starts `~/` outside the quotes (`~/'my notes'`), so the shell still expands it. It goes as a
   paste, so nothing runs until Return, and no space is added.
 - A folder that cannot be read says why, with Up still there; no answer in 15 s is "Could not
-  list this folder".
+  list this folder", with Retry and Up.
 
 ## 5. Short windows and landscape
 

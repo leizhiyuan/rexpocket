@@ -47,13 +47,15 @@
     <string name="insert_path">Insert path</string>
     <string name="insert_path_here">Insert this folder</string>
     <string name="insert_path_up">Up to %1$s</string>
-    <string name="insert_path_show_hidden">Show hidden</string>
-    <string name="insert_path_hide_hidden">Hide hidden</string>
+    <string name="insert_path_open">Open %1$s</string>
+    <string name="insert_path_show_hidden">Show hidden items</string>
+    <string name="insert_path_hide_hidden">Hide hidden items</string>
     <string name="insert_path_loading">Reading the folder…</string>
     <string name="insert_path_missing">This folder does not exist</string>
     <string name="insert_path_not_dir">This is not a folder</string>
     <string name="insert_path_denied">Rex is not allowed to read this folder</string>
     <string name="insert_path_failed">Could not list this folder</string>
     <string name="insert_path_empty">Nothing in this folder</string>
+    <string name="insert_path_only_hidden">Only hidden items here</string>
     <string name="insert_path_truncated">Only the first %1$d are listed</string>
 </resources>
