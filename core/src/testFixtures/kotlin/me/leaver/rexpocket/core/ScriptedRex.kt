@@ -95,8 +95,11 @@ class ScriptedRex(
         /** `all` or `session` after `session.bootstrap` or `session.attach_all`: it may call methods on any session. */
         @Volatile var scope: String? = null
 
-        /** The panes it held when its connection dropped, with who had each after: given back on a resume. */
-        val lost: MutableMap<String, String?> = ConcurrentHashMap()
+        /**
+         * The panes it held when its connection dropped, with who had each after (null: nobody),
+         * given back on a resume. A plain map, which takes a null; it is used under the Rex's lock.
+         */
+        val lost: MutableMap<String, String?> = HashMap()
 
         val seq = AtomicLong()
 
