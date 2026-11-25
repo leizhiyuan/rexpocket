@@ -1011,6 +1011,8 @@ class RexViewModel @JvmOverloads constructor(
 
     fun deleteHost(id: String) {
         LauncherShortcuts.hostRemoved(getApplication(), id)
+        // Its notifications go with it: an Approve or Reply on one has no host to go to.
+        Alerts.settleHost(getApplication(), id)
         disconnect(id)
         store.delete(id)
         hosts.value = store.list()

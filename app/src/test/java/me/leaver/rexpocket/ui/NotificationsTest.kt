@@ -241,6 +241,21 @@ class NotificationsTest {
     }
 
     /**
+     * Removing a host in the app takes its notifications with it: an Approve or Reply left on one
+     * has no host to go to, and would only come back saying it was not sent.
+     */
+    @Test
+    fun removingAHostTakesItsNotificationsWithIt() {
+        val block = start().first()
+        away()
+        desk.rex.report(block, "blocked", kind = "question", app = "claude", msg = "Which branch?")
+        paneNotification(block)
+        compose.runOnUiThread { model.removeHost(desk.host.id) }
+        gone(block)
+        assertTrue("its group summary went too", manager.activeNotifications.none { it.tag == "host/${desk.host.id}" })
+    }
+
+    /**
      * Mute on an alert, in the slot its other actions leave: the tab's panes alert no more, the
      * choice is kept with the host's, and the notification says where to undo it.
      */
