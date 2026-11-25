@@ -75,6 +75,13 @@ class NetbirdAddonE2ETest {
         throw AssertionError()
     }
 
+    /**
+     * The node's registration, by its overlay IPv4 address. An IPv6 address joins it a moment
+     * later, when the management server gets to it, so a list read twice could differ by that
+     * alone; the v4 address is what names the peer the account registered.
+     */
+    private fun registration(): List<String> = awaitPeer().self!!.ips.filter { ':' !in it }
+
     /** Reads the SSH peer's banner through the add-on's dial, by name and by address. */
     private fun readsTheBanner() {
         for (host in listOf(peer, peerIp)) {
@@ -105,11 +112,12 @@ class NetbirdAddonE2ETest {
 
         // The first account joins with the key, then runs again without it.
         box.start(config(TailnetBackend.NetbirdAddon.storageKey, setupKey))
-        val first = awaitPeer().self!!.ips
+        val first = registration()
+        assertTrue("the node has an IPv4 address", first.isNotEmpty())
         readsTheBanner()
         box.stop()
         box.start(config(TailnetBackend.NetbirdAddon.storageKey))
-        assertEquals("the first account's registration was kept", first, awaitPeer().self!!.ips)
+        assertEquals("the first account's registration was kept", first, registration())
 
         // A second account has no registration until it joins, then one of its own.
         try {
@@ -119,13 +127,13 @@ class NetbirdAddonE2ETest {
             assertTrue("message was: ${e.message}", e.message.orEmpty().contains("setup key"))
         }
         box.start(config(second, setupKey))
-        val other = awaitPeer().self!!.ips
+        val other = registration()
         assertNotEquals("the second account is a peer of its own", first, other)
         readsTheBanner()
 
         // Back on the first, without a key; then the second removed: its registration is gone.
         box.start(config(TailnetBackend.NetbirdAddon.storageKey))
-        assertEquals(first, awaitPeer().self!!.ips)
+        assertEquals(first, registration())
         client.forget(second)
         box.stop()
         try {
