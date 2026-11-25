@@ -117,6 +117,8 @@ internal fun ActionSheet(onDismiss: () -> Unit, title: String? = null, content: 
             Box(Modifier.padding(top = 10.dp, bottom = 4.dp).size(width = 36.dp, height = 5.dp).clip(CircleShape).background(Colors.line))
         },
     ) {
+        // A modal sheet owns a window with its own status and navigation bar icons.
+        SystemBarAppearance(Colors.isDark)
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
                 .padding(bottom = 12.dp),

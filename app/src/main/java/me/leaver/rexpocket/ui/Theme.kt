@@ -20,7 +20,9 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
+import me.leaver.rexpocket.data.DesignMode
 import me.leaver.rexpocket.terminal.TerminalTheme
 
 /**
@@ -197,13 +199,17 @@ object Colors {
 }
 
 /**
- * Picks the palette from the phone's appearance and keeps the system bars in step with it. The
+ * Applies the selected appearance and keeps the system bars in step with it. The
  * Material theme under it carries the same colours, so the platform's own pieces - the ripple on a
  * press, a dialog, a menu - look like the rest of the app.
  */
 @Composable
-fun RexTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun RexTheme(designMode: DesignMode, content: @Composable () -> Unit) {
+    val dark = when (designMode) {
+        DesignMode.System -> isSystemInDarkTheme()
+        DesignMode.Light -> false
+        DesignMode.Dark -> true
+    }
     val p = if (dark) Dark else Light
     val scheme = if (dark) {
         darkColorScheme(
@@ -220,16 +226,22 @@ fun RexTheme(content: @Composable () -> Unit) {
             surfaceContainerHighest = p.key, error = p.danger, scrim = p.scrim,
         )
     }
+    SideEffect { Colors.use(dark) }
+    SystemBarAppearance(dark)
+    MaterialTheme(colorScheme = scheme, content = content)
+}
+
+@Composable
+internal fun SystemBarAppearance(dark: Boolean) {
     val view = LocalView.current
     SideEffect {
-        Colors.use(dark)
-        val window = view.context.findActivity()?.window ?: return@SideEffect
+        val window = (view.parent as? DialogWindowProvider)?.window
+            ?: view.context.findActivity()?.window ?: return@SideEffect
         WindowCompat.getInsetsController(window, view).apply {
             isAppearanceLightStatusBars = !dark
             isAppearanceLightNavigationBars = !dark
         }
     }
-    MaterialTheme(colorScheme = scheme, content = content)
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {

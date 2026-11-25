@@ -57,6 +57,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
     val opening by model.opening.collectAsState()
     val tailnetPath by model.tailnetPath.collectAsState()
     val alerts by model.alerts.collectAsState()
+    val designMode by model.designMode.collectAsState()
     val keyBarShift by model.keyBarShift.collectAsState()
     val keyBarAlt by model.keyBarAlt.collectAsState()
     val keyBar by model.keyBar.collectAsState()
@@ -97,7 +98,7 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
         if (authUrl.isBlank()) return@LaunchedEffect
         openLink(context, authUrl)
     }
-    RexTheme {
+    RexTheme(designMode) {
         Box(Modifier.fillMaxSize().background(Colors.bg)) {
             val window = windowSize()
             // A tablet or a desk window keeps the list beside the pane: a session or a tab is
@@ -128,6 +129,8 @@ fun RexPocketApp(model: RexViewModel = viewModel()) {
                     onTailscale = { tailscaleOpen = true },
                     alerts = alerts,
                     onAlerts = model::setAlerts,
+                    designMode = designMode,
+                    onDesignMode = model::setDesignMode,
                     keyBarShift = keyBarShift,
                     keyBarAlt = keyBarAlt,
                     onKeyBarShift = model::setKeyBarShift,

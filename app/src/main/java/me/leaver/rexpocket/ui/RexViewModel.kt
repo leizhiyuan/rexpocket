@@ -35,6 +35,7 @@ import me.leaver.rexpocket.core.TerminalFeed
 import me.leaver.rexpocket.core.UpdateChannel
 import me.leaver.rexpocket.core.toProblem
 import me.leaver.rexpocket.core.RexClient
+import me.leaver.rexpocket.data.DesignMode
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.FontFiles
 import me.leaver.rexpocket.data.FontCatalog
@@ -174,6 +175,13 @@ class RexViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Background alerts: on, the app stays connected while it is away and says when a program needs you. */
     val alerts: StateFlow<Boolean> = Alerts.enabled.also { it.value = store.alerts() }
+
+    val designMode = MutableStateFlow(store.designMode())
+
+    fun setDesignMode(mode: DesignMode) {
+        store.setDesignMode(mode)
+        designMode.value = mode
+    }
 
     /** True when the key bar is kept on screen with a keyboard attached, which is not the default. */
     val keyBar = MutableStateFlow(store.keyBarAlways())

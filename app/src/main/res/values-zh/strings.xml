@@ -150,6 +150,11 @@
     <string name="settings">设置</string>
     <string name="settings_source">GitHub 源码</string>
     <string name="settings_group_connection">连接</string>
+    <string name="settings_group_general">通用</string>
+    <string name="settings_design">外观</string>
+    <string name="design_system">跟随系统</string>
+    <string name="design_light">浅色</string>
+    <string name="design_dark">深色</string>
     <string name="settings_group_terminal">终端</string>
     <string name="settings_group_version">版本</string>
     <string name="settings_group_about">关于</string>

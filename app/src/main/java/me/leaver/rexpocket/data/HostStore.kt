@@ -31,6 +31,8 @@ data class TailscaleSettings(
     val hostname: String = "",
 )
 
+enum class DesignMode { System, Light, Dark }
+
 class HostStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("rexpocket", Context.MODE_PRIVATE)
     private val secrets = SecretBox()
@@ -149,6 +151,15 @@ class HostStore(context: Context) {
         prefs.edit().putBoolean(KEY_ALERTS, on).apply()
     }
 
+    fun designMode(): DesignMode {
+        val saved = prefs.getString(KEY_DESIGN_MODE, null)
+        return DesignMode.entries.firstOrNull { it.name == saved } ?: DesignMode.System
+    }
+
+    fun setDesignMode(mode: DesignMode) {
+        prefs.edit().putString(KEY_DESIGN_MODE, mode.name).apply()
+    }
+
     /**
      * Whether the key bar stays on screen with a keyboard attached. Off by default: the bar is the
      * screen keyboard's, and a desk keyboard already has every key on it.
@@ -210,6 +221,7 @@ class HostStore(context: Context) {
         private const val KEY_LAST_HOST = "last_host"
         private const val KEY_FONT = "font_scale"
         private const val KEY_ALERTS = "background_alerts"
+        private const val KEY_DESIGN_MODE = "design_mode"
         private const val KEY_KEY_BAR = "key_bar_always"
         private const val KEY_KEY_BAR_SHIFT = "keybar_shift"
         private const val KEY_KEY_BAR_ALT = "keybar_alt"
