@@ -268,7 +268,13 @@ internal fun QuickReplyChips(replies: List<String>, insert: Boolean, modifier: M
  */
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-internal fun QuickRepliesSheet(replies: QuickReplies, onChange: (QuickReplies) -> Unit, onDismiss: () -> Unit) {
+internal fun QuickRepliesSheet(
+    replies: QuickReplies,
+    onChange: (QuickReplies) -> Unit,
+    onDismiss: () -> Unit,
+    /** The back arrow before the title, when the page was opened from Settings: back to it. */
+    onBack: (() -> Unit)? = null,
+) {
     // The reply being edited: its index, NEW for one being added, null on the list.
     var editing by rememberSaveable { mutableStateOf<Int?>(null) }
     // The list as it was before the last delete, while Undo can put it back.
@@ -306,7 +312,7 @@ internal fun QuickRepliesSheet(replies: QuickReplies, onChange: (QuickReplies) -
         }
         return
     }
-    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.quick_replies_title)) {
+    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.quick_replies_title), onBack = onBack) {
         Text(
             stringResource(R.string.quick_replies_body),
             color = Colors.muted,

@@ -18,7 +18,6 @@
     <string name="home_interrupt_for">中斷 %1$s</string>
     <string name="rename_automatic">自動名稱</string>
     <string name="rename_empty_hint">留空或選擇自動名稱，即恢復 Rex 取的名字。</string>
-    <string name="template_new_tab">從範本新增分頁</string>
     <string name="new_tab_blank">空白分頁</string>
     <string name="new_tab_blank_detail">一個 shell，位於主機的家目錄</string>
     <string name="palette_new_tab_template">新增分頁：%1$s</string>
@@ -37,4 +36,5 @@
     <string name="template_directory">目錄</string>
     <string name="template_command">指令</string>
     <string name="template_help">分頁從該目錄開始（~ 是主機上的主目錄），並以 shell 指令列執行該指令；指令結束後，分頁留在該目錄的 shell 中。</string>
+    <string name="backup_setting_templates">啟動範本</string>
 </resources>

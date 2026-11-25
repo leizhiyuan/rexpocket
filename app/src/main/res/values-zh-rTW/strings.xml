@@ -377,7 +377,7 @@
     <string name="notifications_not_allowed">否</string>
     <string name="notifications_not_allowed_body">在你允許之前，Android 不會顯示 RexPocket 的任何通知。</string>
     <string name="notifications_group_when">在這些時候告訴我</string>
-    <string name="notifications_waiting">程式在等我</string>
+    <string name="notifications_waiting">程式受阻，等我處理</string>
     <string name="notifications_failed">程式出錯</string>
     <string name="notifications_done">程式完成</string>
     <string name="notifications_messages">程式傳送通知</string>

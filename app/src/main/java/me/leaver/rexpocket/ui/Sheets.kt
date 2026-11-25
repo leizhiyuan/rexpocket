@@ -52,7 +52,10 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.selection.toggleable
 
 import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.isWebLink
@@ -272,6 +275,10 @@ private val ICON_INSET = 56.dp
  *
  * A row that cannot act right now - Send a file while a file is on its way - stays in its place,
  * greyed out and not [enabled], so the rows around it do not jump as the state changes.
+ *
+ * To TalkBack a row is a button; a row that turns something on and off ([checked] given, its
+ * detail "On" or "Off") is a switch, said on or off once rather than as its detail too; a [marked]
+ * row - the session on screen, the account in use - is selected.
  */
 @Composable
 internal fun SheetScope.SheetItem(
@@ -284,6 +291,8 @@ internal fun SheetScope.SheetItem(
     supporting: String? = null,
     enabled: Boolean = true,
     opens: Boolean = false,
+    /** Whether the switch this row is is on; null for a row that is not one. */
+    checked: Boolean? = null,
     /** For a test to find the row by: a tag, say. */
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
@@ -305,7 +314,14 @@ internal fun SheetScope.SheetItem(
         }
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp)
-                .clickable(enabled = enabled) { if (keepOpen) onClick() else close(onClick) }
+                .then(
+                    if (checked != null) {
+                        Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch) { if (keepOpen) onClick() else close(onClick) }
+                    } else {
+                        Modifier.clickable(enabled = enabled, role = Role.Button) { if (keepOpen) onClick() else close(onClick) }
+                    },
+                )
+                .semantics { if (marked) selected = true }
                 .alpha(if (enabled) 1f else DISABLED_ALPHA)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -327,7 +343,7 @@ internal fun SheetScope.SheetItem(
                     Text(supporting, color = Colors.muted, fontSize = TextStyles.label, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 }
                 if (stacked && detail != null) {
-                    Text(detail, color = Colors.muted, fontSize = TextStyles.label)
+                    Text(detail, color = Colors.muted, fontSize = TextStyles.label, modifier = Modifier.saidAsState(checked))
                 }
             }
             if (detail != null && !stacked) {
@@ -339,7 +355,7 @@ internal fun SheetScope.SheetItem(
                     textAlign = TextAlign.End,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = DETAIL_MAX),
+                    modifier = Modifier.widthIn(max = DETAIL_MAX).saidAsState(checked),
                 )
             }
             if (marked) {
@@ -353,3 +369,6 @@ internal fun SheetScope.SheetItem(
         }
     }
 }
+
+/** A switch row's "On" or "Off", which its toggle state already says: left out for TalkBack. */
+private fun Modifier.saidAsState(checked: Boolean?): Modifier = if (checked == null) this else clearAndSetSemantics { }

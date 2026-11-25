@@ -18,7 +18,6 @@
     <string name="home_interrupt_for">中断 %1$s</string>
     <string name="rename_automatic">自动名称</string>
     <string name="rename_empty_hint">留空或选择自动名称，即恢复 Rex 起的名字。</string>
-    <string name="template_new_tab">从模板新建标签页</string>
     <string name="new_tab_blank">空白标签页</string>
     <string name="new_tab_blank_detail">一个 shell，位于主机的主目录</string>
     <string name="palette_new_tab_template">新标签页：%1$s</string>
@@ -37,4 +36,5 @@
     <string name="template_directory">目录</string>
     <string name="template_command">命令</string>
     <string name="template_help">标签页从该目录开始（~ 是主机上的主目录），并以 shell 命令行运行该命令；命令结束后，标签页留在该目录的 shell 中。</string>
+    <string name="backup_setting_templates">启动模板</string>
 </resources>

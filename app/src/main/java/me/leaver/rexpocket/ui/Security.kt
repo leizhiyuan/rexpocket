@@ -274,6 +274,8 @@ internal fun SecuritySheet(
     onDismiss: () -> Unit,
     authenticate: Authenticate,
     problem: () -> String?,
+    /** The back arrow before the title, when the page was opened from Settings: back to it. */
+    onBack: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var pickWait by remember { mutableStateOf(false) }
@@ -286,13 +288,14 @@ internal fun SecuritySheet(
         said = text
         toast(context, text)
     }
-    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.security_title)) {
+    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.security_title), onBack = onBack) {
         Group {
             SheetItem(
                 label = stringResource(R.string.security_lock),
                 icon = R.drawable.ic_lock,
                 supporting = said ?: firstProblem?.takeIf { !prefs.lock } ?: stringResource(R.string.security_lock_body),
                 detail = if (prefs.lock) on else off,
+                checked = prefs.lock,
                 keepOpen = true,
                 modifier = Modifier.testTag(SECURITY_LOCK_TAG),
             ) {
@@ -330,6 +333,7 @@ internal fun SecuritySheet(
                 icon = R.drawable.ic_block,
                 supporting = stringResource(R.string.security_block_screenshots_body),
                 detail = if (prefs.blockScreenshots) on else off,
+                checked = prefs.blockScreenshots,
                 keepOpen = true,
                 modifier = Modifier.testTag(SECURITY_SCREENSHOTS_TAG),
             ) { onPrefs(prefs.copy(blockScreenshots = !prefs.blockScreenshots)) }
@@ -364,3 +368,12 @@ private fun lockAfterChoice(seconds: Int): Choice = when (seconds) {
     900 -> Choice(R.string.security_wait_15m, R.drawable.ic_timer, R.string.security_wait_hint)
     else -> Choice(R.string.security_wait_1h, R.drawable.ic_timer, R.string.security_wait_hint)
 }
+
+/**
+ * Settings › Security's row detail: what guards the app, each part named, so a screenshot block is
+ * not hidden behind the lock: "Locked with the phone's lock · Screenshots blocked".
+ */
+internal fun securityDetail(prefs: SecurityPrefs): List<Int> = listOfNotNull(
+    R.string.security_detail_locked.takeIf { prefs.lock },
+    R.string.security_detail_screenshots.takeIf { prefs.blockScreenshots },
+).ifEmpty { listOf(R.string.security_detail_off) }

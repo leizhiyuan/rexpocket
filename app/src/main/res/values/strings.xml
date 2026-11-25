@@ -367,7 +367,7 @@
     <string name="alerts_watching">Watching %1$s for programs that need you</string>
     <string name="alerts_stop">Stop</string>
     <string name="alerts_failed">failed</string>
-    <string name="alerts_channel_done">Finished</string>
+    <string name="alerts_channel_done">Done</string>
     <string name="alerts_channel_done_body">A program finished and its result is ready to look at.</string>
     <string name="alerts_channel_messages">Program messages</string>
     <string name="alerts_channel_messages_body">Notifications a program in a terminal asks for, and its bells when you turn them on.</string>
@@ -383,9 +383,9 @@
     <string name="notifications_not_allowed">No</string>
     <string name="notifications_not_allowed_body">Android shows nothing from RexPocket until you allow it.</string>
     <string name="notifications_group_when">Tell me when</string>
-    <string name="notifications_waiting">A program waits for me</string>
+    <string name="notifications_waiting">A program is blocked on me</string>
     <string name="notifications_failed">A program fails</string>
-    <string name="notifications_done">A program finishes</string>
+    <string name="notifications_done">A program is done</string>
     <string name="notifications_messages">A program sends a notification</string>
     <string name="notifications_bells">A bell rings in a pane I am not looking at</string>
     <string name="notifications_group_screen">While I am looking</string>

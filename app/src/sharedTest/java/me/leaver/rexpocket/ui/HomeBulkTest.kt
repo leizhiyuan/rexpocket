@@ -202,8 +202,15 @@ class HomeBulkTest {
         homeMenu()
         inSheet(string(R.string.home_connect_all)).performClick()
         compose.awaitThat { away.id in m.lives.value }
+        // Nothing listens on the away host's port: it fails, and the ⋮'s Connect all, as the
+        // empty filter's does, offers to retry it rather than going away while it is dialed.
+        fun failing() = m.lives.value[away.id]?.state?.let { it.phase == Phase.Failed || (it.phase != Phase.Live && it.problem != null) } == true
+        compose.awaitThat { failing() }
         homeMenu()
-        assertTrue("everything is connected or on its way", !sheetHas(string(R.string.home_connect_all)))
+        assertTrue("a failed host is still to connect", sheetHas(string(R.string.home_connect_all)))
+        inSheet(string(R.string.home_connect_all)).performClick()
+        assertTrue("Connect all retried, it did not drop the host", away.id in m.lives.value)
+        homeMenu()
         inSheet(string(R.string.home_disconnect_all)).performClick()
         compose.awaitThat { m.lives.value.isEmpty() }
     }
@@ -254,7 +261,7 @@ class HomeBulkTest {
         compose.runOnUiThread { m.setLaunchTemplates(desk.host.id, listOf(api, web)) }
         val before = tabs(m, shown).size
         hostSheet()
-        inSheet(string(R.string.template_new_tab)).performScrollTo().performClick()
+        inSheet(string(R.string.menu_new_tab)).performScrollTo().performClick()
         compose.waitForIdle()
         inSheet("api").performClick()
         compose.awaitThat { m.route.value == Route.Term && tabs(m, shown).size == before + 1 }
@@ -265,7 +272,7 @@ class HomeBulkTest {
 
         // Edit templates: web moves up, then is deleted, and Undo brings it back in its place.
         hostSheet()
-        inSheet(string(R.string.template_new_tab)).performScrollTo().performClick()
+        inSheet(string(R.string.menu_new_tab)).performScrollTo().performClick()
         compose.waitForIdle()
         inSheet(string(R.string.template_manage)).performClick()
         compose.waitForIdle()

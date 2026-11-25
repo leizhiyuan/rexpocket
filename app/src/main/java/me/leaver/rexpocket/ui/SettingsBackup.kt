@@ -574,6 +574,7 @@ internal fun SettingsBackupSheet(step: BackupStep, backupper: SettingsBackupper)
                         icon = R.drawable.ic_lock,
                         supporting = stringResource(R.string.backup_include_keys_body),
                         detail = stringResource(if (step.includeKeys) R.string.alerts_on else R.string.alerts_off),
+                        checked = step.includeKeys,
                         keepOpen = true,
                         enabled = !step.busy,
                     ) { backupper.includeKeys(!step.includeKeys) }
@@ -803,7 +804,7 @@ private fun settingName(key: SettingKey): String = stringResource(
         SettingKey.QuickReplies -> R.string.quick_replies_title
         SettingKey.TailnetChoices -> R.string.backup_setting_tailnets
         SettingKey.Tile -> R.string.tile_group_all
-        SettingKey.Templates -> R.string.template_new_tab
+        SettingKey.Templates -> R.string.backup_setting_templates
         SettingKey.TerminalFont -> R.string.terminal_font_title
         SettingKey.KeyBarAlways -> R.string.keybar_title
         SettingKey.CtrlC -> R.string.keybar_ctrl_c

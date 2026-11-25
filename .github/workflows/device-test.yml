@@ -144,6 +144,7 @@ jobs:
               me.leaver.rexpocket.ui.TextSizeTest \
               me.leaver.rexpocket.ui.InsertPathTest \
               me.leaver.rexpocket.ui.InsertPathKeyTest \
+              me.leaver.rexpocket.ui.DesignReviewTest \
               me.leaver.rexpocket.alerts.BackgroundServiceTest; do
             adb logcat -c || true
             if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \

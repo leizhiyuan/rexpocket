@@ -258,7 +258,7 @@ class MultiHostTest {
         val actions = header.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.CustomActions].map { it.label }
         assertEquals(
             listOf(
-                string(R.string.action_disconnect), string(R.string.session_new), string(R.string.template_new_tab), string(R.string.home_action_collapse),
+                string(R.string.action_disconnect), string(R.string.session_new), string(R.string.menu_new_tab), string(R.string.home_action_collapse),
                 string(R.string.home_collapse_sessions), string(R.string.action_move_down), string(R.string.action_edit_host), string(R.string.conn_settings),
                 string(R.string.home_copy_address), string(R.string.home_remove_host),
             ),

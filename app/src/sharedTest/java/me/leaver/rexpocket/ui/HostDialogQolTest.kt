@@ -1,6 +1,7 @@
 package me.leaver.rexpocket.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -64,6 +65,19 @@ class HostDialogQolTest {
             }
         }
         compose.waitForIdle()
+    }
+
+    /** Password and Private key are one choice: the one in use is said as selected. */
+    @Test
+    fun theSignInChoiceIsSaidAsSelected() {
+        dialog(prefillAddress = "ssh://me@desk.local:22")
+        val selected = androidx.compose.ui.test.SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.Selected, true)
+        fun choice(id: Int) = compose.onNode(androidx.compose.ui.test.hasText(string(id)) and androidx.compose.ui.test.hasClickAction())
+        choice(R.string.ssh_auth_password).assert(selected)
+        choice(R.string.ssh_auth_key).assert(!selected).performClick()
+        compose.waitForIdle()
+        choice(R.string.ssh_auth_key).assert(selected)
+        choice(R.string.ssh_auth_password).assert(!selected)
     }
 
     @Test

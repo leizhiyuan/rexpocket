@@ -38,10 +38,12 @@ internal fun AppearanceSheet(
     /** The terminal's text size for new tabs; see TextSize.kt. */
     terminalTextSize: Float = TextScale.DEFAULT,
     onTerminalTextSize: (Float) -> Unit = {},
+    /** The back arrow before the title, when the page was opened from Settings: back to it. */
+    onBack: (() -> Unit)? = null,
 ) {
     var sizeOpen by rememberSaveable { mutableStateOf(false) }
     if (sizeOpen) DefaultTextSizeDialog(terminalTextSize, onTerminalTextSize) { sizeOpen = false }
-    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.appearance_title)) {
+    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.appearance_title), onBack = onBack) {
         Group {
             ChoiceRow(stringResource(R.string.appearance_app), AppTheme.entries, appearance.app, ::choice) {
                 onAppearance(appearance.copy(app = it))

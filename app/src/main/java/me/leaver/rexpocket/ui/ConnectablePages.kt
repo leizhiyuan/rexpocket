@@ -250,6 +250,7 @@ internal fun HostPage(
             SheetItem(
                 label = stringResource(R.string.bg_notify),
                 detail = state(choices.notify),
+                checked = choices.notify,
                 keepOpen = true,
             ) { onChoices(choices.copy(notify = !choices.notify)) }
             val effective = choices.copy(notify = true).prefs(defaults)
@@ -355,6 +356,7 @@ internal fun TailnetPage(
                 label = stringResource(R.string.tailnet_notify),
                 supporting = stringResource(R.string.tailnet_notify_body),
                 detail = if (policy.notify) on else off,
+                checked = policy.notify,
                 keepOpen = true,
             ) { onPolicy(policy.copy(notify = !policy.notify)) }
         }

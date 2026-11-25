@@ -269,14 +269,20 @@ internal fun hostActions(
     val folded = sessions.count { HomeFolds.sessionKey(id, it.id) in folds.sessions }
     return listOfNotNull(
         ActionGroup(connectionItems(ref, ops)),
+        // What to make on the host, then how its list looks: two cards, so neither is a list of six.
         ActionGroup(
-            listOfNotNull(
+            listOf(
                 RowAction(stringResource(R.string.session_new), R.drawable.ic_add, enabled = why == null, detail = why) { ops.newSession(ref.host) },
-                // A template opens its tab in the session the phone shows on this host, or the first;
-                // with no session yet, in a new one. Its sheet also adds, edits and orders them.
-                RowAction(stringResource(R.string.template_new_tab), R.drawable.ic_command) {
+                // New tab's own sheet, as every New tab: Blank tab, the host's templates, Add
+                // template…. It opens in the session the phone shows on this host, or the first;
+                // with no session yet, in a new one.
+                RowAction(stringResource(R.string.menu_new_tab), R.drawable.ic_command) {
                     ops.templates(id, ref.state.activeSessionId ?: ref.state.sessions.firstOrNull()?.id)
                 },
+            ),
+        ),
+        ActionGroup(
+            listOfNotNull(
                 if (expanded) {
                     RowAction(stringResource(R.string.home_action_collapse), R.drawable.ic_expand) { ops.foldHost(id, false) }
                 } else {

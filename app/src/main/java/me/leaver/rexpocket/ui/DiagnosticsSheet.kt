@@ -31,6 +31,8 @@ internal fun DiagnosticsSheet(
     onDismiss: () -> Unit,
     report: (limit: Int) -> String,
     onRecordingChanged: (Boolean) -> Unit,
+    /** The back arrow before the title, when the page was opened from Settings: back to it. */
+    onBack: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var capture by remember { mutableStateOf(Diagnostics.capture(context)) }
@@ -47,7 +49,7 @@ internal fun DiagnosticsSheet(
         onRecordingChanged(false)
     }
 
-    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.diagnostics)) {
+    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.diagnostics), onBack = onBack) {
         val running = capture
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text(

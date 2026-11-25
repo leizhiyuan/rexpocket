@@ -49,11 +49,10 @@ dialog cannot confirm while its host is away; a sheet or dialog whose session or
 device, closes. End session and Close tab confirm; Remove host confirms and offers Undo.
 
 - Host: Connect / Retry now / Cancel / Disconnect (a failing host offers Retry now and Disconnect);
-  New session, New tab from template, Collapse or Expand, Collapse and Expand all sessions, Mark all
-  as seen (every tab of the host with news); Move up, Move down; Edit host, Copy address, Tailnet
+  New session, New tab (New tab's sheet, on the session shown); Collapse or Expand, Collapse and
+  Expand all sessions, Mark all as seen - two cards, making and looking (every tab of the host with news); Move up, Move down; Edit host, Copy address, Tailnet
   details; Remove host….
-- Session: Connect or Retry first while the host is not live; Open, New tab, New tab from template,
-  Rename…; Collapse or Expand, Mark all as seen; Move up, Move down ("2 of 7", Rex's full order); End
+- Session: Connect or Retry first while the host is not live; Open, New tab, Rename…; Collapse or Expand, Mark all as seen; Move up, Move down ("2 of 7", Rex's full order); End
   session….
 - Tab: Open, Rename…; Approve, Deny, Reply and Interrupt where they apply (as on Needs you's row:
   Approve and Deny for an approval prompt whose keys the app knows, Reply for a blocked tab but never
@@ -139,9 +138,11 @@ sheet wherever the tab is listed; the TalkBack actions follow the sheet.
 
 The home's ⋮ beside the chips has Expand all, Collapse all (with Undo), **Mark all as seen** (what
 the list shows now: the filter's tabs, or the tree's as the search narrows it, on every connected
-host; one Undo); **Connect all** (the hosts not connected) and **Disconnect all** (with Reconnect);
-Add host, Import hosts and Tailnet; the tailnet is a chip there once connected, and the full card in
-the list while it is on its way or needs the person.
+host; one Undo); **Connect all** (the hosts the filters cannot hear: not connected, or failing,
+which it retries now - the same as the empty list's Connect all) and **Disconnect all** (with
+Reconnect); Add host, Import hosts and Tailnet (the joined tailnet's sheet, as Settings' Tailnet;
+the join screen before); the tailnet is a chip there once connected, and the full card in the list
+while it is on its way or needs the person.
 
 The **bottom bar** holds ⚙, the search field (above the keyboard while it is up) and +. + makes a
 session on the one connected host, or asks which host, offering one that is not connected as
@@ -162,7 +163,7 @@ to find before: **New tab** - in a session's sheet, "+ New tab" under its tabs, 
 ⋮ menu - opens one sheet with **Blank tab** (a shell) first, then the host's templates, then **Add
 template…**; with none yet the sheet says what one is, with an example ("Claude in ~/proj: cd
 ~/proj && claude"). The palette lists each as "New tab: api"; Ctrl+Shift+T and the palette's New
-tab stay a blank tab at once. The host's sheet keeps **New tab from template**, the same sheet. A
+tab stay a blank tab at once. The host's sheet has **New tab** too, the same sheet. A
 tap opens a new tab, labelled with the template's name, that starts in the directory and runs the
 command, and shows it on the phone (the host connects first when it is not). From a session the
 tab goes in that session; from the host's sheet, in the session the phone shows on that host, or

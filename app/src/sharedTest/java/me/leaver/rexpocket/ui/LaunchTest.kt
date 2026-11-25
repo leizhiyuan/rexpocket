@@ -3,6 +3,8 @@ package me.leaver.rexpocket.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.isOff
+import androidx.compose.ui.test.isOn
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -158,17 +160,18 @@ class LaunchTest {
         compose.waitForIdle()
         compose.onNode(hasText(string(R.string.notifications_title)) and hasClickAction()).performScrollTo().performClick()
         compose.waitForIdle()
-        // Background alerts and Android's permission come first; Android's own pages open from it.
-        compose.onNode(hasText(string(R.string.alerts_title)) and hasClickAction()).assert(hasText(string(R.string.alerts_off)))
+        // Background alerts comes first; Android's own pages open from the checks. A switch's
+        // On or Off is its toggle state, which TalkBack says once.
+        compose.onNode(hasText(string(R.string.alerts_title)) and hasClickAction()).assert(isOff())
         assertTrue(compose.rowHasChevron(string(R.string.notifications_android)))
         assertFalse(compose.rowHasChevron(string(R.string.notifications_done)))
         val done = compose.onNode(hasText(string(R.string.notifications_done)) and hasClickAction()).performScrollTo()
-        done.assert(hasText(string(R.string.alerts_on)))
+        done.assert(isOn())
         done.performClick()
         compose.waitForIdle()
-        compose.onNode(hasText(string(R.string.notifications_done)) and hasClickAction()).assert(hasText(string(R.string.alerts_off)))
+        compose.onNode(hasText(string(R.string.notifications_done)) and hasClickAction()).assert(isOff())
         // A bell off screen is opt-in.
-        compose.onNode(hasText(string(R.string.notifications_bells)) and hasClickAction()).performScrollTo().assert(hasText(string(R.string.alerts_off)))
+        compose.onNode(hasText(string(R.string.notifications_bells)) and hasClickAction()).performScrollTo().assert(isOff())
         assertFalse(m.alertPrefs.value.done)
         assertFalse(HostStore(compose.activity).alertPrefs().done)
         assertTrue(HostStore(compose.activity).alertPrefs().waiting)

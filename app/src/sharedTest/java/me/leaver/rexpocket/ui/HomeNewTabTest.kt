@@ -151,7 +151,7 @@ class HomeNewTabTest {
         val before = desk.tabs(shown)
         compose.onNode(hasContentDescription(string(R.string.manage_actions_for, desk.host.label)) and hasClickAction() and !inASheet).performClick()
         compose.waitForIdle()
-        inSheet(string(R.string.template_new_tab)).performScrollTo().performClick()
+        inSheet(string(R.string.menu_new_tab)).performScrollTo().performClick()
         compose.waitForIdle()
         inSheet("api").performClick()
         assertOnNewTab(m, shown, before)

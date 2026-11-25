@@ -20,7 +20,6 @@
     <string name="home_interrupt_for">Interrupt %1$s</string>
     <string name="rename_automatic">Automatic name</string>
     <string name="rename_empty_hint">Empty, or Automatic name, gives it back the name Rex chose.</string>
-    <string name="template_new_tab">New tab from template</string>
     <string name="new_tab_blank">Blank tab</string>
     <string name="new_tab_blank_detail">A shell, in the host\'s home</string>
     <string name="palette_new_tab_template">New tab: %1$s</string>
@@ -39,4 +38,5 @@
     <string name="template_directory">Directory</string>
     <string name="template_command">Command</string>
     <string name="template_help">The tab starts in the directory (~ is the home on the host) and runs the command as a shell line; when it ends, the tab is a shell there.</string>
+    <string name="backup_setting_templates">Launch templates</string>
 </resources>

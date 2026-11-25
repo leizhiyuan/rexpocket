@@ -179,8 +179,8 @@ such:
 ### What the phone does now
 
 The eye on the home screen shows the connected host's tabs whose program reported `blocked`,
-`error`, `done` or `working`, in that order, as groups Waiting, Failed, Done, Running
-(`activitySections` in core, `ActivityList.kt`). A tab stands in the group of its most pressing
+`error`, `done` or `working`, in that order, as groups Blocked, Failed, Done, Working (Rex's
+words since 2026-11-24, were Waiting and Running; `activitySections` in core, `ActivityList.kt`). A tab stands in the group of its most pressing
 pane. Each row: the reporting program's tile (its `app`, or the foreground process) with a dot in
 the group's colour (red failed and blue done as in the screenshot; amber waiting and green running
 as the app's tabs already use - **unconfirmed** against Rex), the tab's title, its session's label,

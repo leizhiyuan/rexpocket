@@ -1,6 +1,9 @@
 # App lock and screenshot block
 
 Settings › Security has two switches, both off until the person turns them on.
+Settings' Security row names each that is on ("Locked with the phone's lock · Screenshots
+blocked"), so the second is not hidden behind the first (`securityDetail`); the page has the
+sheet's back arrow to Settings, as Settings' other pages do (design-review.md, 1).
 
 ## Lock RexPocket
 

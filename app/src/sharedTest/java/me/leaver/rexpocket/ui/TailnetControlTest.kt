@@ -3,6 +3,7 @@ package me.leaver.rexpocket.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -66,6 +67,21 @@ class TailnetControlTest {
         node.socksPort = socks.port
         node.state.value = TailnetSamples.connected()
         return desk
+    }
+
+    /** The home's ⋮ Tailnet, as Settings' Tailnet: the joined tailnet's sheet, not the join screen. */
+    @Test
+    fun theHomeMenusTailnetOpensTheJoinedTailnetsSheet() {
+        deskThroughTheNode()
+        val m = launch(open = TailnetSamples.macHost)
+        compose.awaitThat { m.tailnetStage.value is TailnetStage.Connected }
+        compose.onNode(hasContentDescription(string(R.string.home_menu)) and hasClickAction()).performClick()
+        compose.waitForIdle()
+        compose.onNode(hasText(string(R.string.tailnet_title)) and hasClickAction()).performScrollTo().performClick()
+        compose.waitForIdle()
+        // The sheet is titled by the network, and offers its Disconnect.
+        compose.onNode(hasText("Tailscale") and hasAnyAncestor(hasTestTag(ACTION_SHEET_TAG))).assertExists()
+        compose.onNode(hasText(string(R.string.action_disconnect)) and hasClickAction() and hasAnyAncestor(hasTestTag(ACTION_SHEET_TAG))).assertExists()
     }
 
     @Test

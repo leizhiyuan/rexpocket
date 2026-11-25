@@ -27,7 +27,7 @@ screen already shows it (Activity, tab dots).
 | `blocked` (`permission` from any other program, `question`, none) | Waiting | on | Needs you (high) | Reply, Interrupt |
 | `blocked` `auth` | Waiting | on | Needs you (high) | Interrupt; never Reply |
 | `error` | Failed | on | Failures (high) | Mute |
-| `done` | Done | **on** | Finished (default) | Reply, Mute |
+| `done` | Done | **on** | Done (default; was Finished) | Reply, Mute |
 | `desktop_notification` (OSC 9, OSC 777) | Message | on | Program messages (default) | Reply; Interrupt while busy; Mute |
 | `bell`, pane not on screen | Message | **off** | Program messages (default) | as above |
 | `bell`, pane on screen | - | vibrate on | - | - |
@@ -293,13 +293,16 @@ the question explains itself. Refused, or refused before for good (Android then 
 with notifications off for the app: a toast says where and Android's notification page for the app
 opens, rather than a message with nowhere to go. Settings › Background and notifications (a chevron
 row in the Connection group, and what Manage, the stopped notes and the background tile's long
-press open) shows:
+press open) shows, in this order (design-review.md, 2: what people come to change first, the
+set-once checks and pages after):
 
-- **Background alerts**, with what it does.
+- **Background alerts**, with what it does, and *Android stopped background mode* under it when
+  that happened.
+- **Tell me when**: a switch per kind, every host's default, in Rex's words: "A program is
+  blocked on me", "A program fails", "A program is done", "A program sends a notification", "A
+  bell rings in a pane I am not looking at". Then Vibrate on a bell and Progress bars.
 - **Let it run in the background**, a checklist (`BackgroundChecks`), each row saying it is fine or
   **Fix**, which opens the place to fix it:
-  - *Android stopped background mode* (red, only after it happened): when, and Fix (above, "Android
-    stopped it").
   - *Background notification*: with background mode off, that there is no notification and no
     buttons, and **Turn on**; with it on and the notification hidden (`Alerts.watchHidden`: not
     allowed, or its channel off), that the service runs with its notification and buttons hidden,
@@ -325,10 +328,9 @@ press open) shows:
   the switches are kept but say nothing until it is on. **Unmute every tab** when some are muted.
   The host's row here, and on the home (a crossed-out bell beside its name, read as "Notifications
   off"), says when its notifications are off and how many tabs are muted.
-- **Tell me when**: a switch per kind, every host's default.
 - **Quick Settings tiles**: the three, each with Change… and Clear (above).
-- Vibrate on a bell, and each channel's Android page (sound, vibration, lock screen, Do Not
-  Disturb): Needs you, Failures, Finished, Program messages and Progress, marked "Off in Android"
+- Each channel's Android page (sound, vibration, lock screen, Do Not
+  Disturb): Needs you, Failures, Done, Program messages and Progress, marked "Off in Android"
   when the person switched it off there.
 - **Reset to defaults**, last, after a confirm: the kinds of alert, Vibrate and Progress bars as
   the app comes (`AlertPrefs()`). Background mode, each host's and tailnet's page and Android's own

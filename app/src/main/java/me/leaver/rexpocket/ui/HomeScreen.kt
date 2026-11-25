@@ -83,6 +83,8 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -319,6 +321,10 @@ internal fun HomeScreen(
     // An account's dialog on the tailnet's page, which is put away under it.
     var accountEdit by rememberSaveable { mutableStateOf<String?>(null) }
     var settings by rememberSaveable { mutableStateOf(false) }
+    // A page opened from Settings has a back arrow to it; swiping it down still closes both. Set
+    // by Settings' rows, cleared where the same page opens from elsewhere (a notification, the
+    // composer); a Notifications page keeps it through a host's page and back.
+    var fromSettings by rememberSaveable { mutableStateOf(false) }
     var notifications by rememberSaveable { mutableStateOf(false) }
     var controlsPage by rememberSaveable { mutableStateOf<ControlsPage?>(null) }
     var appearanceOpen by rememberSaveable { mutableStateOf(false) }
@@ -348,6 +354,12 @@ internal fun HomeScreen(
             if (snackbar.showSnackbar(message, action, duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) onAction()
         }
     }
+    /** The back arrow of a page Settings opened, which [close]s it and opens Settings again; null otherwise. */
+    fun settingsBack(close: () -> Unit): (() -> Unit)? = if (!fromSettings) null else ({
+        close()
+        fromSettings = false
+        settings = true
+    })
     // A tailnet's Disconnect, as a host's: at once with nothing on it, with a confirm naming the
     // hosts that go with it otherwise, and a snackbar with Reconnect that brings them back too.
     val tailnetOff: (confirmed: Boolean) -> Unit = { confirmed ->
@@ -369,12 +381,14 @@ internal fun HomeScreen(
             HomeRequest.ConfirmTailnetOff -> if (tailnetView.hosts.isNotEmpty()) confirmTailnetOff = true
             HomeRequest.Notifications -> {
                 settings = false
+                fromSettings = false
                 page = null
                 notifications = true
             }
             // The widget's tap or a host's notifications: the Activity view, not a sheet left open over it.
             HomeRequest.Activity -> {
                 settings = false
+                fromSettings = false
                 notifications = false
                 page = null
                 tailnetDetails = false
@@ -481,6 +495,15 @@ internal fun HomeScreen(
         if (connectedNow.size == 1) onNewSession(connectedNow.single()) else picking = true
     }
 
+    // Hosts the filters do not hear: not connected, or asked to and not getting through (a
+    // connection that failed, or keeps dialing and says why). One just on its way is not. Connect
+    // all, in the ⋮ and under an empty filter alike, dials the first and retries the others now.
+    val unheard = hosts.filter { h ->
+        val st = lives[h.id]?.state
+        st == null || (st.phase != Phase.Live && (st.phase == Phase.Failed || st.problem != null))
+    }
+    val connectAll: () -> Unit = { unheard.forEach { if (it.id in lives) onRetry(it.id) else onConnect(it) } }
+
     if (hosts.isEmpty()) {
         EmptyHome(
             tailnet = tailnet,
@@ -546,14 +569,7 @@ internal fun HomeScreen(
             }
             h.id to ops.unseen(h.id, st, windows)
         }.filterValues { it.isNotEmpty() }
-        // Hosts the filters do not hear: not connected, or asked to and not getting through (a
-        // connection that failed, or keeps dialing and says why). One just on its way is not.
-        val unheard = hosts.filter { h ->
-            val st = lives[h.id]?.state
-            st == null || (st.phase != Phase.Live && (st.phase == Phase.Failed || st.problem != null))
-        }
         val away = unheard.size
-        val connectAll: () -> Unit = { unheard.forEach { if (it.id in lives) onRetry(it.id) else onConnect(it) } }
         Column(Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().imePadding()) {
             // The tailnet's card while it is on its way or needs the person; a chip once it is on.
             val tailnetHosts = hosts.count { it.viaTailscale }
@@ -765,9 +781,7 @@ internal fun HomeScreen(
                 // Every host at once, as each host's sheet has its own; Disconnect all has Reconnect.
                 ActionGroup(
                     listOfNotNull(
-                        hosts.filter { it.id !in lives }.takeIf { it.isNotEmpty() }?.let { away ->
-                            RowAction(stringResource(R.string.home_connect_all), R.drawable.ic_host) { away.forEach(onConnect) }
-                        },
+                        RowAction(stringResource(R.string.home_connect_all), R.drawable.ic_host, run = connectAll).takeIf { unheard.isNotEmpty() },
                         hosts.filter { it.id in lives }.takeIf { it.isNotEmpty() }?.let { on ->
                             RowAction(stringResource(R.string.home_disconnect_all), R.drawable.ic_disconnect, danger = true) {
                                 on.forEach { onDisconnect(it.id) }
@@ -780,7 +794,10 @@ internal fun HomeScreen(
                     listOf(
                         RowAction(stringResource(R.string.action_add_host), R.drawable.ic_add) { creating = true },
                         RowAction(stringResource(R.string.import_hosts_title), R.drawable.ic_host) { onImportHosts() },
-                        RowAction(stringResource(R.string.tailnet_title), R.drawable.ic_tailnet) { onTailnet() },
+                        // As Settings' Tailnet: the joined tailnet's sheet, the way to join one before.
+                        RowAction(stringResource(R.string.tailnet_title), R.drawable.ic_tailnet) {
+                            if (tailnet.enabled) tailnetDetails = true else onTailnet()
+                        },
                     ),
                 ),
                 // The tailnet by hand, as a host's sheet has its host: Connect or Disconnect.
@@ -822,12 +839,19 @@ internal fun HomeScreen(
             onSend = { text, enter -> onSendPrompt(target.hostId, target.sessionId, target.blockId, text, enter) },
             onDismiss = { composeTo = null },
             // The draft stays with the pane; Settings › Quick replies opens in its place.
-            onEditReplies = { quickRepliesOpen = true },
+            onEditReplies = {
+                fromSettings = false
+                quickRepliesOpen = true
+            },
         )
     }
 
     if (quickRepliesOpen) {
-        QuickRepliesSheet(quickReplies, onQuickReplies, onDismiss = { quickRepliesOpen = false })
+        QuickRepliesSheet(
+            quickReplies, onQuickReplies,
+            onDismiss = { quickRepliesOpen = false },
+            onBack = settingsBack { quickRepliesOpen = false },
+        )
     }
 
     if (creating || editing != null) {
@@ -972,6 +996,7 @@ internal fun HomeScreen(
             alerts = alerts,
             onNotifications = {
                 settings = false
+                fromSettings = true
                 notifications = true
             },
             onControls = {
@@ -981,11 +1006,13 @@ internal fun HomeScreen(
             quickReplies = quickRepliesDetail(quickReplies),
             onQuickReplies = {
                 settings = false
+                fromSettings = true
                 quickRepliesOpen = true
             },
             onFontSettings = onFontSettings,
             onAppearance = {
                 settings = false
+                fromSettings = true
                 appearanceOpen = true
             },
             onImportHosts = {
@@ -999,6 +1026,7 @@ internal fun HomeScreen(
             security = security,
             onSecurity = {
                 settings = false
+                fromSettings = true
                 securityOpen = true
             },
             reopenLastTab = reopenLastTab,
@@ -1006,6 +1034,7 @@ internal fun HomeScreen(
             recording = recording,
             onDiagnostics = {
                 settings = false
+                fromSettings = true
                 diagnostics = true
             },
             update = update,
@@ -1026,6 +1055,7 @@ internal fun HomeScreen(
         NotificationsSheet(
             tileName = tileName,
             onDismiss = { notifications = false },
+            onBack = settingsBack { notifications = false },
             alerts = alerts,
             onAlerts = toggleAlerts,
             prefs = alertPrefs,
@@ -1115,13 +1145,21 @@ internal fun HomeScreen(
         onKeyArrangement = onKeyArrangement,
     )
 
-    if (appearanceOpen) AppearanceSheet(appearance, onAppearance, onDismiss = { appearanceOpen = false }, terminalTextSize = terminalTextSize, onTerminalTextSize = onTerminalTextSize)
+    if (appearanceOpen) {
+        AppearanceSheet(
+            appearance, onAppearance,
+            onDismiss = { appearanceOpen = false },
+            terminalTextSize = terminalTextSize, onTerminalTextSize = onTerminalTextSize,
+            onBack = settingsBack { appearanceOpen = false },
+        )
+    }
 
     if (securityOpen) {
         SecuritySheet(
             prefs = security,
             onPrefs = onSecurity,
             onDismiss = { securityOpen = false },
+            onBack = settingsBack { securityOpen = false },
             authenticate = rememberDeviceAuthenticator(),
             problem = { AppLockGate.problem(context) },
         )
@@ -1130,6 +1168,7 @@ internal fun HomeScreen(
     if (diagnostics) {
         DiagnosticsSheet(
             onDismiss = { diagnostics = false },
+            onBack = settingsBack { diagnostics = false },
             report = onDiagnosticsReport,
             onRecordingChanged = { recording = it },
         )
@@ -1222,13 +1261,7 @@ private fun SettingsSheet(
             SheetItem(
                 stringResource(R.string.security_title),
                 icon = R.drawable.ic_lock,
-                detail = stringResource(
-                    when {
-                        security.lock -> R.string.security_detail_locked
-                        security.blockScreenshots -> R.string.security_detail_screenshots
-                        else -> R.string.security_detail_off
-                    },
-                ),
+                detail = securityDetail(security).map { stringResource(it) }.joinToString(" · "),
                 opens = true,
                 onClick = onSecurity,
             )
@@ -1742,15 +1775,16 @@ internal fun HostDialog(
                         next = if (useKey) keyField else passwordField,
                     ) { sshUser = it }
                     // Flowing, so large text puts the second choice under the first rather than squeezing both.
-                    FlowRow {
-                        TextButton(onClick = { useKey = false }) {
+                    // A pair of which one: said as selected, as the radio buttons they stand for.
+                    FlowRow(Modifier.selectableGroup()) {
+                        TextButton(onClick = { useKey = false }, modifier = Modifier.semantics { selected = !useKey }) {
                             Text(
                                 stringResource(R.string.ssh_auth_password),
                                 color = if (!useKey) Colors.accent else Colors.muted,
                                 fontWeight = if (!useKey) FontWeight.SemiBold else FontWeight.Normal,
                             )
                         }
-                        TextButton(onClick = { useKey = true }) {
+                        TextButton(onClick = { useKey = true }, modifier = Modifier.semantics { selected = useKey }) {
                             Text(
                                 stringResource(R.string.ssh_auth_key),
                                 color = if (useKey) Colors.accent else Colors.muted,

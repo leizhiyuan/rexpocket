@@ -59,6 +59,8 @@ internal fun NotificationsSheet(
     onPage: (Connectable) -> Unit = {},
     /** Names a Quick Settings tile's item; see [TileSlotsGroup]. */
     tileName: (Connectable) -> String? = { null },
+    /** The back arrow before the title, when the page was opened from Settings: back to it. */
+    onBack: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     // Read again whenever the app comes back: the person may have changed them in Android's settings.
@@ -77,21 +79,20 @@ internal fun NotificationsSheet(
     val fix = stringResource(R.string.bg_fix)
     fun state(value: Boolean) = if (value) on else off
 
-    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.notifications_title)) {
+    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.notifications_title), onBack = onBack) {
         Group {
             SheetItem(
                 label = stringResource(R.string.alerts_title),
                 icon = R.drawable.ic_notifications,
                 supporting = stringResource(R.string.notifications_background_body),
                 detail = state(alerts),
+                checked = alerts,
                 keepOpen = true,
                 onClick = onAlerts,
             )
-        }
-        // What Android lets background mode do, and a Fix for each that is not as it should be.
-        Group(stringResource(R.string.bg_group_checks)) {
             // Android stopped background mode and would not let it start again: said here even
-            // when notifications are off and its notification could not show. Gone once it runs again.
+            // when notifications are off and its notification could not show, under the switch it
+            // undoes rather than among the checks. Gone once it runs again.
             if (androidStop != null) {
                 SheetItem(
                     label = stringResource(R.string.bg_android_stopped),
@@ -111,6 +112,35 @@ internal fun NotificationsSheet(
                     onClick = { if (checks.battery) BackgroundChecks.open(context, BackgroundChecks.appDetails(context)) else BackgroundChecks.askBattery(context) },
                 )
             }
+        }
+        // What to be told about comes right under the switch that turns it on: the checks, pages and
+        // tiles below are set once, these are what people come here to change.
+        Group(stringResource(R.string.notifications_group_when), icons = false) {
+            // Each switch stays usable with alerts off: the choice is kept for when they come on.
+            for ((event, label) in EVENTS) {
+                SheetItem(stringResource(label), detail = state(prefs.on(event)), checked = prefs.on(event), keepOpen = true) {
+                    onPrefs(prefs.with(event, !prefs.on(event)))
+                }
+            }
+        }
+        Group(stringResource(R.string.notifications_group_screen), icons = false) {
+            SheetItem(stringResource(R.string.notifications_vibrate), detail = state(prefs.vibrate), checked = prefs.vibrate, keepOpen = true) {
+                onPrefs(prefs.copy(vibrate = !prefs.vibrate))
+            }
+        }
+        // A program's progress bar as a notification of its own while away: off by default, as it
+        // is a notification that stays while the work goes on.
+        Group(stringResource(R.string.notifications_group_progress), icons = false) {
+            SheetItem(
+                stringResource(R.string.notifications_progress),
+                supporting = stringResource(R.string.notifications_progress_body),
+                detail = state(prefs.progress),
+                checked = prefs.progress,
+                keepOpen = true,
+            ) { onPrefs(prefs.copy(progress = !prefs.progress)) }
+        }
+        // What Android lets background mode do, and a Fix for each that is not as it should be.
+        Group(stringResource(R.string.bg_group_checks)) {
             // The watch notification: only with background mode on, and hidden when Android hides
             // it - the service still runs then, without its Stop and Connect or Disconnect buttons.
             val watch = watchCheck(alerts, checks)
@@ -211,29 +241,6 @@ internal fun NotificationsSheet(
             }
         }
         TileSlotsGroup(tileName)
-        Group(stringResource(R.string.notifications_group_when), icons = false) {
-            // Each switch stays usable with alerts off: the choice is kept for when they come on.
-            for ((event, label) in EVENTS) {
-                SheetItem(stringResource(label), detail = state(prefs.on(event)), keepOpen = true) {
-                    onPrefs(prefs.with(event, !prefs.on(event)))
-                }
-            }
-        }
-        Group(stringResource(R.string.notifications_group_screen), icons = false) {
-            SheetItem(stringResource(R.string.notifications_vibrate), detail = state(prefs.vibrate), keepOpen = true) {
-                onPrefs(prefs.copy(vibrate = !prefs.vibrate))
-            }
-        }
-        // A program's progress bar as a notification of its own while away: off by default, as it
-        // is a notification that stays while the work goes on.
-        Group(stringResource(R.string.notifications_group_progress), icons = false) {
-            SheetItem(
-                stringResource(R.string.notifications_progress),
-                supporting = stringResource(R.string.notifications_progress_body),
-                detail = state(prefs.progress),
-                keepOpen = true,
-            ) { onPrefs(prefs.copy(progress = !prefs.progress)) }
-        }
         // Sound, vibration, the lock screen and Do Not Disturb are Android's, per channel.
         Group(stringResource(R.string.notifications_group_channels), icons = false) {
             for ((kind, label) in listOf(
