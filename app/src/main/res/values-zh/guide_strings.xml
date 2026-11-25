@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="guide_title">帮助</string>
+    <string name="guide_menu">帮助与指南</string>
+    <string name="guide_menu_keys">帮助 指南 怎么 教程 导览 提示 在哪 功能</string>
+    <string name="guide_search_field">你想做什么？</string>
+    <string name="guide_tour_row">快速导览</string>
+    <string name="guide_tour_row_detail">主页上的五个要点，不到一分钟</string>
+    <string name="guide_show_me">带我去</string>
+    <string name="guide_got_it">知道了</string>
+    <string name="guide_tour_skip">跳过导览</string>
+    <string name="guide_tour_next">下一步</string>
+    <string name="guide_tour_done">完成</string>
+    <string name="guide_nothing_found">没有与“%1$s”匹配的内容。换个说法试试，或清空搜索浏览全部。</string>
+    <string name="guide_needs_tab">这在终端界面上。请先打开一个标签页，帮助会从那里带你过去。</string>
+    <string name="guide_open_tab_on">在 %1$s 上打开标签页</string>
+    <string name="guide_tab_failed">无法在 %1$s 上打开标签页</string>
+    <string name="guide_needs_host">这属于某台主机。请先添加主机。</string>
+    <string name="guide_pick_host">哪台主机？</string>
+    <string name="guide_could_not_show">从这里无法指给你看。上面那行说明了它在哪里。</string>
+    <string name="guide_palette_group">帮助</string>
+    <string name="guide_palette_row">帮助：%1$s</string>
+
+    <string name="guide_section_home">主页与主机</string>
+    <string name="guide_section_terminal">终端</string>
+    <string name="guide_section_agents">回复代理</string>
+    <string name="guide_section_gestures">手势与长按</string>
+    <string name="guide_section_keys">按键栏</string>
+    <string name="guide_section_notifications">通知</string>
+    <string name="guide_section_tailnet">Tailnet</string>
+    <string name="guide_section_settings">设置与安全</string>
+
+    <string name="guide_tour_filters_title">需要你的事</string>
+    <string name="guide_tour_filters_hint">“需要你”列出所有已连接主机上等你处理的事。“活动”是 Rex 对程序在做什么的视图。</string>
+    <string name="guide_tour_rows_title">每一行能做的事</string>
+    <string name="guide_tour_rows_hint">长按主机、会话或标签页，或点它的 ⋮：重命名、移动、用模板新建标签页、结束。</string>
+    <string name="guide_tour_new_title">新建会话</string>
+    <string name="guide_tour_new_hint">+ 新建会话。会话的“新标签页”还能运行你的启动模板。</string>
+    <string name="guide_tour_settings_title">设置</string>
+    <string name="guide_tour_settings_hint">通知、按键栏、文字大小、应用锁和备份都在这里。</string>
+    <string name="guide_tour_help_title">随时可用的帮助</string>
+    <string name="guide_tour_help_hint">⋮ › 帮助与指南可以找到任何功能并告诉你它在哪里。终端的 ⋮ 和命令面板里也有。</string>
+
+    <string name="guide_add_host_title">添加主机</string>
+    <string name="guide_add_host_hint">⋮ › 添加主机，或列表末尾的“添加主机”</string>
+    <string name="guide_add_host_body">主机是运行 Rex 的电脑。填写它的地址：通过 SSH（电脑上无需开放端口）、tailnet 或局域网。保存前，“测试连接”会逐步检查。</string>
+    <string name="guide_add_host_keys">新 电脑 服务器 mac ssh 地址 连接 机器</string>
+
+    <string name="guide_host_link_title">从另一台电脑添加主机</string>
+    <string name="guide_host_link_hint">电脑上的链接或二维码，或 ⋮ › 导入主机</string>
+    <string name="guide_host_link_body">在电脑上，tools/host-link.sh 会打印 rexpocket:// 链接和它的二维码。用手机相机扫码或打开链接：“添加主机”会预先填好，供你检查。“导入主机”可导入整份列表，或已连接 Rex 自己的列表。</string>
+    <string name="guide_host_link_keys">二维码 扫码 相机 链接 分享 导入 列表 电脑 笔记本</string>
+
+    <string name="guide_needs_you_title">查看需要你的事</string>
+    <string name="guide_needs_you_hint">主页顶部的“需要你”</string>
+    <string name="guide_needs_you_body">“需要你”列出每台已连接主机上，程序在等你、失败了或已完成但还没看过的标签页。“工作中”列出正在工作的。计数只包括已连接的主机。</string>
+    <string name="guide_needs_you_keys">等待 阻塞 失败 完成 注意 筛选 运行 工作中</string>
+
+    <string name="guide_activity_title">Rex 的活动视图</string>
+    <string name="guide_activity_hint">“活动”：按优先级或按会话</string>
+    <string name="guide_activity_body">“活动”像 Rex 的活动视图一样，列出程序报告过状态的每个标签页：按优先级（阻塞、失败、完成、工作中、空闲）或按会话。“包括空闲”会在你看过后仍保留空闲的标签页。</string>
+    <string name="guide_activity_keys">活动 优先级 会话 空闲 状态 程序</string>
+
+    <string name="guide_search_title">查找主机、会话或标签页</string>
+    <string name="guide_search_hint">主页底部的搜索框</string>
+    <string name="guide_search_body">输入名称的一部分：列表会缩小到匹配的主机、会话和标签页，并全部展开。返回键清除搜索。</string>
+    <string name="guide_search_keys">搜索 筛选 查找 名称</string>
+
+    <string name="guide_new_session_title">新建会话</string>
+    <string name="guide_new_session_hint">主页右下角的 +</string>
+    <string name="guide_new_session_body">+ 在已连接的主机上新建会话，或询问用哪台主机，必要时先连接。会话的 ⋮ › 新标签页可给它添加标签页。</string>
+    <string name="guide_new_session_keys">新建 会话 创建 shell 加号</string>
+
+    <string name="guide_row_actions_title">重命名、移动或结束会话和标签页</string>
+    <string name="guide_row_actions_hint">长按这一行，或点它的 ⋮</string>
+    <string name="guide_row_actions_body">每台主机、每个会话和标签页都有自己的面板：重命名、上移下移、新标签页、标记为已看、状态详情、结束或关闭。单击只会打开或折叠，从不连接。</string>
+    <string name="guide_row_actions_keys">重命名 移动 排序 结束 关闭 删除 长按 菜单 面板 已看</string>
+
+    <string name="guide_edit_host_title">编辑、移动或移除主机</string>
+    <string name="guide_edit_host_hint">主机的 ⋮ › 编辑主机、上移、移除主机…</string>
+    <string name="guide_edit_host_body">主机的面板可以编辑地址和名称、在列表中移动、复制地址，以及移除主机（可撤销）。</string>
+    <string name="guide_edit_host_keys">编辑 修改 地址 端口 名称 移除 删除 顺序 主机</string>
+
+    <string name="guide_templates_title">在某个文件夹里运行命令</string>
+    <string name="guide_templates_hint">新标签页 › 添加模板…：名称、文件夹和命令</string>
+    <string name="guide_templates_body">启动模板会打开一个在指定文件夹里启动并运行命令的标签页，例如在 ~/proj 中运行 claude。你的模板出现在所有“新标签页”里：会话的、主机的、终端 ⋮ 中的，以及命令面板。</string>
+    <string name="guide_templates_keys">模板 启动 claude codex 代理 文件夹 目录 cwd 命令 运行 项目</string>
+
+    <string name="guide_host_quiet_title">让主机安静</string>
+    <string name="guide_host_quiet_hint">主机的 ⋮ › 连接与通知</string>
+    <string name="guide_host_quiet_body">主机的页面可以关闭它的通知，或选择它的程序的哪些报告会通知你，以及它是否在后台保持连接。页面上也列出它已静音的标签页。</string>
+    <string name="guide_host_quiet_keys">静音 安静 通知 主机 后台 关闭</string>
+
+    <string name="guide_tile_title">快捷设置磁贴</string>
+    <string name="guide_tile_hint">主机或 tailnet 的页面 › 添加磁贴</string>
+    <string name="guide_tile_body">Android 快捷设置里的磁贴一点就能连接或断开主机或 tailnet。在页面上添加后，把它拖进快捷设置面板。主屏幕小组件会列出需要你的事。</string>
+    <string name="guide_tile_keys">磁贴 快捷设置 下拉 小组件 快捷方式 桌面</string>
+
+    <string name="guide_text_size_title">更改文字大小</string>
+    <string name="guide_text_size_hint">⋮ › 文字大小，或用两指在终端上捏合</string>
+    <string name="guide_text_size_body">捏合或 − 和 + 会改变这个标签页的大小；这一行会显示它能容纳的列数和行数。“重置”回到默认值，默认值在“设置 › 外观”中，适用于所有新标签页。外接键盘可用 Ctrl+= 和 Ctrl+-。</string>
+    <string name="guide_text_size_keys">缩放 字体 放大 缩小 捏合 比例 列 换行 适应 zoom font</string>
+
+    <string name="guide_palette_title">搜索所有操作</string>
+    <string name="guide_palette_hint">⋮ › 命令面板，或 Ctrl+Shift+P</string>
+    <string name="guide_palette_body">命令面板列出终端能做的一切、所有会话的每个标签页以及你的 Rex 操作，边输入边查找。帮助的条目也在其中。</string>
+    <string name="guide_palette_keys">命令面板 搜索 操作 全部 键盘</string>
+
+    <string name="guide_rex_actions_title">运行你的 Rex 操作</string>
+    <string name="guide_rex_actions_hint">⋮ › 命令面板：按它们的类别</string>
+    <string name="guide_rex_actions_body">Rex 配置中的操作（rex.action）是命令面板里的行，带有说明，对屏幕上的窗格运行。操作提出的问题会以对话框显示。</string>
+    <string name="guide_rex_actions_keys">自定义 操作 rex lua 配置 脚本 类别</string>
+
+    <string name="guide_insert_path_title">输入文件夹或文件的路径</string>
+    <string name="guide_insert_path_hint">⋮ › 插入路径，或按键栏上的文件夹键</string>
+    <string name="guide_insert_path_body">“插入路径”从程序所在位置浏览主机上的文件夹，把你选的文件夹或文件输入到窗格中，并为 shell 加好引号。按回车前不会运行任何东西。</string>
+    <string name="guide_insert_path_keys">路径 文件夹 目录 文件 浏览 cd ls 插入</string>
+
+    <string name="guide_send_file_title">把文件发送到主机</string>
+    <string name="guide_send_file_hint">⋮ › 发送文件，或附件键</string>
+    <string name="guide_send_file_body">在手机上选一个文件：它会上传到主机，路径会输入到窗格中，就像把文件拖到电脑终端上一样。</string>
+    <string name="guide_send_file_keys">上传 附件 图片 照片 文件 发送 分享</string>
+
+    <string name="guide_find_title">在输出中查找</string>
+    <string name="guide_find_hint">⋮ › 查找，或 Ctrl+Shift+F</string>
+    <string name="guide_find_body">“查找”搜索窗格的屏幕和回滚历史，标出每个匹配项，并在它们之间跳转。</string>
+    <string name="guide_find_keys">查找 搜索 回滚 输出 文本 匹配</string>
+
+    <string name="guide_split_title">拆分窗格</string>
+    <string name="guide_split_hint">⋮ › 右侧新建窗格，或下方</string>
+    <string name="guide_split_body">新窗格会拆分标签页，和电脑上一样。手机一次显示一个窗格：按键栏上方的圆点可切换，左右滑动也可以。</string>
+    <string name="guide_split_keys">拆分 窗格 右侧 下方 新窗格 分屏</string>
+
+    <string name="guide_switch_tab_title">切换标签页、窗格或会话</string>
+    <string name="guide_switch_tab_hint">点终端顶部的标题</string>
+    <string name="guide_switch_tab_body">标题会打开会话的标签页和窗格以及其他会话。命令面板可以按名称在任何会话中查找标签页。</string>
+    <string name="guide_switch_tab_keys">切换 标签页 窗格 会话 窗口 导航</string>
+
+    <string name="guide_new_tab_title">打开新标签页</string>
+    <string name="guide_new_tab_hint">⋮ › 新标签页：空白标签页或模板</string>
+    <string name="guide_new_tab_body">“新标签页”提供空白标签页和你的启动模板，以及用来新建模板的“添加模板…”。Ctrl+Shift+T 会立即打开空白标签页。</string>
+    <string name="guide_new_tab_keys">新 标签页 窗口 模板 空白</string>
+
+    <string name="guide_copy_output_title">复制或分享全部输出</string>
+    <string name="guide_copy_output_hint">⋮ › 复制输出或分享输出</string>
+    <string name="guide_copy_output_body">“复制输出”把窗格的屏幕和回滚历史作为文本复制，每行保持程序写出的样子。“分享输出”把它发送到其他应用。“选择文本”可以选取一部分。</string>
+    <string name="guide_copy_output_keys">复制 分享 输出 文本 剪贴板 日志 回滚 导出</string>
+
+    <string name="guide_full_screen_title">全屏</string>
+    <string name="guide_full_screen_hint">⋮ › 全屏，或双击终端</string>
+    <string name="guide_full_screen_body">全屏让窗格占满整个窗口。角落的按钮、同一个手势或返回键可退出。</string>
+    <string name="guide_full_screen_keys">全屏 沉浸 隐藏 栏 更大</string>
+
+    <string name="guide_shortcuts_title">使用外接键盘</string>
+    <string name="guide_shortcuts_hint">⋮ › 键盘快捷键</string>
+    <string name="guide_shortcuts_body">接上外接键盘时，界面自己的快捷键可以打开命令面板、查找、新标签页和调整文字大小；Ctrl+Shift+/ 会列出它们。</string>
+    <string name="guide_shortcuts_keys">键盘 快捷键 硬件 蓝牙 外接 按键</string>
+
+    <string name="guide_approve_title">批准、拒绝或回复代理</string>
+    <string name="guide_approve_hint">“需要你”：行上的批准、拒绝和回复</string>
+    <string name="guide_approve_body">等待代理批准提示的行上有“批准”和“拒绝”，会发送对应按键而无需打开窗格；“回复”发送一行文字，可用快捷回复。通知上也有同样的按钮。</string>
+    <string name="guide_approve_keys">批准 拒绝 回复 回答 权限 提示 是 否 代理 claude codex</string>
+
+    <string name="guide_composer_title">写一段长提示</string>
+    <string name="guide_composer_hint">⋮ › 撰写提示</string>
+    <string name="guide_composer_body">撰写器是一个完整的提示编辑器，一次粘贴发送，之后可按或不按回车。草稿会保留在窗格上，直到程序收下。</string>
+    <string name="guide_composer_keys">撰写 提示 编辑器 消息 长 粘贴 草稿</string>
+
+    <string name="guide_quick_replies_title">快捷回复</string>
+    <string name="guide_quick_replies_hint">设置 › 快捷回复</string>
+    <string name="guide_quick_replies_body">快捷回复是你最常对代理说的话，在回复、撰写器、通知和按键栏面板里一点即用。在这里编辑、排序或恢复默认。</string>
+    <string name="guide_quick_replies_keys">快捷回复 预设 片段 是 继续 回答</string>
+
+    <string name="guide_mute_tab_title">将标签页静音</string>
+    <string name="guide_mute_tab_hint">⋮ › 将此标签页静音，或通知上的“静音标签页”</string>
+    <string name="guide_mute_tab_body">静音的标签页不发送通知或进度条。展开通知可找到“静音标签页”。在同一菜单里取消静音，或在主机页面上，那里列出它已静音的标签页。</string>
+    <string name="guide_mute_tab_keys">静音 安静 通知 标签页 取消静音</string>
+
+    <string name="guide_pinch_title">捏合缩放</string>
+    <string name="guide_pinch_hint">两指放在终端上：张开放大，并拢缩小</string>
+    <string name="guide_pinch_body">捏合会改变这个标签页的文字大小，让宽表格放得下。⋮ › 文字大小用 − 和 + 也能做到。</string>
+    <string name="guide_pinch_keys">捏合 缩放 手势 两指 文字大小 zoom pinch</string>
+
+    <string name="guide_swipe_panes_title">滑动到下一个窗格</string>
+    <string name="guide_swipe_panes_hint">在终端上左右滑动</string>
+    <string name="guide_swipe_panes_body">标签页里有两个或更多窗格时，左右滑动会移到旁边的窗格，按键栏上方的圆点会显示。上下拖动则滚动历史。</string>
+    <string name="guide_swipe_panes_keys">滑动 手势 窗格 下一个 上一个 滚动 拖动</string>
+
+    <string name="guide_long_press_select_title">选择文本和打开链接</string>
+    <string name="guide_long_press_select_hint">长按终端；长按链接可打开它</string>
+    <string name="guide_long_press_select_body">长按会开始选择，可拖动手柄并复制。长按链接时，无论长按设成什么，都会提供打开、复制和分享。⋮ › 选择文本也可以。</string>
+    <string name="guide_long_press_select_keys">长按 按住 选择 复制 链接 网址 打开</string>
+
+    <string name="guide_double_tap_title">双击</string>
+    <string name="guide_double_tap_hint">双击终端进入全屏</string>
+    <string name="guide_double_tap_body">默认情况下，双击进入全屏，单击打开键盘。“设置 › 终端操作”可以更改它们各自的作用。</string>
+    <string name="guide_double_tap_keys">双击 手势 全屏 键盘</string>
+
+    <string name="guide_hold_return_title">换行而不发送</string>
+    <string name="guide_hold_return_hint">长按按键栏上的回车键</string>
+    <string name="guide_hold_return_body">长按回车即 Shift+回车：在代理的提示里换行而不是发送。TalkBack 把它作为该键的一个操作提供。</string>
+    <string name="guide_hold_return_keys">长按 按住 回车 换行 shift 多行 enter</string>
+
+
+    <string name="guide_hold_ctrl_title">Ctrl 组合键</string>
+    <string name="guide_hold_ctrl_hint">点 Ctrl 再点一个键，或长按 Ctrl 显示组合键</string>
+    <string name="guide_hold_ctrl_body">点一下 Ctrl 会作用于下一个键（按键栏或键盘的）；快速点两下会保持开启。长按会显示组合键：再点一下就是 C-a 到 C-z。</string>
+    <string name="guide_hold_ctrl_keys">ctrl 控制 组合键 长按 修饰键 c-r c-d</string>
+
+    <string name="guide_gesture_settings_title">更改单击的作用</string>
+    <string name="guide_gesture_settings_hint">设置 › 终端操作 › 单击、双击、长按</string>
+    <string name="guide_gesture_settings_body">选择单击、双击和长按在终端上的作用，以及各自等待多久。</string>
+    <string name="guide_gesture_settings_keys">手势 单击 双击 长按 设置 键盘 切换</string>
+
+    <string name="guide_insert_path_key_title">文件夹键</string>
+    <string name="guide_insert_path_key_hint">按键栏上的文件夹键</string>
+    <string name="guide_insert_path_key_body">它打开“插入路径”：从程序所在位置浏览主机上的文件夹，把文件夹或文件的路径输入到窗格中。旁边的附件键从手机发送文件。</string>
+    <string name="guide_insert_path_key_keys">文件夹键 插入路径 目录 文件 附件 回形针</string>
+
+    <string name="guide_arrange_keys_title">添加或移除按键</string>
+    <string name="guide_arrange_keys_hint">设置 › 终端操作 › 排列按键</string>
+    <string name="guide_arrange_keys_body">把任意键放到按键栏上（F10、Home、PgDn、一个字母、C-d），排序或隐藏它们，并用 htop、vim 或 tmux 的预设创建按键组。</string>
+    <string name="guide_arrange_keys_keys">按键栏 按键 排列 自定义 f1 f10 home end pgup esc fn htop vim tmux 按键组</string>
+
+    <string name="guide_alerts_title">应用关闭时的通知</string>
+    <string name="guide_alerts_hint">设置 › 后台与通知 › 后台提醒</string>
+    <string name="guide_alerts_body">后台提醒让主机在应用离开时保持连接，这样程序等待、失败或完成时会通知你，通知上有回复、批准、拒绝和静音。</string>
+    <string name="guide_alerts_keys">通知 提醒 后台 推送 声音 振动 完成时</string>
+
+    <string name="guide_tailnet_title">使用 tailnet</string>
+    <string name="guide_tailnet_hint">设置 › tailnet</string>
+    <string name="guide_tailnet_body">应用可以自己加入你的 tailnet（例如 Tailscale），无需开放端口或运行 VPN 应用就能连到家里的电脑。它的面板列出网络上的设备，每台都有“添加主机”。</string>
+    <string name="guide_tailnet_keys">tailnet tailscale vpn wireguard 组网 远程 网络</string>
+
+    <string name="guide_app_lock_title">锁定应用</string>
+    <string name="guide_app_lock_hint">设置 › 安全 › 锁定 RexPocket</string>
+    <string name="guide_app_lock_body">回到应用时，它会要求指纹、面容或屏幕锁定，可设为立即或离开几分钟后。开启时会先请你确认一次。</string>
+    <string name="guide_app_lock_keys">锁定 生物识别 指纹 面容 pin 密码 安全 隐私</string>
+
+    <string name="guide_screenshots_title">禁止截屏</string>
+    <string name="guide_screenshots_hint">设置 › 安全 › 禁止截屏</string>
+    <string name="guide_screenshots_body">截屏和录屏中不会显示应用的任何内容，最近任务中它的画面也是空白。</string>
+    <string name="guide_screenshots_keys">截屏 录屏 最近任务 隐私 安全</string>
+
+    <string name="guide_backup_title">备份设置</string>
+    <string name="guide_backup_hint">设置 › 导出和导入设置</string>
+    <string name="guide_backup_body">所有设置，连同你的主机和模板，导出到一个文件（含密钥时用口令加密），再在另一台手机上导入。</string>
+    <string name="guide_backup_keys">备份 导出 导入 恢复 文件 换手机 迁移</string>
+
+    <string name="guide_appearance_title">深色或浅色</string>
+    <string name="guide_appearance_hint">设置 › 外观</string>
+    <string name="guide_appearance_body">应用的主题、与之分开的终端配色、应用的文字大小，以及终端的默认文字大小。</string>
+    <string name="guide_appearance_keys">深色 浅色 主题 夜间 配色 颜色 对比度 文字大小</string>
+
+    <string name="guide_font_title">终端字体</string>
+    <string name="guide_font_hint">设置 › 终端字体</string>
+    <string name="guide_font_body">选择终端的字体（手机的等宽字体，或下载一次的 JetBrains Mono）以及默认文字大小。</string>
+    <string name="guide_font_keys">字体 等宽 字型 font monospace</string>
+
+    <string name="guide_updates_title">更新与预览版</string>
+    <string name="guide_updates_hint">设置 › 更新</string>
+    <string name="guide_updates_body">应用每天检查一次更新的版本并提示你；你同意之前不会下载任何东西。上面的通道选择稳定版或预览版。</string>
+    <string name="guide_updates_keys">更新 升级 版本 预览 稳定 通道 安装</string>
+
+    <string name="guide_diagnostics_title">发送诊断报告</string>
+    <string name="guide_diagnostics_hint">设置 › 诊断</string>
+    <string name="guide_diagnostics_body">诊断会记录应用的行为并生成可分享的报告，其中不含名称、标题和消息。</string>
+    <string name="guide_diagnostics_keys">诊断 错误 报告 日志 调试 问题</string>
+</resources>

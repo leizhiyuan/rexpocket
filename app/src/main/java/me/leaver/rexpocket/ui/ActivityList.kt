@@ -1,5 +1,7 @@
 package me.leaver.rexpocket.ui
 
+import me.leaver.rexpocket.ui.guide.GuideSpot
+import me.leaver.rexpocket.ui.guide.guideTarget
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -285,6 +287,13 @@ internal fun FilterChips(
                 ),
                 border = null,
                 modifier = Modifier.heightIn(min = 48.dp).testTag(filterChipTag(choice))
+                    .guideTarget(
+                        when (choice) {
+                            HomeFilter.NeedsYou -> GuideSpot.HomeNeedsYou
+                            HomeFilter.Activity -> GuideSpot.HomeActivity
+                            else -> null
+                        },
+                    )
                     .semantics { if (marked) stateDescription = connectedOnly },
             )
         }

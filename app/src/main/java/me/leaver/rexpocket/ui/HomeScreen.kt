@@ -1,5 +1,10 @@
 package me.leaver.rexpocket.ui
 
+import me.leaver.rexpocket.ui.guide.GuideOpens
+import me.leaver.rexpocket.ui.guide.GuidePlace
+import me.leaver.rexpocket.ui.guide.GuideSpot
+import me.leaver.rexpocket.ui.guide.LocalGuide
+import me.leaver.rexpocket.ui.guide.guideTarget
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -412,6 +417,36 @@ internal fun HomeScreen(
         }
         onRequestHandled()
     }
+    // Help's Show me: the home's own places, opened over nothing else (ui/guide, help-guide.md).
+    GuideOpens(HOME_GUIDE_PLACES) { asked ->
+        settings = false
+        notifications = false
+        controlsPage = null
+        securityOpen = false
+        appearanceOpen = false
+        quickRepliesOpen = false
+        diagnostics = false
+        tailnetDetails = false
+        homeMenu = false
+        page = null
+        sheets.sheet = null
+        templateSheets.close()
+        val host = asked.hostId
+        when (asked.place) {
+            GuidePlace.HomeMenu -> homeMenu = true
+            GuidePlace.Settings -> settings = true
+            GuidePlace.Notifications -> notifications = true
+            GuidePlace.Controls -> controlsPage = ControlsPage.Controls
+            GuidePlace.Security -> securityOpen = true
+            GuidePlace.HostSheet -> if (host != null) sheets.sheet = ManageTarget.Host(host)
+            GuidePlace.HostPage -> if (host != null) {
+                pageFromNotifications = false
+                page = Connectable.host(host).key
+            }
+            GuidePlace.NewTab -> if (host != null) templateSheets.open(host, null)
+            else -> Unit
+        }
+    }
     val ops = HomeOps(
         connect = onConnect,
         retry = onRetry,
@@ -577,7 +612,7 @@ internal fun HomeScreen(
             // Quiet too once disconnected by hand or waiting for a host: nothing is wrong then.
             val tailnetQuiet = tailnetShown && (tailnetStage is TailnetStage.Connected || tailnetStage is TailnetStage.Disconnected)
             Row(Modifier.fillMaxWidth().padding(start = PAGE, end = PAGE - 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                FilterChips(filter, needsYou, running, onHomeFilter, Modifier.weight(1f), partial = away > 0)
+                FilterChips(filter, needsYou, running, onHomeFilter, Modifier.weight(1f).guideTarget(GuideSpot.HomeFilters), partial = away > 0)
                 if (tailnetQuiet) {
                     val network = tailnetName(tailnet.backend)
                     TailnetChip(
@@ -588,7 +623,7 @@ internal fun HomeScreen(
                         onClick = { tailnetDetails = true },
                     )
                 }
-                RoundButton(R.drawable.ic_more, stringResource(R.string.home_menu), { homeMenu = true }, tint = Colors.muted, size = 48.dp)
+                RoundButton(R.drawable.ic_more, stringResource(R.string.home_menu), { homeMenu = true }, Modifier.guideTarget(GuideSpot.HomeMenu), tint = Colors.muted, size = 48.dp)
             }
             Box(Modifier.weight(1f)) {
                 LazyColumn(
@@ -792,8 +827,8 @@ internal fun HomeScreen(
                 ),
                 ActionGroup(
                     listOf(
-                        RowAction(stringResource(R.string.action_add_host), R.drawable.ic_add) { creating = true },
-                        RowAction(stringResource(R.string.import_hosts_title), R.drawable.ic_host) { onImportHosts() },
+                        RowAction(stringResource(R.string.action_add_host), R.drawable.ic_add, spot = GuideSpot.MenuAddHost) { creating = true },
+                        RowAction(stringResource(R.string.import_hosts_title), R.drawable.ic_host, spot = GuideSpot.MenuImportHosts) { onImportHosts() },
                         // As Settings' Tailnet: the joined tailnet's sheet, the way to join one before.
                         RowAction(stringResource(R.string.tailnet_title), R.drawable.ic_tailnet) {
                             if (tailnet.enabled) tailnetDetails = true else onTailnet()
@@ -808,6 +843,14 @@ internal fun HomeScreen(
                         } else {
                             RowAction(stringResource(R.string.tailnet_disconnect_item, tailnetView.name), R.drawable.ic_disconnect, danger = true) { tailnetOff(false) }
                         }.takeIf { tailnet.enabled },
+                    ),
+                ),
+                // Help: find any feature and be shown where it is (ui/guide).
+                ActionGroup(
+                    listOfNotNull(
+                        LocalGuide.current?.let { guide ->
+                            RowAction(stringResource(R.string.guide_menu), R.drawable.ic_help, spot = GuideSpot.MenuHelp) { guide.openHelp() }
+                        },
                     ),
                 ),
             ),
@@ -1092,7 +1135,7 @@ internal fun HomeScreen(
                 onRetry = { onRetry(host.id) },
                 onBack = pageBack,
                 onDismiss = closePage,
-                tile = { TileGroup(Connectable.host(host.id), host.label.ifBlank { host.host }, tileName) },
+                tile = { Column(Modifier.guideTarget(GuideSpot.HostTile)) { TileGroup(Connectable.host(host.id), host.label.ifBlank { host.host }, tileName) } },
                 onBackgroundMode = toggleAlerts,
                 parked = hostParked(host, tailnetView),
                 onUnpark = {
@@ -1224,6 +1267,7 @@ private fun SettingsSheet(
                 detail = if (tailnetStage is TailnetStage.Off) stringResource(R.string.tailscale_not_joined)
                 else tailnetName(tailnet.backend) + " · " + tailnetStageText(tailnetStage, tailnet.backend),
                 opens = true,
+                modifier = Modifier.guideTarget(GuideSpot.SetTailnet),
                 onClick = onTailnet,
             )
             // Alerts are the connection kept up in the background, so they sit with the way in.
@@ -1241,10 +1285,10 @@ private fun SettingsSheet(
             // Gestures and keys have a sheet of their own, so this one stays a list of places to go.
             SheetItem(stringResource(R.string.controls_title), icon = R.drawable.ic_touch_app, opens = true, onClick = onControls)
             // What agents are told most, in one tap from a notification, the key bar and the palette.
-            SheetItem(stringResource(R.string.quick_replies_title), icon = R.drawable.ic_return, detail = quickReplies, opens = true, onClick = onQuickReplies)
-            SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_text_fields, opens = true, onClick = onFontSettings)
+            SheetItem(stringResource(R.string.quick_replies_title), icon = R.drawable.ic_return, detail = quickReplies, opens = true, modifier = Modifier.guideTarget(GuideSpot.SetQuickReplies), onClick = onQuickReplies)
+            SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_text_fields, opens = true, modifier = Modifier.guideTarget(GuideSpot.SetFont), onClick = onFontSettings)
             // The app's light or dark, and the terminal's apart from it.
-            SheetItem(stringResource(R.string.appearance_title), icon = R.drawable.ic_contrast, opens = true, onClick = onAppearance)
+            SheetItem(stringResource(R.string.appearance_title), icon = R.drawable.ic_contrast, opens = true, modifier = Modifier.guideTarget(GuideSpot.SetAppearance), onClick = onAppearance)
             // Off, a fresh start shows this list; Android killing the app on the terminal still
             // comes back to it, since that is the person's own place rather than a pick.
             ChoiceRow(
@@ -1254,7 +1298,7 @@ private fun SettingsSheet(
         }
         // Everything above, and the hosts, to one file for another phone, and back.
         Group(stringResource(R.string.settings_group_backup)) {
-            SheetItem(stringResource(R.string.backup_title), icon = R.drawable.ic_backup, opens = true, onClick = onBackup)
+            SheetItem(stringResource(R.string.backup_title), icon = R.drawable.ic_backup, opens = true, modifier = Modifier.guideTarget(GuideSpot.SetBackup), onClick = onBackup)
         }
         // Who can open the app, and whether it can be seen in screenshots and recents.
         Group(stringResource(R.string.settings_group_security)) {
@@ -1278,8 +1322,15 @@ private fun SettingsSheet(
                 icon = R.drawable.ic_system_update,
                 detail = updateDetail(update),
                 keepOpen = true,
+                modifier = Modifier.guideTarget(GuideSpot.SetUpdates),
                 onClick = onUpdate,
             )
+        }
+        // Help: find any feature and be shown where it is, and the quick tour (ui/guide).
+        LocalGuide.current?.let { guide ->
+            Group {
+                SheetItem(stringResource(R.string.guide_menu), icon = R.drawable.ic_help, opens = true, modifier = Modifier.guideTarget(GuideSpot.SetHelp)) { guide.openHelp() }
+            }
         }
         // About the app itself: what it recorded, where its code is, and what it is built from.
         Group(stringResource(R.string.settings_group_about)) {
@@ -1288,6 +1339,7 @@ private fun SettingsSheet(
                 detail = stringResource(if (recording) R.string.diagnostics_state_on else R.string.diagnostics_state_off),
                 icon = R.drawable.ic_bug_report,
                 opens = true,
+                modifier = Modifier.guideTarget(GuideSpot.SetDiagnostics),
                 onClick = onDiagnostics,
             )
             SheetItem(stringResource(R.string.settings_source), icon = R.drawable.ic_open_in_new) { openLink(context, SOURCE_URL) }
@@ -1981,4 +2033,10 @@ internal fun asSavedHost(
     sshPassphrase = if (parsed.viaSsh) sshPassphrase else "",
     sshHostKey = if (parsed.viaSsh) sshHostKey else "",
     fallbacks = initial?.fallbacks.orEmpty(),
+)
+
+/** The places of Help's entries that the home opens itself. */
+private val HOME_GUIDE_PLACES: Set<GuidePlace> = setOf(
+    GuidePlace.Home, GuidePlace.HomeMenu, GuidePlace.Settings, GuidePlace.Notifications, GuidePlace.Controls,
+    GuidePlace.Security, GuidePlace.HostSheet, GuidePlace.HostPage, GuidePlace.NewTab,
 )

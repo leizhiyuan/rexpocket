@@ -57,12 +57,13 @@ internal fun SheetScope.TextSizeRow(
     grid: Pair<Int, Int>?,
     onScale: (Float) -> Unit,
     onReset: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val percent = TextScale.percent(scale)
     val detail = if (grid != null) stringResource(R.string.text_size_detail, percent, grid.first, grid.second) else stringResource(R.string.text_size_percent, percent)
     val spoken = if (grid != null) stringResource(R.string.text_size_state, percent, grid.first, grid.second) else stringResource(R.string.text_size_state_short, percent)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp).testTag(TEXT_SIZE_ROW_TAG),
+        modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp).testTag(TEXT_SIZE_ROW_TAG),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Glyph(R.drawable.ic_text_fields, Colors.muted, size = 24.dp)

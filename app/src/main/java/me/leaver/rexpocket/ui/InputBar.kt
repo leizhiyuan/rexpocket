@@ -1,5 +1,7 @@
 package me.leaver.rexpocket.ui
 
+import me.leaver.rexpocket.ui.guide.guideSpotOf
+import me.leaver.rexpocket.ui.guide.guideTarget
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlinx.coroutines.coroutineScope
@@ -200,7 +202,7 @@ internal fun KeyBar(
                                 onQuickReply(reply)
                             }
                         } else {
-                            BarKeyFace(barKey, key, Colors.clear, actions)
+                            BarKeyFace(barKey, key.guideTarget(guideSpotOf(barKey)), Colors.clear, actions)
                         }
                     }
                 }

@@ -1,5 +1,7 @@
 package me.leaver.rexpocket.ui
 
+import me.leaver.rexpocket.ui.guide.GuideSpot
+import me.leaver.rexpocket.ui.guide.guideTarget
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -252,6 +254,7 @@ internal fun HostPage(
                 detail = state(choices.notify),
                 checked = choices.notify,
                 keepOpen = true,
+                modifier = Modifier.guideTarget(GuideSpot.HostNotify),
             ) { onChoices(choices.copy(notify = !choices.notify)) }
             val effective = choices.copy(notify = true).prefs(defaults)
             for ((event, label) in EVENTS) {

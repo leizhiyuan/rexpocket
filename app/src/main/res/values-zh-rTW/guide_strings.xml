@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="guide_title">說明</string>
+    <string name="guide_menu">說明與指南</string>
+    <string name="guide_menu_keys">說明 幫助 指南 怎麼 教學 導覽 提示 在哪 功能</string>
+    <string name="guide_search_field">你想做什麼？</string>
+    <string name="guide_tour_row">快速導覽</string>
+    <string name="guide_tour_row_detail">主頁上的五個重點，不到一分鐘</string>
+    <string name="guide_show_me">帶我去</string>
+    <string name="guide_got_it">知道了</string>
+    <string name="guide_tour_skip">略過導覽</string>
+    <string name="guide_tour_next">下一步</string>
+    <string name="guide_tour_done">完成</string>
+    <string name="guide_nothing_found">沒有符合「%1$s」的內容。換個說法試試，或清除搜尋瀏覽全部。</string>
+    <string name="guide_needs_tab">這在終端機畫面上。請先開啟一個分頁，說明會從那裡帶你過去。</string>
+    <string name="guide_open_tab_on">在 %1$s 上開啟分頁</string>
+    <string name="guide_tab_failed">無法在 %1$s 上開啟分頁</string>
+    <string name="guide_needs_host">這屬於某台主機。請先新增主機。</string>
+    <string name="guide_pick_host">哪台主機？</string>
+    <string name="guide_could_not_show">無法從這裡指給你看。上面那行說明了它在哪裡。</string>
+    <string name="guide_palette_group">說明</string>
+    <string name="guide_palette_row">說明：%1$s</string>
+
+    <string name="guide_section_home">主頁與主機</string>
+    <string name="guide_section_terminal">終端機</string>
+    <string name="guide_section_agents">回覆代理程式</string>
+    <string name="guide_section_gestures">手勢與長按</string>
+    <string name="guide_section_keys">按鍵列</string>
+    <string name="guide_section_notifications">通知</string>
+    <string name="guide_section_tailnet">Tailnet</string>
+    <string name="guide_section_settings">設定與安全性</string>
+
+    <string name="guide_tour_filters_title">需要你的事</string>
+    <string name="guide_tour_filters_hint">「需要你」列出所有已連線主機上等你處理的事。「活動」是 Rex 對程式在做什麼的檢視。</string>
+    <string name="guide_tour_rows_title">每一列能做的事</string>
+    <string name="guide_tour_rows_hint">長按主機、工作階段或分頁，或輕觸它的 ⋮：重新命名、移動、用範本新增分頁、結束。</string>
+    <string name="guide_tour_new_title">新增工作階段</string>
+    <string name="guide_tour_new_hint">+ 新增工作階段。工作階段的「新增分頁」還能執行你的啟動範本。</string>
+    <string name="guide_tour_settings_title">設定</string>
+    <string name="guide_tour_settings_hint">通知、按鍵列、文字大小、應用程式鎖和備份都在這裡。</string>
+    <string name="guide_tour_help_title">隨時可用的說明</string>
+    <string name="guide_tour_help_hint">⋮ › 說明與指南可以找到任何功能並告訴你它在哪裡。終端機的 ⋮ 和命令面板裡也有。</string>
+
+    <string name="guide_add_host_title">新增主機</string>
+    <string name="guide_add_host_hint">⋮ › 新增主機，或清單末端的「新增主機」</string>
+    <string name="guide_add_host_body">主機是執行 Rex 的電腦。填寫它的位址：透過 SSH（電腦上不必開放連接埠）、tailnet 或區域網路。儲存前，「測試連線」會逐步檢查。</string>
+    <string name="guide_add_host_keys">新 電腦 伺服器 mac ssh 位址 連線 機器</string>
+
+    <string name="guide_host_link_title">從另一台電腦新增主機</string>
+    <string name="guide_host_link_hint">電腦上的連結或 QR 碼，或 ⋮ › 匯入主機</string>
+    <string name="guide_host_link_body">在電腦上，tools/host-link.sh 會印出 rexpocket:// 連結和它的 QR 碼。用手機相機掃描或開啟連結：「新增主機」會預先填好，供你檢查。「匯入主機」可匯入整份清單，或已連線 Rex 自己的清單。</string>
+    <string name="guide_host_link_keys">QR 碼 掃描 相機 連結 分享 匯入 清單 電腦 筆電</string>
+
+    <string name="guide_needs_you_title">查看需要你的事</string>
+    <string name="guide_needs_you_hint">主頁頂端的「需要你」</string>
+    <string name="guide_needs_you_body">「需要你」列出每台已連線主機上，程式在等你、失敗了或已完成但還沒看過的分頁。「工作中」列出正在工作的。計數只包含已連線的主機。</string>
+    <string name="guide_needs_you_keys">等待 阻塞 失敗 完成 注意 篩選 執行 工作中</string>
+
+    <string name="guide_activity_title">Rex 的活動檢視</string>
+    <string name="guide_activity_hint">「活動」：依優先順序或依工作階段</string>
+    <string name="guide_activity_body">「活動」像 Rex 的活動檢視一樣，列出程式回報過狀態的每個分頁：依優先順序（阻塞、失敗、完成、工作中、閒置）或依工作階段。「包含閒置」會在你看過後仍保留閒置的分頁。</string>
+    <string name="guide_activity_keys">活動 優先順序 工作階段 閒置 狀態 程式</string>
+
+    <string name="guide_search_title">尋找主機、工作階段或分頁</string>
+    <string name="guide_search_hint">主頁底部的搜尋欄</string>
+    <string name="guide_search_body">輸入名稱的一部分：清單會縮小到符合的主機、工作階段和分頁，並全部展開。返回鍵會清除搜尋。</string>
+    <string name="guide_search_keys">搜尋 篩選 尋找 名稱</string>
+
+    <string name="guide_new_session_title">新增工作階段</string>
+    <string name="guide_new_session_hint">主頁右下角的 +</string>
+    <string name="guide_new_session_body">+ 在已連線的主機上新增工作階段，或詢問用哪台主機，必要時先連線。工作階段的 ⋮ › 新增分頁可為它加入分頁。</string>
+    <string name="guide_new_session_keys">新增 工作階段 建立 shell 加號</string>
+
+    <string name="guide_row_actions_title">重新命名、移動或結束工作階段和分頁</string>
+    <string name="guide_row_actions_hint">長按這一列，或輕觸它的 ⋮</string>
+    <string name="guide_row_actions_body">每台主機、每個工作階段和分頁都有自己的面板：重新命名、上移下移、新增分頁、標示為已看、狀態詳情、結束或關閉。輕觸只會開啟或收合，從不連線。</string>
+    <string name="guide_row_actions_keys">重新命名 移動 排序 結束 關閉 刪除 長按 選單 面板 已看</string>
+
+    <string name="guide_edit_host_title">編輯、移動或移除主機</string>
+    <string name="guide_edit_host_hint">主機的 ⋮ › 編輯主機、上移、移除主機…</string>
+    <string name="guide_edit_host_body">主機的面板可以編輯位址和名稱、在清單中移動、複製位址，以及移除主機（可復原）。</string>
+    <string name="guide_edit_host_keys">編輯 修改 位址 連接埠 名稱 移除 刪除 順序 主機</string>
+
+    <string name="guide_templates_title">在某個資料夾中執行指令</string>
+    <string name="guide_templates_hint">新增分頁 › 新增範本…：名稱、資料夾和指令</string>
+    <string name="guide_templates_body">啟動範本會開啟一個在指定資料夾中啟動並執行指令的分頁，例如在 ~/proj 中執行 claude。你的範本會出現在所有「新增分頁」裡：工作階段的、主機的、終端機 ⋮ 中的，以及命令面板。</string>
+    <string name="guide_templates_keys">範本 啟動 claude codex 代理程式 資料夾 目錄 cwd 指令 執行 專案</string>
+
+    <string name="guide_host_quiet_title">讓主機安靜</string>
+    <string name="guide_host_quiet_hint">主機的 ⋮ › 連線與通知</string>
+    <string name="guide_host_quiet_body">主機的頁面可以關閉它的通知，或選擇它的程式的哪些回報會通知你，以及它是否在背景保持連線。頁面上也列出它已靜音的分頁。</string>
+    <string name="guide_host_quiet_keys">靜音 安靜 通知 主機 背景 關閉</string>
+
+    <string name="guide_tile_title">快速設定圖塊</string>
+    <string name="guide_tile_hint">主機或 tailnet 的頁面 › 新增圖塊</string>
+    <string name="guide_tile_body">Android 快速設定裡的圖塊一按就能連線或中斷主機或 tailnet。在頁面上新增後，把它拖進快速設定面板。主畫面小工具會列出需要你的事。</string>
+    <string name="guide_tile_keys">圖塊 快速設定 下拉 小工具 捷徑 桌面</string>
+
+    <string name="guide_text_size_title">變更文字大小</string>
+    <string name="guide_text_size_hint">⋮ › 文字大小，或用兩指在終端機上捏合</string>
+    <string name="guide_text_size_body">捏合或 − 和 + 會改變這個分頁的大小；這一列會顯示它能容納的欄數和列數。「重設」回到預設值，預設值在「設定 › 外觀」中，適用於所有新分頁。實體鍵盤可用 Ctrl+= 和 Ctrl+-。</string>
+    <string name="guide_text_size_keys">縮放 字型 放大 縮小 捏合 比例 欄 換行 符合 zoom font</string>
+
+    <string name="guide_palette_title">搜尋所有動作</string>
+    <string name="guide_palette_hint">⋮ › 命令面板，或 Ctrl+Shift+P</string>
+    <string name="guide_palette_body">命令面板列出終端機能做的一切、所有工作階段的每個分頁以及你的 Rex 動作，邊輸入邊尋找。說明的項目也在其中。</string>
+    <string name="guide_palette_keys">命令面板 搜尋 動作 全部 鍵盤</string>
+
+    <string name="guide_rex_actions_title">執行你的 Rex 動作</string>
+    <string name="guide_rex_actions_hint">⋮ › 命令面板：依它們的類別</string>
+    <string name="guide_rex_actions_body">Rex 設定中的動作（rex.action）是命令面板裡的項目，附有說明，對畫面上的窗格執行。動作提出的問題會以對話框顯示。</string>
+    <string name="guide_rex_actions_keys">自訂 動作 rex lua 設定 指令碼 類別</string>
+
+    <string name="guide_insert_path_title">輸入資料夾或檔案的路徑</string>
+    <string name="guide_insert_path_hint">⋮ › 插入路徑，或按鍵列上的資料夾鍵</string>
+    <string name="guide_insert_path_body">「插入路徑」從程式所在位置瀏覽主機上的資料夾，把你選的資料夾或檔案輸入到窗格中，並為 shell 加好引號。按 Return 前不會執行任何東西。</string>
+    <string name="guide_insert_path_keys">路徑 資料夾 目錄 檔案 瀏覽 cd ls 插入</string>
+
+    <string name="guide_send_file_title">把檔案傳送到主機</string>
+    <string name="guide_send_file_hint">⋮ › 傳送檔案，或附件鍵</string>
+    <string name="guide_send_file_body">在手機上選一個檔案：它會上傳到主機，路徑會輸入到窗格中，就像把檔案拖到電腦終端機上一樣。</string>
+    <string name="guide_send_file_keys">上傳 附件 圖片 相片 檔案 傳送 分享</string>
+
+    <string name="guide_find_title">在輸出中尋找</string>
+    <string name="guide_find_hint">⋮ › 尋找，或 Ctrl+Shift+F</string>
+    <string name="guide_find_body">「尋找」搜尋窗格的畫面和捲動記錄，標出每個相符項目，並在它們之間跳轉。</string>
+    <string name="guide_find_keys">尋找 搜尋 捲動記錄 輸出 文字 相符</string>
+
+    <string name="guide_split_title">分割窗格</string>
+    <string name="guide_split_hint">⋮ › 在右側新增窗格，或下方</string>
+    <string name="guide_split_body">新窗格會分割分頁，和電腦上一樣。手機一次顯示一個窗格：按鍵列上方的圓點可切換，左右滑動也可以。</string>
+    <string name="guide_split_keys">分割 窗格 右側 下方 新窗格 分割畫面</string>
+
+    <string name="guide_switch_tab_title">切換分頁、窗格或工作階段</string>
+    <string name="guide_switch_tab_hint">輕觸終端機頂端的標題</string>
+    <string name="guide_switch_tab_body">標題會開啟工作階段的分頁和窗格以及其他工作階段。命令面板可以依名稱在任何工作階段中尋找分頁。</string>
+    <string name="guide_switch_tab_keys">切換 分頁 窗格 工作階段 視窗 導覽</string>
+
+    <string name="guide_new_tab_title">開啟新分頁</string>
+    <string name="guide_new_tab_hint">⋮ › 新增分頁：空白分頁或範本</string>
+    <string name="guide_new_tab_body">「新增分頁」提供空白分頁和你的啟動範本，以及用來建立範本的「新增範本…」。Ctrl+Shift+T 會立即開啟空白分頁。</string>
+    <string name="guide_new_tab_keys">新增 分頁 視窗 範本 空白</string>
+
+    <string name="guide_copy_output_title">複製或分享全部輸出</string>
+    <string name="guide_copy_output_hint">⋮ › 複製輸出或分享輸出</string>
+    <string name="guide_copy_output_body">「複製輸出」把窗格的畫面和捲動記錄當成文字複製，每行保持程式寫出的樣子。「分享輸出」把它傳到其他應用程式。「選取文字」可以選取一部分。</string>
+    <string name="guide_copy_output_keys">複製 分享 輸出 文字 剪貼簿 記錄 捲動記錄 匯出</string>
+
+    <string name="guide_full_screen_title">全螢幕</string>
+    <string name="guide_full_screen_hint">⋮ › 全螢幕，或在終端機上輕觸兩下</string>
+    <string name="guide_full_screen_body">全螢幕讓窗格佔滿整個視窗。角落的按鈕、同一個手勢或返回鍵可離開。</string>
+    <string name="guide_full_screen_keys">全螢幕 沉浸 隱藏 列 更大</string>
+
+    <string name="guide_shortcuts_title">使用實體鍵盤</string>
+    <string name="guide_shortcuts_hint">⋮ › 鍵盤快速鍵</string>
+    <string name="guide_shortcuts_body">接上實體鍵盤時，畫面自己的快速鍵可以開啟命令面板、尋找、新分頁和調整文字大小；Ctrl+Shift+/ 會列出它們。</string>
+    <string name="guide_shortcuts_keys">鍵盤 快速鍵 硬體 藍牙 實體 按鍵</string>
+
+    <string name="guide_approve_title">核准、拒絕或回覆代理程式</string>
+    <string name="guide_approve_hint">「需要你」：列上的核准、拒絕和回覆</string>
+    <string name="guide_approve_body">等待代理程式核准提示的列上有「核准」和「拒絕」，會送出對應按鍵而不必開啟窗格；「回覆」送出一行文字，可用快速回覆。通知上也有同樣的按鈕。</string>
+    <string name="guide_approve_keys">核准 拒絕 回覆 回答 權限 提示 是 否 代理程式 claude codex</string>
+
+    <string name="guide_composer_title">寫一段長提示</string>
+    <string name="guide_composer_hint">⋮ › 撰寫提示</string>
+    <string name="guide_composer_body">撰寫器是完整的提示編輯器，一次貼上送出，之後可按或不按 Return。草稿會保留在窗格上，直到程式收下。</string>
+    <string name="guide_composer_keys">撰寫 提示 編輯器 訊息 長 貼上 草稿</string>
+
+    <string name="guide_quick_replies_title">快速回覆</string>
+    <string name="guide_quick_replies_hint">設定 › 快速回覆</string>
+    <string name="guide_quick_replies_body">快速回覆是你最常對代理程式說的話，在回覆、撰寫器、通知和按鍵列面板裡一按即用。在這裡編輯、排序或還原預設值。</string>
+    <string name="guide_quick_replies_keys">快速回覆 預設 片段 是 繼續 回答</string>
+
+    <string name="guide_mute_tab_title">將分頁靜音</string>
+    <string name="guide_mute_tab_hint">⋮ › 將此分頁靜音，或通知上的「將分頁靜音」</string>
+    <string name="guide_mute_tab_body">靜音的分頁不會傳送通知或進度列。展開通知可找到「將分頁靜音」。在同一選單裡取消靜音，或在主機頁面上，那裡列出它已靜音的分頁。</string>
+    <string name="guide_mute_tab_keys">靜音 安靜 通知 分頁 取消靜音</string>
+
+    <string name="guide_pinch_title">捏合縮放</string>
+    <string name="guide_pinch_hint">兩指放在終端機上：張開放大，併攏縮小</string>
+    <string name="guide_pinch_body">捏合會改變這個分頁的文字大小，讓寬表格放得下。⋮ › 文字大小用 − 和 + 也能做到。</string>
+    <string name="guide_pinch_keys">捏合 縮放 手勢 兩指 文字大小 zoom pinch</string>
+
+    <string name="guide_swipe_panes_title">滑動到下一個窗格</string>
+    <string name="guide_swipe_panes_hint">在終端機上左右滑動</string>
+    <string name="guide_swipe_panes_body">分頁裡有兩個或更多窗格時，左右滑動會移到旁邊的窗格，按鍵列上方的圓點會顯示。上下拖曳則捲動記錄。</string>
+    <string name="guide_swipe_panes_keys">滑動 手勢 窗格 下一個 上一個 捲動 拖曳</string>
+
+    <string name="guide_long_press_select_title">選取文字和開啟連結</string>
+    <string name="guide_long_press_select_hint">長按終端機；長按連結可開啟它</string>
+    <string name="guide_long_press_select_body">長按會開始選取，可拖曳控點並複製。長按連結時，無論長按設成什麼，都會提供開啟、複製和分享。⋮ › 選取文字也可以。</string>
+    <string name="guide_long_press_select_keys">長按 按住 選取 複製 連結 網址 開啟</string>
+
+    <string name="guide_double_tap_title">輕觸兩下</string>
+    <string name="guide_double_tap_hint">在終端機上輕觸兩下進入全螢幕</string>
+    <string name="guide_double_tap_body">預設情況下，輕觸兩下進入全螢幕，輕觸開啟鍵盤。「設定 › 終端機控制」可以變更它們各自的作用。</string>
+    <string name="guide_double_tap_keys">輕觸兩下 雙擊 手勢 全螢幕 鍵盤</string>
+
+    <string name="guide_hold_return_title">換行而不送出</string>
+    <string name="guide_hold_return_hint">長按按鍵列上的 Return 鍵</string>
+    <string name="guide_hold_return_body">長按 Return 即 Shift+Return：在代理程式的提示裡換行而不是送出。TalkBack 會把它當作該鍵的一個動作提供。</string>
+    <string name="guide_hold_return_keys">長按 按住 return enter 換行 shift 多行</string>
+
+
+    <string name="guide_hold_ctrl_title">Ctrl 組合鍵</string>
+    <string name="guide_hold_ctrl_hint">輕觸 Ctrl 再按一個鍵，或長按 Ctrl 顯示組合鍵</string>
+    <string name="guide_hold_ctrl_body">輕觸一下 Ctrl 會作用於下一個鍵（按鍵列或鍵盤的）；快速輕觸兩下會保持開啟。長按會顯示組合鍵：再按一下就是 C-a 到 C-z。</string>
+    <string name="guide_hold_ctrl_keys">ctrl 控制 組合鍵 長按 修飾鍵 c-r c-d</string>
+
+    <string name="guide_gesture_settings_title">變更輕觸的作用</string>
+    <string name="guide_gesture_settings_hint">設定 › 終端機控制 › 輕觸、輕觸兩下、長按</string>
+    <string name="guide_gesture_settings_body">選擇輕觸、輕觸兩下和長按在終端機上的作用，以及各自等待多久。</string>
+    <string name="guide_gesture_settings_keys">手勢 輕觸 輕觸兩下 長按 設定 鍵盤 切換</string>
+
+    <string name="guide_insert_path_key_title">資料夾鍵</string>
+    <string name="guide_insert_path_key_hint">按鍵列上的資料夾鍵</string>
+    <string name="guide_insert_path_key_body">它開啟「插入路徑」：從程式所在位置瀏覽主機上的資料夾，把資料夾或檔案的路徑輸入到窗格中。旁邊的附件鍵從手機傳送檔案。</string>
+    <string name="guide_insert_path_key_keys">資料夾鍵 插入路徑 目錄 檔案 附件 迴紋針</string>
+
+    <string name="guide_arrange_keys_title">新增或移除按鍵</string>
+    <string name="guide_arrange_keys_hint">設定 › 終端機控制 › 排列按鍵</string>
+    <string name="guide_arrange_keys_body">把任意鍵放到按鍵列上（F10、Home、PgDn、一個字母、C-d），排序或隱藏它們，並用 htop、vim 或 tmux 的預設集建立按鍵群組。</string>
+    <string name="guide_arrange_keys_keys">按鍵列 按鍵 排列 自訂 f1 f10 home end pgup esc fn htop vim tmux 群組</string>
+
+    <string name="guide_alerts_title">應用程式關閉時的通知</string>
+    <string name="guide_alerts_hint">設定 › 背景與通知 › 背景提醒</string>
+    <string name="guide_alerts_body">背景提醒讓主機在應用程式離開時保持連線，這樣程式等待、失敗或完成時會通知你，通知上有回覆、核准、拒絕和靜音。</string>
+    <string name="guide_alerts_keys">通知 提醒 背景 推播 聲音 震動 完成時</string>
+
+    <string name="guide_tailnet_title">使用 tailnet</string>
+    <string name="guide_tailnet_hint">設定 › Tailnet</string>
+    <string name="guide_tailnet_body">應用程式可以自己加入你的 tailnet（例如 Tailscale），不必開放連接埠或執行 VPN 應用程式就能連到家裡的電腦。它的面板列出網路上的裝置，每台都有「新增主機」。</string>
+    <string name="guide_tailnet_keys">tailnet tailscale vpn wireguard 網狀網路 遠端 網路</string>
+
+    <string name="guide_app_lock_title">鎖定應用程式</string>
+    <string name="guide_app_lock_hint">設定 › 安全性 › 鎖定 RexPocket</string>
+    <string name="guide_app_lock_body">回到應用程式時，它會要求指紋、臉部或螢幕鎖定，可設為立即或離開幾分鐘後。開啟時會先請你確認一次。</string>
+    <string name="guide_app_lock_keys">鎖定 生物辨識 指紋 臉部 pin 密碼 安全性 隱私</string>
+
+    <string name="guide_screenshots_title">禁止螢幕截圖</string>
+    <string name="guide_screenshots_hint">設定 › 安全性 › 禁止螢幕截圖</string>
+    <string name="guide_screenshots_body">螢幕截圖和螢幕錄影中不會顯示應用程式的任何內容，最近使用的應用程式中它的畫面也是空白。</string>
+    <string name="guide_screenshots_keys">螢幕截圖 螢幕錄影 最近使用 隱私 安全</string>
+
+    <string name="guide_backup_title">備份設定</string>
+    <string name="guide_backup_hint">設定 › 匯出和匯入設定</string>
+    <string name="guide_backup_body">所有設定，連同你的主機和範本，匯出到一個檔案（含金鑰時以密碼短語加密），再在另一支手機上匯入。</string>
+    <string name="guide_backup_keys">備份 匯出 匯入 還原 檔案 換手機 轉移</string>
+
+    <string name="guide_appearance_title">深色或淺色</string>
+    <string name="guide_appearance_hint">設定 › 外觀</string>
+    <string name="guide_appearance_body">應用程式的主題、與之分開的終端機配色、應用程式的文字大小，以及終端機的預設文字大小。</string>
+    <string name="guide_appearance_keys">深色 淺色 主題 夜間 配色 顏色 對比 文字大小</string>
+
+    <string name="guide_font_title">終端機字型</string>
+    <string name="guide_font_hint">設定 › 終端機字型</string>
+    <string name="guide_font_body">選擇終端機的字型（手機的等寬字型，或下載一次的 JetBrains Mono）以及預設文字大小。</string>
+    <string name="guide_font_keys">字型 字體 等寬 font monospace</string>
+
+    <string name="guide_updates_title">更新與預覽版</string>
+    <string name="guide_updates_hint">設定 › 更新</string>
+    <string name="guide_updates_body">應用程式每天檢查一次較新的版本並提示你；你同意之前不會下載任何東西。上方的管道選擇穩定版或預覽版。</string>
+    <string name="guide_updates_keys">更新 升級 版本 預覽 穩定 管道 安裝</string>
+
+    <string name="guide_diagnostics_title">傳送診斷報告</string>
+    <string name="guide_diagnostics_hint">設定 › 診斷</string>
+    <string name="guide_diagnostics_body">診斷會記錄應用程式的行為並產生可分享的報告，其中不含名稱、標題和訊息。</string>
+    <string name="guide_diagnostics_keys">診斷 錯誤 報告 記錄 偵錯 問題</string>
+</resources>

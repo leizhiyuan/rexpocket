@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Help: the guide that takes you to a feature, and the quick tour. See docs/design/help-guide.md. -->
+    <string name="guide_title">Help</string>
+    <string name="guide_menu">Help and guide</string>
+    <string name="guide_menu_keys">help guide how tour tips where find feature</string>
+    <string name="guide_search_field">What do you want to do?</string>
+    <string name="guide_tour_row">Take the quick tour</string>
+    <string name="guide_tour_row_detail">Five stops on the home, under a minute</string>
+    <string name="guide_show_me">Show me</string>
+    <string name="guide_got_it">Got it</string>
+    <string name="guide_tour_skip">Skip tour</string>
+    <string name="guide_tour_next">Next</string>
+    <string name="guide_tour_done">Done</string>
+    <string name="guide_nothing_found">Nothing matches “%1$s”. Try other words, or clear the search to browse.</string>
+    <string name="guide_needs_tab">This is on the terminal screen. Open a tab first, and Help shows you from there.</string>
+    <string name="guide_open_tab_on">Open a tab on %1$s</string>
+    <string name="guide_tab_failed">Couldn\'t open a tab on %1$s</string>
+    <string name="guide_needs_host">This belongs to a host. Add a host first.</string>
+    <string name="guide_pick_host">Which host?</string>
+    <string name="guide_could_not_show">Couldn\'t point at it from here. The line above says where it is.</string>
+    <string name="guide_palette_group">Help</string>
+    <string name="guide_palette_row">Help: %1$s</string>
+
+    <string name="guide_section_home">Home and hosts</string>
+    <string name="guide_section_terminal">Terminal</string>
+    <string name="guide_section_agents">Answering agents</string>
+    <string name="guide_section_gestures">Gestures and long presses</string>
+    <string name="guide_section_keys">Key bar</string>
+    <string name="guide_section_notifications">Notifications</string>
+    <string name="guide_section_tailnet">Tailnet</string>
+    <string name="guide_section_settings">Settings and security</string>
+
+    <!-- The quick tour. -->
+    <string name="guide_tour_filters_title">What needs you</string>
+    <string name="guide_tour_filters_hint">Needs you lists what waits on you on every connected host. Activity is Rex\'s view of what programs are doing.</string>
+    <string name="guide_tour_rows_title">Everything a row can do</string>
+    <string name="guide_tour_rows_hint">Long press a host, session or tab, or tap its ⋮: rename, move, new tab from a template, end.</string>
+    <string name="guide_tour_new_title">A new session</string>
+    <string name="guide_tour_new_hint">+ starts a session. A session\'s New tab also runs your launch templates.</string>
+    <string name="guide_tour_settings_title">Settings</string>
+    <string name="guide_tour_settings_hint">Notifications, the key bar, text size, the app lock and backup are here.</string>
+    <string name="guide_tour_help_title">Help, any time</string>
+    <string name="guide_tour_help_hint">⋮ › Help and guide finds any feature and shows you where it is. It is in the terminal\'s ⋮ and the command palette too.</string>
+
+    <!-- Entries: a title, a one-line hint (where and how), a short body, and words to search by. -->
+    <string name="guide_add_host_title">Add a host</string>
+    <string name="guide_add_host_hint">⋮ › Add host, or Add host at the end of the list</string>
+    <string name="guide_add_host_body">A host is a computer running Rex. Give its address: over SSH (nothing to open on the computer), a tailnet, or the local network. Test connection checks each step before you save.</string>
+    <string name="guide_add_host_keys">new computer server mac ssh address connect machine</string>
+
+    <string name="guide_host_link_title">Add a host from another computer</string>
+    <string name="guide_host_link_hint">A link or QR code from the computer, or ⋮ › Import hosts</string>
+    <string name="guide_host_link_body">On the computer, tools/host-link.sh prints a rexpocket:// link and its QR code. Scan the code with the phone\'s camera, or open the link: Add host opens filled in for you to check. Import hosts takes a whole list, or a connected Rex\'s own list.</string>
+    <string name="guide_host_link_keys">qr code scan camera link share import list desk laptop</string>
+
+    <string name="guide_needs_you_title">See what needs you</string>
+    <string name="guide_needs_you_hint">The Needs you chip at the top of the home</string>
+    <string name="guide_needs_you_body">Needs you lists every tab, on every connected host, whose program waits on you, failed or finished and was not seen. Working lists what is at work. The counts cover connected hosts only.</string>
+    <string name="guide_needs_you_keys">waiting blocked failed done attention filter running working</string>
+
+    <string name="guide_activity_title">Rex\'s Activity view</string>
+    <string name="guide_activity_hint">The Activity chip: by priority or by session</string>
+    <string name="guide_activity_body">Activity lists every tab a program reported on, as Rex\'s Activity view does: by priority (blocked, failed, done, working, idle) or by session. Include idle keeps idle tabs after you saw them.</string>
+    <string name="guide_activity_keys">activity priority session idle status programs</string>
+
+    <string name="guide_search_title">Find a host, session or tab</string>
+    <string name="guide_search_hint">The search field at the bottom of the home</string>
+    <string name="guide_search_body">Type part of a name: the list narrows to the hosts, sessions and tabs that match, with every fold open. Back clears the search.</string>
+    <string name="guide_search_keys">search filter look up find name</string>
+
+    <string name="guide_new_session_title">Start a session</string>
+    <string name="guide_new_session_hint">+ at the bottom right of the home</string>
+    <string name="guide_new_session_body">+ makes a session on the connected host, or asks which host, and can connect one first. A session\'s ⋮ › New tab adds a tab to it.</string>
+    <string name="guide_new_session_keys">new session create shell plus</string>
+
+    <string name="guide_row_actions_title">Rename, move or end a session or tab</string>
+    <string name="guide_row_actions_hint">Long press the row, or tap its ⋮</string>
+    <string name="guide_row_actions_body">Every host, session and tab has a sheet: rename, move up or down, new tab, mark as seen, status details, end or close. A tap opens or folds the row; it never connects.</string>
+    <string name="guide_row_actions_keys">rename move reorder end close kill delete long press menu sheet mark seen</string>
+
+    <string name="guide_edit_host_title">Edit, move or remove a host</string>
+    <string name="guide_edit_host_hint">The host\'s ⋮ › Edit host, Move up, Remove host…</string>
+    <string name="guide_edit_host_body">The host\'s sheet edits its address and name, moves it in the list, copies its address and removes it, with Undo.</string>
+    <string name="guide_edit_host_keys">edit change address port name remove delete order host</string>
+
+    <string name="guide_templates_title">Run a command in a folder</string>
+    <string name="guide_templates_hint">New tab › Add template…: a name, a folder and a command</string>
+    <string name="guide_templates_body">A launch template opens a tab that starts in a folder and runs a command, such as claude in ~/proj. Your templates are in every New tab: a session\'s, the host\'s and the terminal\'s ⋮, and the command palette.</string>
+    <string name="guide_templates_keys">template launch claude codex agent folder directory cwd command start run project</string>
+
+    <string name="guide_host_quiet_title">Silence a host</string>
+    <string name="guide_host_quiet_hint">The host\'s ⋮ › Connection and notifications</string>
+    <string name="guide_host_quiet_body">A host\'s page turns its notifications off, or chooses which of its programs\' reports notify you, and whether it stays connected in the background. It also lists its muted tabs.</string>
+    <string name="guide_host_quiet_keys">mute silence quiet notifications host background off</string>
+
+    <string name="guide_tile_title">A Quick Settings tile</string>
+    <string name="guide_tile_hint">A host\'s or the tailnet\'s page › Add a tile</string>
+    <string name="guide_tile_body">A tile in Android\'s Quick Settings connects or disconnects a host or the tailnet with one tap. Add it on the page, then drag it into the Quick Settings panel. The home screen widget lists what needs you.</string>
+    <string name="guide_tile_keys">tile quick settings shade widget shortcut launcher</string>
+
+    <string name="guide_text_size_title">Change the text size</string>
+    <string name="guide_text_size_hint">⋮ › Text size, or pinch the terminal with two fingers</string>
+    <string name="guide_text_size_body">A pinch or − and + change this tab\'s size; the row shows the columns and rows it fits. Reset goes back to the default, which is in Settings › Appearance for every new tab. Ctrl+= and Ctrl+- work on a desk keyboard.</string>
+    <string name="guide_text_size_keys">zoom font bigger smaller larger pinch scale columns wrap fit</string>
+
+    <string name="guide_palette_title">Search every action</string>
+    <string name="guide_palette_hint">⋮ › Command palette, or Ctrl+Shift+P</string>
+    <string name="guide_palette_body">The command palette lists everything the terminal can do, every tab of every session and your Rex actions, and finds them as you type. Help\'s entries are in it too.</string>
+    <string name="guide_palette_keys">command palette search actions everything keyboard ctrl shift p</string>
+
+    <string name="guide_rex_actions_title">Run your Rex actions</string>
+    <string name="guide_rex_actions_hint">⋮ › Command palette: under their category</string>
+    <string name="guide_rex_actions_body">The actions in your Rex configuration (rex.action) are rows of the command palette, with their description, run for the pane on screen. A question an action asks shows as a dialog.</string>
+    <string name="guide_rex_actions_keys">custom action rex lua config script category</string>
+
+    <string name="guide_insert_path_title">Type a folder\'s or file\'s path</string>
+    <string name="guide_insert_path_hint">⋮ › Insert path, or the folder key on the key bar</string>
+    <string name="guide_insert_path_body">Insert path browses the host\'s folders from where the program is, and types the folder or file you pick into the pane, quoted for the shell. Nothing runs until Return.</string>
+    <string name="guide_insert_path_keys">path folder directory file browse cd ls insert</string>
+
+    <string name="guide_send_file_title">Send a file to the host</string>
+    <string name="guide_send_file_hint">⋮ › Send a file, or the attach key</string>
+    <string name="guide_send_file_body">Pick a file on the phone: it is uploaded to the host and its path typed into the pane, as dropping a file on a desk terminal does.</string>
+    <string name="guide_send_file_keys">upload attach image photo file send share</string>
+
+    <string name="guide_find_title">Find in the output</string>
+    <string name="guide_find_hint">⋮ › Find, or Ctrl+Shift+F</string>
+    <string name="guide_find_body">Find searches the pane\'s screen and scrollback, with each match marked, and moves between them.</string>
+    <string name="guide_find_keys">find search scrollback output text match</string>
+
+    <string name="guide_split_title">Split a pane</string>
+    <string name="guide_split_hint">⋮ › New pane on the right, or below</string>
+    <string name="guide_split_body">A new pane splits the tab, as on the desk. The phone shows one pane at a time: the dots over the key bar switch, and so does a sideways swipe.</string>
+    <string name="guide_split_keys">split pane right below new pane divide</string>
+
+    <string name="guide_switch_tab_title">Switch tab, pane or session</string>
+    <string name="guide_switch_tab_hint">Tap the title at the top of the terminal</string>
+    <string name="guide_switch_tab_body">The title opens the session\'s tabs and panes and the other sessions. The command palette finds a tab in any session by name.</string>
+    <string name="guide_switch_tab_keys">switch tab pane session window navigate</string>
+
+    <string name="guide_new_tab_title">Open a new tab</string>
+    <string name="guide_new_tab_hint">⋮ › New tab: a blank tab or a template</string>
+    <string name="guide_new_tab_body">New tab offers a blank tab and your launch templates, and Add template… to make one. Ctrl+Shift+T opens a blank tab at once.</string>
+    <string name="guide_new_tab_keys">new tab window template blank</string>
+
+    <string name="guide_copy_output_title">Copy or share all the output</string>
+    <string name="guide_copy_output_hint">⋮ › Copy output or Share output</string>
+    <string name="guide_copy_output_body">Copy output takes the pane\'s screen and scrollback as text, each line as the program wrote it. Share output sends it to another app. Select text picks a part.</string>
+    <string name="guide_copy_output_keys">copy share output text clipboard log scrollback export</string>
+
+    <string name="guide_full_screen_title">Full screen</string>
+    <string name="guide_full_screen_hint">⋮ › Full screen, or double tap the terminal</string>
+    <string name="guide_full_screen_body">Full screen gives the pane the whole window. The corner button, the same gesture or Back leaves it.</string>
+    <string name="guide_full_screen_keys">full screen immersive hide bars bigger</string>
+
+    <string name="guide_shortcuts_title">Use a desk keyboard</string>
+    <string name="guide_shortcuts_hint">⋮ › Keyboard shortcuts</string>
+    <string name="guide_shortcuts_body">With a keyboard on the desk, the screen\'s own shortcuts open the palette, Find, new tabs and the text size; Ctrl+Shift+/ lists them.</string>
+    <string name="guide_shortcuts_keys">keyboard shortcuts hardware bluetooth desk keys</string>
+
+    <string name="guide_approve_title">Approve, deny or reply to an agent</string>
+    <string name="guide_approve_hint">Needs you: Approve, Deny and Reply on the row</string>
+    <string name="guide_approve_body">A row waiting on an agent\'s approval prompt has Approve and Deny, which send its keys without opening the pane; Reply sends a line, with your quick replies. A notification has the same buttons.</string>
+    <string name="guide_approve_keys">approve deny reply answer permission prompt yes no agent claude codex</string>
+
+    <string name="guide_composer_title">Write a long prompt</string>
+    <string name="guide_composer_hint">⋮ › Compose prompt</string>
+    <string name="guide_composer_body">The composer is a full editor for a prompt, sent in one paste with Return after it or not. Its draft stays with the pane until the program took it.</string>
+    <string name="guide_composer_keys">compose prompt editor message long paste draft write</string>
+
+    <string name="guide_quick_replies_title">Quick replies</string>
+    <string name="guide_quick_replies_hint">Settings › Quick replies</string>
+    <string name="guide_quick_replies_body">Quick replies are what you tell agents most, one tap away in Reply, the composer, a notification and a key-bar panel. Edit, reorder or restore the defaults here.</string>
+    <string name="guide_quick_replies_keys">quick reply canned snippet yes continue answer</string>
+
+    <string name="guide_mute_tab_title">Mute a tab</string>
+    <string name="guide_mute_tab_hint">⋮ › Mute this tab, or Mute tab on its notification</string>
+    <string name="guide_mute_tab_body">A muted tab sends no notifications or progress bars. Expand a notification to find its Mute tab. Unmute in the same menu, or on the host\'s page, which lists its muted tabs.</string>
+    <string name="guide_mute_tab_keys">mute silence quiet notification tab unmute</string>
+
+    <string name="guide_pinch_title">Pinch to zoom</string>
+    <string name="guide_pinch_hint">Two fingers on the terminal: apart is bigger, together smaller</string>
+    <string name="guide_pinch_body">A pinch changes this tab\'s text size, so a wide table fits. ⋮ › Text size does the same with − and +.</string>
+    <string name="guide_pinch_keys">pinch zoom gesture two fingers text size</string>
+
+    <string name="guide_swipe_panes_title">Swipe to the next pane</string>
+    <string name="guide_swipe_panes_hint">Swipe sideways on the terminal</string>
+    <string name="guide_swipe_panes_body">With two or more panes in a tab, a sideways swipe moves to the one beside it, as the dots over the key bar show. A drag up or down scrolls the history.</string>
+    <string name="guide_swipe_panes_keys">swipe gesture pane next previous scroll drag</string>
+
+    <string name="guide_long_press_select_title">Select text and open links</string>
+    <string name="guide_long_press_select_hint">Long press the terminal; long press a link to open it</string>
+    <string name="guide_long_press_select_body">A long press selects, with handles to drag and Copy. On a link it offers Open, Copy and Share, whatever the long press is set to. ⋮ › Select text works too.</string>
+    <string name="guide_long_press_select_keys">long press hold select copy link url open</string>
+
+    <string name="guide_double_tap_title">Double tap</string>
+    <string name="guide_double_tap_hint">Double tap the terminal for full screen</string>
+    <string name="guide_double_tap_body">By default a double tap enters full screen and a tap opens the keyboard. Settings › Terminal controls can change what each does.</string>
+    <string name="guide_double_tap_keys">double tap gesture full screen keyboard</string>
+
+    <string name="guide_hold_return_title">A new line without sending</string>
+    <string name="guide_hold_return_hint">Hold the Return key on the key bar</string>
+    <string name="guide_hold_return_body">Return held is Shift+Return: a new line in an agent\'s prompt instead of sending it. TalkBack offers it as an action of the key.</string>
+    <string name="guide_hold_return_keys">hold long press return enter new line shift multiline</string>
+
+
+    <string name="guide_hold_ctrl_title">Control chords</string>
+    <string name="guide_hold_ctrl_hint">Tap Ctrl then a key, or hold Ctrl for the chords</string>
+    <string name="guide_hold_ctrl_body">Ctrl tapped applies to the next key, from the bar or the keyboard; tapped twice quickly it stays on. Held, it opens the chords: C-a to C-z in one more tap.</string>
+    <string name="guide_hold_ctrl_keys">ctrl control chord hold modifier c-r c-d</string>
+
+    <string name="guide_gesture_settings_title">Change what a tap does</string>
+    <string name="guide_gesture_settings_hint">Settings › Terminal controls › Tap, Double tap, Long press</string>
+    <string name="guide_gesture_settings_body">Choose what a tap, a double tap and a long press do on the terminal, and how long each waits.</string>
+    <string name="guide_gesture_settings_keys">gesture tap double tap long press settings keyboard toggle</string>
+
+    <string name="guide_insert_path_key_title">The folder key</string>
+    <string name="guide_insert_path_key_hint">The folder key on the key bar</string>
+    <string name="guide_insert_path_key_body">It opens Insert path: a folder on the host, from where the program is, whose path - or a file\'s - is typed into the pane. Next to it, the attach key sends a file from the phone.</string>
+    <string name="guide_insert_path_key_keys">folder key insert path directory file attach paperclip</string>
+
+    <string name="guide_arrange_keys_title">Add or remove keys</string>
+    <string name="guide_arrange_keys_hint">Settings › Terminal controls › Arrange keys</string>
+    <string name="guide_arrange_keys_body">Put any key on the bar - F10, Home, PgDn, a letter, C-d - reorder or hide them, and make key groups from presets for htop, vim or tmux.</string>
+    <string name="guide_arrange_keys_keys">key bar keys arrange customize f1 f10 home end pgup esc fn htop vim tmux group</string>
+
+    <string name="guide_alerts_title">Notifications while the app is closed</string>
+    <string name="guide_alerts_hint">Settings › Background and notifications › Background alerts</string>
+    <string name="guide_alerts_body">Background alerts keep hosts connected while the app is away, so a program waiting, failing or finishing notifies you, with Reply, Approve, Deny and Mute on the notification.</string>
+    <string name="guide_alerts_keys">notification alert background push sound vibrate when done</string>
+
+    <string name="guide_tailnet_title">Use a tailnet</string>
+    <string name="guide_tailnet_hint">Settings › Tailnet</string>
+    <string name="guide_tailnet_body">The app can join your tailnet itself, such as Tailscale, so it reaches a computer at home without opening a port or running a VPN app. Its sheet lists the devices on it, each with Add host.</string>
+    <string name="guide_tailnet_keys">tailnet tailscale vpn wireguard mesh remote network</string>
+
+    <string name="guide_app_lock_title">Lock the app</string>
+    <string name="guide_app_lock_hint">Settings › Security › Lock RexPocket</string>
+    <string name="guide_app_lock_body">The app asks for your fingerprint, face or screen lock when you come back to it, at once or after a few minutes away. It asks you first when you turn it on.</string>
+    <string name="guide_app_lock_keys">lock biometric fingerprint face pin password security privacy</string>
+
+    <string name="guide_screenshots_title">Block screenshots</string>
+    <string name="guide_screenshots_hint">Settings › Security › Block screenshots</string>
+    <string name="guide_screenshots_body">Screenshots and screen recordings show nothing of the app, and its picture in recent apps is blank.</string>
+    <string name="guide_screenshots_keys">screenshot screen recording recents privacy secure</string>
+
+    <string name="guide_backup_title">Back up settings</string>
+    <string name="guide_backup_hint">Settings › Export and import settings</string>
+    <string name="guide_backup_body">Every setting, with your hosts and templates, goes to one file, encrypted with a passphrase when it holds keys, and back on another phone.</string>
+    <string name="guide_backup_keys">backup export import restore file move phone transfer</string>
+
+    <string name="guide_appearance_title">Dark or light</string>
+    <string name="guide_appearance_hint">Settings › Appearance</string>
+    <string name="guide_appearance_body">The app\'s theme, the terminal\'s colours apart from it, the app\'s text size and the default terminal text size.</string>
+    <string name="guide_appearance_keys">dark light theme night colours colors contrast text size</string>
+
+    <string name="guide_font_title">Terminal font</string>
+    <string name="guide_font_hint">Settings › Terminal font</string>
+    <string name="guide_font_body">Pick the terminal\'s typeface - the phone\'s monospace or JetBrains Mono, downloaded once - and the default text size.</string>
+    <string name="guide_font_keys">font typeface monospace nerd font ttf</string>
+
+    <string name="guide_updates_title">Updates and previews</string>
+    <string name="guide_updates_hint">Settings › Updates</string>
+    <string name="guide_updates_body">The app looks for a newer build once a day and offers it; nothing downloads until you say so. The channel above it chooses stable builds or previews.</string>
+    <string name="guide_updates_keys">update upgrade version preview stable channel install</string>
+
+    <string name="guide_diagnostics_title">Send a diagnostics report</string>
+    <string name="guide_diagnostics_hint">Settings › Diagnostics</string>
+    <string name="guide_diagnostics_body">Diagnostics records what the app does and makes a report to share, with names, titles and messages left out.</string>
+    <string name="guide_diagnostics_keys">diagnostics bug report log debug problem</string>
+</resources>

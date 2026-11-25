@@ -1,5 +1,7 @@
 package me.leaver.rexpocket.ui
 
+import me.leaver.rexpocket.ui.guide.GuideSpot
+import me.leaver.rexpocket.ui.guide.guideTarget
 import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -88,6 +90,7 @@ internal fun NotificationsSheet(
                 detail = state(alerts),
                 checked = alerts,
                 keepOpen = true,
+                modifier = androidx.compose.ui.Modifier.guideTarget(GuideSpot.AlertsSwitch),
                 onClick = onAlerts,
             )
             // Android stopped background mode and would not let it start again: said here even

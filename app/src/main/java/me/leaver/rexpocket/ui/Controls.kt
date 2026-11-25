@@ -1,5 +1,7 @@
 package me.leaver.rexpocket.ui
 
+import me.leaver.rexpocket.ui.guide.GuideSpot
+import me.leaver.rexpocket.ui.guide.guideTarget
 import android.view.ViewConfiguration
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -95,7 +97,7 @@ internal fun ControlsSheet(
             // Each row opens a picker of its choices (Pickers.kt); the sheet stays open under it, so
             // the detail shows the change. The icon is the action chosen, not the gesture, so it
             // changes with it (choice(), below).
-            ChoiceRow(stringResource(R.string.gesture_tap), TapAction.entries, gestures.tap, ::choice) {
+            ChoiceRow(stringResource(R.string.gesture_tap), TapAction.entries, gestures.tap, ::choice, modifier = Modifier.guideTarget(GuideSpot.GestureTap)) {
                 onGestures(gestures.copy(tap = it))
             }
             ChoiceRow(stringResource(R.string.gesture_double_tap), DoubleTapAction.entries, gestures.doubleTap, ::choice) {
@@ -129,6 +131,7 @@ internal fun ControlsSheet(
                 label = stringResource(R.string.arrange_title), icon = R.drawable.ic_drag_handle,
                 supporting = stringResource(R.string.arrange_hint),
                 opens = true,
+                modifier = Modifier.guideTarget(GuideSpot.ArrangeKeys),
                 onClick = onArrangeKeys,
             )
             // Tapped, or held unless the program is busy. Whether the key shows at all is Arrange

@@ -1,5 +1,6 @@
 package me.leaver.rexpocket.ui
 
+import me.leaver.rexpocket.ui.guide.GuideSpot
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -137,7 +138,7 @@ internal fun TemplateSheetsHost(
                     ),
                     ActionGroup(
                         listOfNotNull(
-                            RowAction(stringResource(R.string.template_add), R.drawable.ic_add) { sheets.edit(null, TemplateSheets.Page.Run) },
+                            RowAction(stringResource(R.string.template_add), R.drawable.ic_add, spot = GuideSpot.TemplateAdd) { sheets.edit(null, TemplateSheets.Page.Run) },
                             RowAction(stringResource(R.string.template_manage), R.drawable.ic_edit) { sheets.page = TemplateSheets.Page.Manage }
                                 .takeIf { list.isNotEmpty() },
                         ),

@@ -1,5 +1,7 @@
 package me.leaver.rexpocket.ui
 
+import me.leaver.rexpocket.ui.guide.GuideSpot
+import me.leaver.rexpocket.ui.guide.guideTarget
 import android.app.Activity
 import android.app.KeyguardManager
 import android.content.Context
@@ -297,7 +299,7 @@ internal fun SecuritySheet(
                 detail = if (prefs.lock) on else off,
                 checked = prefs.lock,
                 keepOpen = true,
-                modifier = Modifier.testTag(SECURITY_LOCK_TAG),
+                modifier = Modifier.testTag(SECURITY_LOCK_TAG).guideTarget(GuideSpot.AppLock),
             ) {
                 if (prefs.lock) {
                     said = null
@@ -335,7 +337,7 @@ internal fun SecuritySheet(
                 detail = if (prefs.blockScreenshots) on else off,
                 checked = prefs.blockScreenshots,
                 keepOpen = true,
-                modifier = Modifier.testTag(SECURITY_SCREENSHOTS_TAG),
+                modifier = Modifier.testTag(SECURITY_SCREENSHOTS_TAG).guideTarget(GuideSpot.BlockScreenshots),
             ) { onPrefs(prefs.copy(blockScreenshots = !prefs.blockScreenshots)) }
         }
         Text(

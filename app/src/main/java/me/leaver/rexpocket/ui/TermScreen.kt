@@ -1,5 +1,11 @@
 package me.leaver.rexpocket.ui
 
+import me.leaver.rexpocket.ui.guide.GuideOpens
+import me.leaver.rexpocket.ui.guide.GuidePlace
+import me.leaver.rexpocket.ui.guide.GuideSpot
+import me.leaver.rexpocket.ui.guide.LocalGuide
+import me.leaver.rexpocket.ui.guide.guidePaletteEntries
+import me.leaver.rexpocket.ui.guide.guideTarget
 import me.leaver.rexpocket.core.tabDetails
 import android.os.Build
 import android.os.SystemClock
@@ -525,6 +531,11 @@ internal fun TermScreen(
     val short = LocalConfiguration.current.screenHeightDp < SHORT_WINDOW_DP
     val chrome = TermChrome(fullScreen, short = short, imeUp = imeShown())
     SystemBars(shown = chrome.systemBars)
+    // Help's Show me: the terminal's ⋮ menu, or the screen itself with its bars (ui/guide).
+    GuideOpens(TERM_GUIDE_PLACES) { asked ->
+        fullScreen = false
+        sheet = if (asked.place == GuidePlace.TermMenu) Sheet.Actions else null
+    }
 
     // An open sheet handles Back itself and closes. In full screen Back first brings the bars back:
     // the later handler is the one asked first.
@@ -617,7 +628,7 @@ internal fun TermScreen(
             // Settings › Appearance can set apart from the app's; the notes in its place are the app's.
             val shown = focused?.id
             val paper = if (closed != null && view != null || empty) Colors.terminal else Colors.pane
-            Box(Modifier.weight(1f).fillMaxWidth().background(paper).clipToBounds().testTag(PANE_TAG)) {
+            Box(Modifier.weight(1f).fillMaxWidth().background(paper).clipToBounds().testTag(PANE_TAG).guideTarget(GuideSpot.Pane.takeIf { focused != null })) {
                 if (closed != null && view != null) {
                     ClosedPaneNote(
                         closed = closed,
@@ -794,9 +805,9 @@ internal fun TermScreen(
             // hide them, and full screen hides it all. See terminal-controls.md, 4.
             Group {
                 // Everything below, and every tab and session, searchable: see command-palette.md.
-                SheetItem(stringResource(R.string.palette_title), icon = R.drawable.ic_command) { sheet = Sheet.Palette }
-                if (focused != null) SheetItem(stringResource(R.string.find_title), icon = R.drawable.ic_search) { openFind() }
-                SheetItem(stringResource(R.string.shortcuts_title), icon = R.drawable.ic_keyboard, opens = true) { sheet = Sheet.Shortcuts }
+                SheetItem(stringResource(R.string.palette_title), icon = R.drawable.ic_command, modifier = Modifier.guideTarget(GuideSpot.TermPalette)) { sheet = Sheet.Palette }
+                if (focused != null) SheetItem(stringResource(R.string.find_title), icon = R.drawable.ic_search, modifier = Modifier.guideTarget(GuideSpot.TermFind)) { openFind() }
+                SheetItem(stringResource(R.string.shortcuts_title), icon = R.drawable.ic_keyboard, opens = true, modifier = Modifier.guideTarget(GuideSpot.TermShortcuts)) { sheet = Sheet.Shortcuts }
                 for (key in PHONE_ACTIONS) {
                     when (key) {
                         // Paste, Send a file and the keyboard act on the pane on screen.
@@ -810,11 +821,12 @@ internal fun TermScreen(
                                 stringResource(R.string.upload_attach),
                                 icon = R.drawable.ic_attach_file,
                                 enabled = upload?.running != true,
+                                modifier = Modifier.guideTarget(GuideSpot.TermSendFile),
                             ) { filePicker.launch("*/*") }
                         }
                         // A path on the host, beside a file from the phone.
                         BarKey.InsertPath -> if (focused != null) {
-                            SheetItem(stringResource(R.string.insert_path), icon = R.drawable.ic_folder, opens = true) { sheet = Sheet.InsertPath }
+                            SheetItem(stringResource(R.string.insert_path), icon = R.drawable.ic_folder, opens = true, modifier = Modifier.guideTarget(GuideSpot.TermInsertPath)) { sheet = Sheet.InsertPath }
                         }
                         BarKey.Keyboard -> if (focused != null) {
                             SheetItem(
@@ -822,16 +834,16 @@ internal fun TermScreen(
                                 icon = if (imeUp) R.drawable.ic_keyboard_hide else R.drawable.ic_keyboard,
                             ) { toggleKeyboard() }
                         }
-                        BarKey.FullScreen -> SheetItem(stringResource(R.string.action_full_screen), icon = R.drawable.ic_fullscreen) { toggleFullScreen() }
+                        BarKey.FullScreen -> SheetItem(stringResource(R.string.action_full_screen), icon = R.drawable.ic_fullscreen, modifier = Modifier.guideTarget(GuideSpot.TermFullScreen)) { toggleFullScreen() }
                         BarKey.Compose -> if (focused != null) {
-                            SheetItem(stringResource(R.string.composer_title), icon = R.drawable.ic_edit) { openComposer() }
+                            SheetItem(stringResource(R.string.composer_title), icon = R.drawable.ic_edit, modifier = Modifier.guideTarget(GuideSpot.TermCompose)) { openComposer() }
                         }
                         else -> Unit
                     }
                 }
                 // The tab's text size, which only a pinch reached before: − / +, Reset, the grid.
                 if (focused != null && sizeKey != null) {
-                    TextSizeRow(tabScale, fontScale, grid, onScale = ::setTabScale, onReset = ::resetTabScale)
+                    TextSizeRow(tabScale, fontScale, grid, onScale = ::setTabScale, onReset = ::resetTabScale, modifier = Modifier.guideTarget(GuideSpot.TermTextSize))
                 }
             }
             Group(stringResource(R.string.level_pane)) {
@@ -843,7 +855,7 @@ internal fun TermScreen(
                         icon = if (state.holder == Holder.Phone) R.drawable.ic_back_hand else R.drawable.ic_front_hand,
                     ) { toggleHolder() }
                 }
-                SheetItem(stringResource(R.string.menu_split_right), icon = R.drawable.ic_split_right) { onAct { split(vertical = false) } }
+                SheetItem(stringResource(R.string.menu_split_right), icon = R.drawable.ic_split_right, modifier = Modifier.guideTarget(GuideSpot.TermSplit)) { onAct { split(vertical = false) } }
                 SheetItem(stringResource(R.string.menu_split_below), icon = R.drawable.ic_split_below) { onAct { split(vertical = true) } }
                 if (focused != null) {
                     SheetItem(stringResource(R.string.menu_rename_pane), icon = R.drawable.ic_edit) { rename = Rename(Level.Pane, focused.id, focused.label) }
@@ -861,14 +873,14 @@ internal fun TermScreen(
                 Group(stringResource(R.string.group_terminal)) {
                     // Selecting without a long press, which may be set to do something else.
                     SheetItem(stringResource(R.string.select_text), icon = R.drawable.ic_text_select) { selectText() }
-                    SheetItem(stringResource(R.string.palette_copy_output), icon = R.drawable.ic_copy) { copyOutput() }
+                    SheetItem(stringResource(R.string.palette_copy_output), icon = R.drawable.ic_copy, modifier = Modifier.guideTarget(GuideSpot.TermCopyOutput)) { copyOutput() }
                     SheetItem(stringResource(R.string.palette_share_output), icon = R.drawable.ic_share) { shareOutput() }
                     SheetItem(stringResource(R.string.palette_clear_terminal), Colors.danger, icon = R.drawable.ic_clear_all) { wipe = Wipe.Clear }
                     SheetItem(stringResource(R.string.palette_reset_terminal), Colors.danger, icon = R.drawable.ic_restart) { wipe = Wipe.Reset }
                 }
             }
             Group(stringResource(R.string.level_tab)) {
-                SheetItem(stringResource(R.string.menu_new_tab), icon = R.drawable.ic_add, opens = true) { sheet = Sheet.NewTab }
+                SheetItem(stringResource(R.string.menu_new_tab), icon = R.drawable.ic_add, opens = true, modifier = Modifier.guideTarget(GuideSpot.TermNewTab)) { sheet = Sheet.NewTab }
                 if (view != null && tab != null) {
                     val title = tabTitle(view, tab, state)
                     SheetItem(stringResource(R.string.menu_rename_tab), icon = R.drawable.ic_edit) { rename = Rename(Level.Tab, tab.id, tab.label) }
@@ -879,6 +891,7 @@ internal fun TermScreen(
                         stringResource(if (muted) R.string.menu_unmute_tab else R.string.menu_mute_tab),
                         icon = if (muted) R.drawable.ic_notifications else R.drawable.ic_notifications_off,
                         supporting = if (muted) stringResource(R.string.menu_tab_muted) else null,
+                        modifier = Modifier.guideTarget(GuideSpot.TermMuteTab),
                     ) { onMuteTab(tab.id, !muted) }
                     SheetItem(stringResource(R.string.menu_close_tab), Colors.danger, icon = R.drawable.ic_close) { confirm = Confirm(Level.Tab, tab.id, title) }
                 }
@@ -894,6 +907,12 @@ internal fun TermScreen(
                     }
                 }
             }
+            // Help: find any feature and be shown where it is (ui/guide).
+            LocalGuide.current?.let { guide ->
+                Group {
+                    SheetItem(stringResource(R.string.guide_menu), icon = R.drawable.ic_help, opens = true, modifier = Modifier.guideTarget(GuideSpot.TermHelp)) { guide.openHelp() }
+                }
+            }
         }
         Sheet.Palette -> {
             val paneGroup = stringResource(R.string.level_pane)
@@ -901,6 +920,8 @@ internal fun TermScreen(
             val sessionGroup = stringResource(R.string.level_session)
             val phoneGroup = stringResource(R.string.palette_group_phone)
             val copied = stringResource(R.string.toast_copied)
+            // Help's rows: Help itself and "Help: …" for each entry, found as the rest are.
+            val helpRows = guidePaletteEntries(LocalGuide.current)
             val entries = buildList {
                 fun action(label: String, group: String, rexName: String? = null, run: () -> Unit) =
                     add(PaletteEntry(label, group, null, PaletteRun(run = run), keywords = rexName))
@@ -1032,6 +1053,7 @@ internal fun TermScreen(
                 for (a in rexActions) {
                     add(PaletteEntry(a.title, a.category, a.description, PaletteRun { onRexAction(a) }, keywords = listOfNotNull(a.name, a.keywords).joinToString(" ")))
                 }
+                addAll(helpRows)
             }
             LaunchedEffect(Unit) { onPaletteOpen() }
             CommandPalette(entries, onDismiss = { sheet = null })
@@ -1305,7 +1327,7 @@ private fun SessionTopBar(
                 Spacer(Modifier.width(4.dp))
             }
             Row(
-                Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(Radius.card))
+                Modifier.weight(1f).height(56.dp).guideTarget(GuideSpot.TermTitle).clip(RoundedCornerShape(Radius.card))
                     .clickable(enabled = view != null, role = Role.Button, onClickLabel = stringResource(R.string.menu_navigate), onClick = onNavigate)
                     .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1792,3 +1814,6 @@ internal const val DOCK_TAG = "terminal-dock"
 
 /** The top bar's height, which a short window keeps as room while the bar steps aside. */
 private val TOP_BAR_HEIGHT = 64.dp
+
+/** The places of Help's entries that the terminal opens itself. */
+private val TERM_GUIDE_PLACES: Set<GuidePlace> = setOf(GuidePlace.Terminal, GuidePlace.TermMenu)

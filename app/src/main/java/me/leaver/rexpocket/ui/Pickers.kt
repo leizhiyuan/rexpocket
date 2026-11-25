@@ -57,6 +57,7 @@ internal fun <T> SheetScope.ChoiceRow(
     choice: (T) -> Choice,
     @DrawableRes icon: Int? = null,
     supporting: String? = null,
+    modifier: Modifier = Modifier,
     onPick: (T) -> Unit,
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
@@ -68,6 +69,7 @@ internal fun <T> SheetScope.ChoiceRow(
         supporting = supporting,
         keepOpen = true,
         opens = true,
+        modifier = modifier,
     ) { open = true }
     if (open) {
         ChoicePicker(

@@ -44,6 +44,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import me.leaver.rexpocket.update.InstallResult
 import me.leaver.rexpocket.update.UpdateState
+import me.leaver.rexpocket.ui.guide.Guide
+import me.leaver.rexpocket.ui.guide.GuideHost
+import me.leaver.rexpocket.ui.guide.GuideLayer
+import me.leaver.rexpocket.ui.guide.LocalGuide
+import androidx.compose.runtime.CompositionLocalProvider
 
 // The app root: lays the list and the pane out for the window in hand, and hosts the dialogs that
 // float over both.
@@ -53,6 +58,14 @@ fun RexPocketApp(
     model: RexViewModel = viewModel(),
     /** Opens a link in the browser; a test hands its own in, to see which links opened. */
     openUrl: ((String) -> Unit)? = null,
+) = RexPocketApp(model, openUrl, remember { Guide() })
+
+@Composable
+internal fun RexPocketApp(
+    model: RexViewModel,
+    openUrl: ((String) -> Unit)? = null,
+    /** Help's state; a test hands its own in, to drive Show me and see what the spotlight found. */
+    guide: Guide,
 ) {
     val route by model.route.collectAsState()
     val hosts by model.hosts.collectAsState()
@@ -142,8 +155,11 @@ fun RexPocketApp(
             loginGate.asked(tailnetStage)
         }
     }
-    RexTheme(appearance.app, appearance.terminal, appearance.text) {
-        Box(
+    // Help: its sheet, Show me and the tour, over both screens (ui/guide, docs/design/help-guide.md).
+    CompositionLocalProvider(LocalGuide provides guide) { RexTheme(appearance.app, appearance.terminal, appearance.text) {
+        val window = windowSize()
+        val layout = layoutFor(window, hasHosts = hosts.isNotEmpty(), terminalOpen = route == Route.Term)
+        GuideLayer(Modifier.fillMaxSize()) { Box(
             Modifier
                 .fillMaxSize()
                 .background(Colors.bg)
@@ -162,7 +178,6 @@ fun RexPocketApp(
                     false
                 },
         ) {
-            val window = windowSize()
             // A tablet or a desk window keeps the list beside the pane: a session or a tab is
             // switched without leaving the terminal it was showing. With nothing open, the pane
             // side says so and waits for a pick.
@@ -310,7 +325,7 @@ fun RexPocketApp(
                     onTemplates = { next -> model.host?.id?.let { model.setLaunchTemplates(it, next) } },
                 )
             }
-            when (layoutFor(window, hasHosts = hosts.isNotEmpty(), terminalOpen = route == Route.Term)) {
+            when (layout) {
                 WindowLayout.ListDetail -> BoxWithConstraints(Modifier.fillMaxSize()) {
                     val list = listPaneWidth(maxWidth)
                     val open = route == Route.Term
@@ -328,7 +343,8 @@ fun RexPocketApp(
                 }
                 WindowLayout.OneColumn -> if (route == Route.Term) term(false) else home(false)
             }
-        }
+        } }
+        GuideHost(guide, model, homeShown = layout != WindowLayout.OneColumn || route != Route.Term)
         // A question one of the person's Rex actions asks, over whatever is on screen.
         model.rexPrompt.collectAsState().value?.let { prompt ->
             val actions = model.rexActions.collectAsState().value
@@ -423,7 +439,7 @@ fun RexPocketApp(
                 onCancel = { model.disconnect(asking.target.id) },
             )
         }
-    }
+    } }
 }
 
 /**

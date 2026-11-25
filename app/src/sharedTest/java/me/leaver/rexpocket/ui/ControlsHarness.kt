@@ -37,6 +37,8 @@ internal fun freshApp(): Application {
     app.getSharedPreferences("home_marks", Context.MODE_PRIVATE).edit().clear().commit()
     // The terminal's pinch hint and the composer's Return after.
     app.getSharedPreferences(TERMINAL_PREFS, Context.MODE_PRIVATE).edit().clear().commit()
+    // Help's tour: whether this install is new and the tour ran (ui/guide).
+    app.getSharedPreferences(me.leaver.rexpocket.ui.guide.GUIDE_PREFS, Context.MODE_PRIVATE).edit().clear().commit()
     return app
 }
 

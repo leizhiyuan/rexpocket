@@ -1,5 +1,7 @@
 package me.leaver.rexpocket.ui
 
+import me.leaver.rexpocket.ui.guide.GuideSpot
+import me.leaver.rexpocket.ui.guide.guideTarget
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -229,6 +231,8 @@ internal fun HostHeader(
     actions: List<CustomAccessibilityAction> = emptyList(),
     /** The host's notifications are off: a crossed-out bell beside its name, which TalkBack reads. */
     silenced: Boolean = false,
+    /** The first host's ⋮ is the one Help points at for every row's sheet. */
+    menuTarget: Boolean = false,
 ) {
     val folded = stringResource(R.string.state_folded)
     val silencedWords = stringResource(R.string.alerts_muted_host)
@@ -277,7 +281,10 @@ internal fun HostHeader(
             // Under the line rather than beside it, so the line keeps its width with large text.
             if (action != null) RowButton(action.first, action.second, Modifier.offset(x = (-12).dp))
         }
-        RoundButton(R.drawable.ic_more, stringResource(R.string.manage_actions_for, host.label), onMenu, tint = Colors.muted, size = 48.dp)
+        RoundButton(
+            R.drawable.ic_more, stringResource(R.string.manage_actions_for, host.label), onMenu, tint = Colors.muted, size = 48.dp,
+            modifier = Modifier.guideTarget(GuideSpot.HostActions.takeIf { menuTarget }),
+        )
         if (foldable) FoldChevron(expanded)
     }
 }
@@ -687,9 +694,9 @@ internal fun HomeBottomBar(
         modifier.fillMaxWidth().background(Colors.bg).navigationBarsPadding().padding(horizontal = PAGE - 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RoundButton(R.drawable.ic_settings, stringResource(R.string.settings), onSettings, size = 48.dp, iconSize = 24.dp)
+        RoundButton(R.drawable.ic_settings, stringResource(R.string.settings), onSettings, Modifier.guideTarget(GuideSpot.HomeSettings), size = 48.dp, iconSize = 24.dp)
         Row(
-            Modifier.weight(1f).padding(horizontal = 4.dp).heightIn(min = 48.dp).clip(RoundedCornerShape(50)).background(Colors.surface)
+            Modifier.weight(1f).padding(horizontal = 4.dp).heightIn(min = 48.dp).guideTarget(GuideSpot.HomeSearch).clip(RoundedCornerShape(50)).background(Colors.surface)
                 .padding(start = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -713,7 +720,7 @@ internal fun HomeBottomBar(
                 RoundButton(R.drawable.ic_close, stringResource(R.string.action_clear), { onQuery("") }, tint = Colors.muted, size = 40.dp)
             }
         }
-        RoundButton(R.drawable.ic_add, stringResource(R.string.session_new), onNew, tint = Colors.accent, plate = Colors.keyOn, size = 48.dp, iconSize = 24.dp)
+        RoundButton(R.drawable.ic_add, stringResource(R.string.session_new), onNew, Modifier.guideTarget(GuideSpot.HomeNew), tint = Colors.accent, plate = Colors.keyOn, size = 48.dp, iconSize = 24.dp)
     }
 }
 
@@ -924,6 +931,7 @@ internal fun HostItem(env: TreeEnv, ref: HostRef, rows: List<HomeSession>, expan
         onMenu = { env.sheets.sheet = ManageTarget.Host(host.id) },
         actions = groups.talkBack(),
         silenced = env.silenced(host.id),
+        menuTarget = env.hosts.firstOrNull()?.id == host.id,
     )
     if (live != null) {
         HostStatus(

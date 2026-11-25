@@ -1,5 +1,7 @@
 package me.leaver.rexpocket.ui
 
+import me.leaver.rexpocket.ui.guide.GuideSpot
+import me.leaver.rexpocket.ui.guide.guideTarget
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -69,6 +71,8 @@ internal class RowAction(
     val keepOpen: Boolean = false,
     /** What TalkBack says for the item as a button on a row, where its label alone would not say whose it is: "Approve for build". */
     val said: String? = null,
+    /** The control Help points at for this item, if any (ui/guide). */
+    val spot: me.leaver.rexpocket.ui.guide.GuideSpot? = null,
     val run: () -> Unit,
 )
 
@@ -303,7 +307,7 @@ internal fun hostActions(
         moveGroup(place, count, null) { to -> ops.moveHost(id, to) },
         ActionGroup(
             listOfNotNull(
-                RowAction(stringResource(R.string.action_edit_host), R.drawable.ic_edit) { ops.editHost(id) },
+                RowAction(stringResource(R.string.action_edit_host), R.drawable.ic_edit, spot = GuideSpot.HostEdit) { ops.editHost(id) },
                 RowAction(stringResource(R.string.conn_settings), R.drawable.ic_notifications) { ops.page(id) },
                 RowAction(stringResource(R.string.home_copy_address), R.drawable.ic_copy) { ops.copyAddress(ref.host) },
                 RowAction(stringResource(R.string.home_tailnet_details), R.drawable.ic_tailnet) { ops.tailnetDetails() }.takeIf { ref.host.viaTailscale },
@@ -464,6 +468,7 @@ internal fun RowActionsSheet(title: String?, groups: List<ActionGroup>, onDismis
                         icon = action.icon,
                         keepOpen = action.keepOpen,
                         enabled = action.enabled,
+                        modifier = androidx.compose.ui.Modifier.guideTarget(action.spot),
                         onClick = action.run,
                     )
                 }

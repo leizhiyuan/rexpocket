@@ -89,9 +89,8 @@ Every entry below is in the registry; the place and the control it points at fol
   Mute) → ⋮, Mute this tab.
 - **Gestures and long presses.** Pinch for text size, swipe sideways for the next pane, long press
   to select (and a link to open it), double tap for full screen → the pane. Hold Return for a new
-  line → the Return key. Hold the attach key for Insert path → that key. Hold Ctrl for a chord → the
-  Ctrl key. Change what a tap does → Settings › Terminal controls, Tap.
-- **Key bar.** Add or remove keys (F10, Home, a vim group) → Terminal controls, Arrange keys.
+  line → the Return key. Hold Ctrl for a chord → the Ctrl key. Change what a tap does → Settings › Terminal controls, Tap.
+- **Key bar.** The folder key (Insert path) → that key. Add or remove keys (F10, Home, a vim group) → Terminal controls, Arrange keys.
 - **Notifications.** Notifications while the app is closed → Notifications, Background alerts.
 - **Tailnet.** Use a tailnet → Settings, Tailnet.
 - **Settings and security.** Lock the app → Security, Lock RexPocket. Block screenshots → Security,
@@ -108,7 +107,10 @@ object, all in `ui/guide/`.
   screen test that does not start the whole app) it is no modifier at all. Otherwise, only while
   the spotlight wants this spot, it asks to be scrolled into view (`BringIntoViewRequester`, so a
   sheet's scroll or the key bar's row moves to it) and reports its bounds to its layer from
-  `onGloballyPositioned`. A control not wanted costs one state read.
+  `onGloballyPositioned`; a control clipped out of sight reports nothing, so "found" means on
+  screen. A control not wanted costs one state read. The scroll waits two frames, not a time: a
+  sheet has laid out by then, and a test's frame clock, which only moves while something draws,
+  gets there too.
 - **`GuideLayer`** is a box round a window's content that knows its own coordinates; a target
   reports to the nearest one (`LocalGuideLayer`) and the layer draws the scrim, the ring and the
   card over that window. There is one at the app's root and one inside `ActionSheet`, the one sheet
@@ -148,9 +150,11 @@ places; and one `guideTarget` per control. Nothing else changes, no dependency i
   and a tap elsewhere dismiss it, and the tap reaches the control; a terminal entry with no tab open
   says so and its Open a tab gets there; the palette's Help rows; the tour's Next, Skip and its one
   automatic run on a new install only.
-- `GuideEntriesTest` (JVM): ids unique; every spot of the enum is pointed at by an entry or a tour
-  step; every section has entries; and the strings in all three languages (with
-  `TranslationParityTest`).
+- `GuideEntriesTest` (JVM): ids unique; every spot of the enum is pointed at by an entry, a tour
+  step or is a row that opens Help; every section has entries; the gestures and long presses are
+  all there; when the tour is due. The strings in all three languages are `TranslationParityTest`'s.
+- The screen tests hand their own `Guide` to the app (an internal overload of `RexPocketApp`), and
+  `freshApp` clears the `guide` preferences, so no other test ever sees the tour.
 
 ## Left out, on purpose
 
