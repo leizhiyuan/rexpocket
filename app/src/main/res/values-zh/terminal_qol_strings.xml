@@ -23,7 +23,7 @@
     <string name="confirm_reset_terminal">重置终端？</string>
     <string name="confirm_reset_terminal_body">终端会重新开始并清空，就像刚打开一样。其中的程序继续运行。</string>
     <string name="confirm_reset_action">重置</string>
-    <string name="group_pane_more">更多</string>
+    <string name="group_terminal">终端</string>
 
     <string name="quick_replies_edit_all">编辑快捷回复</string>
     <string name="quick_reply_deleted">已删除“%1$s”</string>

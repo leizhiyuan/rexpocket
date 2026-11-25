@@ -96,10 +96,11 @@ class TermMenuTest {
         string(R.string.menu_split_right),
         string(R.string.menu_split_below),
         string(R.string.menu_rename_pane),
+        // What the pane shows: taken, then erased, the two that erase last.
+        "# " + string(R.string.group_terminal),
         string(R.string.select_text),
         string(R.string.palette_copy_output),
         string(R.string.palette_share_output),
-        "# " + string(R.string.group_pane_more),
         string(R.string.palette_clear_terminal),
         string(R.string.palette_reset_terminal),
         "# " + string(R.string.level_tab),
@@ -125,7 +126,7 @@ class TermMenuTest {
     fun aSplitTabHandedBackOffersTakeOverAndClosePane() {
         val lines = open(liveState(tabOf(testPane("left"), testPane("right")), released = true))
         val expected = onePane(holder = R.string.action_take_over).toMutableList()
-        expected.add(expected.indexOf(string(R.string.palette_share_output)) + 1, string(R.string.menu_close_pane))
+        expected.add(expected.indexOf(string(R.string.menu_rename_pane)) + 1, string(R.string.menu_close_pane))
         assertEquals(expected, texts(lines))
     }
 

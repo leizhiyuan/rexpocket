@@ -155,10 +155,11 @@ The menu, top to bottom; each section's destructive row last, in red:
    Paste; Send a file; Insert path › (4.3); Show / Hide keyboard; Full screen; Compose prompt; then
    Text size (4.2).
 2. Pane: Release / Take over (while the session is live and a tab is open, as the top bar's chip);
-   New pane on the right; New pane below; Rename pane; Select text; Copy output; Share output;
-   Close pane.
-3. More: Clear terminal; Reset terminal - both red, both asking first, as Close pane does: what
-   they erase does not come back. The palette's rows ask the same way.
+   New pane on the right; New pane below; Rename pane; Close pane.
+3. Terminal, what the pane shows: Select text; Copy output; Share output; Clear terminal; Reset
+   terminal - the last two red, both asking first, as Close pane does: what they erase does not
+   come back. The palette's rows ask the same way. (They were a group captioned "More", which said
+   nothing, while Select text and the copies sat among the Pane rows that split and close.)
 4. Tab: New tab; Rename tab; Status details; Close tab.
 5. Session: Sessions; Rename session; End session.
 

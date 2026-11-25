@@ -22,13 +22,13 @@
     <string name="select_text_nothing">Nothing on screen to select yet</string>
     <string name="selection_select_screen">Select screen</string>
 
-    <!-- Clear and Reset terminal ask first. -->
+    <!-- Clear and Reset terminal ask first; the ⋮ menu groups them with Select text and Copy output. -->
     <string name="confirm_clear_terminal">Clear the terminal?</string>
     <string name="confirm_clear_terminal_body">The screen and the scrollback are erased; the line being typed stays. This cannot be undone.</string>
     <string name="confirm_reset_terminal">Reset the terminal?</string>
     <string name="confirm_reset_terminal_body">The terminal starts over, cleared, as if just opened. The program in it keeps running.</string>
     <string name="confirm_reset_action">Reset</string>
-    <string name="group_pane_more">More</string>
+    <string name="group_terminal">Terminal</string>
 
     <!-- Quick replies, from the key bar's panel and the composer. -->
     <string name="quick_replies_edit_all">Edit quick replies</string>

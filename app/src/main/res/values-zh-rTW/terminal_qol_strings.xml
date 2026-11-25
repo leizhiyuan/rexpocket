@@ -23,7 +23,7 @@
     <string name="confirm_reset_terminal">要重設終端機嗎？</string>
     <string name="confirm_reset_terminal_body">終端機會重新開始並清空，如同剛開啟。其中的程式會繼續執行。</string>
     <string name="confirm_reset_action">重設</string>
-    <string name="group_pane_more">更多</string>
+    <string name="group_terminal">終端機</string>
 
     <string name="quick_replies_edit_all">編輯快速回覆</string>
     <string name="quick_reply_deleted">已刪除「%1$s」</string>

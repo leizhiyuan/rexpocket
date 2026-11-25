@@ -847,10 +847,6 @@ internal fun TermScreen(
                 SheetItem(stringResource(R.string.menu_split_below), icon = R.drawable.ic_split_below) { onAct { split(vertical = true) } }
                 if (focused != null) {
                     SheetItem(stringResource(R.string.menu_rename_pane), icon = R.drawable.ic_edit) { rename = Rename(Level.Pane, focused.id, focused.label) }
-                    // Selecting without a long press, which may be set to do something else.
-                    SheetItem(stringResource(R.string.select_text), icon = R.drawable.ic_text_select) { selectText() }
-                    SheetItem(stringResource(R.string.palette_copy_output), icon = R.drawable.ic_copy) { copyOutput() }
-                    SheetItem(stringResource(R.string.palette_share_output), icon = R.drawable.ic_share) { shareOutput() }
                     // A tab's last pane closing closes the tab on Rex: that is Close tab, below.
                     if (panes.size > 1) {
                         SheetItem(stringResource(R.string.menu_close_pane), Colors.danger, icon = R.drawable.ic_close) {
@@ -859,9 +855,14 @@ internal fun TermScreen(
                     }
                 }
             }
-            // Rex's own two Pane actions that erase what the pane shows: each asks first.
+            // What the pane shows: taken (selected, copied, shared), then erased by Rex's own two
+            // Pane actions that do, each asking first.
             if (focused != null) {
-                Group(stringResource(R.string.group_pane_more)) {
+                Group(stringResource(R.string.group_terminal)) {
+                    // Selecting without a long press, which may be set to do something else.
+                    SheetItem(stringResource(R.string.select_text), icon = R.drawable.ic_text_select) { selectText() }
+                    SheetItem(stringResource(R.string.palette_copy_output), icon = R.drawable.ic_copy) { copyOutput() }
+                    SheetItem(stringResource(R.string.palette_share_output), icon = R.drawable.ic_share) { shareOutput() }
                     SheetItem(stringResource(R.string.palette_clear_terminal), Colors.danger, icon = R.drawable.ic_clear_all) { wipe = Wipe.Clear }
                     SheetItem(stringResource(R.string.palette_reset_terminal), Colors.danger, icon = R.drawable.ic_restart) { wipe = Wipe.Reset }
                 }
