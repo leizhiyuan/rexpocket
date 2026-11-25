@@ -120,7 +120,8 @@ done or failed one (with Undo, TalkBack "Mark build as seen"), and a line for ea
 not connected, with Connect.
 
 **What the filters cannot see.** Only a live connection hears a host's programs, so the counts and
-lists are the connected hosts'. While any saved host is not connected, the counted chips carry a
+lists are the connected hosts'. While any saved host is not connected - or was asked to connect and
+cannot get through, which its line offers to Retry now - the counted chips carry a
 small hollow ring and say "Connected hosts only" to TalkBack, and an empty list says "Nothing needs
 you on connected hosts · 2 not connected", with Connect all when more than one is away (one has its
 own line's Connect under it).
@@ -159,7 +160,8 @@ sheet lists them; a tap opens a new tab, labelled with the template's name, that
 directory and runs the command, and shows it on the phone (the host connects first when it is
 not). From a session's sheet the tab goes in that session; from the host's, in the session the
 phone shows on that host, or its first, or a new session when it has none. The sheet's caption
-says which ("Opens in api-work").
+says which ("Opens in api-work"). A session ended meanwhile, at the desk or here, is no longer
+offered: the caption then says a new session, and that is where the tab opens.
 
 Rex's shell block takes `command` and `cwd` itself (`block-creators.json`, the shell flavor's
 options), so nothing is typed into the tab: it is made running `sh -c 'cd ~/'src/api' && claude;

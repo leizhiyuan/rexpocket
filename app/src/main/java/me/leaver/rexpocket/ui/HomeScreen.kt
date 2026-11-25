@@ -546,8 +546,14 @@ internal fun HomeScreen(
             }
             h.id to ops.unseen(h.id, st, windows)
         }.filterValues { it.isNotEmpty() }
-        val away = hosts.count { it.id !in lives }
-        val connectAll: () -> Unit = { hosts.filter { it.id !in lives }.forEach(onConnect) }
+        // Hosts the filters do not hear: not connected, or asked to and not getting through (a
+        // connection that failed, or keeps dialing and says why). One just on its way is not.
+        val unheard = hosts.filter { h ->
+            val st = lives[h.id]?.state
+            st == null || (st.phase != Phase.Live && (st.phase == Phase.Failed || st.problem != null))
+        }
+        val away = unheard.size
+        val connectAll: () -> Unit = { unheard.forEach { if (it.id in lives) onRetry(it.id) else onConnect(it) } }
         Column(Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().imePadding()) {
             // The tailnet's card while it is on its way or needs the person; a chip once it is on.
             val tailnetHosts = hosts.count { it.viaTailscale }
@@ -688,15 +694,19 @@ internal fun HomeScreen(
                         }
                         if (shown == 0) {
                             item(key = "filter-empty") {
-                                ActivityEmpty(filter, live = connectedHosts.isNotEmpty(), searching = q.isNotEmpty(), away = away, onConnectAll = connectAll.takeIf { away > 1 })
+                                ActivityEmpty(filter, live = connectedHosts.size > unheard.count { it.id in lives }, searching = q.isNotEmpty(), away = away, onConnectAll = connectAll.takeIf { away > 1 })
                             }
                         }
                         // What the filter cannot see: the hosts that are not connected, each with its way in.
-                        for (host in hosts.filter { it.id !in lives }) {
+                        for (host in unheard) {
                             item(key = "filter-off-${host.id}") {
                                 NoteRow(
                                     stringResource(R.string.home_not_connected_line, host.label),
-                                    stringResource(R.string.action_connect) to { onConnect(host) },
+                                    if (host.id in lives) {
+                                        stringResource(R.string.action_retry_now) to { onRetry(host.id) }
+                                    } else {
+                                        stringResource(R.string.action_connect) to { onConnect(host) }
+                                    },
                                     card = false,
                                 )
                             }

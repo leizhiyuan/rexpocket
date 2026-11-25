@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.LaunchTemplate
+import me.leaver.rexpocket.core.Phase
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -42,9 +43,13 @@ class HomeEdgeTest {
 
     private fun string(id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
-    private fun start(): RexViewModel {
+    /** A second saved host whose Rex cannot be reached: nothing listens on its port. */
+    private val away = me.leaver.rexpocket.data.SavedHost(id = "away-host", label = "build-box", host = "127.0.0.1", port = 9, plaintext = true)
+
+    private fun start(withAway: Boolean = false): RexViewModel {
         val app = freshApp()
-        desk.saveFor(app, lastSession = shown)
+        val store = desk.saveFor(app, lastSession = shown)
+        if (withAway) store.upsert(away)
         val m = launchedModel(compose, app)
         model = m
         compose.setContent { RexPocketApp(m) }
@@ -198,5 +203,29 @@ class HomeEdgeTest {
         val hostRow = compose.onAllNodes(hasText(desk.host.label) and !inASheet).fetchSemanticsNodes()
             .first { SemanticsActions.CustomActions in it.config }.config[SemanticsActions.CustomActions].map { it.label }
         assertEquals(sheet, hostRow)
+    }
+
+    /**
+     * A host that was asked to connect and cannot be reached is not heard any more than one never
+     * connected: a filter still marks its counts as the connected hosts' only, says so when empty,
+     * and lists the host with the way to try again.
+     */
+    @Test
+    fun aHostThatCannotBeReachedIsNotCountedAsHeard() {
+        val m = start(withAway = true)
+        compose.runOnUiThread { m.connect(away) }
+        // It keeps dialing, and says why it cannot get through.
+        compose.awaitThat { m.lives.value[away.id]?.state?.let { it.phase != Phase.Live && it.problem != null } == true }
+        compose.onNodeWithTag(filterChipTag(HomeFilter.NeedsYou)).performClick()
+        compose.waitForIdle()
+        val empty = string(R.string.filter_needs_you_none_connected) + " · " + string(R.string.home_not_connected_count, 1)
+        compose.awaitThat { compose.onAllNodes(hasText(empty)).fetchSemanticsNodes().size == 1 }
+        val marked = compose.onNodeWithTag(filterChipTag(HomeFilter.NeedsYou)).fetchSemanticsNode().config
+        assertEquals(string(R.string.home_counts_connected_only), marked.getOrElse(SemanticsProperties.StateDescription) { "" })
+        compose.onNode(hasText(string(R.string.home_not_connected_line, away.label))).assertExists()
+        // Its line's button tries again.
+        compose.onNode(hasText(string(R.string.action_retry_now)) and hasClickAction() and !inASheet).performClick()
+        compose.waitForIdle()
+        assertTrue(m.lives.value.containsKey(away.id))
     }
 }
