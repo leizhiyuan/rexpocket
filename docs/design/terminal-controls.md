@@ -14,7 +14,7 @@ one change of behaviour by default is that a tap in full screen also closes the 
 | Top bar: back, the tab title (opens tabs and panes), who holds the pane, ⋮ | shown | hidden |
 | Pane switcher pill (only with 2+ panes in the tab) | over the key bar | hidden |
 | Pane | between the bars | the whole window |
-| Key pill: Esc, C-c, Tab, Return, Ctrl, Fn, Paste, Attach, `/` by default; any key of the catalogue and the keys of key groups (4.1) | bottom | hidden |
+| Key pill: Esc, C-c, Tab, Return, Ctrl, Fn, Paste, Attach, Insert path, `/` by default; any key of the catalogue and the keys of key groups (4.1) | bottom | hidden |
 | Small pill: arrow stick, keyboard key, full-screen key (scrolled into view) | bottom right | hidden |
 | Exit-full-screen corner button | — | top right |
 
@@ -140,7 +140,8 @@ its 20 dp hint instead. A wide pill with every key hidden is not drawn; the smal
 place at the right.
 
 **The ⋮ menu repeats every key-bar action that acts on the phone rather than sending a key**:
-Paste, Send a file, the keyboard (Show keyboard / Hide keyboard) and Full screen, plus the top
+Paste, Send a file, Insert path (what it types is picked on the phone), the keyboard (Show
+keyboard / Hide keyboard), Full screen and Compose prompt, plus the top
 bar's Release / Take over. They are always there, whatever the bar shows: a desk keyboard takes the
 bar away, Arrange keys can hide those keys, full screen and a short window's keyboard hide the bar
 or the top bar, and the menu is where people look for what the screen can do. Keys that send bytes
@@ -151,10 +152,11 @@ default, so a key added to the bar has to be put on one side.
 The menu, top to bottom; each section's destructive row last, in red:
 
 1. No caption: Command palette; Find (9); Keyboard shortcuts › (10); then, in the bar's order:
-   Paste; Send a file; Show / Hide keyboard; Full screen; Compose prompt; then Text size (4.2).
+   Paste; Send a file; Insert path › (4.3); Show / Hide keyboard; Full screen; Compose prompt; then
+   Text size (4.2).
 2. Pane: Release / Take over (while the session is live and a tab is open, as the top bar's chip);
    New pane on the right; New pane below; Rename pane; Select text; Copy output; Share output;
-   Insert path › (4.3); Close pane.
+   Close pane.
 3. More: Clear terminal; Reset terminal - both red, both asking first, as Close pane does: what
    they erase does not come back. The palette's rows ask the same way.
 4. Tab: New tab; Rename tab; Status details; Close tab.
@@ -180,7 +182,7 @@ One catalogue (`BarKey`, core) of every key the bar can draw, each with a stored
 
 | Kind | Keys | Stored as |
 | --- | --- | --- |
-| The bar's own | Esc, C-c, Tab, Return, Ctrl, Shift, Alt, Paste, Attach, `/` | `escape`, `ctrl_c`, ... as before |
+| The bar's own | Esc, C-c, Tab, Return, Ctrl, Shift, Alt, Paste, Attach, Insert path, `/` | `escape`, `ctrl_c`, ... as before; Insert path `insert_path` |
 | Answering agents (off the bar by default) | Compose prompt (the composer; in the ⋮ menu too), Quick replies (a panel of the person's quick replies, never in a group) | `compose`, `quick_replies` |
 | Group keys | one per group: `Fn`, and each group made | `fn`, `group_<id>` |
 | The right pill's | arrow stick, keyboard key, full-screen key | `arrows`, `keyboard`, `full_screen` |
@@ -209,7 +211,7 @@ A key is at most once in each place, but may be in several: on the pill and in `
 is by default. So putting F10 on the bar adds it there and leaves `Fn`'s rows of F-keys whole;
 moving a key is adding it in one place and removing it from the other, two steps a person sees.
 
-Defaults are today's bar: the pill Esc, C-c, Tab, Return, Ctrl, Fn, Paste, Attach, `/`; `Fn` with
+Defaults are today's bar: the pill Esc, C-c, Tab, Return, Ctrl, Fn, Paste, Attach, Insert path, `/`; `Fn` with
 Home, End, PgUp, PgDn, Ins, Del, F1-F12 and the seven symbols; the right pill stick, keyboard key,
 full-screen key. Shift and Alt are off the bar until added, as they were hidden.
 
@@ -300,7 +302,7 @@ not drawn (no "Add keys" on a full right pill) rather than greyed.
 | Key | Values | Missing means |
 | --- | --- | --- |
 | `keybar_order` | the key pill's keys, then the right pill's | built from the old switches, below |
-| `keybar_hidden` | the default bar keys (the 14 of the last version) not on their pill | as `keybar_order` |
+| `keybar_hidden` | the default bar keys (the 14 of the last version, and Insert path) not on their pill | as `keybar_order` |
 | `keybar_groups` | the group ids, in the order they were made | `fn` alone, with today's keys |
 | `keybar_group_<id>` | the group's keys | the preset's keys, or none |
 | `keybar_group_<id>_name` | its name | the preset's name |
@@ -368,10 +370,16 @@ rows"), politely again as it changes; − and + are "Smaller text" and "Bigger t
 ### 4.3 Insert path
 
 A folder browser that types the path picked into the pane: for a shell, where an agent's own `@`
-picker is not there to help. From the ⋮ menu's Pane group, a long press on the key bar's Attach key
-(a TalkBack action of the key too: Attach sends a file from the phone, Insert path names one on the
-host), and the palette (Rex's own Insert Path…
-words find it).
+picker is not there to help. From its own key on the bar, a folder, just after Attach's paperclip
+(Attach sends a file from the phone, Insert path names one on the host), the ⋮ menu's row beside
+Send a file, and the palette (Rex's own Insert Path… words find it).
+
+It was first a long press on Attach, which nobody found: a held key has no mark, and the paperclip
+says "phone file", not "host path". Now it is a key of its own, on by default (`insert_path`), and
+Attach has no long press. A bar stored before it gains it once, after Attach (or the key before it
+that is there), by the rule for a default key added since (4.1); that holds for a bar someone
+arranged too, since it is one key, one tap from coming off, and stored as off after that. Arrange
+keys offers it under The bar's keys, and a group may hold it.
 
 - It asks Rex, `block.method` `list_dir` (`com.superlogical.terminal.list_dir`) with `path` empty -
   the working directory of the pane's foreground program, as Rex resolves it - and `files` on. So

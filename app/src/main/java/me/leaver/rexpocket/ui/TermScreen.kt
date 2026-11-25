@@ -759,7 +759,7 @@ internal fun TermScreen(
                             onQuickReply = ::sendQuickReply,
                             onCompose = ::openComposer,
                             onEditReplies = if (onQuickReplies != null) { { sheet = Sheet.QuickReplies } } else null,
-                            onInsertPath = if (focused != null) { { sheet = Sheet.InsertPath } } else null,
+                            onInsertPath = { if (focused != null) sheet = Sheet.InsertPath },
                         )
                     }
                 }
@@ -812,6 +812,10 @@ internal fun TermScreen(
                                 enabled = upload?.running != true,
                             ) { filePicker.launch("*/*") }
                         }
+                        // A path on the host, beside a file from the phone.
+                        BarKey.InsertPath -> if (focused != null) {
+                            SheetItem(stringResource(R.string.insert_path), icon = R.drawable.ic_folder, opens = true) { sheet = Sheet.InsertPath }
+                        }
                         BarKey.Keyboard -> if (focused != null) {
                             SheetItem(
                                 stringResource(if (imeUp) R.string.menu_hide_keyboard else R.string.menu_show_keyboard),
@@ -847,7 +851,6 @@ internal fun TermScreen(
                     SheetItem(stringResource(R.string.select_text), icon = R.drawable.ic_text_select) { selectText() }
                     SheetItem(stringResource(R.string.palette_copy_output), icon = R.drawable.ic_copy) { copyOutput() }
                     SheetItem(stringResource(R.string.palette_share_output), icon = R.drawable.ic_share) { shareOutput() }
-                    SheetItem(stringResource(R.string.insert_path), icon = R.drawable.ic_folder, opens = true) { sheet = Sheet.InsertPath }
                     // A tab's last pane closing closes the tab on Rex: that is Close tab, below.
                     if (panes.size > 1) {
                         SheetItem(stringResource(R.string.menu_close_pane), Colors.danger, icon = R.drawable.ic_close) {
@@ -1660,7 +1663,8 @@ private fun holderShown(state: PocketState, tab: WindowInfo?): Boolean = state.p
  */
 internal val BarKey.actsOnPhone: Boolean
     get() = when (this) {
-        BarKey.Paste, BarKey.Attach, BarKey.Keyboard, BarKey.FullScreen, BarKey.Compose -> true
+        // Insert path types, but what it types is picked on the phone, in its folder browser.
+        BarKey.Paste, BarKey.Attach, BarKey.InsertPath, BarKey.Keyboard, BarKey.FullScreen, BarKey.Compose -> true
         BarKey.Escape, BarKey.CtrlC, BarKey.Tab, BarKey.Enter, BarKey.Ctrl, BarKey.Shift, BarKey.Alt,
         BarKey.Slash, BarKey.Arrows -> false
         // Quick replies type, as the keys do; the palette lists each one too.

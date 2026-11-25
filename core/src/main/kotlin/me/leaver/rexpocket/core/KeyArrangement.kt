@@ -35,6 +35,9 @@ sealed class BarKey(val pref: String, val kind: KeyKind) {
     data object Paste : BarKey("paste", KeyKind.Bar)
     data object Attach : BarKey("attach", KeyKind.Bar)
 
+    /** Opens Insert path: a folder browser of the host that types the path picked into the pane. */
+    data object InsertPath : BarKey("insert_path", KeyKind.Bar)
+
     /** Opens the prompt composer for the pane: a longer prompt, sent in one paste. */
     data object Compose : BarKey("compose", KeyKind.Bar)
 
@@ -86,7 +89,7 @@ sealed class BarKey(val pref: String, val kind: KeyKind) {
          * Group keys are the arrangement's own (see [KeyArrangement.catalogue]).
          */
         val catalogue: List<BarKey> by lazy {
-            listOf(Escape, CtrlC, Tab, Enter, Ctrl, Shift, Alt, Paste, Attach, Slash, Arrows, Keyboard, FullScreen, Compose, Replies) +
+            listOf(Escape, CtrlC, Tab, Enter, Ctrl, Shift, Alt, Paste, Attach, InsertPath, Slash, Arrows, Keyboard, FullScreen, Compose, Replies) +
                 DeskKey.entries.map { Desk(it) } +
                 ARROW_CODES.map { Arrow(it) } +
                 ('a'..'z').filter { it != 'c' }.map { Chord(it) } +
@@ -301,12 +304,12 @@ data class KeyArrangement(
         const val MAX_NAME = 8
 
         val DEFAULT_KEYS: List<BarKey>
-            get() = listOf(BarKey.Escape, BarKey.CtrlC, BarKey.Tab, BarKey.Enter, BarKey.Ctrl, BarKey.Fn, BarKey.Paste, BarKey.Attach, BarKey.Slash)
+            get() = listOf(BarKey.Escape, BarKey.CtrlC, BarKey.Tab, BarKey.Enter, BarKey.Ctrl, BarKey.Fn, BarKey.Paste, BarKey.Attach, BarKey.InsertPath, BarKey.Slash)
         val DEFAULT_REST: List<BarKey> get() = listOf(BarKey.Arrows, BarKey.Keyboard, BarKey.FullScreen)
 
         /**
          * Every key the bar has had by default, in its default place - Shift and Alt among them, as
-         * they were hidden rather than absent. A key here that a stored order lacks and the stored
+         * they were hidden rather than absent, and Insert path, which came later. A key here that a stored order lacks and the stored
          * hidden list does not name came after that order was stored, and goes back in its place.
          */
         val BAR_KEYS_SO_FAR: List<BarKey>

@@ -23,6 +23,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.leaver.rexpocket.R
@@ -222,17 +223,13 @@ class TextSizeTest {
     }
 
     /**
-     * Insert path from the key bar too: a long press on the Attach key, which TalkBack offers as an
-     * action of the key. Here, that action opens the browser over the pane on screen; the long
-     * press itself is InsertPathTest's (this screen keeps the key bar folded away).
+     * Insert path from the key bar too: a key of its own, on the bar by default. Its tap opens the
+     * browser over the pane on screen (by its semantics: this screen keeps the key bar scrolled).
      */
     @Test
-    fun insertPathOpensFromTheAttachKey() {
-        val attach = compose.onNode(hasContentDescription(string(R.string.upload_attach)) and hasClickAction())
-        val actions = attach.fetchSemanticsNode().config.getOrElse(androidx.compose.ui.semantics.SemanticsActions.CustomActions) { emptyList() }
-        val insert = actions.firstOrNull { it.label == string(R.string.insert_path) }
-        assertTrue("TalkBack has no Insert path on the key: $actions", insert != null)
-        compose.runOnUiThread { insert!!.action() }
+    fun insertPathOpensFromItsKey() {
+        compose.onNode(hasContentDescription(string(R.string.insert_path)) and hasClickAction())
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         compose.waitForIdle()
         compose.waitUntil(5_000) { acts.isNotEmpty() }
         compose.onNodeWithText(string(R.string.insert_path_loading)).assertExists()
@@ -341,17 +338,16 @@ class InsertPathTest {
     }
 }
 
-/** The key bar's Attach key: a tap attaches a file from the phone, a long press is Insert path. */
+/** The key bar's Insert path key, and the Attach key beside it, which is only Send a file now. */
 @RunWith(AndroidJUnit4::class)
-class AttachKeyTest {
+class InsertPathKeyTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
     private fun string(id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
-    /** A long press on the key bar's Attach key is Insert path; a tap still attaches a file. */
     @Test
-    fun aLongPressOnTheAttachKeyIsInsertPath() {
+    fun insertPathIsAKeyOfItsOwnAndAttachOnlySendsAFile() {
         var inserts = 0
         var attaches = 0
         compose.setContent {
@@ -366,13 +362,18 @@ class AttachKeyTest {
             }
         }
         compose.waitForIdle()
-        val attach = compose.onNode(hasContentDescription(string(R.string.upload_attach)) and hasClickAction())
-        attach.performTouchInput { longClick() }
+        compose.onNode(hasContentDescription(string(R.string.insert_path)) and hasClickAction()).performClick()
         compose.waitForIdle()
         assertEquals(1, inserts)
         assertEquals(0, attaches)
-        attach.performClick()
+        // One route each: a long press on Attach is no second Insert path, and TalkBack offers none.
+        val attach = compose.onNode(hasContentDescription(string(R.string.upload_attach)) and hasClickAction())
+        val actions = attach.fetchSemanticsNode().config.getOrElse(androidx.compose.ui.semantics.SemanticsActions.CustomActions) { emptyList() }
+        assertTrue("$actions", actions.isEmpty())
+        // Held, it is a tap: a file from the phone.
+        attach.performTouchInput { longClick() }
         compose.waitForIdle()
+        assertEquals(1, inserts)
         assertEquals(1, attaches)
     }
 }

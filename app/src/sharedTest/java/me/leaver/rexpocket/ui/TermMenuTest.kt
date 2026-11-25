@@ -83,6 +83,7 @@ class TermMenuTest {
         string(R.string.shortcuts_title),
         string(R.string.key_paste),
         string(R.string.upload_attach),
+        string(R.string.insert_path),
         string(keyboard),
         string(R.string.action_full_screen),
         string(R.string.composer_title),
@@ -98,7 +99,6 @@ class TermMenuTest {
         string(R.string.select_text),
         string(R.string.palette_copy_output),
         string(R.string.palette_share_output),
-        string(R.string.insert_path),
         "# " + string(R.string.group_pane_more),
         string(R.string.palette_clear_terminal),
         string(R.string.palette_reset_terminal),
@@ -125,7 +125,7 @@ class TermMenuTest {
     fun aSplitTabHandedBackOffersTakeOverAndClosePane() {
         val lines = open(liveState(tabOf(testPane("left"), testPane("right")), released = true))
         val expected = onePane(holder = R.string.action_take_over).toMutableList()
-        expected.add(expected.indexOf(string(R.string.insert_path)) + 1, string(R.string.menu_close_pane))
+        expected.add(expected.indexOf(string(R.string.palette_share_output)) + 1, string(R.string.menu_close_pane))
         assertEquals(expected, texts(lines))
     }
 

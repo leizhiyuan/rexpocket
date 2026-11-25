@@ -8,6 +8,7 @@ import me.leaver.rexpocket.core.BarKey.CtrlC
 import me.leaver.rexpocket.core.BarKey.Enter
 import me.leaver.rexpocket.core.BarKey.Escape
 import me.leaver.rexpocket.core.BarKey.FullScreen
+import me.leaver.rexpocket.core.BarKey.InsertPath
 import me.leaver.rexpocket.core.BarKey.Keyboard
 import me.leaver.rexpocket.core.BarKey.Paste
 import me.leaver.rexpocket.core.BarKey.Shift
@@ -34,7 +35,7 @@ class KeyArrangementTest {
 
     @Test
     fun theDefaultIsTodaysBarAndTodaysFnPanel() {
-        assertEquals(listOf(Escape, CtrlC, Tab, Enter, Ctrl, fn, Paste, Attach, Slash), default.shown(Pill.Keys))
+        assertEquals(listOf(Escape, CtrlC, Tab, Enter, Ctrl, fn, Paste, Attach, InsertPath, Slash), default.shown(Pill.Keys))
         assertEquals(listOf(Arrows, Keyboard, FullScreen), default.shown(Pill.Rest))
         val panel = default.group(BarKey.FN_GROUP)!!
         assertEquals("Fn", panel.name)
@@ -185,7 +186,7 @@ class KeyArrangementTest {
     fun withNothingStoredTheOldSettingsDecideWhatShows() {
         assertEquals(default, KeyArrangement.fromStored(null, null))
         val old = KeyArrangement.fromStored(null, null, legacyShift = true, legacyAlt = false, legacyCtrlCHidden = true)
-        assertEquals(listOf(Escape, Tab, Enter, Ctrl, Shift, fn, Paste, Attach, Slash), old.keys)
+        assertEquals(listOf(Escape, Tab, Enter, Ctrl, Shift, fn, Paste, Attach, InsertPath, Slash), old.keys)
         assertEquals(default.groups, old.groups)
     }
 
@@ -196,7 +197,8 @@ class KeyArrangementTest {
             "slash,escape,ctrl_c,tab,enter,ctrl,shift,alt,fn,paste,attach,full_screen,arrows,keyboard",
             "tab,alt",
         )
-        assertEquals(listOf(Slash, Escape, CtrlC, Enter, Ctrl, Shift, fn, Paste, Attach), stored.shown(Pill.Keys))
+        // Insert path came after that version: it goes in once, after Attach, as a key added since does.
+        assertEquals(listOf(Slash, Escape, CtrlC, Enter, Ctrl, Shift, fn, Paste, Attach, InsertPath), stored.shown(Pill.Keys))
         assertEquals(listOf(FullScreen, Arrows, Keyboard), stored.rest)
         assertEquals("Fn as it was", default.groups, stored.groups)
         // Fn hidden then: off the bar, its panel kept.
@@ -205,6 +207,24 @@ class KeyArrangementTest {
         assertEquals(default.groups, noFn.groups)
         // Nothing hidden: Shift and Alt on, though the old switches said no.
         assertTrue(KeyArrangement.fromStored(BarKey.catalogue.take(13).joinToString(",") { it.pref } + ",fn", "").has(Shift))
+    }
+
+    /**
+     * Insert path is a key of its own, after Attach. A bar stored before it existed gains it once,
+     * after Attach or the key before it there; taken off, it is stored as off and stays off.
+     */
+    @Test
+    fun insertPathReachesEveryBarOnceAndStaysOffWhenTakenOff() {
+        val before = "escape,ctrl_c,tab,enter,ctrl,shift,alt,fn,paste,attach,slash,arrows,keyboard,full_screen"
+        assertEquals(default, KeyArrangement.fromStored(before, "shift,alt"))
+        // Customised: Attach off, keys moved. It goes after the key before it by default that is there.
+        val moved = KeyArrangement.fromStored("slash,paste,escape,enter,arrows,keyboard", "ctrl_c,tab,ctrl,shift,alt,fn,attach,full_screen")
+        assertEquals(listOf(Slash, Paste, InsertPath, Escape, Enter), moved.keys)
+        val off = default.remove(InsertPath)
+        assertTrue("insert_path" in off.storedHidden().split(','))
+        assertFalse(off.roundTrip().has(InsertPath))
+        assertTrue(InsertPath in default.catalogue(Pill.Keys))
+        assertTrue("it may sit in a group's panel", InsertPath in default.catalogue(Pill.Keys, BarKey.FN_GROUP))
     }
 
     @Test
@@ -224,7 +244,7 @@ class KeyArrangementTest {
         // A key from a later build, a duplicate, a key stored in the wrong pill; Ctrl, Attach and the
         // full-screen key missing, as from an older build.
         val a = KeyArrangement.fromStored("slash,escape,warp,escape,ctrl_c,tab,keyboard,enter,shift,alt,fn,paste,arrows", "warp,keyboard,tab")
-        assertEquals(listOf(Slash, Escape, CtrlC, Enter, Ctrl, Shift, Alt, fn, Paste, Attach), a.keys)
+        assertEquals(listOf(Slash, Escape, CtrlC, Enter, Ctrl, Shift, Alt, fn, Paste, Attach, InsertPath), a.keys)
         assertEquals("the keyboard key cannot be hidden", listOf(Keyboard, FullScreen, Arrows), a.rest)
         assertEquals(Escape, KeyArrangement.fromStored("tab,ctrl_c", "").keys.first())
         // A group key whose group is gone, a group from a later build's ids, keys not allowed in a group.

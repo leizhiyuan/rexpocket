@@ -233,8 +233,8 @@ class ArrangeKeysTest {
         assertTrue("Fn keeps its F10", f10 in stored().group(BarKey.FN_GROUP)!!.keys)
         assertTrue(stored().has(f10))
 
-        // Moved to the front with its up button, nine steps, as a person would.
-        repeat(9) { tap(string(R.string.arrange_move_up, "F10")) }
+        // Moved to the front with its up button, past the ten keys of the bar, as a person would.
+        repeat(10) { tap(string(R.string.arrange_move_up, "F10")) }
         assertEquals(f10, listOnScreen().first())
         assertTrue(barX(f10) < barX(BarKey.Escape))
 

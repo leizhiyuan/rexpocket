@@ -10,10 +10,10 @@ import org.junit.Test
 
 /**
  * How the key bar shares its width (keyBarWidths): the bar's width is the screen's less its 12 dp
- * margins; 9 keys is the default key pill (Esc, C-c, Tab, Return, Ctrl, Fn, Paste, Attach, `/`).
+ * margins; 10 keys is the default key pill (Esc, C-c, Tab, Return, Ctrl, Fn, Paste, Attach, Insert path, `/`).
  */
 class KeyBarLayoutTest {
-    private fun bar(screen: Float, keys: Int = 9, restKeys: Int = 3) = keyBarWidths(screen - 24f, keys, restKeys)
+    private fun bar(screen: Float, keys: Int = 10, restKeys: Int = 3) = keyBarWidths(screen - 24f, keys, restKeys)
 
     /** What the key pill shows of the key past its last whole one: its keys start after a 4 dp pad. */
     private fun KeyBarWidths.keyHint() = (keys - 4f) % 48f
@@ -26,7 +26,7 @@ class KeyBarLayoutTest {
         val w = bar(891f)
         assertTrue(w.restWhole)
         assertEquals(152f, w.rest)
-        assertTrue(w.keys >= 9 * 48f + 8f)
+        assertTrue(w.keys >= 10 * 48f + 8f)
     }
 
     @Test

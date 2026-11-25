@@ -109,7 +109,7 @@ import kotlin.math.abs
  * the arrow stick and the keyboard key keep the right, always in the same place.
  *
  * The pill starts with what an agent asks for most: back out, interrupt, complete, accept, `ctrl`.
- * Paste, the paperclip and a slash for pi's command menu follow off the edge. C-c is red while the
+ * Paste, the paperclip, the folder and a slash for pi's command menu follow off the edge. C-c is red while the
  * program works or waits; Settings can make it wait for a hold while the program is idle, where a
  * stray tap would wipe a half-written prompt, or take it off the bar, leaving Ctrl then `c`. `ctrl`
  * applies to the next key, from this row or from the phone keyboard; a quick second tap keeps it
@@ -120,7 +120,8 @@ import kotlin.math.abs
  * and the symbols a phone keyboard keeps a page away. The modifiers held in the row apply to them.
  *
  * The paperclip is the dock's way to send a file or an image: it opens the platform's picker, and
- * goes quiet while the file picked last is still on its way.
+ * goes quiet while the file picked last is still on its way. The folder beside it, Insert path,
+ * goes the other way: it browses the host's folders and types the path picked.
  */
 @Composable
 internal fun KeyBar(
@@ -150,8 +151,8 @@ internal fun KeyBar(
     onCompose: () -> Unit = {},
     /** Edit quick replies, at the foot of the Quick replies panel; null leaves it out. */
     onEditReplies: (() -> Unit)? = null,
-    /** Insert path, from a long press on the Attach key (and its TalkBack action); null leaves it out. */
-    onInsertPath: (() -> Unit)? = null,
+    /** The Insert path key: the folder browser of the host, for the pane. */
+    onInsertPath: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     val pill = RoundedCornerShape(50)
@@ -410,7 +411,7 @@ private class KeyActions(
     val attachReady: Boolean,
     val onDeskKey: (DeskKey) -> Unit,
     val onCompose: () -> Unit,
-    val onInsertPath: (() -> Unit)? = null,
+    val onInsertPath: () -> Unit,
 )
 
 /**
@@ -476,21 +477,16 @@ private fun BarKeyFace(barKey: BarKey, modifier: Modifier, plate: Color, a: KeyA
             ) { a.onMod(mod) }
         }
         BarKey.Paste -> Key(stringResource(R.string.key_paste), modifier, plate = plate, icon = R.drawable.ic_paste) { a.onPaste() }
-        // A file from the phone on a tap; a path on the host, Insert path, on a long press.
+        // A file from the phone.
         BarKey.Attach -> Key(
             stringResource(R.string.upload_attach),
             modifier,
             plate = plate,
             icon = R.drawable.ic_attach_file,
             color = if (a.attachReady) Colors.ink else Colors.muted,
-            onLongClick = a.onInsertPath?.let { insert ->
-                {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    insert()
-                }
-            },
-            longClickLabel = stringResource(R.string.insert_path).takeIf { a.onInsertPath != null },
         ) { if (a.attachReady) a.onAttach() }
+        // A path on the host: its folder browser, which types the path picked.
+        BarKey.InsertPath -> Key(stringResource(R.string.insert_path), modifier, plate = plate, icon = R.drawable.ic_folder) { a.onInsertPath() }
         // A slash opens pi's command menu; the stick then walks it.
         BarKey.Slash -> Key("/", modifier, plate = plate) { a.onKey(KeyPress("slash", '/'.code, text = "/"), "") }
         is BarKey.Desk -> Key(deskLabel(barKey.key), modifier, plate = plate) { a.onDeskKey(barKey.key) }
