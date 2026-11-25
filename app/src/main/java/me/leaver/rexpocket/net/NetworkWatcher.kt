@@ -13,7 +13,8 @@ import me.leaver.rexpocket.diagnostics.Diagnostics
 /**
  * Calls [onChange] when the phone's default network becomes a different one: Wi-Fi to mobile data,
  * or back after a gap. A socket on the network that went away can take a minute of pings to notice,
- * so the connection is better redialed at once. The first network seen after [start] is not a change.
+ * so the connection is better redialed at once. The network the phone has when [start] runs is not
+ * a change; one that comes after a start with none is, so hosts that failed offline dial at once.
  *
  * It also says whether the default network is validated (Android checked it reaches the internet),
  * and calls [onValidated] when it becomes so: back in the foreground, the app's network is
@@ -25,8 +26,8 @@ class NetworkWatcher(
     private val onChange: () -> Unit,
 ) {
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
-    private var current: Network? = null
-    private var started = false
+    // Set on the main thread by start and stop, read and moved on the system's network thread.
+    @Volatile private var current: Network? = null
 
     private val _validated = MutableStateFlow(false)
 
@@ -38,9 +39,10 @@ class NetworkWatcher(
             val previous = current
             current = network
             Diagnostics.event(TAG, "network available (was ${previous != null})")
-            if (previous != network) _validated.value = isValidated(network)
-            if (started && previous != network) onChange()
-            started = true
+            if (previous != network) {
+                _validated.value = isValidated(network)
+                onChange()
+            }
         }
 
         override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
@@ -78,12 +80,16 @@ class NetworkWatcher(
     }
 
     fun start() {
+        // The callback's first call names the network there now, which is no change. Taking the
+        // first call for that instead missed the one that mattered: with no network at the start,
+        // the first is the network coming, and hosts that failed offline waited out their backoff.
+        current = runCatching { connectivity?.activeNetwork }.getOrNull()
+        _validated.value = current?.let(::isValidated) == true
         runCatching { connectivity?.registerDefaultNetworkCallback(callback) }
     }
 
     fun stop() {
         runCatching { connectivity?.unregisterNetworkCallback(callback) }
-        started = false
         current = null
         _validated.value = false
     }
