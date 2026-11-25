@@ -345,9 +345,10 @@ all at once from the host's page. A whole host is silenced on its page, as befor
 
 ## Widget
 
-A home screen widget (`HomeWidget`, Glance) lists each connected host with how many tabs need the
-person (waiting or failed), are done and not yet seen, and are working, in the home's words
-(`activitySections`, `runningItems`), four hosts at most. A tap opens the home on Activity. Only a
+A home screen widget (`HomeWidget`, Glance) lists each connected host with how many tabs are
+blocked, failed (only when there are some), done and not yet seen, and working, as the Activity view
+it opens counts and words them (`activitySections`: each tab once, by its most pressing report;
+blocked, failed and done add up to the home's Needs you), four hosts at most. A tap opens the home on Activity. Only a
 live connection hears a host's programs, so the counts are as fresh as the background watch keeps
 them: it writes them as they change, at most every 3 s, and the widget says "Updated 14:05". Without
 the watch (background mode off, or stopped) they are the ones from when the app last left the

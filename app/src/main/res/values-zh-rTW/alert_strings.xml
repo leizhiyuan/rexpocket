@@ -33,8 +33,11 @@
         <item quantity="other">%d 台主機</item>
     </plurals>
     <string name="widget_name">RexPocket 動態</string>
-    <string name="widget_description">每台主機上需要你處理、已完成和正在運作的程式。</string>
-    <string name="widget_counts">%1$d 需要你 · %2$d 已完成 · %3$d 運作中</string>
+    <string name="widget_description">每台主機上受阻、失敗、已完成和工作中的程式。</string>
+    <string name="widget_blocked">%1$d 受阻</string>
+    <string name="widget_failed">%1$d 失敗</string>
+    <string name="widget_done">%1$d 已完成</string>
+    <string name="widget_working">%1$d 工作中</string>
     <string name="widget_updated">更新於 %1$s</string>
     <string name="widget_stale">背景已關閉 · 數字可能已過時 · %1$s</string>
     <string name="widget_never">開啟 RexPocket 即可在這裡看到你的主機</string>

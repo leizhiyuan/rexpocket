@@ -94,10 +94,10 @@ class BackgroundModeTest {
         val block = connections.lives.value.getValue(desk.host.id).state.views.getValue(desk.ids[0]).allBlocks().first().id
         desk.rex.report(block, "blocked", kind = "question", app = "claude", msg = "Restarted?")
         await(what = "the alert") { manager.activeNotifications.any { it.tag == Alerts.tagOf(desk.host.id, block) && it.id == Alerts.PANE_ID } }
-        // The watch keeps the home screen widget's counts: the host, with one tab that needs the person.
+        // The watch keeps the home screen widget's counts: the host, with one blocked tab.
         await(what = "the widget's counts") {
             val snap = me.leaver.rexpocket.alerts.WidgetSnapshot.parse(app.getSharedPreferences("rexpocket", 0).getString("widget.snapshot", null))
-            snap?.live == true && snap.hosts.singleOrNull()?.let { it.name == "desk" && it.needs == 1 } == true
+            snap?.live == true && snap.hosts.singleOrNull()?.let { it.name == "desk" && it.blocked == 1 } == true
         }
     }
 

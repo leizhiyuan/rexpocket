@@ -18,7 +18,7 @@ class HomeWidgetTest {
 
     @Test
     fun aSnapshotReadsBackAsWritten() {
-        val snap = WidgetSnapshot(1_700_000_000_000L, live = true, listOf(WidgetHost("mac", 2, 1, 3), WidgetHost("pi", 0, 0, 0)))
+        val snap = WidgetSnapshot(1_700_000_000_000L, live = true, listOf(WidgetHost("mac", 2, 1, 1, 3), WidgetHost("pi", 0, 0, 0, 0)))
         assertEquals(snap, WidgetSnapshot.parse(snap.toJson()))
         assertNull(WidgetSnapshot.parse(null))
         assertNull(WidgetSnapshot.parse("not json"))

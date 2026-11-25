@@ -39,26 +39,27 @@ import me.leaver.rexpocket.core.PocketState
 import me.leaver.rexpocket.core.SeenCheck
 import me.leaver.rexpocket.core.activitySections
 import me.leaver.rexpocket.core.markCovers
-import me.leaver.rexpocket.core.runningItems
 import me.leaver.rexpocket.data.HomeMarks
 import me.leaver.rexpocket.ui.Connections
 import org.json.JSONArray
 import org.json.JSONObject
 
-// The home screen widget: per connected host, how many tabs need the person, are done (not yet
-// seen) and are working, in the home's words. Only a live connection hears a host's programs, so
+// The home screen widget: per connected host, how many tabs are blocked, failed, done (not yet
+// seen) and working, as the home's Activity view counts and words them. Only a live connection hears a host's programs, so
 // the counts are as fresh as the background watch keeps them: it writes them as they change; with
 // background mode off they are the ones from when the app left the screen, and the widget says so.
 // See docs/design/notifications.md, "Widget".
 
-/** One host's counts, as the widget shows them. */
-internal data class WidgetHost(val name: String, val needs: Int, val done: Int, val working: Int)
+/** One host's counts, as the widget shows them: the Activity view's Blocked, Failed, Done and Working. */
+internal data class WidgetHost(val name: String, val blocked: Int, val failed: Int, val done: Int, val working: Int)
 
 /** What the widget shows: the hosts' counts, when they were read, and whether the watch keeps them fresh. */
 internal data class WidgetSnapshot(val at: Long, val live: Boolean, val hosts: List<WidgetHost>) {
     fun toJson(): String = JSONObject().put("at", at).put("live", live).put(
         "hosts",
-        JSONArray().apply { hosts.forEach { put(JSONObject().put("name", it.name).put("needs", it.needs).put("done", it.done).put("working", it.working)) } },
+        JSONArray().apply {
+            hosts.forEach { put(JSONObject().put("name", it.name).put("blocked", it.blocked).put("failed", it.failed).put("done", it.done).put("working", it.working)) }
+        },
     ).toString()
 
     companion object {
@@ -67,7 +68,7 @@ internal data class WidgetSnapshot(val at: Long, val live: Boolean, val hosts: L
             val arr = o.optJSONArray("hosts") ?: JSONArray()
             val hosts = (0 until arr.length()).mapNotNull { i ->
                 val h = arr.optJSONObject(i) ?: return@mapNotNull null
-                WidgetHost(h.optString("name"), h.optInt("needs"), h.optInt("done"), h.optInt("working"))
+                WidgetHost(h.optString("name"), h.optInt("blocked"), h.optInt("failed"), h.optInt("done"), h.optInt("working"))
             }
             return WidgetSnapshot(o.optLong("at"), o.optBoolean("live"), hosts)
         }
@@ -75,13 +76,14 @@ internal data class WidgetSnapshot(val at: Long, val live: Boolean, val hosts: L
 }
 
 /**
- * A host's counts: the tabs waiting on the person or failed (Needs you), done and not yet seen,
- * and working - as the home's Activity groups them ([activitySections], [runningItems]).
+ * A host's counts as the home's Activity view, which the widget's tap opens, groups its tabs
+ * ([activitySections]): each tab once, by its most pressing report. Blocked, failed and done add
+ * up to the home's Needs you.
  */
 internal fun widgetCounts(name: String, state: PocketState, seen: SeenCheck): WidgetHost {
     val sections = activitySections(state, seen)
-    fun count(vararg groups: ActivityGroup) = sections.filter { it.group in groups }.sumOf { it.items.size }
-    return WidgetHost(name, count(ActivityGroup.Waiting, ActivityGroup.Failed), count(ActivityGroup.Done), runningItems(state, seen).size)
+    fun count(group: ActivityGroup) = sections.filter { it.group == group }.sumOf { it.items.size }
+    return WidgetHost(name, count(ActivityGroup.Waiting), count(ActivityGroup.Failed), count(ActivityGroup.Done), count(ActivityGroup.Running))
 }
 
 class HomeWidget : GlanceAppWidget() {
@@ -106,11 +108,11 @@ class HomeWidget : GlanceAppWidget() {
                 snapshot == null -> Text(context.getString(R.string.widget_never), style = TextStyle(color = muted, fontSize = 12.sp))
                 snapshot.hosts.isEmpty() -> Text(context.getString(R.string.widget_no_hosts), style = TextStyle(color = muted, fontSize = 12.sp))
                 else -> for (host in snapshot.hosts.take(MAX_HOSTS)) {
-                    val counts = context.getString(R.string.widget_counts, host.needs, host.done, host.working)
+                    val counts = countsLine(context, host)
                     // One line for TalkBack: the host, then its counts.
                     Column(GlanceModifier.padding(vertical = 2.dp).semantics { contentDescription = "${host.name}: $counts" }) {
                         Text(host.name, style = TextStyle(color = ink, fontSize = 13.sp, fontWeight = FontWeight.Medium), maxLines = 1)
-                        Text(counts, style = TextStyle(color = if (host.needs > 0) GlanceTheme.colors.primary else muted, fontSize = 12.sp), maxLines = 1)
+                        Text(counts, style = TextStyle(color = if (host.blocked + host.failed > 0) GlanceTheme.colors.primary else muted, fontSize = 12.sp), maxLines = 1)
                     }
                 }
             }
@@ -129,6 +131,14 @@ class HomeWidget : GlanceAppWidget() {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
         private fun prefs(context: Context) = context.applicationContext.getSharedPreferences("rexpocket", Context.MODE_PRIVATE)
+
+        /** A host's counts in the Activity view's words: "1 blocked · 2 done · 1 working", failed only when there are some. */
+        internal fun countsLine(context: Context, host: WidgetHost): String = listOfNotNull(
+            context.getString(R.string.widget_blocked, host.blocked),
+            context.getString(R.string.widget_failed, host.failed).takeIf { host.failed > 0 },
+            context.getString(R.string.widget_done, host.done),
+            context.getString(R.string.widget_working, host.working),
+        ).joinToString(" · ")
 
         /** When the counts were read, and with background mode off that they may be stale. */
         internal fun footer(context: Context, snapshot: WidgetSnapshot): String {

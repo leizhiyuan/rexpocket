@@ -37,8 +37,11 @@
         <item quantity="other">%d hosts</item>
     </plurals>
     <string name="widget_name">RexPocket activity</string>
-    <string name="widget_description">What needs you, what is done and what is working, per host.</string>
-    <string name="widget_counts">%1$d needs you · %2$d done · %3$d working</string>
+    <string name="widget_description">What is blocked, failed, done and working, per host.</string>
+    <string name="widget_blocked">%1$d blocked</string>
+    <string name="widget_failed">%1$d failed</string>
+    <string name="widget_done">%1$d done</string>
+    <string name="widget_working">%1$d working</string>
     <string name="widget_updated">Updated %1$s</string>
     <string name="widget_stale">Background off · counts may be stale · %1$s</string>
     <string name="widget_never">Open RexPocket to see your hosts here</string>
