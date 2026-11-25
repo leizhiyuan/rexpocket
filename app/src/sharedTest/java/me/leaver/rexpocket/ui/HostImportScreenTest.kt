@@ -102,7 +102,7 @@ class HostImportScreenTest {
         assertTrue(seen(string(R.string.import_key_confirm, "agents")))
         assertTrue(seen(string(R.string.import_key_tofu)))
         // Nothing changes before the confirm. (A JVM without a keystore keeps no password: compare with what the store holds.)
-        val before = store.list()
+        val before = store.listWithSecrets()
         assertEquals(listOf("desk", "agents"), store.list().map { it.label })
 
         // The key change is not confirmed: agents stays as it was.
