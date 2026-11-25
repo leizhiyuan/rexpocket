@@ -43,7 +43,7 @@
     <string name="tailscale_leave">離開 tailnet</string>
     <string name="tailscale_hostname">這台手機的節點名稱</string>
     <string name="tailscale_hint">應用程式會自己執行一個 Tailscale 節點，所以這台手機不必安裝 Tailscale 應用程式，也不會佔用手機的 VPN，就能連到 host.tailnet-xxxx.ts.net 這類 tailnet 名稱。加入時會在瀏覽器開啟 Tailscale 頁面，授權這個節點一次；登入狀態會保留在應用程式裡。位址是 tailnet 名稱或 100.x 位址的主機，會自動透過這個節點連線。</string>
-    <string name="tailscale_need_join_host">這個位址在 tailnet 上：加入 tailnet 才能連線（輕觸這裡）。</string>
+    <string name="tailscale_need_join_host">這個位址在 tailnet 上：加入 tailnet 才能連線。</string>
     <string name="error_join_tailnet_first">請先加入 tailnet。</string>
     <string name="tailscale_state_running">執行中</string>
     <string name="tailscale_state_starting">啟動中…</string>

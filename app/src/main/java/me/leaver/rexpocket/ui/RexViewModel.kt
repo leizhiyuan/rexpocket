@@ -933,6 +933,12 @@ class RexViewModel @JvmOverloads constructor(
         homeRequest.value = HomeRequest.Page(key)
     }
 
+    /** Opens Settings on the home: the back arrow of a page Settings opened from the app's root. */
+    fun showSettings() {
+        route.value = Route.Home
+        homeRequest.value = HomeRequest.Settings
+    }
+
     /** Asks whether to disconnect the tailnet, naming the hosts on it: a tile's or a notification's tap. */
     fun askTailnetOff() {
         route.value = Route.Home
@@ -1917,6 +1923,9 @@ sealed interface HomeRequest {
 
     /** Settings › Background and notifications. */
     data object Notifications : HomeRequest
+
+    /** Settings itself: the back arrow of Backup and Import hosts opened from it. */
+    data object Settings : HomeRequest
 
     /** The Activity view itself, from the widget or a host's notifications: no sheet left over it. */
     data object Activity : HomeRequest

@@ -522,7 +522,12 @@ internal const val BACKUP_TAG = "settings-backup"
 
 /** Settings › Backup, on whichever page [step] is. */
 @Composable
-internal fun SettingsBackupSheet(step: BackupStep, backupper: SettingsBackupper) {
+internal fun SettingsBackupSheet(
+    step: BackupStep,
+    backupper: SettingsBackupper,
+    /** The first page's back arrow, when Settings opened it: back to Settings. */
+    onBack: (() -> Unit)? = null,
+) {
     val context = LocalContext.current
     // The passphrase waits here while the file picker is open, and only there: never saved.
     var sealWith by remember { mutableStateOf<String?>(null) }
@@ -550,7 +555,7 @@ internal fun SettingsBackupSheet(step: BackupStep, backupper: SettingsBackupper)
                     backupper.shared()
                 }
             }
-            ActionSheet(onDismiss = backupper::close, title = stringResource(R.string.backup_title)) {
+            ActionSheet(onDismiss = backupper::close, title = stringResource(R.string.backup_title), onBack = onBack) {
                 Column(Modifier.padding(horizontal = 16.dp).testTag(BACKUP_TAG), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(stringResource(R.string.backup_body), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
                     if (step.busy) Text(stringResource(R.string.backup_working), color = Colors.muted, fontSize = TextStyles.label)

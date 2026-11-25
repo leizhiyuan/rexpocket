@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -52,7 +54,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.selection.toggleable
@@ -276,9 +277,9 @@ private val ICON_INSET = 56.dp
  * A row that cannot act right now - Send a file while a file is on its way - stays in its place,
  * greyed out and not [enabled], so the rows around it do not jump as the state changes.
  *
- * To TalkBack a row is a button; a row that turns something on and off ([checked] given, its
- * detail "On" or "Off") is a switch, said on or off once rather than as its detail too; a [marked]
- * row - the session on screen, the account in use - is selected.
+ * To TalkBack a row is a button; a row that turns something on and off ([checked] given) is a
+ * switch, and ends in a Material switch in place of its [detail]'s "On" or "Off"; a [marked] row -
+ * the session on screen, the account in use - is selected.
  */
 @Composable
 internal fun SheetScope.SheetItem(
@@ -297,15 +298,17 @@ internal fun SheetScope.SheetItem(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    // A switch shows itself in place of its "On" or "Off".
+    val words = detail.takeIf { checked == null }
     BoxWithConstraints(modifier.fillMaxWidth()) {
         // Beside the label while both fit there; under it once the detail would wrap or the label would
         // have to break a word to make room for it, as large text on a narrow phone makes them.
         val measurer = rememberTextMeasurer()
         val density = LocalDensity.current
-        val stacked = detail != null && with(density) {
+        val stacked = words != null && with(density) {
             val trailing = (if (marked) 32.dp else 0.dp) + (if (opens) 28.dp else 0.dp)
             val room = maxWidth - 32.dp - (if (icon != null) 40.dp else 0.dp) - trailing
-            val detailWidth = measurer.measure(detail, TextStyle(fontSize = TextStyles.label), maxLines = 1).size.width.toDp()
+            val detailWidth = measurer.measure(words, TextStyle(fontSize = TextStyles.label), maxLines = 1).size.width.toDp()
             val labelRoom = room - 12.dp - detailWidth
             val labelStyle = TextStyle(fontSize = TextStyles.body, fontWeight = if (marked) FontWeight.SemiBold else FontWeight.Normal)
             val widestWord = label.split(' ').maxOf { word -> measurer.measure(word, labelStyle, maxLines = 1).size.width }.toDp()
@@ -342,20 +345,31 @@ internal fun SheetScope.SheetItem(
                 if (supporting != null) {
                     Text(supporting, color = Colors.muted, fontSize = TextStyles.label, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 }
-                if (stacked && detail != null) {
-                    Text(detail, color = Colors.muted, fontSize = TextStyles.label, modifier = Modifier.saidAsState(checked))
+                if (stacked && words != null) {
+                    Text(words, color = Colors.muted, fontSize = TextStyles.label)
                 }
             }
-            if (detail != null && !stacked) {
+            if (words != null && !stacked) {
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    detail,
+                    words,
                     color = Colors.muted,
                     fontSize = TextStyles.label,
                     textAlign = TextAlign.End,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = DETAIL_MAX).saidAsState(checked),
+                    modifier = Modifier.widthIn(max = DETAIL_MAX),
+                )
+            }
+            if (checked != null) {
+                Spacer(Modifier.width(12.dp))
+                // The row is the toggle (its semantics above), so the switch itself only shows it.
+                Switch(
+                    checked = checked,
+                    onCheckedChange = null,
+                    enabled = enabled,
+                    colors = SwitchDefaults.colors(checkedTrackColor = Colors.accent, checkedThumbColor = Colors.surface),
+                    modifier = Modifier.testTag(SHEET_SWITCH_TAG),
                 )
             }
             if (marked) {
@@ -370,5 +384,5 @@ internal fun SheetScope.SheetItem(
     }
 }
 
-/** A switch row's "On" or "Off", which its toggle state already says: left out for TalkBack. */
-private fun Modifier.saidAsState(checked: Boolean?): Modifier = if (checked == null) this else clearAndSetSemantics { }
+/** The Material switch a switch row ([SheetItem]'s checked) ends in, for the screen tests. */
+internal const val SHEET_SWITCH_TAG = "sheet-switch"

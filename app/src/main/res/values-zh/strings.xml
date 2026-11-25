@@ -43,7 +43,7 @@
     <string name="tailscale_leave">离开 tailnet</string>
     <string name="tailscale_hostname">这台手机的节点名</string>
     <string name="tailscale_hint">应用自己跑一个 Tailscale 节点，所以手机不用装 Tailscale、也不占手机的 VPN，就能连 host.tailnet-xxxx.ts.net 这类 tailnet 名字和地址。加入时会打开浏览器授权这个节点，登录状态留在应用里。地址是 tailnet 名字或 100.x 地址的主机，会自动走这个节点。</string>
-    <string name="tailscale_need_join_host">这个地址在 tailnet 上：先加入 tailnet 才能连（点这里加入）。</string>
+    <string name="tailscale_need_join_host">这个地址在 tailnet 上：先加入 tailnet 才能连。</string>
     <string name="error_join_tailnet_first">先加入 tailnet。</string>
     <string name="tailscale_state_running">运行中</string>
     <string name="tailscale_state_starting">启动中…</string>

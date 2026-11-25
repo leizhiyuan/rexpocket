@@ -43,7 +43,7 @@
     <string name="tailscale_leave">Leave tailnet</string>
     <string name="tailscale_hostname">Node name for this phone</string>
     <string name="tailscale_hint">The app runs its own Tailscale node, so this phone can reach tailnet names such as host.tailnet-xxxx.ts.net without the Tailscale app and without taking over the phone\'s VPN. Joining opens the Tailscale page in a browser to authorize the node once; the login stays in the app. A host whose address is a tailnet name or a 100.x address is dialed through the node automatically.</string>
-    <string name="tailscale_need_join_host">This address is on a tailnet: join the tailnet to reach it (tap here).</string>
+    <string name="tailscale_need_join_host">This address is on a tailnet: join the tailnet to reach it.</string>
     <string name="error_join_tailnet_first">Join a tailnet first.</string>
     <string name="tailscale_state_running">Running</string>
     <string name="tailscale_state_starting">Starting…</string>

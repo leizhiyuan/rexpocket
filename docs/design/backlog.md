@@ -75,14 +75,9 @@ Areas, one per scout:
 
 | Idea | What | Size | Needs |
 | --- | --- | --- | --- |
-| Material switches | On/Off rows draw a Material 3 `Switch` in place of their "On"/"Off" detail. TalkBack already says them as switches (`SheetItem`'s `checked`). | S | A switch slot in `SheetItem`; every test that reads "On"/"Off" off a row reads the toggle state instead (LaunchTest does). |
-| Answers first in the tab sheet | A blocked tab's sheet leads with Approve, Deny, Reply, then Open and Rename. | S | The TalkBack action order changes with it; HomeBulkTest's sheet checks. |
-| New session offline from the host sheet | Connect and create, as + does, rather than greyed out "Connect first". | S | `newSession` already connects; the item's `enabled` and MultiHostTest. |
 | Import and export hosts beside Backup | Settings' "Import hosts" holds export too; Backup and Security are cards of one row. One card "Hosts and backup". | S | Rename the row, move it; OpenFromOutsideTest finds Settings by its Connection caption. |
-| Join tailnet as a button | The host dialog's "join the tailnet (tap here)" is text with a tap. A TextButton under the note. | XS | An emulator test (the dialog has text fields). |
 | Blocked words on tab rows | "waiting for approval" → Rex's blocked kinds, if Rex's own clients word them. | S | Rex's wording for `permission`, `question`, `auth` (unconfirmed). |
 | Background mode page | Notifications is eight cards even reordered; Android's checks and the host and tailnet pages could be "Background mode ›". | M | A page of its own, with its back arrow; NotificationsTest and the deep links (Manage, stopped notes). |
-| Back to Settings everywhere | Backup, Import hosts and Terminal controls, opened from Settings, still close to the home; Notifications, Appearance, Security, Quick replies and Diagnostics have the arrow back. | S | A `fromSettings` flag through RexApp's Backup and Import, and `TerminalControlsPages`' root page. |
 
 ## Robustness pass: found, not fixed
 

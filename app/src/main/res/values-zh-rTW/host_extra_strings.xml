@@ -32,4 +32,5 @@
     <string name="notifications_reset_title">重設通知？</string>
     <string name="notifications_reset_confirm_body">受阻、失敗、完成和訊息會再次提醒，響鈴不提醒，螢幕上的響鈴會震動，進度列關閉。背景模式以及每台主機和 tailnet 的頁面保持不變。</string>
     <string name="import_problem_option">%1$s 的值不對：tryOthers 應為 true 或 false，tailnetAccount 應為不超過 64 個字元的一行文字。</string>
+    <string name="host_save_and_join_tailnet">儲存並加入 tailnet</string>
 </resources>

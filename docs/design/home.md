@@ -49,14 +49,14 @@ dialog cannot confirm while its host is away; a sheet or dialog whose session or
 device, closes. End session and Close tab confirm; Remove host confirms and offers Undo.
 
 - Host: Connect / Retry now / Cancel / Disconnect (a failing host offers Retry now and Disconnect);
-  New session, New tab (New tab's sheet, on the session shown); Collapse or Expand, Collapse and
+  New session ("Connect & create" while not connected, as +), New tab (New tab's sheet, on the session shown); Collapse or Expand, Collapse and
   Expand all sessions, Mark all as seen - two cards, making and looking (every tab of the host with news); Move up, Move down; Edit host, Copy address, Tailnet
   details; Remove host….
 - Session: Connect or Retry first while the host is not live; Open, New tab, Rename…; Collapse or Expand, Mark all as seen; Move up, Move down ("2 of 7", Rex's full order); End
   session….
-- Tab: Open, Rename…; Approve, Deny, Reply and Interrupt where they apply (as on Needs you's row:
+- Tab: Approve, Deny, Reply and Interrupt first, where they apply (as on Needs you's row:
   Approve and Deny for an approval prompt whose keys the app knows, Reply for a blocked tab but never
-  a login, Interrupt while a program works or waits); Mark as seen, Status details, Host mac… (the
+  a login, Interrupt while a program works or waits); then Open, Rename…; Mark as seen, Status details, Host mac… (the
   host's own sheet, the way to its connection from a filtered list, where its header is not in
   sight); Move up, Move down; Close tab….
 

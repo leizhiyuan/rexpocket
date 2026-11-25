@@ -276,7 +276,12 @@ internal fun hostActions(
         // What to make on the host, then how its list looks: two cards, so neither is a list of six.
         ActionGroup(
             listOf(
-                RowAction(stringResource(R.string.session_new), R.drawable.ic_add, enabled = why == null, detail = why) { ops.newSession(ref.host) },
+                // As +'s picker: a host that is not connected connects and makes it, "Connect & create".
+                RowAction(
+                    stringResource(R.string.session_new), R.drawable.ic_add,
+                    enabled = why == null || !ref.connected,
+                    detail = if (ref.connected) why else stringResource(R.string.home_connect_and_create),
+                ) { ops.newSession(ref.host) },
                 // New tab's own sheet, as every New tab: Blank tab, the host's templates, Add
                 // template…. It opens in the session the phone shows on this host, or the first;
                 // with no session yet, in a new one.
@@ -422,6 +427,9 @@ internal fun tabActions(
     val target = ManageTarget.Tab(id, sessionId, windowId)
     val title = tabTitle(view, window, ref.state)
     return listOfNotNull(
+        // What Needs you's row offers, here for the same tab wherever it is listed: first, as the
+        // most pressing thing a blocked tab can be given, before Open and Rename.
+        ActionGroup(answerItems(ref, sessionId, window, ops)),
         ActionGroup(
             listOf(
                 RowAction(stringResource(R.string.home_action_open), R.drawable.ic_open_in_new) { ops.openTab(ref.host, sessionId, windowId) },
@@ -430,8 +438,6 @@ internal fun tabActions(
                 },
             ),
         ),
-        // What Needs you's row offers, here for the same tab wherever it is listed.
-        ActionGroup(answerItems(ref, sessionId, window, ops)),
         ActionGroup(
             listOfNotNull(
                 ops.unseen(id, ref.state, listOf(window)).takeIf { it.isNotEmpty() }?.let { panes ->

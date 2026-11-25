@@ -20,6 +20,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -107,6 +108,10 @@ internal fun RexPocketApp(
     val share by model.share.collectAsState()
     val hostImport by model.hostImport.step.collectAsState()
     val backup by model.settingsBackup.step.collectAsState()
+    // Backup or Import hosts opened from Settings: their first page has a back arrow to it.
+    var dataFromSettings by rememberSaveable { mutableStateOf(false) }
+    var openingFromSettings by remember { mutableStateOf(false) }
+    fun fromSettings(): Boolean = openingFromSettings.also { openingFromSettings = false }
     val security by model.security.collectAsState()
     val context = LocalContext.current
     // The home screen leaves the composition while a terminal fills the window; its saved state
@@ -278,8 +283,15 @@ internal fun RexPocketApp(
                     onAppearance = model::setAppearance,
                     terminalTextSize = font,
                     onTerminalTextSize = model::setFont,
-                    onImportHosts = model.hostImport::open,
-                    onBackup = model.settingsBackup::open,
+                    onImportHosts = {
+                        dataFromSettings = fromSettings()
+                        model.hostImport.open()
+                    },
+                    onBackup = {
+                        dataFromSettings = fromSettings()
+                        model.settingsBackup.open()
+                    },
+                    onFromSettings = { openingFromSettings = true },
                     hostTester = model.hostTester,
                     security = security,
                     onSecurity = model::setSecurity,
@@ -388,7 +400,18 @@ internal fun RexPocketApp(
                 onCancel = model::cancelShare,
             )
         }
-        backup?.let { step -> SettingsBackupSheet(step = step, backupper = model.settingsBackup) }
+        fun backToSettings(close: () -> Unit): (() -> Unit)? = if (!dataFromSettings) null else ({
+            close()
+            dataFromSettings = false
+            model.showSettings()
+        })
+        backup?.let { step ->
+            SettingsBackupSheet(
+                step = step,
+                backupper = model.settingsBackup,
+                onBack = backToSettings { model.settingsBackup.close() },
+            )
+        }
         hostImport?.let { step ->
             HostImportSheet(
                 step = step,
@@ -396,8 +419,10 @@ internal fun RexPocketApp(
                 importer = model.hostImport,
                 onBackup = {
                     model.hostImport.close()
+                    dataFromSettings = false
                     model.settingsBackup.open()
                 },
+                onBack = backToSettings { model.hostImport.close() },
             )
         }
         if (fontSettingsOpen) {

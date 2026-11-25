@@ -37,4 +37,5 @@
     <string name="notifications_reset_title">Reset notifications?</string>
     <string name="notifications_reset_confirm_body">Blocked, failed, done and messages alert again, bells do not, a bell on screen vibrates, and progress bars are off. Background mode and each host\'s and tailnet\'s page stay as they are.</string>
     <string name="import_problem_option">%1$s is not what the field holds: true or false for tryOthers, one line of at most 64 characters for tailnetAccount.</string>
+    <string name="host_save_and_join_tailnet">Save and join tailnet</string>
 </resources>

@@ -76,7 +76,10 @@ class DesignReviewTest {
     fun everyPageOpenedFromSettingsGoesBackToIt() {
         start()
         openSettings()
-        for (page in listOf(R.string.notifications_title, R.string.appearance_title, R.string.security_title, R.string.quick_replies_title, R.string.diagnostics)) {
+        for (page in listOf(
+            R.string.notifications_title, R.string.appearance_title, R.string.security_title, R.string.quick_replies_title, R.string.diagnostics,
+            R.string.controls_title, R.string.backup_title, R.string.import_hosts_title,
+        )) {
             row(page).performScrollTo().performClick()
             compose.waitForIdle()
             assertFalse("${string(page)} opened in Settings' place", settingsShown())
@@ -110,6 +113,10 @@ class DesignReviewTest {
         val switch = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)
         val done = compose.onNode(hasText(string(R.string.notifications_done)) and hasClickAction() and inASheet)
         done.performScrollTo().assert(switch).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
+        // Drawn as a Material switch, not the words "On" or "Off".
+        done.assert(!hasText(string(R.string.alerts_on)))
+        val switches = compose.onAllNodes(hasTestTag(SHEET_SWITCH_TAG), useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue("a switch per On/Off row", switches.size >= EVENTS.size)
         done.performClick()
         compose.waitForIdle()
         done.assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
@@ -140,5 +147,21 @@ class DesignReviewTest {
             listOf(string(R.string.security_detail_locked), string(R.string.security_detail_screenshots)),
             said(SecurityPrefs(lock = true, blockScreenshots = true)),
         )
+    }
+
+    /** A blocked tab's sheet, and so its row's TalkBack actions, lead with the answers. */
+    @Test
+    fun aBlockedTabsSheetLeadsWithItsAnswers() {
+        val m = start()
+        compose.awaitLive(m, desk.ids[0])
+        val claude = m.pocket.value.views.getValue(desk.ids[0]).windows[0].blocks[0].id
+        desk.rex.report(claude, "blocked", kind = "permission", msg = "Allow Bash: npm test?", app = "claude")
+        compose.awaitThat { m.pocket.value.blockStatus[claude]?.state == "blocked" }
+        val row = hasText("Allow Bash: npm test?", substring = true) and hasClickAction() and !inASheet
+        compose.awaitThat { compose.onAllNodes(row).fetchSemanticsNodes().isNotEmpty() }
+        val actions = compose.onAllNodes(row).fetchSemanticsNodes().first { androidx.compose.ui.semantics.SemanticsActions.CustomActions in it.config }
+            .config[androidx.compose.ui.semantics.SemanticsActions.CustomActions].map { it.label }
+        assertEquals(listOf(string(R.string.alerts_approve), string(R.string.alerts_deny), string(R.string.alerts_reply)), actions.take(3))
+        assertTrue(actions.indexOf(string(R.string.home_action_open)) > actions.indexOf(string(R.string.alerts_interrupt)))
     }
 }

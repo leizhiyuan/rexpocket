@@ -2,6 +2,7 @@ package me.leaver.rexpocket.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
@@ -248,8 +249,8 @@ class MultiHostTest {
 
     /**
      * A host's sheet follows its connection while it is open: Disconnect, once the host is
-     * dropped, becomes Connect in its place, and New session, which needs the host, stays greyed
-     * out saying so. The same sheet, items and order, is the host row's TalkBack actions.
+     * dropped, becomes Connect in its place, and New session stays, saying it connects first
+     * ("Connect & create"), as +'s picker does. The same sheet, items and order, is the host row's TalkBack actions.
      */
     @Test
     fun theHostSheetFollowsItsConnectionAndIsTheRowsTalkBackActions() {
@@ -272,7 +273,7 @@ class MultiHostTest {
         compose.awaitThat { mac.host.id !in m.lives.value }
         inSheet(string(R.string.action_connect)).assertExists()
         assertTrue(compose.onAllNodes(hasText(string(R.string.action_disconnect)) and hasClickAction()).fetchSemanticsNodes().isEmpty())
-        inSheet(string(R.string.session_new)).assertIsNotEnabled()
-        compose.onNodeWithText(string(R.string.home_needs_connect)).assertExists()
+        // New session stays usable, as +'s picker has it: it connects the host and makes one.
+        inSheet(string(R.string.session_new)).assertIsEnabled().assert(hasText(string(R.string.home_connect_and_create)))
     }
 }

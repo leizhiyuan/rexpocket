@@ -38,3 +38,15 @@ recorded in [backlog.md](backlog.md) as not worth the churn yet.
 | 15 | The host dialog's "join the tailnet (tap here)" is text with a tap | Host dialog | Not said as a button; no ripple | A TextButton "Join tailnet" under the note |
 | 16 | A tab's status words still say "waiting for approval" | Tab rows, Status details | The chips and captions say Blocked; the row says waiting | "blocked: approval", "blocked: question", "blocked: login" if Rex's own clients word it so (unconfirmed) |
 | 17 | The Notifications page is one long list | Settings › Background and notifications | Even reordered (2), it holds eight cards | Split Android's checks and the per-host and per-tailnet pages into "Background mode ›" |
+
+## Second wave: five P2 items, done
+
+| # | Was | Now | Test |
+| --- | --- | --- | --- |
+| 11 | On/Off rows ended in the words "On" or "Off" | A Material 3 switch (`SheetItem`'s `checked`), the row the toggle | DesignReviewTest.aSwitchRowIsASwitchToTalkBack |
+| 12 | A blocked tab's sheet had Open and Rename above Approve and Deny | Approve, Deny, Reply, Interrupt first, then Open and Rename; the row's TalkBack actions follow | DesignReviewTest.aBlockedTabsSheetLeadsWithItsAnswers |
+| 13 | The host sheet's New session was greyed out offline | Enabled, saying "Connect & create", as +'s picker; it connects and makes the session (greyed only while the host reconnects) | MultiHostTest |
+| 15 | "join the tailnet (tap here)" was text with a tap | The note, then a "Save and join tailnet" button | HostDialogQolTest (emulator) |
+| 1 | Backup, Import hosts and Terminal controls closed to the home | Opened from Settings, their first page has the back arrow to Settings (`HomeRequest.Settings` for the two the app's root shows) | DesignReviewTest.everyPageOpenedFromSettingsGoesBackToIt |
+
+Left: 14 (Import and export hosts beside Backup), 16 (blocked words on rows) and 17 (a Background mode page), too big for the upstream PR.

@@ -365,7 +365,14 @@ internal const val EXPORT_RESULT_TAG = "host-export-result"
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun HostImportSheet(step: HostImportStep, connected: List<SavedHost>, importer: HostImporter, onBackup: (() -> Unit)? = null) {
+internal fun HostImportSheet(
+    step: HostImportStep,
+    connected: List<SavedHost>,
+    importer: HostImporter,
+    onBackup: (() -> Unit)? = null,
+    /** The first page's back arrow, when Settings opened it: back to Settings. */
+    onBack: (() -> Unit)? = null,
+) {
     val context = LocalContext.current
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { importer.readUri(it) } }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -373,7 +380,7 @@ internal fun HostImportSheet(step: HostImportStep, connected: List<SavedHost>, i
         if (uri != null && text != null) importer.saveExport(uri, text)
     }
     when (step) {
-        is HostImportStep.Source -> ActionSheet(onDismiss = importer::close, title = stringResource(R.string.import_hosts_title)) {
+        is HostImportStep.Source -> ActionSheet(onDismiss = importer::close, title = stringResource(R.string.import_hosts_title), onBack = onBack) {
             Column(Modifier.padding(horizontal = 16.dp).testTag(HOST_IMPORT_TAG)) {
                 if (step.reading) Text(stringResource(R.string.import_reading), color = Colors.muted, fontSize = TextStyles.label)
                 step.problem?.let { Text(stringResource(R.string.import_refused) + " " + importProblemText(it), color = Colors.danger, fontSize = TextStyles.body, lineHeight = labelLeading) }

@@ -278,6 +278,8 @@ internal fun HomeScreen(
     onImportHosts: () -> Unit = {},
     /** Settings › Backup: export and import every setting. */
     onBackup: () -> Unit = {},
+    /** Said just before Settings' Import hosts or Backup opens, which then go back to Settings. */
+    onFromSettings: () -> Unit = {},
     /** The host dialog's Test connection; null leaves it out. */
     hostTester: HostTester? = null,
     /** Settings › Security: the app lock and the screenshot block. */
@@ -384,6 +386,8 @@ internal fun HomeScreen(
                 page = request.key
             }
             HomeRequest.ConfirmTailnetOff -> if (tailnetView.hosts.isNotEmpty()) confirmTailnetOff = true
+            // Back from a page the app's root shows over the home (Backup, Import hosts).
+            HomeRequest.Settings -> settings = true
             HomeRequest.Notifications -> {
                 settings = false
                 fromSettings = false
@@ -1044,6 +1048,7 @@ internal fun HomeScreen(
             },
             onControls = {
                 settings = false
+                fromSettings = true
                 controlsPage = ControlsPage.Controls
             },
             quickReplies = quickRepliesDetail(quickReplies),
@@ -1060,10 +1065,12 @@ internal fun HomeScreen(
             },
             onImportHosts = {
                 settings = false
+                onFromSettings()
                 onImportHosts()
             },
             onBackup = {
                 settings = false
+                onFromSettings()
                 onBackup()
             },
             security = security,
@@ -1186,6 +1193,7 @@ internal fun HomeScreen(
         onKeyBarCtrlC = onKeyBarCtrlC,
         keyArrangement = keyArrangement,
         onKeyArrangement = onKeyArrangement,
+        onBack = settingsBack { controlsPage = null },
     )
 
     if (appearanceOpen) {
@@ -1622,6 +1630,9 @@ internal fun TailnetDialog(
     )
 }
 
+/** The host dialog's Save and join tailnet, under the note that its address is on a tailnet. */
+internal const val HOST_JOIN_TAILNET_TAG = "host-join-tailnet"
+
 /**
  * Adding a host is a name and an address. The port, the scheme and whether the address has to go
  * through the built-in tailnet node all follow from the address, and the line under the field
@@ -1924,15 +1935,15 @@ internal fun HostDialog(
                     }
                 }
                 if (parsed != null && parsed.viaTailscale && !tailnetEnabled) {
-                    Text(
-                        stringResource(R.string.tailscale_need_join_host),
-                        color = Colors.amber,
-                        fontSize = TextStyles.label,
-                        modifier = Modifier.clickable {
+                    Text(stringResource(R.string.tailscale_need_join_host), color = Colors.amber, fontSize = TextStyles.label)
+                    // Saves the host as typed, then opens the tailnet to join: a button, said as one.
+                    TextButton(
+                        onClick = {
                             savedHost(viaTailscale = true)?.let(onSave)
                             onJoinTailnet()
                         },
-                    )
+                        modifier = Modifier.heightIn(min = 48.dp).testTag(HOST_JOIN_TAILNET_TAG),
+                    ) { Text(stringResource(R.string.host_save_and_join_tailnet), color = Colors.accent) }
                 }
                 if (parsed?.plaintext == true && !ssh) {
                     Text(stringResource(R.string.field_plaintext_warning), color = Colors.amber, fontSize = TextStyles.label)

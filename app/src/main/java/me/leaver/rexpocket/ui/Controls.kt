@@ -55,10 +55,13 @@ internal fun TerminalControlsPages(
     onKeyBarCtrlC: (CtrlCKey) -> Unit,
     keyArrangement: KeyArrangement,
     onKeyArrangement: (KeyArrangement) -> Unit,
+    /** Terminal controls' back arrow, when Settings opened it: back to Settings. */
+    onBack: (() -> Unit)? = null,
 ) {
     when (page) {
         ControlsPage.Controls -> ControlsSheet(
             onDismiss = { onPage(null) },
+            onBack = onBack,
             gestures = gestures,
             onGestures = onGestures,
             keyBar = keyBar,
@@ -87,12 +90,13 @@ internal fun ControlsSheet(
     onKeyBarCtrlC: (CtrlCKey) -> Unit,
     /** Opens Arrange keys, where the bar's keys are ordered, shown and hidden. */
     onArrangeKeys: () -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     var timing by remember { mutableStateOf<Timing?>(null) }
     var confirmReset by remember { mutableStateOf(false) }
     val systemDoubleTap = ViewConfiguration.getDoubleTapTimeout()
     val systemLongPress = ViewConfiguration.getLongPressTimeout()
-    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.controls_title)) {
+    ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.controls_title), onBack = onBack) {
         Group(stringResource(R.string.controls_group_gestures)) {
             // Each row opens a picker of its choices (Pickers.kt); the sheet stays open under it, so
             // the detail shows the change. The icon is the action chosen, not the gesture, so it

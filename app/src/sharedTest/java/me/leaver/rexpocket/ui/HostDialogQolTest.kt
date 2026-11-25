@@ -67,6 +67,27 @@ class HostDialogQolTest {
         compose.waitForIdle()
     }
 
+    /** A tailnet address with no tailnet joined: a real button saves the host and goes to join. */
+    @Test
+    fun aTailnetAddressOffersSaveAndJoinAsAButton() {
+        var joined = 0
+        compose.setContent {
+            RexTheme {
+                HostDialog(
+                    initial = null, tailnetEnabled = false, prefillAddress = "mac.tail1234.ts.net:7297",
+                    onDismiss = {}, onDelete = null, onSave = { saved += it }, onJoinTailnet = { joined++ },
+                )
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag(HOST_JOIN_TAILNET_TAG).performScrollTo()
+            .assert(androidx.compose.ui.test.SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.Role, androidx.compose.ui.semantics.Role.Button))
+            .performClick()
+        compose.waitForIdle()
+        assertEquals(1, joined)
+        assertEquals("mac.tail1234.ts.net", saved.single().host)
+    }
+
     /** Password and Private key are one choice: the one in use is said as selected. */
     @Test
     fun theSignInChoiceIsSaidAsSelected() {
