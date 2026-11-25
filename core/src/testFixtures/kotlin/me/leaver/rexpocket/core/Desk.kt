@@ -54,6 +54,21 @@ class Desk(
         return window to block
     }
 
+    /**
+     * A tab holding a tunnel instead of a shell, as a desk forwarding a port has: Rex listens on a
+     * free loopback port for it and hands each connection to its owner, the desk. Its tab and block.
+     */
+    suspend fun newTunnel(sid: String): Pair<String, String> {
+        val answer = client.call(
+            "session.new_window",
+            JSONObject().put("session_id", sid).put("focus", true).put(
+                "layout",
+                JSONObject().put("block", JSONObject().put("flavor", "com.superlogical.tunnel.listen").put("options", JSONObject().put("port", 0))),
+            ),
+        )
+        return answer.getString("window_id") to answer.getJSONArray("block_ids").getString(0)
+    }
+
     suspend fun split(sid: String, anchor: String): String = client.call(
         "session.new_split",
         JSONObject()

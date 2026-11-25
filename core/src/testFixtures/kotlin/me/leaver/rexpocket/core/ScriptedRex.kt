@@ -124,6 +124,9 @@ class ScriptedRex(
     }
 
     private val ids = AtomicLong()
+
+    /** Blocks that are not shells, by their flavor (`com.superlogical.tunnel.listen`). */
+    private val flavors = ConcurrentHashMap<String, String>()
     private val sessions = LinkedHashMap<String, Session>()
     private val owners = HashMap<String, String>()
 
@@ -543,11 +546,12 @@ class ScriptedRex(
                                         "blocks",
                                         JSONArray().apply {
                                             tab.blocks.forEach { b ->
+                                                val flavor = flavors[b] ?: TERMINAL_FLAVOR
                                                 val block = JSONObject()
                                                     .put("block_id", b)
-                                                    .put("label", "shell")
-                                                    .put("creator_name", "com.superlogical.terminal")
-                                                    .put("flavor", "com.superlogical.terminal.shell")
+                                                    .put("label", flavor.substringAfterLast('.'))
+                                                    .put("creator_name", flavor.substringBeforeLast('.'))
+                                                    .put("flavor", flavor)
                                                 owners[b]?.let { block.put("owner", it) }
                                                 put(block)
                                             }
@@ -643,6 +647,9 @@ class ScriptedRex(
         window?.optJSONObject("layout")?.optJSONObject("block")?.let { layouts += JSONObject(it.toString()) }
         s.tabs += tab
         val block = tab.blocks.first()
+        // A block of another kind than a shell, such as a tunnel: its view names its creator and flavor.
+        window?.optJSONObject("layout")?.optJSONObject("block")?.optString("flavor")
+            ?.takeIf { it.isNotEmpty() && it != TERMINAL_FLAVOR }?.let { flavors[block] = it }
         if (owner != null) {
             sessionEvent(s.id, "block_created", JSONObject().put("block_id", block))
             claim(block, owner, "create")
@@ -1326,6 +1333,8 @@ class ScriptedRex(
     companion object {
         /** The largest message it takes, as Rex 0.1.0-preview.22's welcome says. */
         const val MAX_MESSAGE_BYTES = 1_048_576
+
+        private const val TERMINAL_FLAVOR = "com.superlogical.terminal.shell"
 
         /** The root record's id, as Rex writes it in events and `program_status_removed`. */
         private const val ROOT = ""

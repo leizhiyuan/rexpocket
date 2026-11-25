@@ -1797,6 +1797,14 @@ class PocketSession(
                 backoff = (backoff * 2).coerceAtMost(PANE_RETRY_MAX_MS)
                 continue
             }
+            // A block that is not a terminal - a desk's port forward is a tunnel block - has no
+            // stream to show, and is not the phone's to take: Rex hands a tunnel's connections to
+            // its owner, so taking it on sight stopped the desk's forwarding.
+            val creator = live.views[sid]?.allBlocks()?.firstOrNull { it.id == blockId }?.creator
+            if (creator != null && creator != TERMINAL_CREATOR) {
+                trace("pane $blockId: a $creator block, not a terminal; left alone")
+                return@flow
+            }
             try {
                 coroutineScope {
                     // The picture is what the person is waiting for, so its stream is asked for at
@@ -2170,7 +2178,7 @@ class PocketSession(
             for ((sid, view) in order) {
                 for (block in view.allBlocks()) {
                     if (block.id in statusRead) continue
-                    if (block.creator != null && block.creator != "com.superlogical.terminal") {
+                    if (block.creator != null && block.creator != TERMINAL_CREATOR) {
                         statusRead += block.id
                         continue
                     }
@@ -2214,7 +2222,7 @@ class PocketSession(
             if (sid in attachedSessions || sid in heardStatusFrom) continue
             for (block in view.allBlocks()) {
                 if (block.id !in statusRead) continue
-                if (block.creator != null && block.creator != "com.superlogical.terminal") continue
+                if (block.creator != null && block.creator != TERMINAL_CREATOR) continue
                 out += sid to block.id
             }
         }
@@ -2423,6 +2431,9 @@ private const val WRITE_METHOD = "com.superlogical.terminal.write"
  * character can take a few bytes of UTF-8 and JSON escaping, so this stays well under it.
  */
 private const val MAX_WRITE_BATCH = 8_000
+
+/** Who makes terminal blocks; a block of any other creator has no terminal stream. */
+internal const val TERMINAL_CREATOR = "com.superlogical.terminal"
 
 /** The largest message every Rex takes (its guide: never below 64 KiB). */
 internal const val MIN_MESSAGE_BYTES = 65_536
