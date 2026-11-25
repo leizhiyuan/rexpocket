@@ -83,7 +83,7 @@ class HomeEdgeTest {
         val label = m.pocket.value.sessions.first { it.id == other }.label
         compose.onNode(hasContentDescription(string(R.string.manage_actions_for, label)) and hasClickAction() and !inASheet).performClick()
         compose.waitForIdle()
-        inSheet(string(R.string.template_new_tab)).performScrollTo().performClick()
+        inSheet(string(R.string.menu_new_tab)).performScrollTo().performClick()
         compose.waitForIdle()
         assertTrue(sheetHas(string(R.string.template_in_session, label)))
 
