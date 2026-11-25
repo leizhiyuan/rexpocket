@@ -750,7 +750,8 @@ class Connections private constructor(private val app: Application, val nodes: T
         }
     }
 
-    private fun SavedHost.withoutKey() = copy(sshHostKey = "")
+    // A host opened for its connection is the same host as the list's, its secrets sealed.
+    private fun SavedHost.withoutKey() = asListed().copy(sshHostKey = "")
 
     /** Skips the wait before the next attempt of [hostId], or starts a stopped one again. */
     fun retry(hostId: String, saved: SavedHost?, resume: Boolean) {
@@ -912,16 +913,18 @@ class Connections private constructor(private val app: Application, val nodes: T
             // The SSH tunnel is per host and outlives a reconnect attempt: only the channels under it
             // come and go. Every Rex connection of this host goes through the same route.
             val ssh = if (target.viaSsh) {
+                val credentials = try {
+                    sshCredentials(target)
+                } catch (e: ProblemException) {
+                    link.pocket.value = PocketState(phase = Phase.Failed, endpointLabel = endpoint.label(), problem = e.problem)
+                    return@launch
+                }
                 SshTunnel(
                     SshSettings(
                         host = target.host,
                         port = target.port,
                         user = target.sshUser,
-                        credentials = SshCredentials(
-                            password = target.sshPassword.takeIf { it.isNotEmpty() },
-                            privateKey = target.sshPrivateKey.takeIf { it.isNotEmpty() },
-                            passphrase = target.sshPassphrase.takeIf { it.isNotEmpty() },
-                        ),
+                        credentials = credentials,
                         hostKey = target.sshHostKey.takeIf { it.isNotEmpty() },
                         socksPort = socksPort,
                         dialer = dialer,
@@ -950,6 +953,24 @@ class Connections private constructor(private val app: Application, val nodes: T
             link.ready.complete(s)
             link.followJob = scope.launch { follow(link, s) }
         }
+    }
+
+    /**
+     * [target]'s SSH sign-in, its secrets opened from the keystore off the main thread now that a
+     * connection asks for them. A secret the keystore cannot open is the connection's problem,
+     * rather than a dial without it that SSH refuses; the next attempt asks the keystore again.
+     */
+    private suspend fun sshCredentials(target: SavedHost): SshCredentials {
+        val opened = withContext(Dispatchers.IO) { store.withSecrets(target) }
+        if (opened.secretsUnreadable) {
+            Diagnostics.event(CONN_TAG, "a saved SSH secret could not be opened from the keystore")
+            throw ProblemException(Problem(Trouble.SshSecretUnreadable, null))
+        }
+        return SshCredentials(
+            password = opened.sshPassword.takeIf { it.isNotEmpty() },
+            privateKey = opened.sshPrivateKey.takeIf { it.isNotEmpty() },
+            passphrase = opened.sshPassphrase.takeIf { it.isNotEmpty() },
+        )
     }
 
     /**
@@ -994,6 +1015,7 @@ class Connections private constructor(private val app: Application, val nodes: T
             link.route.value = route
         }
         link.route.value = cursor.current
+        var credentials: SshCredentials? = null
         val dialer = HostDialer(
             cursor,
             sshSettings = { route, via ->
@@ -1001,11 +1023,8 @@ class Connections private constructor(private val app: Application, val nodes: T
                     host = route.endpoint.host,
                     port = route.endpoint.port,
                     user = route.endpoint.sshUser.orEmpty(),
-                    credentials = SshCredentials(
-                        password = target.sshPassword.takeIf { it.isNotEmpty() },
-                        privateKey = target.sshPrivateKey.takeIf { it.isNotEmpty() },
-                        passphrase = target.sshPassphrase.takeIf { it.isNotEmpty() },
-                    ),
+                    // Opened before the first dial over SSH (prepare, below).
+                    credentials = credentials ?: SshCredentials(),
                     // One host, one trusted key, at every address: another key is never this host's.
                     hostKey = target.sshHostKey.takeIf { it.isNotEmpty() },
                     socksPort = via.socksPort,
@@ -1035,6 +1054,7 @@ class Connections private constructor(private val app: Application, val nodes: T
             routes = cursor,
             prepare = { route ->
                 link.route.value = route
+                if (route.endpoint.viaSsh && credentials == null) credentials = sshCredentials(target)
                 Diagnostics.event(CONN_TAG, "dial address ${routes.indexOf(route) + 1} of ${routes.size}${if (route.main) " (its own)" else ""} tailnet=${route.viaTailnet}")
                 if (route.viaTailnet) {
                     val port = readyTailnet(link, route.endpoint.host)
@@ -1253,6 +1273,7 @@ private val teardown = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
 /** How long after a connection goes live the path is measured: Tailscale needs a moment to go direct. */
 private const val PATH_SETTLE_MS = 3_000L
+
 
 /** The least time between two changes to the progress notifications. */
 private const val PROGRESS_NOTE_MS = 1_000L

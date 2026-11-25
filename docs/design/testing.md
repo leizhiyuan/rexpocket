@@ -35,6 +35,9 @@ not measure the group again when a keyed row moved; see `GroupRows` in `Sheets.k
     `./gradlew -x :app:buildGhostty -x :app:buildGhosttyHost :app:testDebugUnitTest --tests 'me.leaver.rexpocket.ui.*'`
     (with an empty `native/.build/host` when libghostty's host build is not there);
   - on the emulator in `device-test`, each class listed in its test script.
+- `HostStoreTest` (`app/src/sharedTest/.../data`) holds the host store to its SSH secrets on both
+  too: a keystore that fails for a moment loses no saved secret, listing and saving hosts open none,
+  two writers lose no host. Its keystore is a plain AES key, as Robolectric has no Android keystore.
 - Robolectric's Android jar comes through Gradle's repositories (`robolectricAndroid` in
   `app/build.gradle.kts`), not from Maven Central at run time. It wants Java 21.
 

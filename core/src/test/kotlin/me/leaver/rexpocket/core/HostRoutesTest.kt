@@ -89,7 +89,7 @@ class HostRoutesTest {
         for (t in listOf(Trouble.Unreachable, Trouble.TimedOut, Trouble.TailnetNotJoined, Trouble.Tailnet, Trouble.TailnetNeedsLogin, Trouble.TailnetPeerUnknown, Trouble.TailnetPeerOffline, Trouble.RexNotListening)) {
             assertTrue(t.name, HostRoutes.fallsThrough(Problem(t, null)))
         }
-        for (t in listOf(Trouble.SshAuth, Trouble.SshHostKeyChanged, Trouble.SshHostKeyUnknown, Trouble.SshCommand, Trouble.Rejected, Trouble.Dropped, Trouble.Other, Trouble.NotReady)) {
+        for (t in listOf(Trouble.SshAuth, Trouble.SshSecretUnreadable, Trouble.SshHostKeyChanged, Trouble.SshHostKeyUnknown, Trouble.SshCommand, Trouble.Rejected, Trouble.Dropped, Trouble.Other, Trouble.NotReady)) {
             assertFalse(t.name, HostRoutes.fallsThrough(Problem(t, null)))
         }
         assertFalse(HostRoutes.fallsThrough(null))

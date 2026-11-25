@@ -1010,6 +1010,9 @@ class RexViewModel @JvmOverloads constructor(
         }
     }
 
+    /** [host] with its SSH secrets opened from the keystore: for its dialog, one host at a time. */
+    fun hostWithSecrets(host: SavedHost): SavedHost = store.withSecrets(host)
+
     fun saveHost(host: SavedHost) {
         store.upsert(host)
         hosts.value = store.list()

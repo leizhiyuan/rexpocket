@@ -101,7 +101,7 @@ class HostsAndSecurityTest {
             m.setSecurity(SecurityPrefs())
             m.saveHost(agents.copy(fallbacks = agents.fallbacks.reversed(), tryOthers = true))
         }
-        val password = store.find("agents-id")!!.sshPassword
+        val password = store.withSecrets(store.find("agents-id")!!).sshPassword
         compose.runOnUiThread { m.settingsBackup.readText(text) }
         compose.awaitThat { m.settingsBackup.step.value is BackupStep.Preview }
         assertTrue(seen(string(R.string.arrange_title)))
@@ -117,7 +117,7 @@ class HostsAndSecurityTest {
         assertEquals(gestures, store.gestures())
         assertEquals(security, m.security.value)
         assertEquals(security, store.security())
-        val back = store.find("agents-id")!!
+        val back = store.withSecrets(store.find("agents-id")!!)
         assertEquals(agents.fallbacks, back.fallbacks)
         assertFalse(back.tryOthers)
         // No secret went in, and the host keeps its own password (as this phone's keystore keeps it).

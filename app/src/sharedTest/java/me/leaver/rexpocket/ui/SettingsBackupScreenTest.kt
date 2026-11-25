@@ -185,7 +185,7 @@ class SettingsBackupScreenTest {
 
         tap(string(R.string.backup_apply))
         compose.awaitThat { m.settingsBackup.step.value == null }
-        val saved = store.list().single { it.label == "fresh" }
+        val saved = store.listWithSecrets().single { it.label == "fresh" }
         // The backup's password, not a fresh key: no keys page. (A JVM without a keystore keeps no password.)
         assertEquals("", saved.sshPrivateKey)
         assertTrue(saved.sshPassword == "pw2" || saved.sshPassword.isEmpty())

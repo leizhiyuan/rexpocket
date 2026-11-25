@@ -94,6 +94,7 @@ jobs:
           for class in \
               me.leaver.rexpocket.net.TailnetNodeInstrumentedTest \
               me.leaver.rexpocket.data.FontPreferenceTest \
+              me.leaver.rexpocket.data.HostStoreTest \
               me.leaver.rexpocket.ui.TerminalImeTest \
               me.leaver.rexpocket.ui.TerminalViewTest \
               me.leaver.rexpocket.ui.TerminalAccessibilityTest \

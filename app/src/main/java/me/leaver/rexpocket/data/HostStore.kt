@@ -45,8 +45,25 @@ data class SavedHost(
     val fallbacks: List<String> = emptyList(),
     /** Try Other addresses: off connects by [host] alone. */
     val tryOthers: Boolean = true,
+    /**
+     * The SSH secrets as the store read them, sealed: [HostStore.list] leaves the three fields
+     * above empty and opens them only when asked ([HostStore.withSecrets]). A copy carries this, so
+     * a secret it did not change is written back as it was read, opened or not.
+     */
+    val stored: StoredSecrets? = null,
 ) {
     val viaSsh: Boolean get() = sshUser.isNotBlank()
+
+    /** A saved secret of this host that the keystore could not open: the connection says so. */
+    val secretsUnreadable: Boolean get() = stored?.unreadable == true
+
+    /** This saved host as [HostStore.list] gives it, its secrets sealed: to tell whether it changed. */
+    fun asListed(): SavedHost = copy(
+        sshPassword = "",
+        sshPrivateKey = "",
+        sshPassphrase = "",
+        stored = stored?.let { s -> StoredSecrets(s.password?.closed(), s.privateKey?.closed(), s.passphrase?.closed()) },
+    )
 
     /** The host's own address as a route, first in its [HostRoutes.plan]. */
     fun mainRoute(): HostRoute {
@@ -58,6 +75,27 @@ data class SavedHost(
     fun routes(lastKey: String? = null, lastAt: Long = 0, now: Long = System.currentTimeMillis()): List<HostRoute> =
         HostRoutes.plan(mainRoute(), fallbacks, sshUser, tryOthers, lastKey, lastAt, now)
 }
+
+/**
+ * A saved secret as the store read it: its sealed [text], and what it opened to, or null while it
+ * is not opened (or could not be). Never logged: [toString] says nothing of either.
+ */
+class Sealed internal constructor(internal val text: String, internal val opened: String?) {
+    override fun equals(other: Any?) = other is Sealed && other.text == text && other.opened == opened
+    override fun hashCode() = text.hashCode() * 31 + opened.hashCode()
+    override fun toString() = "Sealed"
+
+    internal fun closed() = Sealed(text, null)
+}
+
+/** A host's sealed password, private key and passphrase; null where it has none saved. */
+data class StoredSecrets(
+    internal val password: Sealed?,
+    internal val privateKey: Sealed?,
+    internal val passphrase: Sealed?,
+    /** They were opened, and one of them could not be. */
+    val unreadable: Boolean = false,
+)
 
 /**
  * Settings for the tailnet node the app runs itself: which backend, whether it is joined, and the
@@ -108,9 +146,42 @@ data class HomeFolds(
     }
 }
 
-class HostStore(context: Context) {
+/**
+ * The saved hosts and the app's settings. SSH secrets are sealed by [secrets] (the Android
+ * keystore): [list] and [find] leave them sealed, so the home and every save cost no keystore
+ * call, and [withSecrets] opens one host's when a connection, Test connection or its dialog needs
+ * them. One that cannot be opened is never written over: see [SavedHost.stored].
+ */
+class HostStore(context: Context, private val secrets: SecretBox = SecretBox()) {
     private val prefs = context.applicationContext.getSharedPreferences("rexpocket", Context.MODE_PRIVATE)
-    private val secrets = SecretBox()
+
+    /**
+     * [host] with its secrets opened: blocking on the keystore, so off the main thread where it can
+     * be. One that cannot be opened stays empty and sealed, and [SavedHost.secretsUnreadable] says so;
+     * the next call tries again.
+     */
+    fun withSecrets(host: SavedHost): SavedHost {
+        val s = host.stored ?: return host
+        var unreadable = false
+        fun open(field: Sealed?, value: String): Pair<Sealed?, String> {
+            // Not saved, opened already, or changed since: nothing to open.
+            if (field == null || field.opened != null || value.isNotEmpty()) return field to value
+            val plain = secrets.open(field.text) ?: return (field to value).also { unreadable = true }
+            return Sealed(field.text, plain) to plain
+        }
+        val (password, pw) = open(s.password, host.sshPassword)
+        val (privateKey, key) = open(s.privateKey, host.sshPrivateKey)
+        val (passphrase, phrase) = open(s.passphrase, host.sshPassphrase)
+        return host.copy(
+            sshPassword = pw,
+            sshPrivateKey = key,
+            sshPassphrase = phrase,
+            stored = StoredSecrets(password, privateKey, passphrase, unreadable),
+        )
+    }
+
+    /** Every host with its secrets opened ([withSecrets]): for an export or an import, not for drawing. */
+    fun listWithSecrets(): List<SavedHost> = list().map(::withSecrets)
 
     fun list(): List<SavedHost> {
         val raw = prefs.getString(KEY_HOSTS, "[]") ?: "[]"
@@ -128,29 +199,37 @@ class HostStore(context: Context) {
                         viaTailscale = o.optBoolean("viaTailscale", false),
                         tailnetProfile = o.optString("tailnetProfile", ""),
                         sshUser = o.optString("sshUser", ""),
-                        sshPassword = secrets.open(o.optString("sshPassword", "")),
-                        sshPrivateKey = secrets.open(o.optString("sshPrivateKey", "")),
-                        sshPassphrase = secrets.open(o.optString("sshPassphrase", "")),
                         sshHostKey = o.optString("sshHostKey", ""),
                         fallbacks = o.optJSONArray("fallbacks")?.let { a -> List(a.length()) { a.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
                         tryOthers = o.optBoolean("tryOthers", true),
+                        stored = storedOf(o),
                     ),
                 )
             }
         }.filter { it.id.isNotBlank() && it.host.isNotBlank() }
     }
 
-    fun upsert(host: SavedHost) {
+    private fun storedOf(o: JSONObject): StoredSecrets? {
+        fun sealed(name: String) = o.optString(name, "").takeIf { it.isNotEmpty() }?.let { Sealed(it, null) }
+        val password = sealed("sshPassword")
+        val privateKey = sealed("sshPrivateKey")
+        val passphrase = sealed("sshPassphrase")
+        return if (password == null && privateKey == null && passphrase == null) null else StoredSecrets(password, privateKey, passphrase)
+    }
+
+    // The list is read, changed and written whole, by more than one store (the view model's and
+    // the connections'): one at a time in the process, or one writer's host is lost.
+    fun upsert(host: SavedHost) = synchronized(LOCK) {
         val next = list().filter { it.id != host.id } + host
         write(next)
     }
 
     /** Writes [hosts] as the whole list, in their order: an import's changes in one write. */
-    fun saveAll(hosts: List<SavedHost>) {
+    fun saveAll(hosts: List<SavedHost>) = synchronized(LOCK) {
         write(hosts)
     }
 
-    fun delete(id: String) {
+    fun delete(id: String) = synchronized(LOCK) {
         write(list().filter { it.id != id })
         if (prefs.contains(KEY_CONNECTED_HOSTS)) setConnectedHosts(connectedHosts() - id)
         prefs.edit().remove(lastKey(id)).remove(panesKey(id)).remove(sessionsKey(id)).remove(routeKey(id)).apply()
@@ -474,9 +553,9 @@ class HostStore(context: Context) {
                     .put("viaTailscale", h.viaTailscale)
                     .apply { if (h.tailnetProfile.isNotBlank()) put("tailnetProfile", h.tailnetProfile) }
                     .put("sshUser", h.sshUser)
-                    .put("sshPassword", secrets.seal(h.sshPassword))
-                    .put("sshPrivateKey", secrets.seal(h.sshPrivateKey))
-                    .put("sshPassphrase", secrets.seal(h.sshPassphrase))
+                    .put("sshPassword", sealed(h.sshPassword, h.stored?.password))
+                    .put("sshPrivateKey", sealed(h.sshPrivateKey, h.stored?.privateKey))
+                    .put("sshPassphrase", sealed(h.sshPassphrase, h.stored?.passphrase))
                     .put("sshHostKey", h.sshHostKey)
                     .apply { if (h.fallbacks.isNotEmpty()) put("fallbacks", JSONArray(h.fallbacks)) }
                     .apply { if (!h.tryOthers) put("tryOthers", false) },
@@ -485,7 +564,16 @@ class HostStore(context: Context) {
         prefs.edit().putString(KEY_HOSTS, arr.toString()).apply()
     }
 
+    /**
+     * What to write for a secret now [value], read as [was]: the text that was read when the value
+     * is what it opened to - or still empty, not opened or not openable - and only a changed
+     * secret sealed again. So a keystore that cannot open a secret never writes it over.
+     */
+    private fun sealed(value: String, was: Sealed?): String =
+        if (was != null && value == (was.opened ?: "")) was.text else secrets.seal(value)
+
     companion object {
+        private val LOCK = Any()
         private const val KEY_HOSTS = "hosts"
         private const val KEY_FOLDED_HOSTS = "folded_hosts"
         private const val KEY_FOLDED_SESSIONS = "folded_sessions"

@@ -178,6 +178,7 @@
     <string name="problem_ssh_host_key_changed">SSH 主機金鑰已變更。在你核對之前，重新連線並不安全。</string>
     <string name="problem_ssh_auth">SSH 拒絕登入：%1$s</string>
     <string name="problem_ssh_command">無法透過 SSH 啟動 Rex：%1$s</string>
+    <string name="problem_ssh_secret_unreadable">這支手機的金鑰庫無法開啟已儲存的密碼或金鑰。請再試一次；如果一直失敗，請在「編輯主機」中重新輸入。</string>
     <string name="action_retry_now">立即重試</string>
     <string name="action_dismiss">關閉</string>
     <string name="confirm_delete_host">要刪除 %1$s 嗎？</string>

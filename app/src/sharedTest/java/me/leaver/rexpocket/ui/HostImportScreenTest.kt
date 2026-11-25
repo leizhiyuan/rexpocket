@@ -109,7 +109,7 @@ class HostImportScreenTest {
         tap(string(R.string.import_apply))
         compose.awaitThat { m.hostImport.step.value is HostImportStep.Keys }
         compose.awaitThat { seen(string(R.string.keys_title)) }
-        val hosts = store.list()
+        val hosts = store.listWithSecrets()
         assertEquals(listOf("desk", "agents", "fresh-1", "fresh-2"), hosts.map { it.label })
         assertEquals(before[1], hosts[1])
         assertEquals(fpA, hosts[1].sshHostKey)
@@ -147,12 +147,12 @@ class HostImportScreenTest {
         assertTrue(seen(string(R.string.import_nothing)))
         tap(string(R.string.import_key_confirm, "agents"))
         compose.awaitThat { seen(string(R.string.import_apply)) }
-        val password = store.find("agents-id")!!.sshPassword
+        val password = store.withSecrets(store.find("agents-id")!!).sshPassword
         tap(string(R.string.import_apply))
         // A host with a password gets no new key: nothing to show, and the sheet goes. (A JVM without
         // a keystore kept no password, so there the host has nothing to sign in with and gets a key.)
         compose.awaitThat { m.hostImport.step.value.let { if (password.isEmpty()) it is HostImportStep.Keys else it == null } }
-        val saved = store.find("agents-id")!!
+        val saved = store.withSecrets(store.find("agents-id")!!)
         assertEquals(fpB, saved.sshHostKey)
         assertEquals(password, saved.sshPassword)
     }

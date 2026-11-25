@@ -297,6 +297,7 @@ internal fun RexPocketApp(
                     },
                     onFromSettings = { openingFromSettings = true },
                     hostTester = model.hostTester,
+                    openSecrets = model::hostWithSecrets,
                     security = security,
                     onSecurity = model::setSecurity,
                 )

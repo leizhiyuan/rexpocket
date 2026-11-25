@@ -206,7 +206,7 @@ class HostImporter(
                 Diagnostics.event(TAG, "import refused: ${parse.problem.kind} at entry ${parse.problem.entry ?: "-"}")
                 _step.value = HostImportStep.Source(problem = parse.problem)
             }
-            is HostImportParse.Parsed -> when (val planned = ImportPlan.of(parse, store.list().map { it.known(profiles()) })) {
+            is HostImportParse.Parsed -> when (val planned = ImportPlan.of(parse, store.listWithSecrets().map { it.known(profiles()) })) {
                 is HostImportPlan.Failed -> _step.value = HostImportStep.Source(problem = planned.problem)
                 is HostImportPlan.Planned -> {
                     Diagnostics.event(TAG, "import read: ${parse.hosts.size} hosts, ${parse.skipped.size} skipped")
@@ -233,7 +233,7 @@ class HostImporter(
                 keyed.associate { it.imported.name to SshKeys.generate(it.imported.commentForKey) }
             }
             val all = result.applyTo(
-                store.list(),
+                store.listWithSecrets(),
                 id = { it.id },
                 update = { h, p -> h.imported(p, keys[p.imported.name], profiles()) },
                 create = { p ->
@@ -245,7 +245,7 @@ class HostImporter(
             onChanged()
             Diagnostics.event(TAG, result.summary())
             // A phone whose keystore cannot seal a key keeps none: say so rather than show a key that will not work.
-            val saved = store.list().associateBy { it.label }
+            val saved = store.listWithSecrets().associateBy { it.label }
             val unsaved = keys.keys.filter { saved[it]?.sshPrivateKey.isNullOrEmpty() }
             val entries = keyed.mapNotNull { p -> keys[p.imported.name]?.let { PublicKeyList.Entry(p.imported.name, it.publicKey) } }
             _step.value = if (entries.isEmpty()) {
@@ -261,7 +261,7 @@ class HostImporter(
      * Export hosts: the phone's SSH hosts as `rexpocket-hosts/1`, public data only. A host on a Rex
      * port is left out and named, as the format holds SSH hosts; Settings › Backup has every host.
      */
-    fun export(): HostListExport = HostListFormat.write(store.list().map { it.exported(profiles()) }).also {
+    fun export(): HostListExport = HostListFormat.write(store.listWithSecrets().map { it.exported(profiles()) }).also {
         Diagnostics.event(TAG, "export: ${it.written.size} hosts, ${it.left.size} left out")
         _step.value = HostImportStep.Source(exported = it)
     }
@@ -305,7 +305,8 @@ internal fun SavedHost.known(profiles: TailnetProfiles = TailnetProfiles()): Kno
     address = importAddress(),
     fallbacks = fallbacks.mapNotNull(ImportAddress::parse),
     hostKey = sshHostKey.ifBlank { null },
-    hasCredentials = !viaSsh || sshPassword.isNotEmpty() || sshPrivateKey.isNotBlank(),
+    // A secret the keystore could not open is still the host's: no fresh key over it.
+    hasCredentials = !viaSsh || sshPassword.isNotEmpty() || sshPrivateKey.isNotBlank() || secretsUnreadable,
     tryOthers = tryOthers,
     tailnetAccount = accountName(profiles),
 )

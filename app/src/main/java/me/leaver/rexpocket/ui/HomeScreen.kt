@@ -282,6 +282,8 @@ internal fun HomeScreen(
     onFromSettings: () -> Unit = {},
     /** The host dialog's Test connection; null leaves it out. */
     hostTester: HostTester? = null,
+    /** A host with its SSH secrets opened, for the host dialog (HostStore.withSecrets). */
+    openSecrets: (SavedHost) -> SavedHost = { it },
     /** Settings › Security: the app lock and the screenshot block. */
     security: SecurityPrefs = SecurityPrefs(),
     onSecurity: (SecurityPrefs) -> Unit = {},
@@ -313,7 +315,9 @@ internal fun HomeScreen(
     // this screen's saved state while it is away): the sheet that was open, the search on its
     // query, the eye, and where the list was scrolled to. The folds are the view model's.
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
-    val editing = editingId?.let { id -> hosts.firstOrNull { it.id == id } }
+    val listed = editingId?.let { id -> hosts.firstOrNull { it.id == id } }
+    // The list's hosts keep their secrets sealed; the dialog opens the one it edits.
+    val editing = remember(listed) { listed?.let(openSecrets) }
     var creating by rememberSaveable { mutableStateOf(false) }
     // A device picked in the tailnet sheet: a new host starts from its name and Rex's port.
     var prefillLabel by rememberSaveable { mutableStateOf<String?>(null) }
@@ -2046,6 +2050,8 @@ internal fun asSavedHost(
     sshPassphrase = if (parsed.viaSsh) sshPassphrase else "",
     sshHostKey = if (parsed.viaSsh) sshHostKey else "",
     fallbacks = initial?.fallbacks.orEmpty(),
+    // What the store read: a secret left as the dialog showed it is written back as it was saved.
+    stored = initial?.stored,
 )
 
 /** The places of Help's entries that the home opens itself. */

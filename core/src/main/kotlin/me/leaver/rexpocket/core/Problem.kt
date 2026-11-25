@@ -50,6 +50,9 @@ enum class Trouble {
     /** SSH reached the machine, but Rex is not installed or cannot run there. */
     SshCommand,
 
+    /** The phone's keystore could not open the host's saved SSH password or key; nothing was dialed. */
+    SshSecretUnreadable,
+
     Other,
 }
 

@@ -182,6 +182,7 @@
     <string name="problem_ssh_host_key_changed">The SSH host key changed. Reconnecting is not safe until you check it.</string>
     <string name="problem_ssh_auth">SSH refused the sign-in: %1$s</string>
     <string name="problem_ssh_command">Rex could not be started over SSH: %1$s</string>
+    <string name="problem_ssh_secret_unreadable">This phone\'s keystore could not open the saved password or key. Try again; if it keeps failing, enter it again in Edit host.</string>
     <string name="action_retry_now">Retry now</string>
     <string name="action_dismiss">Dismiss</string>
     <string name="confirm_delete_host">Delete %1$s?</string>

@@ -178,6 +178,7 @@
     <string name="problem_ssh_host_key_changed">SSH 主机密钥变了。核对之前不要继续连接。</string>
     <string name="problem_ssh_auth">SSH 拒绝登录：%1$s</string>
     <string name="problem_ssh_command">无法通过 SSH 启动 Rex：%1$s</string>
+    <string name="problem_ssh_secret_unreadable">这台手机的密钥库无法打开已保存的密码或密钥。请重试；如果一直失败，请在“编辑主机”中重新输入。</string>
     <string name="action_retry_now">立即重试</string>
     <string name="action_dismiss">关闭</string>
     <string name="confirm_delete_host">删除 %1$s？</string>

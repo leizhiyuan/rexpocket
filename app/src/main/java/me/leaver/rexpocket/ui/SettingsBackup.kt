@@ -200,7 +200,7 @@ class SettingsBackupper(
     /** What the phone has, as a backup writes it. */
     internal fun snapshot(withSecrets: Boolean): SettingsSnapshot {
         val now = read()
-        val hosts = store.list()
+        val hosts = store.listWithSecrets()
         // A file names its hosts, and keeps only the first of two with one name: the parts by host
         // are that first one's, never another's under its name.
         val label = hosts.distinctBy { it.label.lowercase() }.associate { it.id to it.label }
@@ -338,7 +338,7 @@ class SettingsBackupper(
                     val font = b.terminalFont
                     if (font != null && font != SYSTEM_FONT && FontCatalog.find(font) == null) b.copy(terminalFont = null) else b
                 }
-                val hosts = store.list()
+                val hosts = store.listWithSecrets()
                 val accounts = read().accounts
                 when (val planned = ImportPlan.of(HostImportParse.Parsed(backup.hosts), hosts.map { it.known(accounts) })) {
                     is HostImportPlan.Failed -> _step.value = BackupStep.Menu(
@@ -436,7 +436,7 @@ class SettingsBackupper(
             preview.backup.tailnets?.let { applyTailnetChoices(Connections.of(app), it) }
             val accounts = read().accounts
             var all = result.applyTo(
-                store.list(),
+                store.listWithSecrets(),
                 id = { it.id },
                 update = { h, p -> h.imported(p, keys[p.imported.name], accounts).signedInWith(credentialsFor(p, secrets)) },
                 create = { p ->
@@ -493,7 +493,7 @@ class SettingsBackupper(
             )
             b.tiles?.let { tiles -> applyTiles(app, tiles, ::id) }
             Diagnostics.event(TAG, "import: " + result.summary() + ", ${preview.changes.size} settings, ${secrets.size} sign-ins")
-            val saved = store.list().associateBy { it.label }
+            val saved = store.listWithSecrets().associateBy { it.label }
             val unsaved = keys.keys.filter { saved[it]?.sshPrivateKey.isNullOrEmpty() }
             val entries = keyed.mapNotNull { p -> keys[p.imported.name]?.let { PublicKeyList.Entry(p.imported.name, it.publicKey) } }
             _step.value = null

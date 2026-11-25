@@ -4,6 +4,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -242,13 +244,30 @@ class RexClient(
 
     companion object {
         /**
+         * What every connection attempt's client shares: one dispatcher, so a host retried all
+         * night reuses its threads instead of leaving each attempt's idle for a minute. Its limits
+         * are lifted: each pane's stream is a WebSocket that holds a dispatcher thread while it is
+         * open, and one host's streams must never wait behind each other.
+         */
+        private val base: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .dispatcher(Dispatcher().apply { maxRequests = Int.MAX_VALUE; maxRequestsPerHost = Int.MAX_VALUE })
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(0, TimeUnit.MILLISECONDS)
+                .pingInterval(30, TimeUnit.SECONDS)
+                .build()
+        }
+
+        /**
          * [socksPort] is the loopback port of the app's own Tailscale inbound. OkHttp hands a SOCKS5
          * proxy the hostname unresolved, so a tailnet name is resolved by Tailscale itself.
+         *
+         * Each call is an attempt's own client on the shared [base], with a pool of its own: an
+         * idle connection left by an earlier attempt, perhaps dead with the network it was on, is
+         * never what a new attempt dials on.
          */
-        fun defaultHttp(socksPort: Int = 0, dialer: StreamDialer? = null): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(0, TimeUnit.MILLISECONDS)
-            .pingInterval(30, TimeUnit.SECONDS)
+        fun defaultHttp(socksPort: Int = 0, dialer: StreamDialer? = null): OkHttpClient = base.newBuilder()
+            .connectionPool(ConnectionPool())
             .apply {
                 if (dialer != null) {
                     // A node in another app (the Netbird add-on) dials for the app: the name goes to it unresolved.

@@ -221,6 +221,7 @@ internal fun problemText(problem: Problem, endpoint: String, network: String = "
     Trouble.SshHostKeyChanged -> stringResource(R.string.problem_ssh_host_key_changed)
     Trouble.SshAuth -> stringResource(R.string.problem_ssh_auth, problem.detail.orEmpty())
     Trouble.SshCommand -> stringResource(R.string.problem_ssh_command, problem.detail.orEmpty())
+    Trouble.SshSecretUnreadable -> stringResource(R.string.problem_ssh_secret_unreadable)
     Trouble.Other -> problem.detail ?: stringResource(R.string.error_operation_failed)
 }
 
