@@ -924,6 +924,7 @@ internal fun HomeScreen(
         onSet = onLaunchTemplates,
         onRun = onRunTemplate,
         snack = { message, action, onAction -> snack(message, action, onAction) },
+        onBlank = { host, sessionId -> if (sessionId != null) onNewTab(host, sessionId) else onNewSession(host) },
     )
     LaunchedEffect(notices) {
         notices.collect { notice ->

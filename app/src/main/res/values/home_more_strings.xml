@@ -21,9 +21,12 @@
     <string name="rename_automatic">Automatic name</string>
     <string name="rename_empty_hint">Empty, or Automatic name, gives it back the name Rex chose.</string>
     <string name="template_new_tab">New tab from template</string>
+    <string name="new_tab_blank">Blank tab</string>
+    <string name="new_tab_blank_detail">A shell, in the host\'s home</string>
+    <string name="palette_new_tab_template">New tab: %1$s</string>
     <string name="template_in_session">Opens in %1$s</string>
     <string name="template_in_new_session">Opens in a new session on %1$s</string>
-    <string name="template_none">No templates yet. A template opens a tab in a directory and starts a command in it, such as claude.</string>
+    <string name="template_none">No templates yet. A template opens a tab that runs a command in a directory, such as Claude in ~/proj: cd ~/proj &amp;&amp; claude. Add one with the directory ~/proj and the command claude.</string>
     <string name="template_add">Add template…</string>
     <string name="template_manage">Edit templates…</string>
     <string name="template_manage_title">Templates on %1$s</string>

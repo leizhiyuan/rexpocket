@@ -362,12 +362,12 @@ internal fun sessionActions(
             top + listOfNotNull(
                 RowAction(stringResource(R.string.home_action_open), R.drawable.ic_open_in_new) { ops.openSession(ref.host, session.id) }
                     .takeIf { ref.connected },
-                // The tab it makes is shown, as "+ New tab" under the session's tabs does: making it
-                // and staying on the home left the person to open the session, on its old tab.
+                // Blank tab, the host's templates or Add template…; the tab made is shown, as "+ New
+                // tab" under the session's tabs does. Making it and staying on the home left the
+                // person to open the session, on its old tab.
                 RowAction(stringResource(R.string.menu_new_tab), R.drawable.ic_add, enabled = why == null, detail = why) {
-                    ops.newTab(ref.host, session.id)
+                    ops.templates(id, session.id)
                 },
-                RowAction(stringResource(R.string.template_new_tab), R.drawable.ic_command) { ops.templates(id, session.id) },
                 RowAction(stringResource(R.string.home_rename), R.drawable.ic_edit, enabled = why == null, detail = why) {
                     sheets.dialog = HomeDialog.Rename(target, label)
                 },

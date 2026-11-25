@@ -963,7 +963,8 @@ private fun SessionBody(env: TreeEnv, ref: HostRef, row: HomeSession, opening: B
                 actionsOf = { windowId -> tabActions(ref, sid, windowId, env.ops, env.sheets).talkBack() },
                 answersOf = { window -> answerItems(ref, sid, window, env.ops) },
                 onNewTab = if (manageable(ref.connected, state, row)) {
-                    { env.ops.newTab(host, sid) }
+                    // Blank tab, the host's templates or Add template…: where templates are found.
+                    { env.ops.templates(host.id, sid) }
                 } else {
                     null
                 },

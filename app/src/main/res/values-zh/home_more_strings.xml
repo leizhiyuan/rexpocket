@@ -19,9 +19,12 @@
     <string name="rename_automatic">自动名称</string>
     <string name="rename_empty_hint">留空或选择自动名称，即恢复 Rex 起的名字。</string>
     <string name="template_new_tab">从模板新建标签页</string>
+    <string name="new_tab_blank">空白标签页</string>
+    <string name="new_tab_blank_detail">一个 shell，位于主机的主目录</string>
+    <string name="palette_new_tab_template">新标签页：%1$s</string>
     <string name="template_in_session">在 %1$s 中打开</string>
     <string name="template_in_new_session">在 %1$s 上的新会话中打开</string>
-    <string name="template_none">还没有模板。模板会在某个目录中打开标签页并在其中启动命令，例如 claude。</string>
+    <string name="template_none">还没有模板。模板会打开一个在某个目录中运行命令的标签页，例如在 ~/proj 中运行 Claude：cd ~/proj &amp;&amp; claude。添加一个，目录填 ~/proj，命令填 claude。</string>
     <string name="template_add">添加模板…</string>
     <string name="template_manage">编辑模板…</string>
     <string name="template_manage_title">%1$s 上的模板</string>

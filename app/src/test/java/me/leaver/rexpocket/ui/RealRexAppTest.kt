@@ -372,6 +372,9 @@ class RealRexAppTest {
         for (tap in taps) {
             val before = deskView().windows.map { it.id }
             tap()
+            // New tab's own sheet: Blank tab, the host's templates, Add template….
+            compose.waitForIdle()
+            compose.onNode(hasText(string(R.string.new_tab_blank)) and hasClickAction() and inASheet).performClick()
             compose.awaitThat { deskView().windows.size == before.size + 1 }
             val made = deskView().windows.single { it.id !in before }
             compose.awaitThat { m.route.value == Route.Term && m.pocket.value.view?.activeWindowId == made.id }

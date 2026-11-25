@@ -19,9 +19,12 @@
     <string name="rename_automatic">自動名稱</string>
     <string name="rename_empty_hint">留空或選擇自動名稱，即恢復 Rex 取的名字。</string>
     <string name="template_new_tab">從範本新增分頁</string>
+    <string name="new_tab_blank">空白分頁</string>
+    <string name="new_tab_blank_detail">一個 shell，位於主機的家目錄</string>
+    <string name="palette_new_tab_template">新增分頁：%1$s</string>
     <string name="template_in_session">在 %1$s 中開啟</string>
     <string name="template_in_new_session">在 %1$s 上的新工作階段中開啟</string>
-    <string name="template_none">還沒有範本。範本會在某個目錄中開啟分頁並在其中啟動指令，例如 claude。</string>
+    <string name="template_none">還沒有範本。範本會開啟一個在某個目錄中執行指令的分頁，例如在 ~/proj 中執行 Claude：cd ~/proj &amp;&amp; claude。新增一個，目錄填 ~/proj，指令填 claude。</string>
     <string name="template_add">新增範本…</string>
     <string name="template_manage">編輯範本…</string>
     <string name="template_manage_title">%1$s 上的範本</string>

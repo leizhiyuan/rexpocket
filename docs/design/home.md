@@ -146,8 +146,10 @@ the list while it is on its way or needs the person.
 The **bottom bar** holds ⚙, the search field (above the keyboard while it is up) and +. + makes a
 session on the one connected host, or asks which host, offering one that is not connected as
 "Connect & create". The search keeps the tree, every fold open and no chevrons, each row with its
-usual tap and ⋮; Back clears it. A + New tab row under a session's tabs makes a tab and opens it;
-the session sheet's New tab makes one without leaving the home.
+usual tap and ⋮; Back clears it. A + New tab row under a session's tabs and the session sheet's
+New tab both open New tab's sheet (Blank tab, the host's templates, Add template…; "Launch
+templates") and then show the tab made. The sheet's New tab once made the tab without leaving the
+home, so opening the session after it showed its old tab: a phone took that for the wrong tab.
 
 **Not built from the spec:** the "Moved to place 2 of 7" snackbar for a row moved out of view (the
 sheet's caption says the place, in Rex's full order, which a move always uses).
@@ -155,13 +157,18 @@ sheet's caption says the place, in Rex's full order, which a move always uses).
 ## Launch templates
 
 A host has a list of templates, each a name, a directory and a command ("api", `~/src/api`,
-`claude`), in the person's order. **New tab from template** in the host's sheet and a session's
-sheet lists them; a tap opens a new tab, labelled with the template's name, that starts in the
-directory and runs the command, and shows it on the phone (the host connects first when it is
-not). From a session's sheet the tab goes in that session; from the host's, in the session the
-phone shows on that host, or its first, or a new session when it has none. The sheet's caption
-says which ("Opens in api-work"). A session ended meanwhile, at the desk or here, is no longer
-offered: the caption then says a new session, and that is where the tab opens.
+`claude`), in the person's order. They are offered where tabs are made, as a phone found them hard
+to find before: **New tab** - in a session's sheet, "+ New tab" under its tabs, and the terminal's
+⋮ menu - opens one sheet with **Blank tab** (a shell) first, then the host's templates, then **Add
+template…**; with none yet the sheet says what one is, with an example ("Claude in ~/proj: cd
+~/proj && claude"). The palette lists each as "New tab: api"; Ctrl+Shift+T and the palette's New
+tab stay a blank tab at once. The host's sheet keeps **New tab from template**, the same sheet. A
+tap opens a new tab, labelled with the template's name, that starts in the directory and runs the
+command, and shows it on the phone (the host connects first when it is not). From a session the
+tab goes in that session; from the host's sheet, in the session the phone shows on that host, or
+its first, or a new session when it has none. The sheet's caption says which ("Opens in
+api-work"). A session ended meanwhile, at the desk or here, is no longer offered: the caption then
+says a new session, and that is where the tab opens. `NewTabChooserTest`, `HomeNewTabTest`.
 
 Rex's shell block takes `command` and `cwd` itself (`block-creators.json`, the shell flavor's
 options), so nothing is typed into the tab: it is made running `sh -c 'cd ~/'src/api' && claude;

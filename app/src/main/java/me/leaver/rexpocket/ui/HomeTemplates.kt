@@ -25,9 +25,10 @@ import me.leaver.rexpocket.R
 import me.leaver.rexpocket.core.LaunchTemplate
 import me.leaver.rexpocket.data.SavedHost
 
-// A host's launch templates on the home: "New tab from template" in the host's and a session's
-// sheet lists them, a tap runs one, and Edit templates adds, changes, orders and deletes them (a
-// delete with Undo). See docs/design/home.md, "Launch templates".
+// A host's launch templates on the home: every New tab (a session's sheet, "+ New tab" under its
+// tabs) and the host's "New tab from template" open one sheet - Blank tab, the host's templates, Add
+// template… - a tap runs one, and Edit templates adds, changes, orders and deletes them (a delete
+// with Undo). See docs/design/home.md, "Launch templates".
 
 /** Test tags around the template dialog's fields, which a test types into. */
 internal const val TEMPLATE_NAME_TAG = "template-name"
@@ -100,6 +101,8 @@ internal fun TemplateSheetsHost(
     onSet: (hostId: String, List<LaunchTemplate>) -> Unit,
     onRun: (SavedHost, sessionId: String?, LaunchTemplate) -> Unit,
     snack: (message: String, action: String?, onAction: () -> Unit) -> Unit,
+    /** A plain shell tab in the session (a new session with one when there is none): Blank tab. */
+    onBlank: (SavedHost, sessionId: String?) -> Unit = { _, _ -> },
 ) {
     val page = sheets.page
     if (page == TemplateSheets.Page.None) return
@@ -123,16 +126,14 @@ internal fun TemplateSheetsHost(
             val where = sheets.session?.let { sessionName(host.id, it) }
             // The session the sheet was opened for, while it is still there; a new one otherwise.
             val runIn = sheets.session?.takeIf { where != null }
+            // New tab's own sheet: a blank tab first, then the host's templates, then a way to make one.
             RowActionsSheet(
-                stringResource(R.string.template_new_tab),
+                stringResource(R.string.menu_new_tab),
                 listOf(
                     ActionGroup(
-                        list.map { t -> RowAction(t.name, R.drawable.ic_command, detail = templateSummary(t)) { onRun(host, runIn, t) } },
-                        caption = if (list.isEmpty()) {
-                            null
-                        } else {
-                            where?.let { stringResource(R.string.template_in_session, it) } ?: stringResource(R.string.template_in_new_session, host.label)
-                        },
+                        listOf(RowAction(stringResource(R.string.new_tab_blank), R.drawable.ic_add, detail = stringResource(R.string.new_tab_blank_detail)) { onBlank(host, runIn) }) +
+                            list.map { t -> RowAction(t.name, R.drawable.ic_command, detail = templateSummary(t)) { onRun(host, runIn, t) } },
+                        caption = where?.let { stringResource(R.string.template_in_session, it) } ?: stringResource(R.string.template_in_new_session, host.label),
                     ),
                     ActionGroup(
                         listOfNotNull(

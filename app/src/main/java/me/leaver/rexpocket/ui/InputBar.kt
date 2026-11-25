@@ -150,6 +150,8 @@ internal fun KeyBar(
     onCompose: () -> Unit = {},
     /** Edit quick replies, at the foot of the Quick replies panel; null leaves it out. */
     onEditReplies: (() -> Unit)? = null,
+    /** Insert path, from a long press on the Attach key (and its TalkBack action); null leaves it out. */
+    onInsertPath: (() -> Unit)? = null,
 ) {
     val scroll = rememberScrollState()
     val pill = RoundedCornerShape(50)
@@ -159,7 +161,7 @@ internal fun KeyBar(
     var pinned by rememberSaveable { mutableStateOf<String?>(null) }
     val openGroup = pinned?.takeIf { id -> id != REPLIES_PANEL && keys.any { it is BarKey.Group && it.id == id } }
     val repliesOpen = pinned == REPLIES_PANEL && BarKey.Replies in keys
-    val actions = KeyActions(mods, busy, ctrlC, onMod, onKey, onNewLine, onPaste, onAttach, attachReady, onDeskKey, onCompose)
+    val actions = KeyActions(mods, busy, ctrlC, onMod, onKey, onNewLine, onPaste, onAttach, attachReady, onDeskKey, onCompose, onInsertPath)
     val restKeys = arrangement.shown(Pill.Rest).filter { it != BarKey.FullScreen || onFullScreen != null }
     BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         // How many keys each pill has decides how they share the width, so both show their hint
@@ -408,6 +410,7 @@ private class KeyActions(
     val attachReady: Boolean,
     val onDeskKey: (DeskKey) -> Unit,
     val onCompose: () -> Unit,
+    val onInsertPath: (() -> Unit)? = null,
 )
 
 /**
@@ -473,12 +476,20 @@ private fun BarKeyFace(barKey: BarKey, modifier: Modifier, plate: Color, a: KeyA
             ) { a.onMod(mod) }
         }
         BarKey.Paste -> Key(stringResource(R.string.key_paste), modifier, plate = plate, icon = R.drawable.ic_paste) { a.onPaste() }
+        // A file from the phone on a tap; a path on the host, Insert path, on a long press.
         BarKey.Attach -> Key(
             stringResource(R.string.upload_attach),
             modifier,
             plate = plate,
             icon = R.drawable.ic_attach_file,
             color = if (a.attachReady) Colors.ink else Colors.muted,
+            onLongClick = a.onInsertPath?.let { insert ->
+                {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    insert()
+                }
+            },
+            longClickLabel = stringResource(R.string.insert_path).takeIf { a.onInsertPath != null },
         ) { if (a.attachReady) a.onAttach() }
         // A slash opens pi's command menu; the stick then walks it.
         BarKey.Slash -> Key("/", modifier, plate = plate) { a.onKey(KeyPress("slash", '/'.code, text = "/"), "") }

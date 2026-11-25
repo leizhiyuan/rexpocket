@@ -32,8 +32,10 @@ screen already shows it (Activity, tab dots).
 | `bell`, pane not on screen | Message | **off** | Program messages (default) | as above |
 | `bell`, pane on screen | - | vibrate on | - | - |
 
-Mute takes the slot the other actions leave (a notification shows three), so an approval prompt has
-none; the tab's ⋮ menu always has it (below, "Muted tabs").
+Mute ("Mute tab") takes the slot the other actions leave (a notification shows three), so a done, a
+failed and a question alert have it and an approval prompt has none; the tab's ⋮ menu always has it
+as "Mute this tab" (below, "Muted tabs"). Android shows a notification's actions once it is
+expanded. `NotificationsTest.aDoneAFailedAndAQuestionAlertEachHaveMute`.
 
 Tapping any of them opens exactly that pane (`openAlert`), also after Android killed and restarted
 the process and after any number of later alerts. The activity is exported, so the tap's intent

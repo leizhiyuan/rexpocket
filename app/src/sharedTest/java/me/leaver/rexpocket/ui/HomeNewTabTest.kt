@@ -25,8 +25,8 @@ import org.junit.runner.RunWith
 
 /**
  * Every New tab on the home ends on the terminal showing the tab it made, not a tab the session
- * already had: the "+ New tab" under a session's tabs, the session sheet's New tab, and a template
- * run from the session's and the host's sheets. A phone found the sheet's New tab leaving the person
+ * already had: the "+ New tab" under a session's tabs, the session sheet's New tab, each with its
+ * Blank tab, and a template run from New tab and from the host's sheet. A phone found the sheet's New tab leaving the person
  * on the home, where opening the session then showed its old tab. The whole app on ScriptedRex.
  */
 @RunWith(AndroidJUnit4::class)
@@ -63,6 +63,12 @@ class HomeNewTabTest {
 
     private fun inSheet(text: String) = compose.onNode(hasText(text) and hasClickAction() and inASheet)
 
+    /** New tab's own sheet: Blank tab, the host's templates, Add template…. */
+    private fun blank() {
+        compose.waitForIdle()
+        inSheet(string(R.string.new_tab_blank)).performClick()
+    }
+
     private fun label(m: RexViewModel, session: String) = m.pocket.value.sessions.first { it.id == session }.label
 
     private fun sessionSheet(m: RexViewModel, session: String) {
@@ -96,6 +102,7 @@ class HomeNewTabTest {
         val before = desk.tabs(other)
         sessionSheet(m, other)
         inSheet(string(R.string.menu_new_tab)).performClick()
+        blank()
         assertOnNewTab(m, other, before)
     }
 
@@ -105,6 +112,7 @@ class HomeNewTabTest {
         val before = desk.tabs(shown)
         sessionSheet(m, shown)
         inSheet(string(R.string.menu_new_tab)).performClick()
+        blank()
         assertOnNewTab(m, shown, before)
     }
 
@@ -116,6 +124,7 @@ class HomeNewTabTest {
             // One "+ New tab" per session, in Rex's order.
             val index = m.pocket.value.sessions.indexOfFirst { it.id == session }
             compose.onAllNodes(hasText(string(R.string.menu_new_tab)) and hasClickAction() and !inASheet)[index].performScrollTo().performClick()
+            blank()
             assertOnNewTab(m, session, before)
             compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
             compose.awaitThat { m.route.value == Route.Home }
@@ -128,7 +137,7 @@ class HomeNewTabTest {
         compose.runOnUiThread { m.setLaunchTemplates(desk.host.id, listOf(LaunchTemplate("t1", "api", "~/api", "claude"))) }
         val before = desk.tabs(other)
         sessionSheet(m, other)
-        inSheet(string(R.string.template_new_tab)).performScrollTo().performClick()
+        inSheet(string(R.string.menu_new_tab)).performScrollTo().performClick()
         compose.waitForIdle()
         inSheet("api").performClick()
         assertOnNewTab(m, other, before)
@@ -157,6 +166,7 @@ class HomeNewTabTest {
         compose.onNodeWithContentDescription(string(R.string.action_more)).performClick()
         compose.waitForIdle()
         inSheet(string(R.string.menu_new_tab)).performScrollTo().performClick()
+        blank()
         assertOnNewTab(m, shown, before)
 
         before = desk.tabs(shown)

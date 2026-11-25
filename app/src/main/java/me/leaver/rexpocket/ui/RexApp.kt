@@ -58,6 +58,7 @@ fun RexPocketApp(
     val hosts by model.hosts.collectAsState()
     val pocket by model.pocket.collectAsState()
     val font by model.fontScale.collectAsState()
+    val launchTemplates by model.launchTemplates.collectAsState()
     val pinchHint by model.pinchHint.collectAsState()
     val terminalTypeface by model.terminalTypeface.collectAsState()
     val terminalFont by model.terminalFont.collectAsState()
@@ -217,7 +218,7 @@ fun RexPocketApp(
                     onMoveHost = model::moveHost,
                     onRemoveHost = model::removeHost,
                     onRestoreHost = model::restoreHost,
-                    launchTemplates = model.launchTemplates.collectAsState().value,
+                    launchTemplates = launchTemplates,
                     onLaunchTemplates = model::setLaunchTemplates,
                     onRunTemplate = model::runTemplate,
                     notices = model.homeNotices,
@@ -305,6 +306,8 @@ fun RexPocketApp(
                     rexActions = model.rexActions.collectAsState().value,
                     onPaletteOpen = model::loadRexActions,
                     onRexAction = model::runRexAction,
+                    templates = model.host?.id?.let { launchTemplates[it] }.orEmpty(),
+                    onTemplates = { next -> model.host?.id?.let { model.setLaunchTemplates(it, next) } },
                 )
             }
             when (layoutFor(window, hasHosts = hosts.isNotEmpty(), terminalOpen = route == Route.Term)) {

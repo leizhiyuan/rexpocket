@@ -368,7 +368,9 @@ rows"), politely again as it changes; − and + are "Smaller text" and "Bigger t
 ### 4.3 Insert path
 
 A folder browser that types the path picked into the pane: for a shell, where an agent's own `@`
-picker is not there to help. From the ⋮ menu's Pane group and the palette (Rex's own Insert Path…
+picker is not there to help. From the ⋮ menu's Pane group, a long press on the key bar's Attach key
+(a TalkBack action of the key too: Attach sends a file from the phone, Insert path names one on the
+host), and the palette (Rex's own Insert Path…
 words find it).
 
 - It asks Rex, `block.method` `list_dir` (`com.superlogical.terminal.list_dir`) with `path` empty -

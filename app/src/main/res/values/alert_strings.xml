@@ -10,7 +10,7 @@
     <string name="alerts_denied">Denied</string>
     <string name="alerts_sent">Sent: %1$s</string>
     <string name="alerts_interrupted">Interrupted</string>
-    <string name="alerts_mute">Mute</string>
+    <string name="alerts_mute">Mute tab</string>
     <string name="alerts_muted">Tab muted. Unmute it from the tab\'s ⋮ menu.</string>
     <string name="alerts_blocked_settings">Notifications are off for RexPocket. Allow them in Android\'s settings, then turn background alerts on.</string>
     <string name="alerts_muted_host">Notifications off</string>

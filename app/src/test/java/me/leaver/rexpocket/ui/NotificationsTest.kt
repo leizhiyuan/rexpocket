@@ -256,6 +256,22 @@ class NotificationsTest {
     }
 
     /**
+     * Every ordinary alert has Mute: a done one, a failed one and a question. Only an approval
+     * prompt, whose Approve, Deny and Reply take the three slots, leaves it to the tab's ⋮ menu.
+     */
+    @Test
+    fun aDoneAFailedAndAQuestionAlertEachHaveMute() {
+        val (block, other) = start()
+        away()
+        desk.rex.report(block, "done", app = "cargo", msg = "built")
+        assertTrue("a done alert has no Mute", paneNotification(block).actionNamed(label(R.string.alerts_mute)) != null)
+        desk.rex.report(other, "error", msg = "crashed")
+        assertTrue("a failed alert has no Mute", paneNotification(other) { it.channelId == Alerts.CHANNEL_FAILED }.actionNamed(label(R.string.alerts_mute)) != null)
+        desk.rex.report(block, "blocked", kind = "question", app = "claude", msg = "Which branch?")
+        assertTrue("a question has no Mute", paneNotification(block) { it.text().endsWith("Which branch?") }.actionNamed(label(R.string.alerts_mute)) != null)
+    }
+
+    /**
      * Mute on an alert, in the slot its other actions leave: the tab's panes alert no more, the
      * choice is kept with the host's, and the notification says where to undo it.
      */

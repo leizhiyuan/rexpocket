@@ -281,7 +281,7 @@ class HomeBulkTest {
         assertEquals(listOf(web, api), RexViewModel(compose.activity.application).launchTemplates.value[desk.host.id])
     }
 
-    /** A template typed into the dialog, run from a session's sheet. On the emulator: a dialog's text field never idles on Robolectric. */
+    /** A template typed into the dialog, run from a session's New tab. On the emulator: a dialog's text field never idles on Robolectric. */
     @Test
     fun aTemplateIsAddedInItsDialogAndRunFromASessionsSheet() {
         assumeFalse("a text field in a dialog never idles on Robolectric", onRobolectric)
@@ -289,9 +289,9 @@ class HomeBulkTest {
         val label = m.pocket.value.sessions.first { it.id == other }.label
         compose.onNode(hasContentDescription(string(R.string.manage_actions_for, label)) and hasClickAction()).performClick()
         compose.waitForIdle()
-        inSheet(string(R.string.template_new_tab)).performScrollTo().performClick()
+        inSheet(string(R.string.menu_new_tab)).performScrollTo().performClick()
         compose.waitForIdle()
-        inSheet(string(R.string.template_add)).performClick()
+        inSheet(string(R.string.template_add)).performScrollTo().performClick()
         compose.waitForIdle()
         compose.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(TEMPLATE_NAME_TAG))).performTextInput("logs")
         compose.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(TEMPLATE_DIR_TAG))).performTextInput("/var/log")

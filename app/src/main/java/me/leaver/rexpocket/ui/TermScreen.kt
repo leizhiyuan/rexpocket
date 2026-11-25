@@ -180,6 +180,9 @@ internal sealed interface Sheet {
 
     /** Settings › Quick replies, reached from the key bar's panel and the composer. */
     data object QuickReplies : Sheet
+
+    /** New tab: a blank tab, one of the host's launch templates, or Add template…. */
+    data object NewTab : Sheet
 }
 
 /** Clear and Reset terminal, which ask first: what they erase does not come back. */
@@ -236,6 +239,9 @@ internal fun TermScreen(
     rexActions: List<me.leaver.rexpocket.core.RexAction> = emptyList(),
     onPaletteOpen: () -> Unit = {},
     onRexAction: (me.leaver.rexpocket.core.RexAction) -> Unit = {},
+    /** The host's launch templates, which New tab offers; and saving them, for Add template… (null leaves it out). */
+    templates: List<me.leaver.rexpocket.core.LaunchTemplate> = emptyList(),
+    onTemplates: ((List<me.leaver.rexpocket.core.LaunchTemplate>) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val ime = LocalSoftwareKeyboardController.current
@@ -243,6 +249,7 @@ internal fun TermScreen(
         if (uri != null) onAttach(uri)
     }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
+    var addingTemplate by remember { mutableStateOf(false) }
     // A modifier taken off the bar while held would stay held with no key to let it go.
     val shift = keyArrangement.isShown(BarKey.Shift)
     val alt = keyArrangement.isShown(BarKey.Alt)
@@ -752,6 +759,7 @@ internal fun TermScreen(
                             onQuickReply = ::sendQuickReply,
                             onCompose = ::openComposer,
                             onEditReplies = if (onQuickReplies != null) { { sheet = Sheet.QuickReplies } } else null,
+                            onInsertPath = if (focused != null) { { sheet = Sheet.InsertPath } } else null,
                         )
                     }
                 }
@@ -856,7 +864,7 @@ internal fun TermScreen(
                 }
             }
             Group(stringResource(R.string.level_tab)) {
-                SheetItem(stringResource(R.string.menu_new_tab), icon = R.drawable.ic_add) { onAct { newWindow() } }
+                SheetItem(stringResource(R.string.menu_new_tab), icon = R.drawable.ic_add, opens = true) { sheet = Sheet.NewTab }
                 if (view != null && tab != null) {
                     val title = tabTitle(view, tab, state)
                     SheetItem(stringResource(R.string.menu_rename_tab), icon = R.drawable.ic_edit) { rename = Rename(Level.Tab, tab.id, tab.label) }
@@ -935,6 +943,10 @@ internal fun TermScreen(
                     }
                 }
                 action(stringResource(R.string.menu_new_tab), tabGroup, "New Tab client.tab.new") { onAct { newWindow() } }
+                // Each launch template of the host, as New tab's sheet offers them.
+                templates.forEach { t ->
+                    action(stringResource(R.string.palette_new_tab_template, t.name), tabGroup, "template launch ${t.directory} ${t.command}") { onAct { newWindow(t) } }
+                }
                 if (view != null && tab != null) {
                     val windows = view.windows
                     val at = windows.indexOfFirst { it.id == tab.id }
@@ -1053,7 +1065,7 @@ internal fun TermScreen(
                     }
                 }
                 Group {
-                    SheetItem(stringResource(R.string.menu_new_tab), icon = R.drawable.ic_add) { onAct { newWindow() } }
+                    SheetItem(stringResource(R.string.menu_new_tab), icon = R.drawable.ic_add, opens = true) { sheet = Sheet.NewTab }
                     SheetItem(stringResource(R.string.menu_split_right), icon = R.drawable.ic_split_right) { onAct { split(vertical = false) } }
                     SheetItem(stringResource(R.string.menu_split_below), icon = R.drawable.ic_split_below) { onAct { split(vertical = true) } }
                 }
@@ -1095,8 +1107,33 @@ internal fun TermScreen(
                 onDismiss = { sheet = null },
             )
         }
+        Sheet.NewTab -> ActionSheet(onDismiss = { sheet = null }, title = stringResource(R.string.menu_new_tab)) {
+            Group {
+                SheetItem(stringResource(R.string.new_tab_blank), icon = R.drawable.ic_add, supporting = stringResource(R.string.new_tab_blank_detail)) {
+                    onAct { newWindow() }
+                }
+                templates.forEach { t ->
+                    SheetItem(t.name, icon = R.drawable.ic_command, supporting = templateSummary(t)) { onAct { newWindow(t) } }
+                }
+            }
+            if (onTemplates != null) {
+                // With none yet, what a template is, with an example, over the way to make one.
+                Group(label = stringResource(R.string.template_none).takeIf { templates.isEmpty() }) {
+                    SheetItem(stringResource(R.string.template_add), icon = R.drawable.ic_add, opens = true) { addingTemplate = true }
+                }
+            }
+        }
         Sheet.QuickReplies -> if (onQuickReplies != null) {
             QuickRepliesSheet(QuickReplies(quickReplies), onQuickReplies, onDismiss = { sheet = null })
+        }
+    }
+
+    if (addingTemplate && onTemplates != null) {
+        TemplateDialog(initial = null, onDismiss = { addingTemplate = false }) { saved ->
+            onTemplates((templates + saved).take(me.leaver.rexpocket.core.LaunchTemplate.MAX_ITEMS))
+            addingTemplate = false
+            // Back to New tab, where the new template now waits for its tap.
+            sheet = Sheet.NewTab
         }
     }
 

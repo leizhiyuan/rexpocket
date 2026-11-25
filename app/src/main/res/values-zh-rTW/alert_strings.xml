@@ -8,7 +8,7 @@
     <string name="alerts_denied">已拒絕</string>
     <string name="alerts_sent">已傳送：%1$s</string>
     <string name="alerts_interrupted">已中斷</string>
-    <string name="alerts_mute">靜音</string>
+    <string name="alerts_mute">將分頁靜音</string>
     <string name="alerts_muted">分頁已靜音。可在分頁的 ⋮ 選單中取消靜音。</string>
     <string name="alerts_blocked_settings">RexPocket 的通知已關閉。請在 Android 設定中允許通知，然後開啟背景提醒。</string>
     <string name="alerts_muted_host">通知已關閉</string>
