@@ -9,6 +9,18 @@ import org.junit.Test
 class AppLockTest {
     private val on = SecurityPrefs(lock = true, lockAfterSeconds = 60)
 
+    /**
+     * A locked app whose picture in recent apps shows the terminal is no lock: anyone holding the
+     * phone reads it there without unlocking. With the lock on, recents get no picture; screenshots
+     * are still the Block screenshots switch's.
+     */
+    @Test
+    fun withTheLockOnRecentAppsShowNoPicture() {
+        assertTrue(SecurityPrefs().recentsPicture)
+        assertFalse(on.recentsPicture)
+        assertFalse(SecurityPrefs(blockScreenshots = true).recentsPicture)
+    }
+
     @Test
     fun offNeverLocks() {
         val s = AppLockState(SecurityPrefs())

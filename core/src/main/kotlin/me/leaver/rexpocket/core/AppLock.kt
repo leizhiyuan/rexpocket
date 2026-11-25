@@ -14,6 +14,13 @@ data class SecurityPrefs(
     val lockAfterSeconds: Int = 60,
     val blockScreenshots: Boolean = false,
 ) {
+    /**
+     * Whether recent apps may show a picture of the app. Not with the lock on: the picture is taken
+     * as the app leaves, terminal and all, and anyone holding the phone could read it there without
+     * unlocking. Block screenshots blanks it too, with screenshots.
+     */
+    val recentsPicture: Boolean get() = !lock && !blockScreenshots
+
     companion object {
         /** The waits Settings › Security offers, in seconds: at once, 1, 5 and 15 minutes, an hour. */
         val LOCK_AFTER = listOf(0, 60, 300, 900, 3600)

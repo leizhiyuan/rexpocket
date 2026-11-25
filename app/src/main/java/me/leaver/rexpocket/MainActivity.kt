@@ -50,6 +50,11 @@ class MainActivity : ComponentActivity() {
             model.security.collect { prefs ->
                 if (prefs.blockScreenshots) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
                 else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                // With the app lock on, recent apps show no picture of the terminal (Android 13 and
+                // later; before, only Block screenshots blanks it). See docs/design/app-lock.md.
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    runCatching { setRecentsScreenshotEnabled(prefs.recentsPicture) }
+                }
             }
         }
         setContent {

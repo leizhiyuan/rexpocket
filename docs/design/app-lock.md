@@ -30,6 +30,10 @@ phone says yes.
 - **The lock screen** stands in for the whole app: the app is left out of the composition rather
   than drawn over, so none of its sheets or dialogs (each a window of its own) float above the lock,
   and its saved state comes back with it. The view model, and so every connection, is untouched.
+- **Recent apps:** with the lock on, the app's picture in recent apps is left blank
+  (`setRecentsScreenshotEnabled(false)`, Android 13 and later; `SecurityPrefs.recentsPicture`): it is
+  taken as the app leaves, and showed the terminal to anyone holding the phone. Before Android 13
+  only Block screenshots blanks it, as that call does not exist there.
 - **Not locked:** notifications and their Reply and Interrupt (Android's own lock screen settings
   decide what they show), the Quick Settings tiles, and background mode's connections.
 
