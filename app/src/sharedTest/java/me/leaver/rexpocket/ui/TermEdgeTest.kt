@@ -52,6 +52,12 @@ class TermEdgeTest {
         return m
     }
 
+    /** Insert path showing [folder] as its heading, with [entry] listed in it. */
+    private fun awaitFolder(folder: String, entry: String) = compose.awaitThat {
+        compose.onAllNodes(hasContentDescription(folder)).fetchSemanticsNodes().isNotEmpty() &&
+            compose.onAllNodes(androidx.compose.ui.test.hasTestTag(insertPathEntryTag(entry))).fetchSemanticsNodes().isNotEmpty()
+    }
+
     /**
      * Insert path from the ⋮ menu: it starts at the program's folder (the home here, its heading
      * `~`), opens a folder with a quote and a space in its name, goes Up and back, and types a file
@@ -74,13 +80,14 @@ class TermEdgeTest {
         compose.onNodeWithText(string(R.string.insert_path)).performScrollTo().performClick()
         compose.awaitThat { compose.onAllNodes(hasContentDescription("~")).fetchSemanticsNodes().isNotEmpty() && compose.onAllNodes(androidx.compose.ui.test.hasTestTag(insertPathEntryTag(root.name))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(insertPathEntryTag(root.name)).performScrollTo().performClick()
-        compose.awaitThat { compose.onAllNodes(hasContentDescription("~/${root.name}")).fetchSemanticsNodes().isNotEmpty() }
+        // The heading names a folder as soon as it is asked for; its rows come with Rex's answer.
+        awaitFolder("~/${root.name}", "it's here")
         compose.onNodeWithTag(insertPathEntryTag("it's here")).performScrollTo().performClick()
-        compose.awaitThat { compose.onAllNodes(hasContentDescription("~/${root.name}/it's here")).fetchSemanticsNodes().isNotEmpty() }
+        awaitFolder("~/${root.name}/it's here", "my \$file.txt")
         compose.onNodeWithTag(INSERT_PATH_UP_TAG).performClick()
-        compose.awaitThat { compose.onAllNodes(hasContentDescription("~/${root.name}")).fetchSemanticsNodes().isNotEmpty() }
+        awaitFolder("~/${root.name}", "it's here")
         compose.onNodeWithTag(insertPathEntryTag("it's here")).performScrollTo().performClick()
-        compose.awaitThat { compose.onAllNodes(androidx.compose.ui.test.hasTestTag(insertPathEntryTag("my \$file.txt"))).fetchSemanticsNodes().isNotEmpty() }
+        awaitFolder("~/${root.name}/it's here", "my \$file.txt")
         compose.onNodeWithTag(insertPathEntryTag("my \$file.txt")).performScrollTo().performClick()
         compose.awaitThat { desk.rex.inputs.isNotEmpty() }
         assertEquals(listOf("paste $block ~/'${root.name}/it'\\''s here/my \$file.txt'"), desk.rex.inputs.toList())
