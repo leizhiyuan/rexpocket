@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -112,6 +113,14 @@ class ScriptedRex(
 
     private class Stream(val client: String, val block: String, val token: ByteString, val nonce: Long) {
         @Volatile var socket: WebSocket? = null
+
+        /** Stream bytes sent so far: a RESUME must count exactly these, as Rex holds it to. */
+        @Volatile var sent = 0L
+
+        fun send(bytes: ByteArray) {
+            sent += bytes.size
+            socket?.send(bytes.toByteString())
+        }
     }
 
     private val ids = AtomicLong()
@@ -480,6 +489,20 @@ class ScriptedRex(
 
     /** The client that holds [block], as Rex has it. */
     fun ownerOf(block: String): String? = synchronized(this) { owners[block] }
+
+    /** RESUMEs refused because they counted other than the bytes sent. */
+    val resumesRefused = AtomicInteger()
+
+    /**
+     * Rex ends [block]'s streams with 1013 `data reconnect required`: more output piled up while
+     * their client was away than it could keep, so each must start over with a new ticket.
+     */
+    fun requireReconnect(block: String) {
+        streams.filter { it.block == block }.forEach { stream ->
+            streams -= stream
+            stream.socket?.close(1013, "data reconnect required")
+        }
+    }
 
     /** Streams open for [block] now. */
     fun openStreams(block: String): Int = streams.count { it.block == block && it.socket != null }
@@ -1239,19 +1262,28 @@ class ScriptedRex(
                     streams += stream
                     welcome(webSocket, stream)
                     if (pictures) {
-                        webSocket.send(SNAPSHOT.toByteString())
+                        stream.send(SNAPSHOT)
                         // Rex follows the snapshot with the pane's size, in its own APC.
                         val owner = ownerOf(block)?.let { "\"$it\"" } ?: "null"
-                        webSocket.send(
+                        stream.send(
                             "\u001b_rex1;${java.lang.Long.toUnsignedString(stream.nonce)};{\"type\":\"resize\",\"cols\":80,\"rows\":24,\"cell_width_px\":8,\"cell_height_px\":16,\"owner\":$owner}\u001b\\"
-                                .toByteArray().toByteString(),
+                                .toByteArray(),
                         )
-                        webSocket.send("$ ".toByteArray().toByteString())
+                        stream.send("$ ".toByteArray())
                     }
                 }
                 0x02 -> {
                     val token = hello.copyOfRange(1, 17).toByteString()
                     val stream = streams.firstOrNull { it.token == token } ?: return reject(webSocket, 0x03)
+                    // The count must be exact: fewer bytes than were sent is 0x03, more is 0x05, and
+                    // either way Rex ends the stream, so only a HELLO starts it again.
+                    var count = 0L
+                    for (i in 0 until 8) count = count or ((hello.getOrElse(17 + i) { 0 }.toLong() and 0xff) shl (8 * i))
+                    if (count != stream.sent) {
+                        streams -= stream
+                        resumesRefused.incrementAndGet()
+                        return reject(webSocket, if (count < stream.sent) 0x03 else 0x05)
+                    }
                     runCatching { stream.socket?.cancel() }
                     stream.socket = webSocket
                     welcome(webSocket, stream)

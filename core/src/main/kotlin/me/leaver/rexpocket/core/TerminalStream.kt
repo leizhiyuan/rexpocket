@@ -156,6 +156,7 @@ class TerminalStream(
 
     /** Opens one connection and waits for its WELCOME. */
     private suspend fun open(): Connected {
+        val resuming = resumeToken != null && received > 0
         val hello = handshake()
         val welcome = CompletableDeferred<Connected>()
         // Each connection gets its own: a socket that failed still reports its close afterwards,
@@ -168,7 +169,11 @@ class TerminalStream(
         val ws = httpFactory().newWebSocket(request, listener(hello, welcome, frames))
         active = ws
         try {
-            return welcome.await()
+            return welcome.await().also {
+                // A HELLO starts a new stream, and a RESUME counts that stream's bytes alone: counted
+                // on from the old one, Rex refused every later resume and the pane was drawn again.
+                if (!resuming) received = 0
+            }
         } catch (e: CancellationException) {
             ws.cancel()
             throw e
@@ -217,6 +222,8 @@ class TerminalStream(
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
             val dropped = DroppedStream(describe(code, reason), fatal = code == CLOSE_BLOCK_CLOSED)
+            // Rex could not keep the stream: a RESUME would only be refused, so the next attempt says HELLO.
+            if (code == CLOSE_RECONNECT_REQUIRED && welcome.isCompleted) resumeToken = null
             if (!welcome.isCompleted) welcome.completeExceptionally(dropped)
             frames.trySend(Frame.Closed(dropped))
         }
@@ -286,6 +293,8 @@ class TerminalStream(
         /** Rex closes with 4000 when the block is gone; no reconnect helps there. */
         private const val CLOSE_BLOCK_CLOSED = 4000
         private const val CLOSE_NORMAL = 1000
+        /** `data reconnect required`: the stream is gone, and only a new ticket and a HELLO start it again. */
+        private const val CLOSE_RECONNECT_REQUIRED = 1013
 
         private const val REJECT_UNKNOWN = 0x00.toByte()
         /** Another connection to the same pane exists, which a RESUME replaces. */
