@@ -112,6 +112,10 @@ internal fun RexPocketApp(
     var dataFromSettings by rememberSaveable { mutableStateOf(false) }
     var openingFromSettings by remember { mutableStateOf(false) }
     fun fromSettings(): Boolean = openingFromSettings.also { openingFromSettings = false }
+    // Closed by a swipe or Back rather than the arrow, neither is from Settings any more: a backup
+    // or host list opened from Files next has no arrow to Settings.
+    val dataOpen = backup != null || hostImport != null
+    LaunchedEffect(dataOpen) { if (!dataOpen) dataFromSettings = false }
     val security by model.security.collectAsState()
     val context = LocalContext.current
     // The home screen leaves the composition while a terminal fills the window; its saved state

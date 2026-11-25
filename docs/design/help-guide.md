@@ -25,7 +25,9 @@ control with a ring and one line.
    pulses three times and stays, and a card next to it with the entry's title, the hint ("Tap − or +,
    or pinch the terminal with two fingers") and Got it. Nothing is blocked: the touch that ends the
    spotlight goes on to whatever was touched, so a tap on the control both dismisses the spotlight
-   and does what the control does.
+   and does what the control does. The card itself is the one exception: a press on its words stays
+   on it, so reading it with a thumb on it does not open the row under it. Back ends the spotlight
+   (or the tour) first, rather than leaving the app with it still up.
 
 **What a place needs first.** A terminal entry needs a tab on screen; a host's sheet needs a host.
 Help says so on the entry's page instead of failing: "This is on the terminal screen. Open a tab
@@ -42,13 +44,16 @@ Five spotlights on the home, one after another, each card with Next (Done on the
 tour: the filters (Needs you and Activity), a host's ⋮ (long press any row for everything it can
 do), + (a new session; New tab offers launch templates), ⚙ (Settings: notifications, keys, text
 size, app lock, backup), and the home's ⋮ (Help and this tour, any time). A step whose control is
-not there (no host row yet) is skipped. A tap anywhere but the card ends the tour, as Skip does: a
-person who wants to do something is not made to finish it.
+not there (no host row yet) is skipped. A tap anywhere but the card ends the tour, as Skip does, and
+so does Back: a person who wants to do something is not made to finish it.
 
 **When it runs.** Once, by itself, on a new install only: the first time the app opens with a host
 after a start that had none (the start after the first host was added, or after a rotation). An
 install that already had hosts when this was added - everyone using the app today - never gets it
-by itself, and a test that saves a host before starting does not either. Help's first row, **Take
+by itself, and a test that saves a host before starting does not either. It runs only on a plain
+start, on the home with nothing over it a moment after the app opens: a start for something - a
+notification, the widget, a launcher shortcut, a share, a tile, a `rexpocket://add` link and its Add
+host dialog - is what the person came for, so the tour waits for the next start. Help's first row, **Take
 the quick tour**, runs it again any time. Seen or skipped, it is stored as done (`tour` in the
 `guide` preferences); like the pinch hint it is the phone's, not in the settings backup.
 
@@ -131,7 +136,15 @@ object, all in `ui/guide/`.
   Got it (Next and Skip tour in the tour), so it is found by swiping and dismissed by a double tap.
   The ring is drawing only, the control keeps its own label and actions.
 - Colours are the theme's tokens, so dark and light follow; the card is at most 360 dp wide and sits
-  under the control, or over it when there is no room under it, inside the window.
+  under the control, or over it when there is no room under it, inside what the window shows: the
+  layer spans the window edge to edge, so the keyboard and the system bars (`safeDrawing`) are taken
+  off first, or a card for the Return key or the pane would sit behind the keyboard (`cardTop`).
+- **What is kept.** Help's sheet (the list or an entry's page, with its note) is saved as the home's
+  sheets are, through a rotation, the app lock and the process going. The spotlight is not: a ring
+  round something that may have moved is worse than none, and Show me is one tap again.
+- **Show me and Settings' back arrow.** A page Help opens (Security, Terminal controls,
+  Notifications) has no arrow back to Settings, even when Settings opened one before and it was
+  swiped away; Settings opens with no arrow either, as from the home.
 
 The hooks into existing code: `ActionSheet` wraps its content in a layer; `RowAction` takes a spot
 for the rows its sheets draw; `ChoiceRow` passes a modifier through; one `GuideOpens` in HomeScreen
@@ -150,6 +163,11 @@ places; and one `guideTarget` per control. Nothing else changes, no dependency i
   and a tap elsewhere dismiss it, and the tap reaches the control; a terminal entry with no tab open
   says so and its Open a tab gets there; the palette's Help rows; the tour's Next, Skip and its one
   automatic run on a new install only.
+- `GuideEdgeTest` (JVM and emulator): Back ends the tour without leaving the app; a press on the
+  card's words does not reach the row under it; Help's page survives a rotation; Show me into a
+  page Settings also opens has no arrow to Settings; Backup swiped away and opened from a file has
+  none either; no tour on a start from the widget, or under a link's Add host (emulator).
+  `GuideCardTest` (JVM) places the card above the keyboard and below the status bar.
 - `GuideEntriesTest` (JVM): ids unique; every spot of the enum is pointed at by an entry, a tour
   step or is a row that opens Help; every section has entries; the gestures and long presses are
   all there; when the tour is due. The strings in all three languages are `TranslationParityTest`'s.

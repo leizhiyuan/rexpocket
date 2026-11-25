@@ -5,6 +5,7 @@ Ideas reviewed and judged worth having, but not worth the effort yet. Each notes
 | Idea | What | Size | Needs |
 | --- | --- | --- | --- |
 | Find Rex on the tailnet | Mark the tailnet sheet's devices that answer as Rex on 7297 or 443, beside the Add host each already has. The device list is there; the probe is not: a dial and a hello through the node per device and port, with timeouts. | S-M | Run it on asking (a "Look for Rex" row), a few at a time, with `ConnectionCheck`'s Rex step. |
+| Help's card first for TalkBack | The spotlight is announced as it appears, but its card is the last node of the window, so swiping to Got it or Next goes through the whole screen first. A `traversalIndex` before the content (and a check that a sheet's layer orders the same) would put it first. | S | An emulator test reading the traversal order, as `TerminalAccessibilityTest` reads the pane's. |
 
 ## Next: a QoL scout pass
 

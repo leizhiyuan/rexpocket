@@ -1,5 +1,6 @@
 package me.leaver.rexpocket.ui.guide
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.core.tween
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -50,6 +53,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -246,15 +251,19 @@ internal fun GuideLayer(modifier: Modifier = Modifier, content: @Composable () -
         CompositionLocalProvider(LocalGuideLayer provides layer) { content() }
         if (found != null && spotlight != null) {
             LaunchedEffect(spotlight, found.first) { guide.shown = found.first }
-            SpotlightOverlay(spotlight, found.second, guide, onCard = { card = it })
+            SpotlightOverlay(spotlight, found.second, guide, layer, onCard = { card = it })
         }
     }
 }
 
 /** The ring, the dimmed screen round it, and the card; drawing only, it takes no touch itself. */
 @Composable
-private fun SpotlightOverlay(spotlight: Spotlight, target: Rect, guide: Guide, onCard: (Rect) -> Unit) {
+private fun SpotlightOverlay(spotlight: Spotlight, target: Rect, guide: Guide, layer: LayerState, onCard: (Rect) -> Unit) {
     val view = LocalView.current
+    // Back ends the spotlight, or the tour, before it does anything else: the screen under it
+    // (the home, which would leave the app) only gets the next one. Composed with the spotlight,
+    // so it is the last handler added, which is asked first.
+    BackHandler { guide.dismiss() }
     LaunchedEffect(spotlight) {
         // TalkBack says it as it appears; the card is then a node with its buttons.
         @Suppress("DEPRECATION")
@@ -292,7 +301,9 @@ private fun SpotlightOverlay(spotlight: Spotlight, target: Rect, guide: Guide, o
             )
         }
     }
-    // The card under the control when there is room, over it otherwise, inside the window.
+    // The card under the control when there is room, over it otherwise, inside what the window
+    // shows: not behind the keyboard, which is up over a key bar's key or the pane, nor the bars.
+    val safe = WindowInsets.safeDrawing
     Layout(
         content = { SpotlightCard(spotlight, guide) },
         modifier = Modifier.fillMaxSize(),
@@ -300,15 +311,14 @@ private fun SpotlightOverlay(spotlight: Spotlight, target: Rect, guide: Guide, o
         val margin = 16.dp.roundToPx()
         val width = minOf(constraints.maxWidth - 2 * margin, CARD_MAX.roundToPx()).coerceAtLeast(0)
         val placeable = measurables.single().measure(Constraints(maxWidth = width, maxHeight = constraints.maxHeight))
+        // The layer's top in its window, to put the window's insets in the layer's terms.
+        val coords = layer.coordinates?.takeIf { it.isAttached }
+        val offset = coords?.positionInWindow()?.y?.toInt() ?: 0
+        val window = coords?.findRootCoordinates()?.size?.height ?: (offset + constraints.maxHeight)
+        val top = (safe.getTop(this) - offset).coerceIn(0, constraints.maxHeight)
+        val bottom = (window - safe.getBottom(this) - offset).coerceIn(top, constraints.maxHeight)
         layout(constraints.maxWidth, constraints.maxHeight) {
-            val gap = 12.dp.roundToPx()
-            val below = hole.bottom.toInt() + gap
-            val above = hole.top.toInt() - gap - placeable.height
-            val y = when {
-                below + placeable.height <= constraints.maxHeight - margin -> below
-                above >= margin -> above
-                else -> (constraints.maxHeight - placeable.height - margin).coerceAtLeast(0)
-            }
+            val y = cardTop(hole.top, hole.bottom, placeable.height, top, bottom, margin, 12.dp.roundToPx())
             val x = (hole.center.x.toInt() - placeable.width / 2).coerceIn(margin, (constraints.maxWidth - margin - placeable.width).coerceAtLeast(margin))
             onCard(Rect(x.toFloat(), y.toFloat(), (x + placeable.width).toFloat(), (y + placeable.height).toFloat()))
             placeable.place(x, y)
@@ -316,11 +326,29 @@ private fun SpotlightOverlay(spotlight: Spotlight, target: Rect, guide: Guide, o
     }
 }
 
+/**
+ * The top of a card [height] tall for a control from [holeTop] to [holeBottom], in a layer whose
+ * shown part runs from [top] to [bottom]: under the control when it fits there, over it when it
+ * fits there, else at the bottom of what is shown.
+ */
+internal fun cardTop(holeTop: Float, holeBottom: Float, height: Int, top: Int, bottom: Int, margin: Int, gap: Int): Int {
+    val below = holeBottom.toInt() + gap
+    val above = holeTop.toInt() - gap - height
+    return when {
+        below + height <= bottom - margin -> below
+        above >= top + margin -> above
+        else -> (bottom - height - margin).coerceAtLeast(top)
+    }
+}
+
 @Composable
 private fun SpotlightCard(spotlight: Spotlight, guide: Guide) {
     Column(
         Modifier.widthIn(max = CARD_MAX).clip(RoundedCornerShape(Radius.card)).background(Colors.raised)
-            .testTag(SPOTLIGHT_CARD_TAG).padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
+            .testTag(SPOTLIGHT_CARD_TAG)
+            // The card is the spotlight's own: a press on its words stops here, rather than going
+            // through to the row under it. Its buttons still take theirs.
+            .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
     ) {
         Text(spotlight.title, color = Colors.ink, fontSize = TextStyles.body, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(end = 8.dp))
         Spacer(Modifier.heightIn(min = 4.dp))

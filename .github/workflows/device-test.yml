@@ -147,6 +147,7 @@ jobs:
               me.leaver.rexpocket.ui.DesignReviewTest \
               me.leaver.rexpocket.ui.GuideRegistryTest \
               me.leaver.rexpocket.ui.GuideScreenTest \
+              me.leaver.rexpocket.ui.GuideEdgeTest \
               me.leaver.rexpocket.alerts.BackgroundServiceTest; do
             adb logcat -c || true
             if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedDebugAndroidTest \

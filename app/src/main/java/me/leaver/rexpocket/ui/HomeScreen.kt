@@ -424,6 +424,8 @@ internal fun HomeScreen(
     // Help's Show me: the home's own places, opened over nothing else (ui/guide, help-guide.md).
     GuideOpens(HOME_GUIDE_PLACES) { asked ->
         settings = false
+        // Help opened it, not Settings: no back arrow to Settings, even one left from before.
+        fromSettings = false
         notifications = false
         controlsPage = null
         securityOpen = false

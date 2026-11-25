@@ -6,8 +6,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -61,18 +64,27 @@ internal fun GuideHost(guide: Guide, model: RexViewModel, homeShown: Boolean) {
             }
         }
     }
+    // Help's sheet as it was, through a rotation, the app lock and the process going: as every
+    // other sheet of the home is. The spotlight is not kept (see Guide).
+    var keptHelp by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(guide) {
+        keptHelp?.let { kept -> if (guide.help == null) guide.help = helpOf(kept) }
+        snapshotFlow { guide.help }.collect { keptHelp = it?.let(::keyOf) }
+    }
     // Once, by itself, on a new install, the first time the app opens with a host: see GuidePrefs.
     val due = remember { GuidePrefs(context).tourDue(hostsNow = model.hosts.value.isNotEmpty()) }
+    // A start for something - a link, a notification, a tile, a share - is not one to tour on: the
+    // person came for that. Read as the app is composed, before the home has taken the request.
+    val plainStart = remember { model.homeRequest.value == null && !model.openedForSomething }
     LaunchedEffect(due) {
-        if (!due) return@LaunchedEffect
+        if (!due || !plainStart) return@LaunchedEffect
         delay(AUTO_TOUR_DELAY_MS)
-        val quiet = withTimeoutOrNull(AUTO_TOUR_WAIT_MS) {
-            snapshotFlow {
-                home.value && route == Route.Home && guide.layers <= 1 && guide.help == null &&
-                    guide.spotlight == null && guide.pending == null
-            }.first { it }
-        }
-        if (quiet != null) guide.startTour()
+        // Only on the home as it opened, with nothing over it; otherwise at the next start.
+        val quiet = home.value && model.route.value == Route.Home && model.opening.value == null &&
+            model.homeRequest.value == null && !model.openedForSomething && model.share.value == null &&
+            model.hostImport.step.value == null && model.settingsBackup.step.value == null &&
+            guide.layers <= 1 && guide.help == null && guide.spotlight == null && guide.pending == null
+        if (quiet) guide.startTour()
     }
     guide.help?.let { view ->
         GuideSheet(
@@ -82,6 +94,14 @@ internal fun GuideHost(guide: Guide, model: RexViewModel, homeShown: Boolean) {
             terminalReady = route == Route.Term && pocketReady(pocket),
         )
     }
+}
+
+/** Help's sheet as saved: the entry's id and the note, `|` between; the list has no id. */
+private fun keyOf(view: HelpView): String = view.entryId.orEmpty() + "|" + view.note?.name.orEmpty()
+
+private fun helpOf(key: String): HelpView {
+    val (id, note) = key.split('|', limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+    return HelpView(id.ifEmpty { null }?.takeIf { guideEntry(it) != null }, HelpNote.entries.firstOrNull { it.name == note })
 }
 
 /** A pane on screen to point at: the terminal live on a tab, not a closed pane's note. */
@@ -222,4 +242,3 @@ private const val TOUR_FIND_MS = 1_500L
 private const val HOME_WAIT_MS = 2_000L
 private const val TAB_WAIT_MS = 20_000L
 private const val AUTO_TOUR_DELAY_MS = 1_200L
-private const val AUTO_TOUR_WAIT_MS = 60_000L

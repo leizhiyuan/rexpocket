@@ -1156,6 +1156,9 @@ class RexViewModel @JvmOverloads constructor(
     /** Set once an alert has opened a pane, so the start-up resume does not replace it. */
     private var openedFromAlert = false
 
+    /** An alert, the widget, a shortcut or a share opened the app: Help's tour waits for a plain start. */
+    internal val openedForSomething: Boolean get() = openedFromAlert || openedFromShare
+
     /**
      * Opens the tab a launcher shortcut names, connecting its host first. A host removed since, a
      * session that ended or a tab that closed is said in a toast: the first two stay on the list,
