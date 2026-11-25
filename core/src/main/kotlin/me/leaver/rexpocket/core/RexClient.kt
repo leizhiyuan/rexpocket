@@ -1,7 +1,6 @@
 package me.leaver.rexpocket.core
 
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.withTimeoutOrNull
@@ -39,10 +38,16 @@ class RexClient(
     private var socket: WebSocket? = null
 
     private val finished = CompletableDeferred<Throwable?>()
+    /**
+     * Rex's events, none dropped. The session takes them in order and some wait on a call (a tab
+     * opened at the desk reads the view again), so on a slow network a busy pane's progress and
+     * titles pile up behind one; a buffer that dropped the oldest lost an agent's approval request
+     * among them, and the phone showed it working until it reconnected. What piles up is bounded
+     * by the calls' time limits. The replay is for the collector that starts after the welcome.
+     */
     private val _events = MutableSharedFlow<JSONObject>(
         replay = 64,
-        extraBufferCapacity = 256,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        extraBufferCapacity = Int.MAX_VALUE - 64,
     )
     val events: SharedFlow<JSONObject> = _events
 
