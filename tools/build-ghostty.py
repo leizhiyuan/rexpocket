@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import tarfile
@@ -114,8 +115,18 @@ def main():
     # Ghostty's Zig dependencies stay with this build, not in the user's shared ~/.cache/zig.
     env.setdefault("ZIG_GLOBAL_CACHE_DIR", str(BUILD / "zig-cache"))
 
+    # The source tarball has no Git history, so Ghostty would otherwise ask Git for the version: in
+    # a checkout whose tags are this app's, that is a tag Ghostty refuses as not its own release.
+    # Say the versions outright - the tag is the libghostty-vt release, build.zig.zon the app's.
+    release = manifest["release"]
+    if not release.startswith("vt-"):
+        raise SystemExit(f"release is not a libghostty-vt tag: {release}")
+    app_version = re.search(r'(?m)^\s*\.version = "([^"]+)"', (source_root / "build.zig.zon").read_text())
+    if not app_version:
+        raise SystemExit(f"no version in {source_root / 'build.zig.zon'}")
     zig_build = [zig_root / "zig", "build", "-Demit-lib-vt", "-Demit-macos-app=false", "-Demit-xcframework=false",
-                 "-Doptimize=ReleaseFast"]
+                 "-Doptimize=ReleaseFast", f"-Dlib-version-string={release.removeprefix('vt-')}",
+                 f"-Dversion-string={app_version.group(1)}"]
     objects = BUILD / ("obj-host" if args.host else "obj")
     objects.mkdir(parents=True, exist_ok=True)
     sources = [NATIVE / "shim.c", NATIVE / "jni.c"]
