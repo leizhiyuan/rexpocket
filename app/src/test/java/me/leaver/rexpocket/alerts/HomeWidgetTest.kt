@@ -37,6 +37,8 @@ class HomeWidgetTest {
     @Test
     fun theBackgroundTileSaysOnOffOrWhatItNeeds() {
         assertEquals(app.getString(R.string.tile_background_allow), BackgroundTile.subtitle(app, on = false, hosts = 0))
+        // On, but Android 13 and later took notifications away since: it cannot alert, and says so.
+        assertEquals(app.getString(R.string.tile_background_allow), BackgroundTile.subtitle(app, on = true, hosts = 2))
         shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         assertEquals(app.getString(R.string.alerts_off), BackgroundTile.subtitle(app, on = false, hosts = 0))
         assertEquals(app.getString(R.string.alerts_on), BackgroundTile.subtitle(app, on = true, hosts = 0))

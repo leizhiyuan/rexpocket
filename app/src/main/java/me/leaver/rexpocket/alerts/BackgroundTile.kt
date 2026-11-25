@@ -91,9 +91,12 @@ class BackgroundTile : TileService() {
     companion object {
         private const val TAG = "RexPocketTile"
 
-        /** "On · 2 hosts", "Off", or "Allow notifications" where Android does not let it alert. */
+        /**
+         * "On · 2 hosts", "Off", or "Allow notifications" where Android does not let it alert: off,
+         * or on with notifications taken away since, when it connects but no alert can show.
+         */
         internal fun subtitle(context: Context, on: Boolean, hosts: Int): String = when {
-            !on && !Alerts.allowed(context) -> context.getString(R.string.tile_background_allow)
+            !Alerts.allowed(context) -> context.getString(R.string.tile_background_allow)
             !on -> context.getString(R.string.alerts_off)
             hosts == 0 -> context.getString(R.string.alerts_on)
             else -> context.getString(R.string.alerts_on) + " · " + context.resources.getQuantityString(R.plurals.tile_background_hosts, hosts, hosts)
