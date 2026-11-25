@@ -135,6 +135,7 @@ object SettingsFormat {
         }
         var backgroundMode: Boolean? = null
         val hostBackground = LinkedHashMap<String, HostBackground>()
+        val mutedKept = LinkedHashSet<String>()
         section(root, "background")?.let { b ->
             backgroundMode = bool(b, "enabled", "background")
             val list = b.opt("hosts")
@@ -156,7 +157,9 @@ object SettingsFormat {
                             overrides[event] = e.opt(key) as? Boolean ?: refuse(SettingsProblem.Kind.BadValue, "$field.events.$key")
                         }
                     }
-                    // The tabs muted on this host, by Rex's window id: added later, so a file may have none.
+                    // The tabs muted on this host, by Rex's window id: added later, so a file may have
+                    // none, and a host it has none for keeps the phone's.
+                    if (h.opt("mutedTabs").let { it == null || it == JSONObject.NULL }) mutedKept += name
                     val muted = h.opt("mutedTabs").let { v ->
                         if (v == null || v == JSONObject.NULL) emptySet() else {
                             val arr = v as? JSONArray ?: refuse(SettingsProblem.Kind.BadValue, "$field.mutedTabs")
@@ -234,6 +237,7 @@ object SettingsFormat {
             home = home,
             hosts = hosts,
             hostBackground = hostBackground,
+            mutedKept = mutedKept,
             quickReplies = quickReplies,
             keyBar = keyBar,
             gestures = gestures,
@@ -433,7 +437,8 @@ object SettingsFormat {
             perHost.put(
                 JSONObject().put("name", name).put("stay", b.stay).put("always", b.always).put("notify", b.notify)
                     .put("events", JSONObject().apply { b.overrides.forEach { (e, on) -> put(e.name, on) } })
-                    .apply { if (b.muted.isNotEmpty()) put("mutedTabs", JSONArray(b.muted.toList())) },
+                    // Always, empty too: a file without it is one from before tabs could be muted.
+                    .put("mutedTabs", JSONArray(b.muted.toList())),
             )
         }
         if (perHost.length() > 0) background.put("hosts", perHost)
@@ -556,6 +561,11 @@ data class SettingsBackup(
     val hosts: List<ImportedHost> = emptyList(),
     /** Each host's background choices, by its name in [hosts]. */
     val hostBackground: Map<String, HostBackground> = emptyMap(),
+    /**
+     * The hosts of [hostBackground] whose entry has no `mutedTabs` (a file from before tabs could be
+     * muted): their [HostBackground.muted] is empty here, and the phone's muted tabs stay.
+     */
+    val mutedKept: Set<String> = emptySet(),
     /** Settings › Quick replies, in order: the replies and prompts the person sends often. */
     val quickReplies: List<String>? = null,
     val keyBar: KeyBarPrefs? = null,
@@ -757,7 +767,7 @@ fun settingChanges(backup: SettingsBackup, current: CurrentSettings, plan: Impor
     for ((name, next) in backup.hostBackground) {
         val existing = planned[name]?.existing
         val now = existing?.let { current.hostBackground[it.id] } ?: HostBackground()
-        change(SettingKey.HostBackground, now, next, host = name)
+        change(SettingKey.HostBackground, now, if (name in backup.mutedKept) next.copy(muted = now.muted) else next, host = name)
     }
     for ((name, next) in backup.templates) {
         val now = planned[name]?.existing?.let { current.templates[it.id] }.orEmpty()

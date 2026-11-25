@@ -429,6 +429,9 @@ class SettingsBackupper(
             val ids = HashMap<String, String>()
             result.unchanged.forEach { p -> p.existing?.let { ids[p.imported.name.lowercase()] = it.id } }
             result.updates.forEach { p -> ids[p.imported.name.lowercase()] = p.existing!!.id }
+            // The tailnet accounts first: a host names its account, which a wiped phone has only
+            // once the file's accounts are added.
+            preview.backup.tailnets?.let { applyTailnetChoices(Connections.of(app), it) }
             val accounts = read().accounts
             var all = result.applyTo(
                 store.list(),
@@ -472,7 +475,10 @@ class SettingsBackupper(
                     activityBySession = b.home?.activityBySession,
                     activityIncludeIdle = b.home?.includeIdle,
                     folds = folds,
-                    background = b.hostBackground.mapNotNull { (n, bg) -> id(n)?.let { it to bg } }.toMap(),
+                    background = b.hostBackground.mapNotNull { (n, bg) ->
+                        // A file from before muted tabs leaves the phone's as they are.
+                        id(n)?.let { it to if (n in b.mutedKept) bg.copy(muted = now.background.of(it).muted) else bg }
+                    }.toMap(),
                     quickReplies = b.quickReplies,
                     templates = b.templates.mapNotNull { (n, list) -> id(n)?.let { it to list } }.toMap(),
                     terminalFont = b.terminalFont,
@@ -483,7 +489,6 @@ class SettingsBackupper(
                     security = b.security,
                 ),
             )
-            b.tailnets?.let { applyTailnetChoices(Connections.of(app), it) }
             b.tiles?.let { tiles -> applyTiles(app, tiles, ::id) }
             Diagnostics.event(TAG, "import: " + result.summary() + ", ${preview.changes.size} settings, ${secrets.size} sign-ins")
             val saved = store.list().associateBy { it.label }
