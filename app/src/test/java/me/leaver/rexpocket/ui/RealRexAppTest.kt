@@ -348,6 +348,41 @@ class RealRexAppTest {
         assertEquals(null, m.pocket.value.notice)
     }
 
+    /**
+     * New tab on the home, from a session's sheet and under its tabs, on a real Rex: the phone ends
+     * on the terminal showing the tab it made, and holds its pane, not on a tab the session had.
+     */
+    @Test
+    fun theHomesNewTabShowsTheNewTab() {
+        // Each session with its tabs on the home has a "+ New tab", in Rex's order.
+        fun order(m: RexViewModel) = m.pocket.value.sessions.filter { it.id in m.pocket.value.views }.indexOfFirst { it.id == sid }
+        val m = launch(onTerminal = false)
+        val label = m.pocket.value.sessions.first { it.id == sid }.label
+        val inASheet = androidx.compose.ui.test.hasAnyAncestor(hasTestTag(ACTION_SHEET_TAG))
+        val taps = listOf<() -> Unit>(
+            {
+                compose.onNode(androidx.compose.ui.test.hasContentDescription(string(R.string.manage_actions_for, label)) and hasClickAction()).performClick()
+                compose.waitForIdle()
+                compose.onNode(hasText(string(R.string.menu_new_tab)) and hasClickAction() and inASheet).performClick()
+            },
+            // "+ New tab" under the session's tabs: the one in this session's card; sessions other
+            // tests left on the Rex have one too.
+            { compose.onAllNodes(hasText(string(R.string.menu_new_tab)) and hasClickAction() and !inASheet)[order(m)].performClick() },
+        )
+        for (tap in taps) {
+            val before = deskView().windows.map { it.id }
+            tap()
+            compose.awaitThat { deskView().windows.size == before.size + 1 }
+            val made = deskView().windows.single { it.id !in before }
+            compose.awaitThat { m.route.value == Route.Term && m.pocket.value.view?.activeWindowId == made.id }
+            assertTrue(made.blocks.any { it.id == shown(m) })
+            awaitHeld(m)
+            assertEquals(null, m.pocket.value.notice)
+            compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+            compose.awaitThat { m.route.value == Route.Home }
+        }
+    }
+
     /** A session whose every tab was closed at the desk stays on Rex; the phone offers a new tab in it. */
     @Test
     fun aSessionLeftWithNoTabsOffersANewOne() {

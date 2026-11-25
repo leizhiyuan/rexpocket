@@ -105,18 +105,10 @@ class HomeManageTest {
     }
 
     @Test
-    fun theSessionsOverflowMakesATabAndEndsTheSessionWithoutAttaching() {
+    fun theSessionsOverflowEndsTheSessionWithoutAttaching() {
         val m = start()
-        val before = view(m).windows.size
         val more = string(R.string.manage_actions_for, label(m))
-        compose.onNode(hasContentDescription(more) and hasClickAction()).performClick()
-        compose.waitForIdle()
-        inSheet(string(R.string.menu_new_tab)).performClick()
-        compose.awaitThat { view(m).windows.size == before + 1 }
-        // The new tab's pane has no owner: Rex gives it to an attached caller only.
-        assertTrue(view(m).windows.last().blocks.all { it.owner == null })
-        assertNotAttached()
-
+        // Its New tab shows the tab it makes, so it attaches: HomeNewTabTest.
         compose.onNode(hasContentDescription(more) and hasClickAction()).performClick()
         compose.waitForIdle()
         inSheet(string(R.string.home_end_session)).performClick()
