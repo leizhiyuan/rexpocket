@@ -665,6 +665,34 @@ internal fun ReplyDialog(
     )
 }
 
+/**
+ * The prompt composer that Reply's Compose opens on the home, for [target]'s pane, with its draft in
+ * [drafts] and its host's Return after; [onEditReplies] is its way to Settings › Quick replies.
+ */
+@Composable
+internal fun HomeComposer(
+    target: ReplyTarget,
+    drafts: PromptDrafts,
+    quickReplies: List<String>,
+    onSend: (text: String, enter: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onEditReplies: (() -> Unit)? = null,
+) {
+    val key = PromptDrafts.key(target.hostId, target.blockId)
+    PromptComposer(
+        target = target.title,
+        draft = drafts[key],
+        onDraft = { drafts[key] = it },
+        quickReplies = quickReplies,
+        // Return after, as the person last chose it on this host, here or in the terminal.
+        enterAfter = drafts.enterAfter(target.hostId),
+        onEnterAfter = { drafts.setEnterAfter(target.hostId, it) },
+        onSend = onSend,
+        onEditReplies = onEditReplies,
+        onDismiss = onDismiss,
+    )
+}
+
 /** How a failed sheet action is said: "Couldn't rename: …". */
 internal fun failedText(action: HomeAction): Int = when (action) {
     is HomeAction.RenameSession, is HomeAction.RenameTab -> R.string.home_failed_rename

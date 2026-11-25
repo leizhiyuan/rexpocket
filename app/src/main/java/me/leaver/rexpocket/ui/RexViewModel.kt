@@ -470,17 +470,28 @@ class RexViewModel @JvmOverloads constructor(
         }
     }
 
-    /** The focused host's own Rex actions (its configuration file's), for the palette; read when it opens. */
-    val rexActions = MutableStateFlow<List<me.leaver.rexpocket.core.RexAction>>(emptyList())
+    /** The last list of Rex actions read, and the host whose configuration file it is. */
+    private val rexActionsRead = MutableStateFlow<Pair<String, List<me.leaver.rexpocket.core.RexAction>>?>(null)
+
+    /**
+     * The focused host's own Rex actions (its configuration file's), for the palette; read when it
+     * opens. Another host's list is never shown here, even while this host's is still on its way.
+     */
+    val rexActions: StateFlow<List<me.leaver.rexpocket.core.RexAction>> = combine(rexActionsRead, focusId) { read, id ->
+        read?.takeIf { it.first == id }?.second.orEmpty()
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** A question a Rex action is asking, until it is answered here or elsewhere. */
     val rexPrompt = MutableStateFlow<me.leaver.rexpocket.core.RexPrompt?>(null)
 
     /** Reads the focused host's actions again: the configuration file may have changed since. */
     fun loadRexActions() {
-        val s = session ?: return
+        val link = focused ?: return
+        val s = link.session ?: return
         viewModelScope.launch {
-            rexActions.value = runCatching { s.rexActions() }.getOrElse { if (it is CancellationException) throw it else rexActions.value }
+            // A read that fails keeps this host's last list, if it has one.
+            val list = runCatching { s.rexActions() }.getOrElse { if (it is CancellationException) throw it else return@launch }
+            rexActionsRead.value = link.id to list
         }
     }
 

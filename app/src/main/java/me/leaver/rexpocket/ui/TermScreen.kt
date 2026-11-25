@@ -168,8 +168,6 @@ internal sealed interface Sheet {
 
     /** What a keyboard on the desk can do here: the screen's own keys. */
     data object Shortcuts : Sheet
-    data class TabActions(val windowId: String) : Sheet
-    data class PaneActions(val blockId: String) : Sheet
 
     /** The tab's Status details: what Rex reports of its programs and what the phone made of it. */
     data class StatusDetails(val windowId: String) : Sheet
@@ -1061,20 +1059,6 @@ internal fun TermScreen(
                 }
             }
         }
-        is Sheet.TabActions -> {
-            // The tab may close on the desktop while its sheet is open; then the sheet goes too.
-            val window = view?.windows?.firstOrNull { it.id == open.windowId }
-            if (view != null && window != null) {
-                val title = tabTitle(view, window, state)
-                ActionSheet(onDismiss = { sheet = null }, title = title) {
-                    Group {
-                        SheetItem(stringResource(R.string.menu_rename_tab), icon = R.drawable.ic_edit) { rename = Rename(Level.Tab, window.id, window.label) }
-                        SheetItem(stringResource(R.string.status_details), icon = R.drawable.ic_eye) { sheet = Sheet.StatusDetails(window.id) }
-                        SheetItem(stringResource(R.string.menu_close_tab), Colors.danger, icon = R.drawable.ic_close) { confirm = Confirm(Level.Tab, window.id, title) }
-                    }
-                }
-            }
-        }
         is Sheet.StatusDetails -> {
             // Gone with its tab, as the tab's sheet is.
             val details = tabDetails(state, open.windowId, seenMark)
@@ -1113,18 +1097,6 @@ internal fun TermScreen(
         }
         Sheet.QuickReplies -> if (onQuickReplies != null) {
             QuickRepliesSheet(QuickReplies(quickReplies), onQuickReplies, onDismiss = { sheet = null })
-        }
-        is Sheet.PaneActions -> {
-            val block = tab?.blocks?.firstOrNull { it.id == open.blockId }
-            if (tab != null && block != null) {
-                val number = tab.blocks.indexOf(block) + 1
-                ActionSheet(onDismiss = { sheet = null }, title = "$number  ${paneTitle(block, state.blockStatus[block.id], state.programs[block.id])}") {
-                    Group {
-                        SheetItem(stringResource(R.string.menu_rename_pane), icon = R.drawable.ic_edit) { rename = Rename(Level.Pane, block.id, block.label) }
-                        SheetItem(stringResource(R.string.menu_close_pane), Colors.danger, icon = R.drawable.ic_close) { confirm = Confirm(Level.Pane, block.id, block.label) }
-                    }
-                }
-            }
         }
     }
 

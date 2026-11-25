@@ -110,6 +110,28 @@ class QuickRepliesScreenTest {
         assertEquals(listOf("continue", "/compact", "yes"), rowsOnScreen())
         assertEquals(listOf("continue", "/compact", "yes"), stored())
     }
+
+    /**
+     * A delete's Undo puts back what was deleted, not the list as it was before the changes made
+     * since: once the list changes again it goes, so a move made after the delete stays.
+     */
+    @Test
+    fun aDeletesUndoDoesNotTakeBackALaterMove() {
+        tap("yes")
+        tap(string(R.string.action_delete))
+        assertEquals(listOf("continue", "/compact"), rowsOnScreen())
+        compose.onNodeWithTag(QUICK_REPLY_UNDO_TAG).assertExists()
+        compose.onNode(hasContentDescription(string(R.string.arrange_move_up, "/compact")) and hasClickAction()).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("/compact", "continue"), rowsOnScreen())
+        val undo = compose.onAllNodes(hasTestTag(QUICK_REPLY_UNDO_TAG)).fetchSemanticsNodes()
+        if (undo.isNotEmpty()) {
+            compose.onNodeWithTag(QUICK_REPLY_UNDO_TAG).performClick()
+            compose.waitForIdle()
+        }
+        assertEquals("the move stays", listOf("/compact", "continue"), stored().filter { it != "yes" })
+        assertEquals(stored(), rowsOnScreen())
+    }
 }
 
 /** Settings › Quick replies as HomeScreen opens it: the sheet, fed from [model], its changes to it. */

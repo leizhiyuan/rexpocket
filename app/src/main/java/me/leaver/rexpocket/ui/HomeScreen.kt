@@ -791,14 +791,14 @@ internal fun HomeScreen(
     }
 
     composeTo?.let { target ->
-        val key = PromptDrafts.key(target.hostId, target.blockId)
-        PromptComposer(
-            target = target.title,
-            draft = drafts[key],
-            onDraft = { drafts[key] = it },
+        HomeComposer(
+            target = target,
+            drafts = drafts,
             quickReplies = quickReplies.items,
             onSend = { text, enter -> onSendPrompt(target.hostId, target.sessionId, target.blockId, text, enter) },
             onDismiss = { composeTo = null },
+            // The draft stays with the pane; Settings › Quick replies opens in its place.
+            onEditReplies = { quickRepliesOpen = true },
         )
     }
 
@@ -887,7 +887,13 @@ internal fun HomeScreen(
         templatesOf = { launchTemplates[it].orEmpty() },
         sessionName = { hostId, sessionId ->
             val st = lives[hostId]?.state
-            st?.views?.get(sessionId)?.label ?: (st?.sessions.orEmpty() + cachedSessions(hostId)).firstOrNull { it.id == sessionId }?.label
+            // A live host's own list says which sessions are still there: one ended meanwhile, at
+            // the desk or here, is not offered, and the template opens in a new session instead.
+            if (st?.phase == Phase.Live && st.sessions.none { it.id == sessionId }) {
+                null
+            } else {
+                st?.views?.get(sessionId)?.label ?: (st?.sessions.orEmpty() + cachedSessions(hostId)).firstOrNull { it.id == sessionId }?.label
+            }
         },
         onSet = onLaunchTemplates,
         onRun = onRunTemplate,

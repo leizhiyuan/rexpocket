@@ -95,6 +95,7 @@ internal fun TemplateSheetsHost(
     sheets: TemplateSheets,
     hosts: List<SavedHost>,
     templatesOf: (String) -> List<LaunchTemplate>,
+    /** A session's name, or null once it is gone: a run then makes a new session. */
     sessionName: (hostId: String, sessionId: String) -> String?,
     onSet: (hostId: String, List<LaunchTemplate>) -> Unit,
     onRun: (SavedHost, sessionId: String?, LaunchTemplate) -> Unit,
@@ -120,11 +121,13 @@ internal fun TemplateSheetsHost(
     when (page) {
         TemplateSheets.Page.Run -> {
             val where = sheets.session?.let { sessionName(host.id, it) }
+            // The session the sheet was opened for, while it is still there; a new one otherwise.
+            val runIn = sheets.session?.takeIf { where != null }
             RowActionsSheet(
                 stringResource(R.string.template_new_tab),
                 listOf(
                     ActionGroup(
-                        list.map { t -> RowAction(t.name, R.drawable.ic_command, detail = templateSummary(t)) { onRun(host, sheets.session, t) } },
+                        list.map { t -> RowAction(t.name, R.drawable.ic_command, detail = templateSummary(t)) { onRun(host, runIn, t) } },
                         caption = if (list.isEmpty()) {
                             null
                         } else {

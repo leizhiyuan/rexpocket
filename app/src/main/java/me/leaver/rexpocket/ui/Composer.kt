@@ -279,6 +279,7 @@ internal fun QuickRepliesSheet(replies: QuickReplies, onChange: (QuickReplies) -
         var text by rememberSaveable(at) { mutableStateOf(if (adding) "" else replies.items.getOrNull(at).orEmpty()) }
         fun save() {
             onChange(if (adding) replies.add(text) else replies.edit(at, text))
+            undo = null
             editing = null
         }
         ActionSheet(
@@ -358,7 +359,11 @@ internal fun QuickRepliesSheet(replies: QuickReplies, onChange: (QuickReplies) -
                     index = i,
                     last = i == replies.items.lastIndex,
                     onEdit = { editing = i },
-                    onMove = { by -> onChange(replies.move(i, by)) },
+                    onMove = { by ->
+                        // The list changed again: Undo would take this back too, so it goes.
+                        undo = null
+                        onChange(replies.move(i, by))
+                    },
                 )
             }
         }
