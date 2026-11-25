@@ -162,12 +162,15 @@ class FleetTest {
         val bPhases = CopyOnWriteArrayList<Phase>()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
-            val aPhases = CopyOnWriteArrayList<Phase>()
             scope.launch(start = CoroutineStart.UNDISPATCHED) { fleet[b.id]!!.state.collect { bPhases += it.phase } }
-            scope.launch(start = CoroutineStart.UNDISPATCHED) { fleet[a.id]!!.state.collect { aPhases += it.phase } }
+            val aHellos = a.rex.calls.count { it.startsWith("session.bootstrap") }
             a.rex.drop(aClient)
             fleet[a.id]!!.reconnectNow()
-            until("A redialed and is live again") { Phase.Reconnecting in aPhases && aPhases.last() == Phase.Live }
+            // Counted on A's Rex, not from A's phases: a state flow keeps only the latest, and the
+            // redial on loopback is quick enough that a collector missed Reconnecting now and then.
+            until("A redialed and is live again") {
+                a.rex.calls.count { it.startsWith("session.bootstrap") } > aHellos && fleet[a.id]!!.state.value.phase == Phase.Live
+            }
             assertEquals(aClient, fleet[a.id]!!.state.value.clientId)
             assertTrue("B left Live: $bPhases", bPhases.all { it == Phase.Live })
             assertEquals(bClient, fleet[b.id]!!.state.value.clientId)
