@@ -83,3 +83,23 @@ Areas, one per scout:
 | Blocked words on tab rows | "waiting for approval" → Rex's blocked kinds, if Rex's own clients word them. | S | Rex's wording for `permission`, `question`, `auth` (unconfirmed). |
 | Background mode page | Notifications is eight cards even reordered; Android's checks and the host and tailnet pages could be "Background mode ›". | M | A page of its own, with its back arrow; NotificationsTest and the deep links (Manage, stopped notes). |
 | Back to Settings everywhere | Backup, Import hosts and Terminal controls, opened from Settings, still close to the home; Notifications, Appearance, Security, Quick replies and Diagnostics have the arrow back. | S | A `fromSettings` flag through RexApp's Backup and Import, and `TerminalControlsPages`' root page. |
+
+## Robustness pass: found, not fixed
+
+From the robustness pass (connections, state, background, data, threading, security). Fixed in the
+same pass, each with a test that failed first: a restarted pane stream's RESUME count
+(StreamResumeTest), events dropped behind a slow call (EventBurstTest), no redial when the
+network comes after a start with none (NetworkWatcherTest), a paste over one Rex message dropping
+the connection (LargePasteTest), recents showing a locked app (AppLockTest), a desk's tunnel taken
+by the phone (OtherBlocksTest). Left, with why:
+
+| Finding | What a person hits | Why not now | Needs |
+| --- | --- | --- | --- |
+| A tab that is not a terminal | A desk's tunnel (or another block kind) in a tab shows an empty terminal on the phone; typing there fails. The block is no longer taken or streamed. | UI words in every translation. | A note in the pane ("A tunnel: open it on the desk"), from `BlockInfo.creator`, and the key bar off for it. |
+| SSH secrets read on the main thread | `HostStore.list()` opens every host's password, key and passphrase through the keystore on each call, and the view model calls it on the main thread (each save, each find). With many SSH hosts a few hundred ms each time; an ANR risk on a slow keystore. | Touches every caller of the store. | Keep the opened hosts in memory (`list()` from a cache written by `write`), and open secrets only when a connection asks. |
+| A keystore that fails once forgets SSH secrets | `SecretBox` keeps a failed key load as null for the process: `open` gives "" and the next `upsert` of any host writes "" over every saved secret. | Rare (a keystore that is busy at start); needs a device to show. | Keep the sealed text when it cannot be opened, and write it back unchanged; retry the key load. |
+| Two writers of the host list | `upsert` reads, changes and writes the whole list without a lock: two at once (a trusted host key from a connection and a rename) lose one. Both are on the main thread today. | No caller off the main thread yet. | `@Synchronized` on the store's writes, or one writer. |
+| Launcher shortcuts are not signed | MainActivity is exported, and an `OPEN_PANE` intent with a host, session and tab id opens that tab, connecting first. Alert links are HMAC-signed; shortcuts are not. The ids are random and private, so another app cannot guess them. | Low risk; pinned shortcuts made before a change would stop working. | Sign the ids with `AlertSigner`, as alert links are, and accept unsigned ones only from the launcher. |
+| Notifications on the lock screen | With the app lock on, alerts still show a pane's words on the phone's lock screen unless Android hides sensitive content. Deliberate (app-lock.md), but the app sets no visibility of its own. | A product choice. | `VISIBILITY_PRIVATE` with a public version ("A program needs you") while the app lock is on. |
+| Recents before Android 13 | `setRecentsScreenshotEnabled` is Android 13 and later; before, a locked app's last screen stays in recents unless Block screenshots is on. | FLAG_SECURE would also block the person's screenshots. | Set FLAG_SECURE while the app is locked or away on 12 and older. |
+| Each connection attempt makes an HTTP client | `RexClient.defaultHttp()` builds a new OkHttpClient (pool, dispatcher threads) per attempt; a host down all night in background mode makes hundreds, each idling its threads for a minute. Not a leak, but churn. | Works; the threads end. | One client per host and route, rebuilt only when the route changes. |
