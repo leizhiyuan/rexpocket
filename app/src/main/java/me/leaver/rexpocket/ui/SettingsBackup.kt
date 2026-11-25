@@ -201,7 +201,9 @@ class SettingsBackupper(
     internal fun snapshot(withSecrets: Boolean): SettingsSnapshot {
         val now = read()
         val hosts = store.list()
-        val label = hosts.associate { it.id to it.label }
+        // A file names its hosts, and keeps only the first of two with one name: the parts by host
+        // are that first one's, never another's under its name.
+        val label = hosts.distinctBy { it.label.lowercase() }.associate { it.id to it.label }
         return SettingsSnapshot(
             appearance = now.appearance,
             terminalFontScale = now.fontScale,
@@ -224,7 +226,7 @@ class SettingsBackupper(
             hostBackground = now.background.hosts.mapNotNull { (id, b) -> label[id]?.let { it to b } }.toMap(),
             quickReplies = now.quickReplies,
             tailnets = tailnetChoicesOf(Connections.of(app)),
-            tiles = tileBindingsOf(app, hosts),
+            tiles = tileBindingsOf(app, hosts.filter { it.id in label }),
             templates = now.templates.mapNotNull { (id, list) -> label[id]?.let { it to list } }.toMap(),
             secrets = if (!withSecrets) emptyList() else hosts.filter { it.viaSsh }.map { h ->
                 HostSecret(h.label, h.sshPassword.ifEmpty { null }, h.sshPrivateKey.ifBlank { null }, h.sshPassphrase.ifEmpty { null })

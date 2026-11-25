@@ -153,4 +153,42 @@ class BackupRoundTripTest {
         assertEquals(false, m.background.value.of(box.id).stay)
         assertTrue(app != null)
     }
+
+    /**
+     * Two hosts of one name: the backup keeps the first, and with it the first's own choices,
+     * templates and tile - never the second's under the first's name.
+     */
+    @Test
+    fun twoHostsOfOneNameBackUpTheFirstsOwnChoices() {
+        val app = compose.activity.application
+        val other = box.copy(id = "box-2", host = "box2.example.com", fallbacks = emptyList(), tryOthers = true)
+        val m1 = tailnetModel(compose, FakeTailnetNode(), listOf(box, other), joined = false)
+        model = m1
+        val shown = androidx.compose.runtime.mutableStateOf(m1)
+        compose.setContent { androidx.compose.runtime.key(shown.value) { RexPocketApp(shown.value) } }
+        compose.runOnUiThread {
+            m1.setHostBackground(box.id, me.leaver.rexpocket.core.HostBackground(stay = false))
+            m1.setHostBackground(other.id, me.leaver.rexpocket.core.HostBackground(notify = false))
+            m1.setLaunchTemplates(box.id, listOf(template))
+            m1.setLaunchTemplates(other.id, listOf(LaunchTemplate("t2", "Other", command = "htop")))
+            TileStore.assign(app, 1, Connectable.host(other.id))
+        }
+        val text = SettingsFormat.write(m1.settingsBackup.snapshot(withSecrets = false)).text
+        compose.runOnUiThread { m1.disconnectAll() }
+        for (name in listOf("rexpocket", "launch_templates", "home_marks")) {
+            app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
+        }
+        val m = tailnetModel(compose, FakeTailnetNode(), emptyList(), joined = false)
+        model = m
+        compose.runOnUiThread { shown.value = m }
+        compose.runOnUiThread { m.settingsBackup.offerShare(ShareRequest(text, emptyList()), "text/plain") {} }
+        compose.awaitThat { seen(string(R.string.backup_preview_title)) }
+        compose.runOnUiThread { m.settingsBackup.apply() }
+        compose.awaitThat { m.settingsBackup.step.value == null }
+        val restored = m.hosts.value.single()
+        assertEquals("box.example.com", restored.host)
+        assertEquals(me.leaver.rexpocket.core.HostBackground(stay = false), m.background.value.of(restored.id))
+        assertEquals(listOf("Logs"), m.launchTemplates.value[restored.id].orEmpty().map { it.name })
+        assertEquals("the second box's tile is not the first's", null, TileStore(app).of(1))
+    }
 }
