@@ -1139,6 +1139,12 @@ class ScriptedRex(
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: okhttp3.Response?) = gone(webSocket, clean = false)
 
         override fun onMessage(webSocket: WebSocket, text: String) {
+            // A request over the welcome's max_message_bytes ends the connection, as Rex's "read
+            // limited at 1048577 bytes" does (status 1009).
+            if (text.toByteArray().size > MAX_MESSAGE_BYTES) {
+                webSocket.close(1009, "read limited at ${MAX_MESSAGE_BYTES + 1} bytes")
+                return
+            }
             val message = JSONObject(text)
             when (message.optString("type")) {
                 "hello" -> {
@@ -1168,7 +1174,7 @@ class ScriptedRex(
                         JSONObject()
                             .put("type", "welcome")
                             .put("protocol", "rex.control.v1")
-                            .put("limits", JSONObject().put("max_message_bytes", 1_048_576))
+                            .put("limits", JSONObject().put("max_message_bytes", MAX_MESSAGE_BYTES))
                             .put("client", welcomeClient)
                             .put("api_revision", message.optInt("api_revision").coerceAtMost(19))
                             .put("api_server_revision", 19)
@@ -1317,11 +1323,14 @@ class ScriptedRex(
         server.shutdown()
     }
 
-    private companion object {
+    companion object {
+        /** The largest message it takes, as Rex 0.1.0-preview.22's welcome says. */
+        const val MAX_MESSAGE_BYTES = 1_048_576
+
         /** The root record's id, as Rex writes it in events and `program_status_removed`. */
-        const val ROOT = ""
+        private const val ROOT = ""
 
         /** The smallest snapshot there is: the magic, a version, and the record that ends it. */
-        val SNAPSHOT = "GHOSTSNP".toByteArray() + byteArrayOf(1, 0) + byteArrayOf(6, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        private val SNAPSHOT = "GHOSTSNP".toByteArray() + byteArrayOf(1, 0) + byteArrayOf(6, 0, 0, 0, 0, 0, 0, 0, 0, 0)
     }
 }

@@ -85,7 +85,12 @@ class RexClient(
         pending[id] = waiter
         val msg = JSONObject().put("type", "request").put("id", id).put("method", method)
         if (payload != null) msg.put("payload", payload)
-        if (!ws.send(msg.toString())) {
+        val text = msg.toString()
+        if (tooLarge(text)) {
+            pending.remove(id)
+            throw RexCallException("too_large", 413, "$method is larger than Rex takes in one message")
+        }
+        if (!ws.send(text)) {
             pending.remove(id)
             // A connection that went away under a call is a drop, which the app says in its own
             // words; a socket that never opened is the failure that kept it from opening.
@@ -120,7 +125,18 @@ class RexClient(
         val id = ids.incrementAndGet().toString()
         val msg = JSONObject().put("type", "request").put("id", id).put("method", method)
         if (payload != null) msg.put("payload", payload)
-        return ws.send(msg.toString())
+        val text = msg.toString()
+        return !tooLarge(text) && ws.send(text)
+    }
+
+    /**
+     * Whether [text] is over the welcome's `max_message_bytes`. Rex ends the whole connection on
+     * such a request (1009, "read limited"), so only that request fails, as its guide asks.
+     */
+    private fun tooLarge(text: String): Boolean {
+        val limit = welcome?.maxMessageBytes?.takeIf { it > 0 } ?: MIN_MESSAGE_BYTES
+        // A UTF-8 character is at most 3 bytes per UTF-16 unit: most messages need no count.
+        return text.length.toLong() * 3 > limit && text.toByteArray(Charsets.UTF_8).size > limit
     }
 
     fun close() = end(frame = true)
@@ -173,7 +189,7 @@ class RexClient(
                         reconnectToken = client?.optNullableString("reconnect_token"),
                         resumed = client?.optBoolean("resumed") ?: false,
                         apiRevision = obj.optInt("api_revision"),
-                        maxMessageBytes = obj.optJSONObject("limits")?.optInt("max_message_bytes") ?: 65536,
+                        maxMessageBytes = obj.optJSONObject("limits")?.optInt("max_message_bytes")?.takeIf { it > 0 } ?: MIN_MESSAGE_BYTES,
                     )
                     welcome = w
                     if (!opened.isCompleted) opened.complete(w)

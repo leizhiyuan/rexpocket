@@ -801,9 +801,9 @@ class PocketSession(
     /** Types [text] into the shown pane, after everything typed before it. */
     suspend fun sendText(text: String) {
         if (text.isEmpty()) return
-        val call = write(text)
-        val (sid, block) = call.target()
-        onPane(sid, block) { input(call).await() }
+        val calls = writes(text)
+        val (sid, block) = calls.first().target()
+        onPane(sid, block) { calls.map(::input).forEach { it.await() } }
     }
 
     /**
@@ -812,11 +812,12 @@ class PocketSession(
      */
     fun writeBytes(data: ByteArray) {
         if (data.isEmpty()) return
-        input(write(String(data, Charsets.UTF_8)))
+        writes(String(data, Charsets.UTF_8)).forEach(::input)
     }
 
     /** [writeBytes], with a way to wait until Rex has the bytes; for tests. */
-    internal fun writeBytesAwaitable(data: ByteArray): CompletableDeferred<Unit> = input(write(String(data, Charsets.UTF_8)))
+    internal fun writeBytesAwaitable(data: ByteArray): CompletableDeferred<Unit> =
+        writes(String(data, Charsets.UTF_8)).map(::input).last()
 
     /**
      * Sends [file] to a pane with Rex's native upload. [sessionId] and [blockId] fix the target when
@@ -864,7 +865,7 @@ class PocketSession(
     suspend fun paste(text: String, sessionId: String? = null, blockId: String? = null) {
         if (text.isEmpty()) return
         val (sid, block) = if (sessionId != null && blockId != null) sessionId to blockId else requireBlock()
-        onPane(sid, block) { input(pasteCall(sid, block, text)).await() }
+        onPane(sid, block) { pastes(sid, block, text).map(::input).forEach { it.await() } }
     }
 
     /**
@@ -967,7 +968,7 @@ class PocketSession(
      */
     suspend fun replyTo(sessionId: String, blockId: String, text: String, enter: Boolean = true): Boolean =
         onPane(sessionId, blockId) {
-            if (text.isNotEmpty()) input(pasteCall(sessionId, blockId, text)).await()
+            if (text.isNotEmpty()) pastes(sessionId, blockId, text).map(::input).forEach { it.await() }
             if (enter) input(keyCall(sessionId, blockId, "enter", "", "", 0, "")).await()
             true
         } ?: false
@@ -999,6 +1000,14 @@ class PocketSession(
             true
         } ?: false
 
+    /**
+     * [text] as paste events whose requests each fit the connection's message limit. Rex ends the
+     * whole connection on a larger one (1009), so a big paste took every pane down with it and was
+     * lost; in pieces, sent in order, the program gets all of it.
+     */
+    private fun pastes(sid: String, block: String, text: String): List<InputCall> =
+        requestPieces(text, messageLimit()).map { pasteCall(sid, block, it) }
+
     private fun pasteCall(sid: String, block: String, text: String) = InputCall(
         "block.event",
         JSONObject()
@@ -1025,13 +1034,19 @@ class PocketSession(
             ),
     )
 
-    private fun write(text: String): InputCall {
+    /** [text] typed into the shown pane, in writes that each fit the message limit, as [pastes] are. */
+    private fun writes(text: String): List<InputCall> {
         val (sid, block) = requireBlock()
-        return InputCall(
-            WRITE_METHOD,
-            JSONObject().put("session_id", sid).put("block_id", block).put("args", JSONObject().put("data", text)),
-        )
+        return requestPieces(text, messageLimit()).map {
+            InputCall(
+                WRITE_METHOD,
+                JSONObject().put("session_id", sid).put("block_id", block).put("args", JSONObject().put("data", it)),
+            )
+        }
     }
+
+    /** The largest message the connection in use takes, as its welcome said; Rex's floor without one. */
+    private fun messageLimit(): Int = (clientRef.get()?.welcome?.maxMessageBytes ?: MIN_MESSAGE_BYTES).coerceAtLeast(MIN_MESSAGE_BYTES)
 
     /** Queues [call] behind everything typed before it; the result completes once Rex has it. */
     private fun input(call: InputCall): CompletableDeferred<Unit> {
@@ -2408,6 +2423,47 @@ private const val WRITE_METHOD = "com.superlogical.terminal.write"
  * character can take a few bytes of UTF-8 and JSON escaping, so this stays well under it.
  */
 private const val MAX_WRITE_BATCH = 8_000
+
+/** The largest message every Rex takes (its guide: never below 64 KiB). */
+internal const val MIN_MESSAGE_BYTES = 65_536
+
+/** Room in a request for everything around the text: ids, method, payload names. */
+private const val REQUEST_OVERHEAD = 4_096
+
+/**
+ * [text] cut into pieces whose JSON, in a request of at most [limitBytes], fits: each character
+ * counted at the most it can take written out (`\uXXXX`, six bytes, for anything but plain ASCII),
+ * cut after a newline in the piece's second half when there is one, never inside a surrogate pair.
+ * Text that fits is one piece, itself.
+ */
+internal fun requestPieces(text: String, limitBytes: Int): List<String> {
+    val budget = (limitBytes - REQUEST_OVERHEAD).coerceAtLeast(1_024)
+    fun cost(c: Char): Int = when {
+        c == '"' || c == '\\' || c == '/' -> 2
+        c.code in 0x20..0x7e -> 1
+        else -> 6
+    }
+    if (text.length * 6 <= budget || text.sumOf { cost(it) } <= budget) return listOf(text)
+    val pieces = ArrayList<String>()
+    var start = 0
+    while (start < text.length) {
+        var used = 0
+        var end = start
+        var newline = -1
+        while (end < text.length && used + cost(text[end]) <= budget) {
+            used += cost(text[end])
+            if (text[end] == '\n') newline = end + 1
+            end++
+        }
+        if (end < text.length) {
+            if (newline > start + (end - start) / 2) end = newline
+            else if (Character.isHighSurrogate(text[end - 1])) end--
+        }
+        pieces += text.substring(start, end)
+        start = end
+    }
+    return pieces
+}
 
 private fun String.firstCodePoint(): Int =
     if (isEmpty()) 0 else codePointAt(0)
