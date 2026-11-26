@@ -196,8 +196,8 @@ The whole screen is the terminal's paper; nothing sits on a band of a second gre
   Enter, the key pad sends the rest.
 - A status colour is the state's: green online/running, amber waiting/relaying, red failed. It never
   repeats what the line already says.
-- The appearance follows the phone. Both palettes are first-class: the terminal, the dock, the
-  sheets and the system bars switch together.
+- The appearance follows the phone by default. Settings → General → Design also offers Light
+  and Dark. The terminal, the dock, the sheets and the system bars switch together.
 - One primary action per screen, in `accent`; a list row is one card; a sheet is grouped cards of
   56 dp rows on the paper with a 24 dp top corner and a drag handle. A group's rows all have icons
   or none do, and its hairlines start where its labels do. The current item carries a check.

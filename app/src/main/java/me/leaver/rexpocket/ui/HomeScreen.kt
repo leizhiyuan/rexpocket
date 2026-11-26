@@ -39,6 +39,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -66,6 +68,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -87,6 +90,7 @@ import me.leaver.rexpocket.core.SessionView
 import me.leaver.rexpocket.core.TailnetPath
 import me.leaver.rexpocket.core.UpdateChannel
 import me.leaver.rexpocket.core.WindowInfo
+import me.leaver.rexpocket.data.DesignMode
 import me.leaver.rexpocket.data.HostStore
 import me.leaver.rexpocket.data.SavedHost
 import me.leaver.rexpocket.data.TailscaleSettings
@@ -159,6 +163,8 @@ internal fun HomeScreen(
     onTailscale: () -> Unit,
     alerts: Boolean,
     onAlerts: (Boolean) -> Unit,
+    designMode: DesignMode,
+    onDesignMode: (DesignMode) -> Unit,
     keyBarShift: Boolean,
     keyBarAlt: Boolean,
     onKeyBarShift: (Boolean) -> Unit,
@@ -409,6 +415,8 @@ internal fun HomeScreen(
             },
             alerts = alerts,
             onAlerts = toggleAlerts,
+            designMode = designMode,
+            onDesignMode = onDesignMode,
             keyBarShift = keyBarShift,
             keyBarAlt = keyBarAlt,
             onKeyBarShift = onKeyBarShift,
@@ -804,6 +812,8 @@ private fun SettingsSheet(
     onTailscale: () -> Unit,
     alerts: Boolean,
     onAlerts: () -> Unit,
+    designMode: DesignMode,
+    onDesignMode: (DesignMode) -> Unit,
     keyBarShift: Boolean,
     keyBarAlt: Boolean,
     onKeyBarShift: (Boolean) -> Unit,
@@ -825,10 +835,6 @@ private fun SettingsSheet(
     val switchedToStable = stringResource(R.string.update_channel_switched_stable)
     val switchedToPreview = stringResource(R.string.update_channel_switched_preview)
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.settings)) {
-        // Four cards, each one answer to a different question: how the phone reaches a computer,
-        // what the terminal looks and feels like, which build it installs, and what the app is. A
-        // flat list of rows made every one of them equally far away; adding a host is not here at
-        // all, because the list it belongs to has its own + button.
         Group(stringResource(R.string.settings_group_connection)) {
             SheetItem(
                 label = stringResource(R.string.tailscale_title),
@@ -849,6 +855,9 @@ private fun SettingsSheet(
                 keepOpen = true,
                 onClick = onAlerts,
             )
+        }
+        Group(stringResource(R.string.settings_group_general)) {
+            DesignSetting(designMode, onDesignMode)
         }
         Group(stringResource(R.string.settings_group_terminal)) {
             SheetItem(
@@ -920,6 +929,42 @@ private fun SettingsSheet(
         }
     }
 }
+
+@Composable
+private fun SheetScope.DesignSetting(mode: DesignMode, onSelect: (DesignMode) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        SheetItem(
+            label = stringResource(R.string.settings_design),
+            icon = R.drawable.ic_settings,
+            detail = stringResource(mode.label),
+            keepOpen = true,
+            onClick = { expanded = true },
+        )
+        Box(Modifier.align(Alignment.BottomEnd)) {
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                for (option in DesignMode.entries) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(option.label), fontSize = TextStyles.body) },
+                        trailingIcon = { if (option == mode) Glyph(R.drawable.ic_check, Colors.accent, size = 20.dp) },
+                        modifier = Modifier.semantics { selected = option == mode },
+                        onClick = {
+                            onSelect(option)
+                            expanded = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val DesignMode.label: Int
+    get() = when (this) {
+        DesignMode.System -> R.string.design_system
+        DesignMode.Light -> R.string.design_light
+        DesignMode.Dark -> R.string.design_dark
+    }
 
 @Composable
 private fun EmptyHome(onAdd: () -> Unit) {

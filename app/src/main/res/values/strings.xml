@@ -151,6 +151,11 @@
     <string name="settings">Settings</string>
     <string name="settings_source">Source on GitHub</string>
     <string name="settings_group_connection">Connection</string>
+    <string name="settings_group_general">General</string>
+    <string name="settings_design">Design</string>
+    <string name="design_system">System</string>
+    <string name="design_light">Light</string>
+    <string name="design_dark">Dark</string>
     <string name="settings_group_terminal">Terminal</string>
     <string name="settings_group_version">Version</string>
     <string name="settings_group_about">About</string>

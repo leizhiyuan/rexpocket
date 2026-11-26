@@ -57,7 +57,8 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   Android asks once for permission to install it. The update channel says what counts as newer:
   **Stable** takes finished releases only, **Preview** takes the newest published, alphas and betas
   included. A build that has never chosen follows what it came from.
-- **Light and dark,** following the phone, in English and Simplified Chinese.
+- **Light and dark.** Follow the phone by default, or choose Light or Dark in Settings → General → Design.
+  The interface is available in English and Simplified Chinese.
 
 ## Set up the computer
 
