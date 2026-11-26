@@ -92,6 +92,12 @@ jobs:
           ./gradlew --no-daemon $GRADLE_ARGS :app:assemble${{ matrix.task }} :app:assemble${{ matrix.task }}AndroidTest
           unzip -l app/build/outputs/apk/${{ matrix.build }}/app-${{ matrix.build }}.apk | grep -E 'lib/|baseline.prof'
 
+      # The APK people install is the `optimized` build, without proguard-test-keep.pro: R8 may remove
+      # what the test keep rules hold on to. The minified job launches that exact build type too.
+      - name: Build the optimized APK
+        if: matrix.build == 'minified'
+        run: ./gradlew --no-daemon $GRADLE_ARGS :app:assembleOptimized
+
       # A real OpenSSH server on the runner, which the emulator reaches as 10.0.2.2: one port with an
       # Ed25519 host key, one with an RSA one; sign-in with a password, an Ed25519 key or an RSA key.
       - name: Start an SSH server for the minified tests
@@ -132,8 +138,24 @@ jobs:
           cat > "$RUNNER_TEMP/run-minified.sh" <<'SH'
           set -u
           adb shell getprop ro.build.version.sdk
-          mkdir -p out
+          mkdir -p out/launch
           status=0
+          # Launch the optimized APK as installed from CI: it must open and stay up.
+          PKG=me.leaver.rexpocket
+          adb logcat -c || true
+          adb install -r app/build/outputs/apk/optimized/app-optimized.apk
+          adb shell am start -W -n $PKG/.MainActivity || true
+          sleep 20
+          adb logcat -d > out/launch/logcat.txt || true
+          cp app/build/outputs/mapping/optimized/mapping.txt out/launch/ 2>/dev/null || true
+          if adb shell pidof $PKG > /dev/null && ! grep -q "FATAL EXCEPTION\|Fatal signal" out/launch/logcat.txt; then
+            echo "RESULT optimized launch: passed"
+          else
+            echo "RESULT optimized launch: FAILED"
+            grep -A40 "FATAL EXCEPTION\|Fatal signal" out/launch/logcat.txt | head -80 || true
+            status=1
+          fi
+          adb uninstall $PKG || true
           for class in \
               me.leaver.rexpocket.MinifiedSmokeTest \
               me.leaver.rexpocket.net.TailnetNodeInstrumentedTest \
