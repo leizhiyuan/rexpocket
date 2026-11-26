@@ -532,16 +532,25 @@ class PocketSession(
      * still exists; otherwise on the pane Rex has focused. With [windowId] it opens on that tab
      * instead, on its remembered or focused pane. The pane is focused before the view is published,
      * so the terminal never shows another pane first, and one focus call moves the tab and the pane.
+     *
+     * With [trustBootstrap], a session that `session.bootstrap` chose on this connection is not
+     * attached again: the bootstrap attached it and sent its view, which events have kept current
+     * since (see rex-protocol, `session.bootstrap`). That saves a round trip when the app goes back
+     * to the last tab at launch.
      */
-    suspend fun openSession(sessionId: String, rememberedBlock: String? = null, windowId: String? = null) {
+    suspend fun openSession(sessionId: String, rememberedBlock: String? = null, windowId: String? = null, trustBootstrap: Boolean = false) {
         preferred = sessionId
         // The pane left behind goes back to the desktop, or it stays at the phone's size.
         if (ownedSession != sessionId) disownQuietly()
         // Released panes stay released across sessions; only the shown pane's state is reset here.
         updateState { it.copy(owning = false, released = false) }
-        val payload = rpc("session.attach", JSONObject().put("session_id", sessionId))
-        attachedSessions += sessionId
-        var view = parseView(payload.getJSONObject("view"))
+        val known = _state.value.takeIf { trustBootstrap && it.activeSessionId == sessionId && sessionId in attachedSessions }
+            ?.views?.get(sessionId)
+        var view = known ?: run {
+            val payload = rpc("session.attach", JSONObject().put("session_id", sessionId))
+            attachedSessions += sessionId
+            parseView(payload.getJSONObject("view"))
+        }
         // The phone's own place: the asked-for tab, else where it was last time. Rex's focus is not
         // moved, so opening a tab here leaves the desktop on whatever it is showing.
         val pane = view.paneToShow(rememberedBlock ?: places[sessionId], windowId)

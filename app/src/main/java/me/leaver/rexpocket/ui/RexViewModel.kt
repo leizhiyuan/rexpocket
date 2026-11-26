@@ -1267,7 +1267,8 @@ class RexViewModel @JvmOverloads constructor(
             return
         }
         try {
-            s.openSession(target, rememberedPane(link.id, target))
+            // The bootstrap usually chose this session already (it asked for it): no second attach.
+            s.openSession(target, rememberedPane(link.id, target), trustBootstrap = true)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {

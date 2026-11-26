@@ -86,11 +86,16 @@ class LaunchTest {
 
     @Test
     fun killedOnTheTerminalComesBackToTheSameSession() {
+        val attaches = { desk.rex.calls.count { it == "session.attach ${desk.ids[1]}" } }
+        val before = attaches()
         val m = launch(killedOnTerminal = true)
         compose.awaitThat { m.route.value == Route.Term }
         compose.waitForIdle()
         assertEquals(desk.ids[1], m.pocket.value.activeSessionId)
         assertEquals(Route.Term, m.route.value)
+        // session.bootstrap asked for it and attached it, with its view: no second round trip.
+        assertEquals("session.attach after the bootstrap that chose it", before, attaches())
+        assertTrue(m.pocket.value.view?.focusedBlock() != null)
     }
 
     @Test
