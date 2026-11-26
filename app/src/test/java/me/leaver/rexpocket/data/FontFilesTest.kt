@@ -108,4 +108,27 @@ class FontFilesTest {
         }
         assertTrue(files.available())
     }
+
+    /** A start verifies the chosen family before any other, and hands it on before the others are read. */
+    @Test fun theChosenFamilyIsCheckedFirstAndAloneBeforeItIsUsed() {
+        val checked = mutableListOf<String>()
+        var checkedWhenChosen: List<String>? = null
+        val installed = installedFonts(
+            selected = "b",
+            ids = listOf("a", "b", "c"),
+            available = { id -> checked += id; id != "c" },
+            onSelected = { ok -> assertTrue(ok); checkedWhenChosen = checked.toList() },
+        )
+        assertEquals(listOf("b"), checkedWhenChosen)
+        assertEquals(setOf("a", "b"), installed)
+        assertEquals("each family is read once", 3, checked.size)
+    }
+
+    @Test fun theSystemFontReadsNoFamilyBeforeItIsUsed() {
+        val checked = mutableListOf<String>()
+        installedFonts(SYSTEM_FONT, listOf("a"), { checked += it; true }) { ok ->
+            assertFalse(ok)
+            assertEquals(emptyList<String>(), checked)
+        }
+    }
 }

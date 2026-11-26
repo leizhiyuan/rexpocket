@@ -87,3 +87,20 @@ internal class FontFiles(private val root: File, private val font: TerminalFont)
         private const val MAX_BYTES = 16_777_216L
     }
 }
+
+/**
+ * The font check at start: whether [selected]'s family is installed and whole is told to
+ * [onSelected] first, so the terminal gets its face without waiting for the rest; then every other
+ * family of [ids] is checked, for the font dialog. Each family is read (hashed) once. Gives back the
+ * installed ones.
+ */
+internal fun installedFonts(
+    selected: String,
+    ids: Collection<String>,
+    available: (String) -> Boolean,
+    onSelected: (Boolean) -> Unit,
+): Set<String> {
+    val chosen = selected in ids && available(selected)
+    onSelected(chosen)
+    return ids.filter { it != selected && available(it) }.toSet() + listOfNotNull(selected.takeIf { chosen })
+}

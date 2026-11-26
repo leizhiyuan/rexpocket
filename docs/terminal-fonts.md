@@ -17,7 +17,7 @@ Selecting JetBrains Mono downloads its regular, bold, italic and bold italic fac
 
 Nerd Font files come from the pinned Nerd Fonts 3.4.0 commit, also checked individually against SHA-256. Sources, styles, checksums and cache versions live in `data/FontCatalog.kt`. Font licenses and the Nerd Fonts attribution/license list are included in `app/src/main/assets/licenses/`. Each family has its own verified cache. Existing JetBrains Mono downloads and the previous boolean font preference migrate without downloading again.
 
-The complete verified family is saved in private application files and the selection in preferences. After downloading, it works offline, including after restarting the app or switching to system monospace and back. A failed or incomplete download keeps the previous selection; tap the font again to retry. Network access to GitHub is needed for the first download.
+The complete verified family is saved in private application files and the selection in preferences. After downloading, it works offline, including after restarting the app or switching to system monospace and back. A failed or incomplete download keeps the previous selection; tap the font again to retry. At start the chosen family is checked first and its face used at once; the other families are checked after it, for the font dialog, so a pane opening at launch is laid out once, in the chosen font (going back to the last tab waits up to a second for it). Network access to GitHub is needed for the first download.
 
 On Android 10+, a custom font family supplies all four styles with the same ASCII advance (0.6 em). Android 8–9 uses the downloaded regular face with synthetic styles. JetBrains Mono does not include Chinese glyphs; CJK continues to use Android font fallback.
 

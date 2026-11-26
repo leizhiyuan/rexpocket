@@ -63,6 +63,7 @@ import me.leaver.rexpocket.data.FontCatalog
 import me.leaver.rexpocket.data.SYSTEM_FONT
 import me.leaver.rexpocket.data.TerminalFontState
 import me.leaver.rexpocket.data.downloadedTypeface
+import me.leaver.rexpocket.data.installedFonts
 import me.leaver.rexpocket.data.SavedHost
 import me.leaver.rexpocket.data.HomeFolds
 import me.leaver.rexpocket.data.HomeMarks
@@ -559,6 +560,9 @@ class RexViewModel @JvmOverloads constructor(
     val terminalTypeface = MutableStateFlow(Typeface.MONOSPACE)
     internal val terminalFont = MutableStateFlow(TerminalFontState())
 
+    /** Done once the chosen font's face is known at start; see [resumeInto]. */
+    private val fontChecked = kotlinx.coroutines.CompletableDeferred<Unit>()
+
     internal fun selectTerminalFont(id: String) {
         if (terminalFont.value.initializing || terminalFont.value.downloading != null) return
         if (id == SYSTEM_FONT) {
@@ -668,19 +672,19 @@ class RexViewModel @JvmOverloads constructor(
         viewModelScope.launch { route.collect { saved[KEY_TERMINAL_OPEN] = it == Route.Term } }
         viewModelScope.launch {
             val saved = store.terminalFont()
-            val (available, face) = withContext(Dispatchers.IO) {
-                val available = fontFiles.filterValues { it.available() }.keys.toSet()
-                val font = FontCatalog.find(saved)
-                val face = if (saved in available && font != null) runCatching {
-                    downloadedTypeface(fontFiles.getValue(saved).directory, font)
-                }.getOrNull() else null
-                available to face
+            var face: Typeface? = null
+            // The chosen family is checked and its face published before the others are read, so
+            // a pane that opens at launch is measured in it, not in monospace and then again.
+            val available = withContext(Dispatchers.IO) {
+                installedFonts(saved, fontFiles.keys, { fontFiles.getValue(it).available() }) { ok ->
+                    val font = FontCatalog.find(saved)
+                    face = if (ok && font != null) runCatching { downloadedTypeface(fontFiles.getValue(saved).directory, font) }.getOrNull() else null
+                    face?.let { terminalTypeface.value = it }
+                    fontChecked.complete(Unit)
+                }
             }
             val selected = if (face != null) saved else SYSTEM_FONT
-            if (face != null) {
-                fontFaces[saved] = face
-                terminalTypeface.value = face
-            }
+            face?.let { fontFaces[saved] = it }
             store.setTerminalFont(selected)
             terminalFont.value = TerminalFontState(
                 selected = selected, available = available, initializing = false,
@@ -1275,7 +1279,9 @@ class RexViewModel @JvmOverloads constructor(
             resumePending = false
             return
         }
-        // Opening took a round trip, and the person may have moved in it.
+        // The pane is laid out once, in the chosen font: its face is nearly always known by now.
+        withTimeoutOrNull(FONT_WAIT_MS) { fontChecked.await() }
+        // Opening (and the font) may have taken a while, and the person may have moved in it.
         if (resumePending && route.value == Route.Home && _opening.value == null && focusId.value == link.id) route.value = Route.Term
         resumePending = false
     }
@@ -1979,6 +1985,9 @@ sealed interface HomeNotice {
     /** Connecting a host on another account switched the tailnet to it; Undo switches back. */
     data class AccountSwitched(val switch: AccountSwitch) : HomeNotice
 }
+
+/** How long going back to the last tab at launch waits for the chosen font's face. */
+private const val FONT_WAIT_MS = 1_000L
 
 /** How long a launcher shortcut waits for its host before it leaves the person on the list. */
 private const val SHORTCUT_WAIT_MS = 30_000L
