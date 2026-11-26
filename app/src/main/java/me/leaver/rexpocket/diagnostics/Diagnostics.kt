@@ -44,7 +44,8 @@ object Diagnostics {
     /** Adds a line for the report: to the journal, and to the recording when one is running. */
     fun event(tag: String, message: String) {
         val line = moment.add(tag, message)
-        journal?.line(line)
+        // Written on the journal's own thread: the main thread says a lot at launch.
+        journal?.post(line)
         val current = session
         if (current != null && !current.line(line)) session = null
         if (BuildConfig.DEBUG) Log.i(tag, message)
@@ -127,7 +128,7 @@ object Diagnostics {
      * recording, when someone made one.
      */
     fun report(context: Context, facts: List<ReportedFact>, secrets: List<String>, limit: Int = Int.MAX_VALUE): String {
-        val recent = journal?.tail(REPORT_LINES) ?: moment.snapshot()
+        val recent = journal?.let { it.flush(); it.tail(REPORT_LINES) } ?: moment.snapshot()
         val sections = listOfNotNull(
             ReportSection("the last few hours", recent),
             lastRecording(context)?.let { ReportSection("the recording", it) },
@@ -216,6 +217,8 @@ object Diagnostics {
         private val previous: Thread.UncaughtExceptionHandler?,
     ) : Thread.UncaughtExceptionHandler {
         override fun uncaughtException(thread: Thread, error: Throwable) {
+            // What was still queued for the journal goes to disk before the process does.
+            runCatching { journal?.flush() }
             val current = session
             if (current != null) {
                 current.line("crash on ${thread.name}: ${error.javaClass.name}: ${error.message}")

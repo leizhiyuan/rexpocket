@@ -3,6 +3,10 @@ package me.leaver.rexpocket.core
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executor
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * The last few hours of what the app did, written as it happens and rotated.
@@ -11,12 +15,33 @@ import java.io.FileOutputStream
  * they open the diagnostics sheet: it runs all along, keeps a bounded tail on the phone, and the
  * report takes the end of it. It never leaves the phone unmasked (see [DiagnosticReport]) and can
  * never grow: at [limitBytes] the file is rotated to `.1`, and only [backups] of those are kept.
+ *
+ * The app [post]s its lines: they are written on [executor], one thread, in the order they came,
+ * so the main thread never waits on the disk. [flush] waits for what is queued: a crash and a
+ * report call it.
  */
 class EventJournal(
     private val file: File,
     private val limitBytes: Long = LIMIT_BYTES,
     private val backups: Int = BACKUPS,
+    executor: Executor? = null,
 ) {
+    private val executor: Executor by lazy {
+        executor ?: Executors.newSingleThreadExecutor { r -> Thread(r, "rexpocket-journal").apply { isDaemon = true } }
+    }
+
+    /** Appends [text] on the journal's own thread, after every line posted before it. */
+    fun post(text: String) {
+        runCatching { executor.execute { line(text) } }
+    }
+
+    /** Waits up to [timeoutMs] for every line posted so far to be written. */
+    fun flush(timeoutMs: Long = FLUSH_MS) {
+        val done = CountDownLatch(1)
+        if (runCatching { executor.execute { done.countDown() } }.isFailure) return
+        runCatching { done.await(timeoutMs, TimeUnit.MILLISECONDS) }
+    }
+
     @Volatile private var out: BufferedWriter? = null
     @Volatile private var written = 0L
 
@@ -92,5 +117,6 @@ class EventJournal(
     private companion object {
         const val LIMIT_BYTES = 1L * 1024 * 1024
         const val BACKUPS = 1
+        const val FLUSH_MS = 1_000L
     }
 }

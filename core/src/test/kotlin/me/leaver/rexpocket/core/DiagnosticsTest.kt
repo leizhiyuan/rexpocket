@@ -174,6 +174,28 @@ class EventJournalTest {
         assertEquals(listOf("line 7", "line 8", "line 9", "line 10"), tail)
     }
 
+    /** The app's events are written on the journal's own thread, in the order they came, not on the caller's. */
+    @Test fun aPostedLineIsWrittenLaterInOrder() {
+        val held = java.util.concurrent.LinkedBlockingQueue<Runnable>()
+        val journal = EventJournal(File(temp.root, "recent.log"), executor = { held.put(it) })
+        journal.post("first")
+        journal.post("second")
+
+        assertFalse("nothing written on the caller's thread", File(temp.root, "recent.log").exists())
+        while (held.isNotEmpty()) held.take().run()
+        assertEquals("first\nsecond\n", File(temp.root, "recent.log").readText())
+    }
+
+    /** A crash and a report wait for what is still queued: flush returns once it is on disk. */
+    @Test fun flushWaitsForWhatIsQueued() {
+        val journal = journal(limit = 100_000)
+        for (i in 1..200) journal.post("line $i")
+        journal.flush()
+
+        assertEquals((1..200).map { "line $it" }, File(temp.root, "recent.log").readLines())
+        assertEquals(listOf("line 199", "line 200"), journal.tail(2))
+    }
+
     @Test fun theTailOfACurrentFileIsItsOwnEnd() {
         val journal = journal(limit = 1_000)
         for (i in 1..5) journal.line("line $i")
