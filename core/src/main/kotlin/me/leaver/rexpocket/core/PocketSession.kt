@@ -397,14 +397,47 @@ class PocketSession(
             retry.trySend(Unit)
             return
         }
+        checkOrReconnect("after the app came back")
+    }
+
+    /**
+     * Asks the live control connection one quick question and replaces it when that goes
+     * unanswered. An answer that is an error is still an answer.
+     */
+    private fun checkOrReconnect(why: String) {
         val client = clientRef.get() ?: return
         val scope = runnerScope ?: return
         scope.launch {
-            val alive = runCatching { client.call("session.list", null, timeoutMs = LIVENESS_MS) }.isSuccess
-            if (!alive && clientRef.get() === client) {
-                trace("control connection did not answer after the app came back; reconnecting")
+            if (!answers(client) && clientRef.get() === client) {
+                trace("control connection did not answer $why; reconnecting")
                 reconnectNow()
             }
+        }
+    }
+
+    private suspend fun answers(client: RexClient): Boolean = try {
+        client.call("session.list", null, timeoutMs = LIVENESS_MS)
+        true
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: RexCallException) {
+        true
+    } catch (e: Exception) {
+        false
+    }
+
+    /**
+     * The phone's network changed. A connection on it is redialed at once, as its socket died with
+     * the network. With [roams] it goes through a tailnet tunnel instead (Tailscale's or Netbird's
+     * userspace TCP over WireGuard), which follows the phone onto the new network: a live one is
+     * asked first and kept when it answers, so a roam costs no new connection, no re-read of every
+     * pane and no new snapshot.
+     */
+    fun networkChanged(roams: Boolean) {
+        if (roams && _state.value.phase == Phase.Live && clientRef.get() != null) {
+            checkOrReconnect("after a network change")
+        } else {
+            reconnectNow()
         }
     }
 
@@ -419,17 +452,7 @@ class PocketSession(
             active.first { it }
             delay(livenessEveryMs)
             if (!active.value) continue
-            val alive = try {
-                client.call("session.list", null, timeoutMs = LIVENESS_MS)
-                true
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: RexCallException) {
-                true
-            } catch (e: Exception) {
-                false
-            }
-            if (!alive && clientRef.get() === client) {
+            if (!answers(client) && clientRef.get() === client) {
                 trace("control connection did not answer its check; reconnecting")
                 reconnectNow()
                 return

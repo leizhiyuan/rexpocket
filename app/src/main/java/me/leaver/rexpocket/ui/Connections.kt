@@ -266,13 +266,21 @@ class Connections private constructor(private val app: Application, val nodes: T
      * socket to die, and a tailnet node in trouble starts again. A network Android has just
      * validated gives such a node, or a start that failed on the network, another go.
      */
+    /** Network changes [network] told of, and their count and the watch when the app last left the screen. */
+    private val networkMoves = java.util.concurrent.atomic.AtomicLong()
+    private var movesWhenLeft = 0L
+    private var leftWithWatch = false
+
     private val network = NetworkWatcher(
         app,
         onValidated = { scope.launch { control.networkChanged() } },
     ) {
         scope.launch {
             control.networkChanged()
-            fleet.reconnectAll()
+            networkMoves.incrementAndGet()
+            // A host reached through the tailnet rides its tunnel, which follows the phone onto the
+            // new network: it is checked and kept when it answers. Direct and SSH hosts redial.
+            fleet.reconnectAll { id -> this@Connections[id]?.let { it.route.value?.viaTailnet ?: it.target.viaTailscale } == true }
         }
     }.also { it.start() }
 
@@ -392,9 +400,17 @@ class Connections private constructor(private val app: Application, val nodes: T
     fun setForeground(visible: Boolean) {
         screenSeen = true
         val returning = visible && !foreground.value
+        if (!visible && foreground.value) {
+            movesWhenLeft = networkMoves.get()
+            leftWithWatch = Alerts.enabled.value
+        }
         foreground.value = visible
         if (visible) settledAway.value = false
-        if (returning && _links.value.values.any { it.target.viaTailscale }) {
+        // Android may have cut the node's sockets while the app was away without the watch holding
+        // its network; with the watch, the node heard of each network change itself. A rebind
+        // drops every path and finds it again, so it is not done on every return.
+        val maybeCut = !leftWithWatch || networkMoves.get() != movesWhenLeft
+        if (returning && maybeCut && _links.value.values.any { it.target.viaTailscale }) {
             scope.launch(Dispatchers.IO) { nodeFor(tailnet.value.backend).resetNetwork() }
         }
         fleet.setActive(visible)

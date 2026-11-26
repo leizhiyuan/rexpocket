@@ -63,4 +63,36 @@ class LivenessTest {
             rex.close()
         }
     }
+
+    /**
+     * A network change: a host reached through a tailnet tunnel, which follows the phone onto the
+     * new network, keeps a connection that still answers; a direct one redials at once.
+     */
+    @Test
+    fun aNetworkChangeKeepsATunnelledConnectionThatAnswers() = runBlocking {
+        val rex = ScriptedRex()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val session = PocketSession(rex.endpoint)
+        try {
+            session.start(scope)
+            withTimeout(10_000) { session.awaitReady() }
+            val asked = lists(rex)
+            session.networkChanged(roams = true)
+            withTimeout(5_000) { while (lists(rex) == asked) delay(20) }
+            delay(500)
+            assertEquals("a tunnelled connection that answers is kept", 1, bootstraps(rex))
+            rex.hold("session.list")
+            session.networkChanged(roams = true)
+            withTimeout(10_000) { while (bootstraps(rex) < 2) delay(50) }
+            rex.release("session.list")
+            withTimeout(5_000) { while (session.state.value.phase != Phase.Live) delay(20) }
+            session.networkChanged(roams = false)
+            withTimeout(5_000) { while (bootstraps(rex) < 3) delay(50) }
+        } finally {
+            rex.release("session.list")
+            session.stop()
+            scope.cancel()
+            rex.close()
+        }
+    }
 }

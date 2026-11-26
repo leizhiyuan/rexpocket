@@ -108,9 +108,12 @@ class Fleet(private val scope: CoroutineScope) {
         _members.value.values.forEach { it.session.setWatching(on) }
     }
 
-    /** The phone's network changed: every member redials at once. */
-    fun reconnectAll() {
-        _members.value.values.forEach { it.session.reconnectNow() }
+    /**
+     * The phone's network changed: every member redials at once, except those whose connection
+     * [roams] with the phone (a tailnet tunnel), which are checked first; see [PocketSession.networkChanged].
+     */
+    fun reconnectAll(roams: (String) -> Boolean = { false }) {
+        _members.value.values.forEach { it.session.networkChanged(roams(it.hostId)) }
     }
 
     /** Each member's state, by host id. */

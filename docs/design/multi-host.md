@@ -101,7 +101,14 @@ person wants them, not as long as the screen. Code: `WatchService` (the anchor),
   what it brings back. A tailnet let go takes its hosts with it; one disconnected by hand keeps its
   hosts off. See [tailnet-control.md](tailnet-control.md).
 - **Network and battery.** `NetworkWatcher` (a default-network callback) redials every host at once
-  when the network changes or comes back. Away from the screen a host that stays down is retried
+  when a network comes after none. A move from one network straight to another is told 2 s after
+  the last move, and only if the network then differs from the one the hosts are on, so a Wi-Fi
+  edge's flap is one redial or none. A host reached through the tailnet is asked a `session.list`
+  first and kept when it answers in 4 s: its connection rides the tunnel, which follows the phone
+  (`PocketSession.networkChanged`). The tailnet node rebinds only for another network, interface
+  or address set (not for DNS, routes or a rotated privacy address), 2 s after a burst settles
+  (`LinkChanges`), and on a return to the screen only when the watch did not hold the network while
+  away or the network changed meanwhile. Away from the screen a host that stays down is retried
   with the same backoff, but capped at a minute instead of 8 s (`MAX_AWAY_BACKOFF_MS`); the screen
   coming back, a network change and a notification's Reply skip the wait. No wake locks and no
   alarms. The WebSocket ping is every 120 s, Rex's own schedule: a 30 s one was outgoing data

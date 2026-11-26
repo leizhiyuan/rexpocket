@@ -235,22 +235,28 @@ abstract class TailnetBox(protected val context: Context) : TailnetNode {
     private fun watchNetwork() {
         val manager = connectivity ?: return
         if (networkCallback != null) return
+        val links = LinkChanges()
         val cb = object : ConnectivityManager.NetworkCallback() {
-            private var last: Network? = null
-
-            override fun onAvailable(network: Network) {
-                if (last != null && last != network) resetNetwork()
-                last = network
-            }
-
+            // Android follows each new default network's onAvailable with its link properties, and
+            // calls this again for every change of them: DNS servers, routes, a rotated IPv6
+            // privacy address. Only a new network, interface or address set is worth a rebind.
             override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
-                if (network == last) resetNetwork()
+                if (links.changed(linkKey(network, linkProperties))) resetSoon.poke()
             }
         }
         runCatching { manager.registerDefaultNetworkCallback(cb) }.onSuccess { networkCallback = cb }
     }
 
+    /**
+     * A burst of link changes (a hand-over, then the addresses settling) is one rebind, made
+     * [LinkChanges.DEBOUNCE_MS] after the last, off the callback's thread: the node's reset waits
+     * on its own rebind and STUN.
+     */
+    private val resetSoon = Debounce(LinkChanges.DEBOUNCE_MS) { resetter.execute { resetNetwork() } }
+    private val resetter by lazy { Executors.newSingleThreadExecutor { Thread(it, "tailnet-reset") } }
+
     private fun unwatchNetwork() {
+        resetSoon.cancel()
         val cb = networkCallback ?: return
         networkCallback = null
         runCatching { connectivity?.unregisterNetworkCallback(cb) }
