@@ -1908,7 +1908,8 @@ class PocketSession(
                         launch { sizeLoop(sid, blockId) }
                         ownershipLoop(sid, blockId)
                     }
-                    val stream = TerminalStream({ endpoint }, httpFactory, trace) { ticket(sid, blockId) }
+                    // Let go after a minute with the app away, and taken up again on its return.
+                    val stream = TerminalStream({ endpoint }, httpFactory, trace, visible = active) { ticket(sid, blockId) }
                     streams += stream
                     try {
                         var flowing = false
