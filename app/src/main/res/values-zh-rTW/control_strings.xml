@@ -32,12 +32,12 @@
 
     <string name="tailnet_use">保持連線</string>
     <string name="tailnet_use_open">應用程式開啟期間</string>
-    <string name="tailnet_use_open_body">RexPocket 開啟時一直在線，它上面的主機可以立即連線。</string>
+    <string name="tailnet_use_open_body">RexPocket 開啟時一直保持連線，它上面的主機可以立即連線。</string>
     <string name="tailnet_use_needed">只在主機需要時</string>
     <string name="tailnet_use_needed_body">它上面的主機連線時啟動，最後一台主機離開一段時間後停止。比較省電；第一次連線要等它啟動。</string>
     <string name="tailnet_linger">多久後停止</string>
     <string name="tailnet_linger_body">在沒有主機使用之後</string>
-    <string name="tailnet_linger_choice_body">沒有主機時它保持在線多久，前景和背景都適用。</string>
+    <string name="tailnet_linger_choice_body">沒有主機時它保持連線多久，前景和背景都適用。</string>
     <string name="linger_1">1 分鐘</string>
     <string name="linger_5">5 分鐘</string>
     <string name="linger_15">15 分鐘</string>
@@ -48,9 +48,9 @@
     <string name="bg_keep_host_follow_body">如果離開時已連線，就在背景保持連線。</string>
     <string name="bg_keep_host_off">放開</string>
     <string name="bg_keep_tailnet_follow">跟隨它的主機</string>
-    <string name="bg_keep_tailnet_follow_body">只要它上面有主機在背景保持連線，它就保持在線；沒有主機後（依上面的時間）停止。</string>
+    <string name="bg_keep_tailnet_follow_body">只要它上面有主機在背景保持連線，它就保持連線；沒有主機後（依上面的時間）停止。</string>
     <string name="bg_keep_tailnet_always">一律</string>
-    <string name="bg_keep_tailnet_always_body">背景模式開啟時一律在線，即使沒有主機連線，開啟 RexPocket 時主機可以立即連線。比較耗電。</string>
+    <string name="bg_keep_tailnet_always_body">背景模式開啟時一律保持連線，即使沒有主機連線，開啟 RexPocket 時主機可以立即連線。比較耗電。</string>
     <string name="bg_keep_tailnet_off">放開</string>
     <string name="bg_keep_tailnet_off_body">離開 RexPocket 一分鐘後停止，它上面的主機也一起中斷；回來時再啟動。</string>
     <string name="bg_keep_mode_off">背景模式已關閉，RexPocket 關閉時一切都會停止。</string>
@@ -59,7 +59,7 @@
     <string name="tailnet_notify_body">離開應用程式時，在它需要登入或停止運作時通知你。</string>
 
     <string name="bg_watch_tailnet_title">%1$s 已連線</string>
-    <string name="bg_watch_tailnet_body">沒有主機連線 · 保持在線以便快速連線</string>
+    <string name="bg_watch_tailnet_body">沒有主機連線 · 保持連線以便快速連線</string>
     <string name="bg_watch_line">%1$s · %2$s</string>
     <string name="tailnet_alert_sign_in">%1$s 需要登入</string>
     <string name="tailnet_alert_sign_in_body">登入之前無法連到它上面的主機。輕觸以開啟 RexPocket。</string>

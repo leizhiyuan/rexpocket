@@ -40,7 +40,7 @@
     <string name="action_undo">Undo</string>
     <string name="home_reply_title">Reply to %1$s</string>
     <string name="home_reply_send">Send</string>
-    <string name="home_connect_and_create">Connect &amp; create</string>
+    <string name="home_connect_and_create">Connect and create</string>
     <string name="home_remove_host">Remove host…</string>
     <string name="home_confirm_remove">Remove %1$s?</string>
     <string name="home_remove">Remove</string>

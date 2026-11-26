@@ -124,7 +124,7 @@
     <string name="share_choose">选择其他窗格</string>
     <string name="share_pick">发送到哪个窗格？</string>
     <string name="share_no_hosts">请先添加主机，然后再分享。</string>
-    <string name="share_connect">轻触以连接</string>
+    <string name="share_connect">点按以连接</string>
 
     <string name="pane_reading">正在读取画面…</string>
     <string name="pane_no_picture">画面还没有来</string>

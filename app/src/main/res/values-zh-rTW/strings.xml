@@ -318,9 +318,9 @@
     <string name="gesture_select">選取文字</string>
     <string name="gesture_open_keyboard_hint">開啟鍵盤；全螢幕時也會收起鍵盤</string>
     <string name="gesture_toggle_keyboard_hint">開啟鍵盤，鍵盤已開啟時則收起</string>
-    <string name="gesture_tap_nothing_hint">只有讀取滑鼠的程式會收到這次點擊</string>
+    <string name="gesture_tap_nothing_hint">只有讀取滑鼠的程式會收到這次輕觸</string>
     <string name="gesture_full_screen_hint">進入或離開全螢幕</string>
-    <string name="gesture_double_tap_nothing_hint">不用點兩下：每次點擊立即生效</string>
+    <string name="gesture_double_tap_nothing_hint">不用輕觸兩下：每次輕觸立即生效</string>
     <string name="gesture_select_hint">選取手指下的單字；連結仍會提供</string>
     <string name="action_take_over">接管</string>
     <string name="action_release">交還</string>
