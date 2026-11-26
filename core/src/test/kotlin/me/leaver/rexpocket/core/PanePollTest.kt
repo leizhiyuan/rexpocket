@@ -27,3 +27,22 @@ class PanePollTest {
         until("left to the desk", timeoutMs = 3_000) { it.released }
     }
 }
+
+/** A pane that closed leaves nothing of itself in the published state; panes ever seen do not pile up. */
+class GonePanesTest {
+    @Test
+    fun aClosedPanesStatusAndTitleGoWithIt() = Scenario.run(FakeRexUnderTest()) {
+        val scripted = (rex as FakeRexUnderTest).rex
+        val (sid, tabs) = desk.newSession(tabs = 2)
+        val (window2, block2) = tabs[1]
+        phone.openSession(sid)
+        scripted.report(block2, "working", app = "omp")
+        scripted.setTitle(block2, "omp")
+        until("the second tab's status") { it.blockStatus[block2]?.state == "working" && it.titles[block2] != null }
+        desk.closeTab(sid, window2)
+        until("the closed pane forgotten") { st ->
+            st.views[sid]?.allBlocks()?.none { it.id == block2 } == true &&
+                block2 !in st.blockStatus && block2 !in st.records && block2 !in st.titles
+        }
+    }
+}

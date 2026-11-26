@@ -1792,6 +1792,7 @@ class PocketSession(
     private fun forgetGonePanes(view: SessionView) {
         forgetGoneProgress(view)
         val present = view.allBlocks().mapTo(HashSet()) { it.id }
+        forgetGoneStatus(view, present)
         val owned = ownedBlock
         if (owned != null && ownedSession == view.sessionId && owned !in present) {
             trace("pane $owned: gone while held; forgotten")
@@ -1803,6 +1804,30 @@ class PocketSession(
         val known = HashSet(present)
         _state.value.views.forEach { (sid, v) -> if (sid != view.sessionId) v.allBlocks().forEach { known += it.id } }
         releasedBlocks.retainAll(known)
+    }
+
+    /**
+     * Each pane's status, directory, program and title, for panes that were in the session's last
+     * view and are in no view now: a long run in the background saw every pane ever opened, and
+     * the published state kept summing the closed ones. Only a view at least as new as the one held
+     * counts, and a pane not yet in any view (reported before its view came) is kept.
+     */
+    private fun forgetGoneStatus(view: SessionView, present: Set<String>) {
+        val old = _state.value.views[view.sessionId] ?: return
+        if (view.revision < old.revision) return
+        val others = _state.value.views.filterKeys { it != view.sessionId }.values
+        val gone = old.allBlocks().map { it.id }.filter { id -> id !in present && others.none { v -> v.allBlocks().any { it.id == id } } }
+        if (gone.isEmpty()) return
+        for (id in gone) {
+            statusRecords -= id
+            pwds -= id
+            foregrounds -= id
+            titleOf -= id
+            sinceOf -= id
+            statusRead -= id
+            reportedDuringRead -= id
+        }
+        publishStatus()
     }
 
     /**
