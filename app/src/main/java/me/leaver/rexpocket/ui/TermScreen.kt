@@ -34,7 +34,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.union
@@ -75,7 +74,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -565,14 +563,12 @@ internal fun TermScreen(
     val empty = closed == null && view != null && view.windows.isEmpty()
     val dock = chrome.keyBar(keyBarShown(hardwareKeys, keyBarWithKeyboard)) && closed == null && !empty
     var bottomPx by remember { mutableIntStateOf(0) }
-    var panePx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
-    // Where the pane's cursor is, so the slide never takes its row out of view; a new pane starts
-    // with none until it has drawn.
-    var cursorTopPx by remember(focused?.id) { mutableStateOf<Int?>(null) }
-    // And where what it has drawn ends, so a short screen is moved only as far as it needs.
-    var drawnBottomPx by remember(focused?.id) { mutableStateOf<Int?>(null) }
-    val slide = imeShift(imeCover(), panePx, cursorTopPx, drawnBottomPx)
+    // Where the pane's cursor is, so the slide never takes its row out of view, and where what it
+    // has drawn ends, so a short screen is moved only as far as it needs; a new pane starts with
+    // neither until it has drawn. Read in layout only (imeSlide), as is the keyboard's inset.
+    val slide = remember(focused?.id) { PaneSlide() }
+    val keyboardCover = imeCover()
 
     // In full screen the phone's bars are hidden, so the pane reaches the edges; a swipe brings them
     // over it for a moment without taking room. A camera cutout keeps the text out from under it at
@@ -661,8 +657,8 @@ internal fun TermScreen(
                         onResize = { cols, rows, cw, ch -> onAct { setSize(cols, rows, cw, ch) } },
                         onSession = { termSession = it },
                         onKeyboard = { keyboard = it },
-                        onCursorTop = { cursorTopPx = it },
-                        onDrawnBottom = { drawnBottomPx = it },
+                        onCursorTop = { slide.cursorTopPx = it },
+                        onDrawnBottom = { slide.drawnBottomPx = it },
                         hardwareKeyboard = hardwareKeys,
                         // A horizontal swipe on the pane moves to the pane beside it, as the dots
                         // under it say there is one.
@@ -683,9 +679,9 @@ internal fun TermScreen(
                         modifier = Modifier.fillMaxSize()
                             // Moved, not resized: see imeShift. An offset keeps the pane's measured size
                             // - and so the grid the program was given - exactly as it was.
-                            .offset { IntOffset(0, -slide.roundToInt()) }
+                            .imeSlide(keyboardCover, slide)
                             .padding(horizontal = 3.dp, vertical = 2.dp)
-                            .onSizeChanged { panePx = it.height },
+                            .onSizeChanged { slide.paneHeightPx = it.height },
                     )
                 }
                 // Find, over the pane's top rows rather than taking a row from it: the program keeps
