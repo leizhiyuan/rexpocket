@@ -287,7 +287,26 @@ class PocketSession(
     private val attachedSessions: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     private val heardStatusFrom: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
-    private var lastResize: TermSize? = null
+    /** The size last sent for the pane; null when it has to be sent again. A change wakes the pane loops. */
+    @Volatile private var lastResize: TermSize? = null
+        set(value) {
+            field = value
+            wakePanes()
+        }
+
+    /**
+     * Bumped by what the pane loops wait on - a size to send, a release or Take over, an owner
+     * change Rex told of - so they wait for it instead of polling every few hundred milliseconds
+     * or asking Rex every few seconds.
+     */
+    private val paneWake = MutableStateFlow(0L)
+
+    private fun wakePanes() = paneWake.update { it + 1 }
+
+    /** Waits for a [wakePanes] after [seen], at most [timeoutMs]. */
+    private suspend fun awaitPaneWake(seen: Long, timeoutMs: Long) {
+        withTimeoutOrNull(timeoutMs) { paneWake.first { it != seen } }
+    }
     private var preferred: String? = null
     private var reconnectToken: String? = null
     private val ready = CompletableDeferred<Unit>()
@@ -1338,6 +1357,8 @@ class PocketSession(
                     val owner = payload.optNullableString("owner")
                     if (block != null && owner != null) tookOnDesk(block, owner)
                 }
+                // The pane's ownership loop asks the terminal now, instead of on its next round.
+                wakePanes()
                 refreshView(sid)
             }
             "block_closed", "window_closed", "window_created", "active_window_changed" ->
@@ -1963,11 +1984,12 @@ class PocketSession(
     /** Applies the phone's size to the pane whenever it changes, while this phone owns it. */
     private suspend fun sizeLoop(sid: String, blockId: String) {
         while (true) {
+            val seen = paneWake.value
             val size = sizeRef.get()
             // A released pane is the desktop's, at the desktop's size. Sending ours would resize it
             // behind the user's back, which is the one thing release promises not to do.
             if (blockId in releasedBlocks) {
-                delay(RELEASE_WAIT_MS)
+                awaitPaneWake(seen, RELEASE_WAIT_MS)
                 continue
             }
             if (lastResize != size) {
@@ -1998,7 +2020,11 @@ class PocketSession(
             // alone: a size set while the call above was out is forgotten by setSize before the
             // answer lands, and the answer then records the older size as sent. Waiting on that
             // left the pane at the old grid - full screen's bands - until the next size, a rotation.
-            while (lastResize != null && lastResize == sizeRef.get()) delay(100)
+            while (true) {
+                val now = paneWake.value
+                if (lastResize == null || lastResize != sizeRef.get()) break
+                awaitPaneWake(now, SIZE_WAIT_MS)
+            }
         }
     }
 
@@ -2110,6 +2136,7 @@ class PocketSession(
         trace("pane $block: release asked")
         // Marked before the lock, so an own_block already in flight sees it and gives the pane back.
         releasedBlocks.add(block)
+        wakePanes()
         markReleased()
         ownership.withLock {
             onPane(sid, block) {
@@ -2132,6 +2159,7 @@ class PocketSession(
         val (sid, block) = requireBlock()
         trace("pane $block: take over asked")
         releasedBlocks.remove(block)
+        wakePanes()
         onPane(sid, block) { takePane(sid, block) }
     }
 
@@ -2157,13 +2185,15 @@ class PocketSession(
         while (true) {
             // Nothing to keep while nobody is looking; this asks Rex a question every few seconds.
             active.first { it }
+            val seen = paneWake.value
             // The owner of a terminal is asked of the terminal itself: the view of a session does not
             // always follow an owner change, and a stale answer here means a pane that stays clipped.
             // A released pane is the desktop's on purpose; the loop still watches, so the button
             // can say who holds it, but it never takes it back on its own.
             if (blockId in releasedBlocks) {
                 if (_state.value.owning || !_state.value.released) markReleased()
-                delay(OWNERSHIP_CHECK_MS)
+                // Settled: Rex tells of the next owner change (block_owner_changed).
+                awaitPaneWake(seen, OWNERSHIP_SAFETY_MS)
                 continue
             }
             val mine = _state.value.clientId
@@ -2177,7 +2207,13 @@ class PocketSession(
                 val owning = owner == Owner.Client(mine)
                 if (_state.value.owning != owning) updateState { it.copy(owning = owning) }
             }
-            if (owner == null || mine == null || owner == Owner.Client(mine)) {
+            if (owner != null && mine != null && owner == Owner.Client(mine)) {
+                // Held: settled until Rex tells of an owner change. The slow round is a safety net.
+                wait = 0L
+                awaitPaneWake(seen, OWNERSHIP_SAFETY_MS)
+                continue
+            }
+            if (owner == null || mine == null) {
                 wait = 0L
             } else if (owner is Owner.Client && hadIt && ownedBy == mine) {
                 trace("pane $blockId: taken by ${owner.id}; leaving it there")
@@ -2468,11 +2504,20 @@ private const val STATUS_MIN_WAIT_MS = 250L
 /** How often a watched pane asks Rex who owns it, so it can take itself back when the desk does. */
 private const val OWNERSHIP_CHECK_MS = 3_000L
 
+/**
+ * How long a settled pane (held by the phone, or released) goes without its owner asked, when no
+ * `block_owner_changed` came: a safety net, as the events are what moves it.
+ */
+private const val OWNERSHIP_SAFETY_MS = 20_000L
+
+/** The longest the size loop sleeps without a wake before it looks at the size again. */
+private const val SIZE_WAIT_MS = 5_000L
+
 /** Wait before a resize Rex turned down is sent again. */
 private const val RESIZE_RETRY_MS = 1_000L
 
-/** How often a released pane looks again at whether it may resume sizing itself. */
-private const val RELEASE_WAIT_MS = 250L
+/** The longest a released pane's size loop sleeps without a wake (Take over wakes it). */
+private const val RELEASE_WAIT_MS = 5_000L
 
 /** Wait before the screen tries its pane again, after the connection or the stream let go. */
 private const val PANE_RETRY_MAX_MS = 5_000L
