@@ -693,7 +693,7 @@ class RexViewModel @JvmOverloads constructor(
         }
         // What is connected is what the list says: a host deleted or given a new address since
         // these connections were made does not keep the old one.
-        connections.reconcile(store.list())
+        connections.reconcile(hosts.value)
         // The watch notification's Stop turns alerts off from outside the app; the setting follows.
         viewModelScope.launch {
             Alerts.enabled.collect { on ->
@@ -1410,8 +1410,8 @@ class RexViewModel @JvmOverloads constructor(
         if (openedFromAlert || openedFromShare || route.value != Route.Home || focusId.value != null) return
         // Every host the person connected and did not disconnect, the one open last first, and
         // the hosts set to be always connected.
-        val last = store.lastHost()?.let { store.find(it) }
         val saved = store.list()
+        val last = store.lastHost()?.let { id -> saved.firstOrNull { it.id == id } }
         val wanted = background.value.atLaunch(last?.id, store.connectedHosts(), saved.map { it.id })
             .mapNotNull { id -> saved.firstOrNull { it.id == id } }
             // A tailnet disconnected by hand stays off, and its hosts with it, until asked for.

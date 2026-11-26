@@ -105,10 +105,14 @@ class Updater(context: Context) {
     private val prefs = app.getSharedPreferences("rexpocket", Context.MODE_PRIVATE)
     private val dir = File(app.cacheDir, "updates")
     private val current: AppVersion? = AppVersion.parse(BuildConfig.VERSION_NAME)
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
+    // Built at the first check or download, on its IO thread: the process's first OkHttpClient sets
+    // up TLS, which the view model's constructor on the main thread should not wait for.
+    private val client by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
 
     /** The release the last check offered, kept so that downloading it needs no second look. */
     private var offered: AppRelease? = null

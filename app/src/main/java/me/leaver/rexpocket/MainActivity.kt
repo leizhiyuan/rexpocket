@@ -40,6 +40,8 @@ class MainActivity : ComponentActivity() {
         // bug that kills the app is the one worth recording), and the crash handler that writes a
         // failure into it before the app goes.
         Diagnostics.install(this)
+        // libghostty, which the first pane's picture needs, loads beside the start rather than in front of it.
+        me.leaver.rexpocket.terminal.preloadGhostty()
         // A tapped alert opens its pane; a recreated activity has already acted on its intent.
         if (savedInstanceState == null) alert(intent)
         // Something shared from another app waits on its sheet for a tap; it is never sent on its own.

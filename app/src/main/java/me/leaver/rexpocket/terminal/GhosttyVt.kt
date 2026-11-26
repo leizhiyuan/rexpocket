@@ -1,12 +1,23 @@
 package me.leaver.rexpocket.terminal
 
 /**
+ * Loads libghostty on a thread of its own, at start: otherwise the first pane's snapshot waits for
+ * it. [GhosttyVt] loading it again is then nothing. A function outside [GhosttyVt], so calling it
+ * neither initializes that object on this thread nor, without the library, leaves it broken.
+ */
+internal fun preloadGhostty() {
+    Thread({ runCatching { System.loadLibrary(GHOSTTY_LIBRARY) } }, "ghostty-preload").apply { isDaemon = true }.start()
+}
+
+private const val GHOSTTY_LIBRARY = "ghostty_jni"
+
+/**
  * The official libghostty-vt, through native/ghostty/jni.c. A handle is one terminal; it is not
  * thread-safe, so [TerminalSession] serializes every call made with it.
  */
 internal object GhosttyVt {
     init {
-        System.loadLibrary("ghostty_jni")
+        System.loadLibrary(GHOSTTY_LIBRARY)
     }
 
     /** 0 when the terminal could not be made. */
