@@ -210,14 +210,14 @@ class SweepCostTest {
             withTimeout(15_000) { phone.awaitReady() }
             phone.openSession(opened)
             fun count(method: String) = rex.calls.count { it.startsWith("com.superlogical.terminal.$method") && it.endsWith(block) }
-            withTimeout(10_000) { while (count("program_status") < 4) delay(50) }
+            withTimeout(30_000) { while (count("program_status") < 4) delay(50) }
             assertEquals("working in the unopened tab", "working", phone.state.value.blockStatus[block]?.state)
             // The first read takes the title with everything else; the sweeps after it do not.
             assertEquals("title reads", 1, count("title"))
             // A pane with no record is asked its title again: a spinner may be all it says.
             rex.report(block, null)
             val before = count("title")
-            withTimeout(10_000) { while (count("title") < before + 2) delay(50) }
+            withTimeout(30_000) { while (count("title") < before + 2) delay(50) }
         } finally {
             phone.stop()
             scope.cancel()

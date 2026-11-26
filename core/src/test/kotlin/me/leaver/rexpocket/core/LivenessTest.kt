@@ -27,13 +27,13 @@ class LivenessTest {
         val session = PocketSession(rex.endpoint, livenessEveryMs = 300)
         try {
             session.start(scope)
-            withTimeout(10_000) { session.awaitReady() }
+            withTimeout(LOADED_MS) { session.awaitReady() }
             session.setActive(true)
-            withTimeout(5_000) { while (lists(rex) < 2) delay(20) }
+            withTimeout(LOADED_MS) { while (lists(rex) < 2) delay(20) }
             assertEquals(1, bootstraps(rex))
             // The socket stays open, but nothing comes back any more.
             rex.hold("session.list")
-            withTimeout(10_000) { while (bootstraps(rex) < 2) delay(50) }
+            withTimeout(LOADED_MS) { while (bootstraps(rex) < 2) delay(50) }
         } finally {
             rex.release("session.list")
             session.stop()
@@ -50,12 +50,12 @@ class LivenessTest {
         try {
             session.setActive(false)
             session.start(scope)
-            withTimeout(10_000) { session.awaitReady() }
+            withTimeout(LOADED_MS) { session.awaitReady() }
             val before = lists(rex)
             delay(1_500)
             assertEquals("liveness calls while away", before, lists(rex))
             session.setActive(true)
-            withTimeout(5_000) { while (lists(rex) < before + 2) delay(20) }
+            withTimeout(LOADED_MS) { while (lists(rex) < before + 2) delay(20) }
             assertTrue(session.state.value.phase == Phase.Live)
         } finally {
             session.stop()
@@ -75,24 +75,34 @@ class LivenessTest {
         val session = PocketSession(rex.endpoint)
         try {
             session.start(scope)
-            withTimeout(10_000) { session.awaitReady() }
+            withTimeout(LOADED_MS) { session.awaitReady() }
             val asked = lists(rex)
             session.networkChanged(roams = true)
-            withTimeout(5_000) { while (lists(rex) == asked) delay(20) }
-            delay(500)
+            withTimeout(LOADED_MS) { while (lists(rex) == asked) delay(20) }
+            // The answer is on its way back; a connection replaced would bootstrap again.
+            delay(1_000)
             assertEquals("a tunnelled connection that answers is kept", 1, bootstraps(rex))
+            assertEquals(Phase.Live, session.state.value.phase)
             rex.hold("session.list")
             session.networkChanged(roams = true)
-            withTimeout(10_000) { while (bootstraps(rex) < 2) delay(50) }
+            withTimeout(LOADED_MS) { while (bootstraps(rex) < 2) delay(50) }
             rex.release("session.list")
-            withTimeout(5_000) { while (session.state.value.phase != Phase.Live) delay(20) }
+            withTimeout(LOADED_MS) { while (session.state.value.phase != Phase.Live) delay(20) }
             session.networkChanged(roams = false)
-            withTimeout(5_000) { while (bootstraps(rex) < 3) delay(50) }
+            withTimeout(LOADED_MS) { while (bootstraps(rex) < 3) delay(50) }
         } finally {
             rex.release("session.list")
             session.stop()
             scope.cancel()
             rex.close()
         }
+    }
+
+    private companion object {
+        /**
+         * How long a wait for something that will happen may take: generous, as these run beside
+         * the whole suite. Each wait ends as soon as its condition holds.
+         */
+        const val LOADED_MS = 30_000L
     }
 }

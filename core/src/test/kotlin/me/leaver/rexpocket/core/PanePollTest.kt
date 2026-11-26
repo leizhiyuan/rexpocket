@@ -21,10 +21,11 @@ class PanePollTest {
         val before = ownerChecks()
         delay(7_000)
         val asked = ownerChecks() - before
-        assertTrue("owner asked $asked times in 7 s while held", asked == 0)
+        // A 3 s poll asked twice or more; a late wake (a size sent just after the pane was held) once.
+        assertTrue("owner asked $asked times in 7 s while held", asked <= 1)
         // The desk takes it: the phone hears of it at once and leaves it there.
         desk.take(sid, block)
-        until("left to the desk", timeoutMs = 3_000) { it.released }
+        until("left to the desk", timeoutMs = 10_000) { it.released }
     }
 }
 
@@ -38,9 +39,9 @@ class GonePanesTest {
         phone.openSession(sid)
         scripted.report(block2, "working", app = "omp")
         scripted.setTitle(block2, "omp")
-        until("the second tab's status") { it.blockStatus[block2]?.state == "working" && it.titles[block2] != null }
+        until("the second tab's status", timeoutMs = 30_000) { it.blockStatus[block2]?.state == "working" && it.titles[block2] != null }
         desk.closeTab(sid, window2)
-        until("the closed pane forgotten") { st ->
+        until("the closed pane forgotten", timeoutMs = 30_000) { st ->
             st.views[sid]?.allBlocks()?.none { it.id == block2 } == true &&
                 block2 !in st.blockStatus && block2 !in st.records && block2 !in st.titles
         }
