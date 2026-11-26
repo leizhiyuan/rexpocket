@@ -35,7 +35,9 @@ phone says yes.
   taken as the app leaves, and showed the terminal to anyone holding the phone. Before Android 13
   only Block screenshots blanks it, as that call does not exist there.
 - **Not locked:** notifications and their Reply and Interrupt (Android's own lock screen settings
-  decide what they show), the Quick Settings tiles, and background mode's connections.
+  decide what they show), the Quick Settings tiles, and background mode's connections. A cold start
+  connects the hosts as the activity is created, while the prompt is still up, so they are live by
+  the time it is answered; nothing of them is shown before (`StartConnectsTest`).
 
 ## Block screenshots
 

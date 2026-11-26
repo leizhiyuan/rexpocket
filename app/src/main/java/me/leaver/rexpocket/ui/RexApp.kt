@@ -126,6 +126,8 @@ internal fun RexPocketApp(
     var tailnetLeaving by remember { mutableStateOf(false) }
     // Each offer is shown once per app run; the settings row still has it afterwards.
     var offeredOnce by remember { mutableStateOf(emptySet<String>()) }
+    // MainActivity has already started the connections as it was created; this is for an app
+    // composed without it (the screen tests), and does nothing a second time.
     LaunchedEffect(Unit) { model.restore() }
     // Once a day: look for a newer build and say so. Nothing is downloaded until it is asked for.
     LaunchedEffect(Unit) { model.checkForUpdates() }

@@ -1159,6 +1159,9 @@ class RexViewModel @JvmOverloads constructor(
     /** Set once an alert has opened a pane, so the start-up resume does not replace it. */
     private var openedFromAlert = false
 
+    /** Whether [restore] ran for this view model. */
+    private var restored = false
+
     /** An alert, the widget, a shortcut or a share opened the app: Help's tour waits for a plain start. */
     internal val openedForSomething: Boolean get() = openedFromAlert || openedFromShare
 
@@ -1385,8 +1388,15 @@ class RexViewModel @JvmOverloads constructor(
      * terminal was on screen, or on every launch with [reopenLastTab]; either way only while the
      * person has not done anything yet ([userActed]). The Rex server keeps the session, so this is
      * a reconnect rather than a new one.
+     *
+     * MainActivity calls it as it is created, before the first frame and the app lock's prompt
+     * (connecting while locked shows nothing: see docs/design/app-lock.md); RexPocketApp's first
+     * composition calls it again. Only the first call of this view model acts, so a rotation, the
+     * composition and the lock coming and going start nothing twice.
      */
     fun restore() {
+        if (restored) return
+        restored = true
         // A joined tailnet comes up as its choices say: while the app is open (the default), the
         // node is up at once and a host on it is dialed at once; when needed, with its first host.
         control.begin()

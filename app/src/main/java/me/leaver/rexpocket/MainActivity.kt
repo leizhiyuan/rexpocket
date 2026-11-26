@@ -44,6 +44,10 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) alert(intent)
         // Something shared from another app waits on its sheet for a tap; it is never sent on its own.
         if (savedInstanceState == null) received(intent)
+        // The hosts start connecting now, not after the first frame or the app lock's prompt. Once
+        // per view model: a rotation keeps it and connects nothing again; a process Android brought
+        // back has a new one, and resumes as its saved state says.
+        model.restore()
         // Block screenshots: the window is secure, so screenshots, screen recording and the recents
         // thumbnail show nothing of it. Followed as the setting changes.
         lifecycleScope.launch {
