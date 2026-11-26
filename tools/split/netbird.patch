@@ -1,25 +1,33 @@
 diff --git a/.github/workflows/android-apk.yml b/.github/workflows/android-apk.yml
-index 29579da649afcbcaed4869e6f87e3a82c467cbd3..92bc557e43678ae173db4757cf5771faa168e6f0 100644
+index fbcba6d9093823dfe0bbf6f6902ebddd53266771..38586813d921e898318a37764b23c293fa322e20 100644
 --- a/.github/workflows/android-apk.yml
 +++ b/.github/workflows/android-apk.yml
-@@ -1,7 +1,10 @@
+@@ -1,11 +1,14 @@
  name: android-apk
  
--# Builds the debug APK for testing on a phone, rexpocket.apk, signed with the kept debug key.
--# Download it from the run's Artifacts section.
-+# Builds the debug APKs for testing on a phone, all signed with the kept debug key:
+-# Builds the APKs for testing on a phone, both signed with the kept debug key:
+-#   rexpocket.apk         the app: the `optimized` build type, i.e. the release build (R8, shrunk
+-#                         resources, baseline profile, not debuggable) signed with that key, so each
+-#                         installs over the last, and over an earlier debug build, as an update
+-#   rexpocket-debug.apk   the same app as a debug build, for a debugger or Layout Inspector
+-# See docs/design/r8.md. Download them from the run's rexpocket-apks artifact; R8's mapping.txt is in
++# Builds the APKs for testing on a phone, all signed with the kept debug key:
 +#   rexpocket.apk                 the app, Tailscale built in, and Netbird through the add-on
 +#   rexpocket-netbird-addon.apk   the Netbird add-on, a separate app (me.leaver.rexpocket.netbird)
 +#   rexpocket-netbird.apk         the app with Netbird embedded; it replaces rexpocket.apk
-+# Download them from the run's Artifacts section.
++#   rexpocket-debug.apk           rexpocket.apk as a debug build, for a debugger or Layout Inspector
++# rexpocket.apk and rexpocket-netbird.apk are the `optimized` build type: the release build (R8,
++# shrunk resources, baseline profile, not debuggable) signed with that key, so each installs over
++# the last, and over an earlier debug build, as an update. See docs/design/r8.md.
++# Download them from the run's rexpocket-apks artifact; R8's mapping.txt for each optimized APK is in
+ # rexpocket-mapping, for retracing a stack trace from Diagnostics.
  on:
    workflow_dispatch:
-   push:
-@@ -71,17 +74,45 @@ jobs:
-           mkdir -p out
-           cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket.apk
+@@ -83,29 +86,56 @@ jobs:
+           grep -qxF 'me.leaver.rexpocket.core.Ed25519Signature: Ed25519Signature()' "$SEEDS"
+           grep -qxF 'me.leaver.rexpocket.core.Ed25519KeyPairGen: Ed25519KeyPairGen()' "$SEEDS"
  
--      - name: Check the APK carries the kept key
+-      - name: Check the APKs carry the kept key
 +      - name: Build the Netbird add-on's library
 +        run: REXPOCKET_NETBIRD=addon sh tools/build-tailnet.sh
 +
@@ -31,41 +39,59 @@ index 29579da649afcbcaed4869e6f87e3a82c467cbd3..92bc557e43678ae173db4757cf5771fa
 +      - name: Build the Netbird library
 +        run: REXPOCKET_NETBIRD=1 sh tools/build-tailnet.sh
 +
-+      - name: Build the debug APK with Netbird
-+        run: ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" -Prexpocket.netbird=true :app:assembleDebug
++      - name: Build the optimized APK with Netbird
++        run: ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" -Prexpocket.netbird=true :app:assembleOptimized
 +
 +      - name: Keep the Netbird APK aside
-+        run: cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket-netbird.apk
++        run: |
++          cp app/build/outputs/apk/optimized/app-optimized.apk out/rexpocket-netbird.apk
++          cp app/build/outputs/mapping/optimized/mapping.txt mapping/rexpocket-netbird-mapping.txt
 +
 +      - name: Check the APKs carry the kept key, and which one offers the add-on
          run: |
            WANT=$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 "SHA256:" | awk '{print $2}' | tr -d ':' | tr 'A-F' 'a-f')
 -          for apk in out/*.apk; do
-+          for apk in out/rexpocket.apk out/rexpocket-netbird-addon.apk out/rexpocket-netbird.apk; do
++          for apk in out/rexpocket.apk out/rexpocket-debug.apk out/rexpocket-netbird-addon.apk out/rexpocket-netbird.apk; do
              GOT=$("$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --print-certs "$apk" | grep -m1 "SHA-256 digest" | awk '{print $NF}')
              echo "$apk $GOT"
              [ "$GOT" = "$WANT" ] || { echo "signed with another key than the kept one"; exit 1; }
            done
-+          AAPT2="$ANDROID_HOME/build-tools/36.1.0/aapt2"
+           AAPT2="$ANDROID_HOME/build-tools/36.1.0/aapt2"
+-          # The optimized APK is not debuggable and carries the baseline profile; the debug one is
+-          # debuggable. Both are the same package and version, so each installs over the other.
+-          badging=$("$AAPT2" dump badging out/rexpocket.apk)
+-          if grep -q application-debuggable <<< "$badging"; then echo "rexpocket.apk is debuggable"; exit 1; fi
+-          unzip -l out/rexpocket.apk > listing.txt
+-          grep -q 'assets/dexopt/baseline.prof$' listing.txt || { echo "rexpocket.apk has no baseline profile"; exit 1; }
 +          # The default app asks for the add-on's permission; the embedded one has nothing of the add-on.
 +          "$AAPT2" dump xmltree --file AndroidManifest.xml out/rexpocket.apk | grep -q 'me.leaver.rexpocket.netbird.permission.NODE'
 +          if "$AAPT2" dump xmltree --file AndroidManifest.xml out/rexpocket-netbird.apk | grep -q 'me.leaver.rexpocket.netbird'; then
 +            echo "rexpocket-netbird.apk offers the add-on"; exit 1
 +          fi
 +          [ "$("$AAPT2" dump packagename out/rexpocket-netbird-addon.apk)" = me.leaver.rexpocket.netbird ]
++          # The optimized APKs are not debuggable and carry the baseline profile; the debug one is
++          # debuggable. All of the app's are the same package and version, so each installs over the others.
++          for apk in out/rexpocket.apk out/rexpocket-netbird.apk; do
++            badging=$("$AAPT2" dump badging "$apk")
++            if grep -q application-debuggable <<< "$badging"; then echo "$apk is debuggable"; exit 1; fi
++            unzip -l "$apk" > listing.txt
++            grep -q 'assets/dexopt/baseline.prof$' listing.txt || { echo "$apk has no baseline profile"; exit 1; }
++          done
+           badging=$("$AAPT2" dump badging out/rexpocket-debug.apk)
+           grep -q application-debuggable <<< "$badging" || { echo "rexpocket-debug.apk is not debuggable"; exit 1; }
+-          versions=$(for apk in out/rexpocket.apk out/rexpocket-debug.apk; do
++          versions=$(for apk in out/rexpocket.apk out/rexpocket-debug.apk out/rexpocket-netbird.apk; do
+             "$AAPT2" dump badging "$apk" > badging.txt
+             head -1 badging.txt | awk '{ print $2, $3 }'
+           done | sort -u)
+           echo "$versions"
+-          [ "$(printf '%s\n' "$versions" | wc -l)" = 1 ] || { echo "the APKs differ in package or version"; exit 1; }
++          [ "$(printf '%s\n' "$versions" | wc -l)" = 1 ] || { echo "the app's APKs differ in package or version"; exit 1; }
  
        - name: Sizes
--        run: ls -l out/
-+        run: |
-+          for apk in out/*.apk; do
-+            echo "$(basename "$apk"): $(stat -c %s "$apk") bytes"
-+            unzip -l "$apk" | awk '$4 ~ /^lib\/.*\.so$/ { print "  " $4 ": " $1 " bytes" }'
-+          done | tee -a "$GITHUB_STEP_SUMMARY"
- 
-       - uses: actions/upload-artifact@v4
-         with:
+         run: |
 diff --git a/.github/workflows/device-test.yml b/.github/workflows/device-test.yml
-index 52959ef511489f4c3fb78d216fdeaac74212bb40..5b7a0160d6babcef6c5098a6cbdd86e9890fd594 100644
+index 276200ed35e6174975947c407a0ced2decb9ed07..5b6b0a6cab8c8e3f593a9c80ea634e6c2261dfe4 100644
 --- a/.github/workflows/device-test.yml
 +++ b/.github/workflows/device-test.yml
 @@ -3,7 +3,7 @@ name: device-test
@@ -77,16 +103,16 @@ index 52959ef511489f4c3fb78d216fdeaac74212bb40..5b7a0160d6babcef6c5098a6cbdd86e9
  # `mrs x0, midr_el1` (Go CPU-feature detection), which the translator does not implement, and the app
  # dies with SIGILL. A real arm64 kernel traps and answers that read. So the test build here is an
  # x86_64 one: both native libraries are built for x86_64 from the same sources and pinned versions,
-@@ -28,7 +28,7 @@ jobs:
-     env:
+@@ -38,7 +38,7 @@ jobs:
        ANDROID_HOME: /usr/local/lib/android/sdk
-       # The arm64 libghostty is not built: this APK carries the x86_64 one.
--      GRADLE_ARGS: -x :app:buildGhostty -Prexpocket.abi=x86_64
-+      GRADLE_ARGS: -x :app:buildGhostty -Prexpocket.netbird=true -Prexpocket.abi=x86_64
+       # The arm64 libghostty is not built: this APK carries the x86_64 one. The tests run against
+       # the build type named by testBuildType: debug, or minified.
+-      GRADLE_ARGS: -x :app:buildGhostty -Prexpocket.abi=x86_64 -Prexpocket.testBuildType=${{ matrix.build }}
++      GRADLE_ARGS: -x :app:buildGhostty -Prexpocket.netbird=true -Prexpocket.abi=x86_64 -Prexpocket.testBuildType=${{ matrix.build }}
      steps:
        - uses: actions/checkout@v4
  
-@@ -55,12 +55,19 @@ jobs:
+@@ -65,12 +65,20 @@ jobs:
            "$SDKMANAGER" "platforms;android-36" "build-tools;36.1.0" "ndk;28.2.13676358"
            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
  
@@ -103,13 +129,14 @@ index 52959ef511489f4c3fb78d216fdeaac74212bb40..5b7a0160d6babcef6c5098a6cbdd86e9
 +      # The Netbird add-on's tests run the default build of the app (the one that offers the add-on)
 +      # beside the add-on itself, which needs its own library.
 +      - name: Build the Netbird add-on's library for x86_64
++        if: matrix.build == 'debug'
 +        run: |
 +          REXPOCKET_NETBIRD=addon sh tools/build-tailnet-x86_64.sh
 +          unzip -l netbirdaddon/libs/tailnet-netbird-addon.aar | grep 'jni/'
  
        - name: Build libghostty for x86_64
          run: |
-@@ -161,6 +168,21 @@ jobs:
+@@ -258,6 +266,21 @@ jobs:
            # broadcast (as root, the only sender Android takes it from), and the process is killed;
            # the watch must come back in the foreground on its own (START_STICKY).
            sh "$RUNNER_TEMP/background.sh" || status=1
@@ -151,7 +178,7 @@ index a3de9c49615b82385fcf4fe1eb0198fb7f629fa3..afc7e33db075fd2ed8027cf215728528
 +# The Netbird add-on's library, built by tools/build-tailnet.sh with REXPOCKET_NETBIRD=addon.
 +netbirdaddon/libs/
 diff --git a/README.md b/README.md
-index 70ca0c36564f0f9fcd69b841c616a3d586ae645e..ecdec8ba8caa51372bc4d03dbb1b228a053ab82b 100644
+index 8ca1e8042b11817f188407da040a69247f563394..416ea7f9d86004f262d6639301611477be215825 100644
 --- a/README.md
 +++ b/README.md
 @@ -7,7 +7,7 @@
@@ -163,7 +190,7 @@ index 70ca0c36564f0f9fcd69b841c616a3d586ae645e..ecdec8ba8caa51372bc4d03dbb1b228a
  
  | Home | Terminal | Terminal at night |
  | --- | --- | --- |
-@@ -53,8 +53,9 @@ switched without leaving the terminal it was showing, and the dock is one hand's
+@@ -69,8 +69,9 @@ switched without leaving the terminal it was showing, and the dock is one hand's
    program waits for approval, an answer or a login, or fails. Tap the alert to open that pane.
  - **Works beside the desk.** The phone holds only the pane it shows and sizes it to the phone; the
    desktop keeps its own tab. **Release** hands a pane back to the desk until you **Take over**.
@@ -175,20 +202,25 @@ index 70ca0c36564f0f9fcd69b841c616a3d586ae645e..ecdec8ba8caa51372bc4d03dbb1b228a
  - **Hosts over SSH.** Add `ssh://host` and sign in with an account and a password or a private key;
    the app reaches Rex through the SSH daemon the machine already runs - no Rex port has to be open.
    The host key is shown and pinned on the first connection; a changed one stops the connection
-@@ -66,6 +67,21 @@ switched without leaving the terminal it was showing, and the dock is one hand's
+@@ -82,6 +83,26 @@ switched without leaving the terminal it was showing, and the dock is one hand's
    included. A build that has never chosen follows what it came from.
  - **Light and dark,** following the phone, in English and Simplified Chinese.
  
 +## Which APK to install
 +
-+Each run of the [android-apk workflow](.github/workflows/android-apk.yml) leaves three APKs in its
-+`rexpocket-debug-apks` artifact, all signed with the same key:
++Each run of the [android-apk workflow](.github/workflows/android-apk.yml) leaves four APKs in its
++`rexpocket-apks` artifact, all signed with the same key:
 +
 +| APK | What it is | Install it |
 +| --- | --- | --- |
 +| `rexpocket.apk` | The app, with Tailscale built in | The usual choice |
 +| `rexpocket-netbird-addon.apk` | The Netbird add-on: a separate app, with no icon, that runs Netbird for `rexpocket.apk` | Beside `rexpocket.apk`, for Netbird |
 +| `rexpocket-netbird.apk` | The app with Netbird built in, about 30 MB larger; it does not use the add-on | Instead of `rexpocket.apk` |
++| `rexpocket-debug.apk` | `rexpocket.apk` as a debug build: slower, for a debugger | Only to debug |
++
++`rexpocket.apk` and `rexpocket-netbird.apk` are built as a release is (minified by R8, with a
++baseline profile, not debuggable), so they install over an earlier debug build as an update; R8's
++mapping for each is in the run's `rexpocket-mapping` artifact. See [docs/design/r8.md](docs/design/r8.md).
 +
 +`rexpocket.apk` and `rexpocket-netbird.apk` are the same app, so either one installs over the other
 +and keeps its hosts. The add-on is an app of its own: take it from the same run or release as
@@ -197,7 +229,7 @@ index 70ca0c36564f0f9fcd69b841c616a3d586ae645e..ecdec8ba8caa51372bc4d03dbb1b228a
  ## Set up the computer
  
  Rex has to be reachable from the phone: over the local network, over a tailnet, or through SSH.
-@@ -97,13 +113,21 @@ own SSH daemon. How the transport works is described in
+@@ -113,13 +134,21 @@ own SSH daemon. How the transport works is described in
     - `192.0.2.10` - plaintext on port 7297
     - `192.0.2.10:7300` - another port
     - `my-mac.tail1234.ts.net` or a `100.x` address - through Tailscale, on 443 with TLS
@@ -221,7 +253,7 @@ index 70ca0c36564f0f9fcd69b841c616a3d586ae645e..ecdec8ba8caa51372bc4d03dbb1b228a
  3. **Open a tab.** Tap a tab on the home screen. The plus beside a session makes a new tab; the
     host's menu starts a new session.
  4. **In the terminal:**
-@@ -183,12 +207,15 @@ you can read it before you send it.
+@@ -201,12 +230,15 @@ you can read it before you send it.
    `rex __internal dial-stdio`, which joins its input and output to Rex's own Unix socket on that
    machine. The app pins the host key it saw, compares it on every connection, and a changed key
    stops retrying until you confirm the new one. The host is dialed directly, or through the
@@ -243,7 +275,7 @@ index 70ca0c36564f0f9fcd69b841c616a3d586ae645e..ecdec8ba8caa51372bc4d03dbb1b228a
  
  ### A faster tailnet path
  
-@@ -212,8 +239,13 @@ Ghostty revision pinned in [native/ghostty/source.json](native/ghostty/source.js
+@@ -230,8 +262,13 @@ Ghostty revision pinned in [native/ghostty/source.json](native/ghostty/source.js
  [tools/build-ghostty.py](tools/build-ghostty.py), which Gradle runs; the first build downloads Zig
  and the Ghostty source, checked against their pinned checksums. To move to a newer Ghostty, change
  the revision and checksum there. `app/libs/tailnet.aar` - the Go module in `tailnet/`, around
@@ -259,7 +291,7 @@ index 70ca0c36564f0f9fcd69b841c616a3d586ae645e..ecdec8ba8caa51372bc4d03dbb1b228a
  tests in `core` run against a Rex on `127.0.0.1:7297` (set `REX_TEST_HOST` / `REX_TEST_PORT`) and
  are skipped without one. The pane lifecycle scenarios - tabs and panes closed on the desk or the
  phone, release and take over, reconnects - run on every build against `ScriptedRex`, a Rex in the
-@@ -254,6 +286,10 @@ which erases the app's hosts and tailnet login.
+@@ -273,6 +310,10 @@ which erases the app's hosts and tailnet login.
    emulator: the app builds its official libghostty-vt library, license in `app/src/main/assets/licenses/Ghostty-MIT.txt`.
  - [Tailscale](https://github.com/tailscale/tailscale), by Tailscale Inc. and contributors, BSD-3-Clause -
    the tsnet library the app's Tailscale node is.
@@ -271,7 +303,7 @@ index 70ca0c36564f0f9fcd69b841c616a3d586ae645e..ecdec8ba8caa51372bc4d03dbb1b228a
    client. [eddsa](https://github.com/str4d/ed25519-java), by Str4d and contributors, CC0 - the
    Ed25519 implementation Android's own security providers do not give JSch.
 diff --git a/README.zh-CN.md b/README.zh-CN.md
-index f308a05031556edd26e7031f789e2eda3e4ce9f3..ffe9f6b3621977eeafe78abaff01101042416d15 100644
+index 6d5a70ecd1310bfa5dd07bf95202daf32000deb8..16bd1baede3a6b435b2ea9275ab1aaf9fe47e3af 100644
 --- a/README.zh-CN.md
 +++ b/README.zh-CN.md
 @@ -6,7 +6,7 @@
@@ -283,7 +315,7 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..ffe9f6b3621977eeafe78abaff011010
  
  | 主页 | 终端 | 夜间终端 |
  | --- | --- | --- |
-@@ -40,7 +40,7 @@
+@@ -51,7 +51,7 @@
  - **后台提醒。** 可选：App 在后台时保持连接，程序等你批准、回答、登录或出错时发通知，点通知直接打开那个窗格。
  - **和桌面同时用。** 手机只占它正在显示的那个窗格，并按手机尺寸显示；桌面停在它自己的标签页上。
    **交还** 把窗格还给桌面，直到你再 **接管**。
@@ -292,13 +324,13 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..ffe9f6b3621977eeafe78abaff011010
    名字或 `100.x` 地址就能连到主机，也不占手机唯一的 VPN 位置。
  - **通过 SSH 添加主机。** 填 `ssh://host`，再填账号和密码（或私钥），就能通过机器本来就在跑的 SSH 服务
    连到 Rex，不用对外开放 Rex 端口。第一次连接会显示并记住主机密钥；密钥变了会停下，等你确认。
-@@ -50,6 +50,20 @@
+@@ -61,6 +61,23 @@
    最新发布的构建，alpha 和 beta 也算；没选过的安装跟着自己来源那条通道走。
  - **浅色与深色**跟随手机，支持英文和简体中文。
  
 +## 装哪个 APK
 +
-+[android-apk 工作流](.github/workflows/android-apk.yml) 每次运行都会在 `rexpocket-debug-apks` 产物里留下三个
++[android-apk 工作流](.github/workflows/android-apk.yml) 每次运行都会在 `rexpocket-apks` 产物里留下四个
 +APK，用同一个密钥签名：
 +
 +| APK | 是什么 | 怎么装 |
@@ -306,6 +338,9 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..ffe9f6b3621977eeafe78abaff011010
 +| `rexpocket.apk` | App 本体，内置 Tailscale | 一般装这个 |
 +| `rexpocket-netbird-addon.apk` | Netbird 附加组件：一个没有图标的独立 App，为 `rexpocket.apk` 运行 Netbird | 要用 Netbird 时与 `rexpocket.apk` 一起装 |
 +| `rexpocket-netbird.apk` | 内置 Netbird 的 App，大约大 30 MB；不使用附加组件 | 代替 `rexpocket.apk` |
++| `rexpocket-debug.apk` | `rexpocket.apk` 的调试构建：更慢，供调试器使用 | 只在调试时 |
++
++`rexpocket.apk` 和 `rexpocket-netbird.apk` 按发布版本的方式构建（经 R8 缩减、带基准配置文件、不可调试），所以可以覆盖安装在之前的调试构建上；每个 APK 的 R8 映射文件在该次运行的 `rexpocket-mapping` 产物里。见 [docs/design/r8.md](docs/design/r8.md)。
 +
 +`rexpocket.apk` 和 `rexpocket-netbird.apk` 是同一个 App，可以互相覆盖安装，主机都会保留。附加组件是另一个
 +App：要和 `rexpocket.apk` 来自同一次运行或同一个发布版本，因为 RexPocket 只和用自己密钥签名的附加组件通信。
@@ -313,7 +348,7 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..ffe9f6b3621977eeafe78abaff011010
  ## 电脑端设置
  
  Rex 要能从手机访问到：局域网、tailnet，或者 SSH 都可以。
-@@ -75,12 +89,17 @@ rex server start --extra-listen :7297 --allow-anonymous
+@@ -86,12 +103,17 @@ rex server start --extra-listen :7297 --allow-anonymous
     - `192.0.2.10`——明文，7297 端口
     - `192.0.2.10:7300`——换个端口
     - `my-mac.tail1234.ts.net` 或 `100.x` 地址——走 Tailscale，443 端口，TLS
@@ -333,7 +368,7 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..ffe9f6b3621977eeafe78abaff011010
  3. **打开标签页。** 在主页点一个标签页。会话旁边的加号新建标签页，主机的菜单里可以新建会话。
  4. **终端里：**
     - 点窗格开始输入。拖动查看回滚，双指缩放改字号，长按选中；长按链接可以打开它。
-@@ -124,10 +143,12 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再
+@@ -135,10 +157,12 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再
    `rex __internal dial-stdio`，把标准输入输出接到那台机器上 Rex 自己的 Unix socket。App 记住第一次
    看到的主机密钥，之后每次连接都比对；密钥变了就不再重试，等你确认新的。主机直连，地址在 tailnet 上时
    走内置的 tailnet 节点。
@@ -349,7 +384,7 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..ffe9f6b3621977eeafe78abaff011010
  
  ### 让 tailnet 更快
  
-@@ -145,7 +166,7 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再
+@@ -156,7 +180,7 @@ App 会把最近几小时的日志留在手机上，所以问题发生之后再
  
  APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 会构建一个用发布密钥签名的版本（见下文「发布」）。只构建
  arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这个 Go 模块构建，包含 `tailscale.com` 的 tsnet 库
@@ -358,7 +393,7 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..ffe9f6b3621977eeafe78abaff011010
  （可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），没有 Rex 时会跳过。窗格生命周期场景（在电脑或手机上关闭标签页和窗格、交还与接管、重连）每次构建都会对测试 JVM 里的 `ScriptedRex` 运行，有真实 Rex 在监听时也会对它运行，见 [docs/design/testing.md](docs/design/testing.md#rex-integration)。 SSH 测试需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台机器，并用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 给出凭据才会运行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可选。
  
  ### 发布
-@@ -171,6 +192,9 @@ arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这
+@@ -182,6 +206,9 @@ arm64-v8a。`app/libs/tailnet.aar` 已经放在仓库里，它由 `tailnet/` 这
    官方的 libghostty-vt，许可证见 `app/src/main/assets/licenses/Ghostty-MIT.txt`。
  - [Tailscale](https://github.com/tailscale/tailscale)，Tailscale Inc. 及贡献者，BSD-3-Clause——App 内的
    Tailscale 节点就是它的 tsnet 库。
@@ -369,7 +404,7 @@ index f308a05031556edd26e7031f789e2eda3e4ce9f3..ffe9f6b3621977eeafe78abaff011010
    [eddsa](https://github.com/str4d/ed25519-java)，Str4d 及贡献者，CC0——Android 自带的安全提供者
    没有给 JSch 的 Ed25519 实现。
 diff --git a/README.zh-TW.md b/README.zh-TW.md
-index b079b920e0a4fd86d355bfd524e5bfee31ced1dc..a6290514449e629a69dade21fe59e19f63d5036e 100644
+index b111b2af4bfcadbb80245ba4b8930f14f7d0657c..9a8aac46b95b5d3f02c0103f596e35400266fbc4 100644
 --- a/README.zh-TW.md
 +++ b/README.zh-TW.md
 @@ -6,7 +6,7 @@
@@ -381,7 +416,7 @@ index b079b920e0a4fd86d355bfd524e5bfee31ced1dc..a6290514449e629a69dade21fe59e19f
  
  | 主頁 | 終端機 | 夜間終端機 |
  | --- | --- | --- |
-@@ -42,7 +42,7 @@
+@@ -53,7 +53,7 @@
    開啟那個窗格。
  - **和桌面同時使用。** 手機只佔它正在顯示的那個窗格，並以手機尺寸顯示；桌面停在自己的分頁上。
    **交還** 會把窗格還給桌面，直到你再次 **接管**。
@@ -390,13 +425,13 @@ index b079b920e0a4fd86d355bfd524e5bfee31ced1dc..a6290514449e629a69dade21fe59e19f
    名稱或 `100.x` 位址就能連到主機，也不必佔用手機唯一的 VPN 位置。
  - **透過 SSH 新增主機。** 填 `ssh://host`，再填帳號和密碼（或私鑰），就能透過機器本來就在跑的 SSH 服務
    連到 Rex，不必對外開放 Rex 連接埠。第一次連線會顯示並記住主機金鑰；金鑰變了會停下來，等你確認。
-@@ -52,6 +52,20 @@
+@@ -63,6 +63,23 @@
    最新發布的建置，alpha 與 beta 也算；沒選過的安裝跟著自己來源的那條通道走。
  - **淺色與深色** 跟隨手機，介面提供英文、簡體中文與繁體中文。
  
 +## 要裝哪個 APK
 +
-+[android-apk 工作流程](.github/workflows/android-apk.yml) 每次執行都會在 `rexpocket-debug-apks` 成品裡留下三個
++[android-apk 工作流程](.github/workflows/android-apk.yml) 每次執行都會在 `rexpocket-apks` 成品裡留下四個
 +APK，用同一把金鑰簽署：
 +
 +| APK | 是什麼 | 怎麼裝 |
@@ -404,6 +439,9 @@ index b079b920e0a4fd86d355bfd524e5bfee31ced1dc..a6290514449e629a69dade21fe59e19f
 +| `rexpocket.apk` | App 本體，內建 Tailscale | 一般裝這個 |
 +| `rexpocket-netbird-addon.apk` | Netbird 附加元件：一個沒有圖示的獨立 App，為 `rexpocket.apk` 執行 Netbird | 要用 Netbird 時與 `rexpocket.apk` 一起裝 |
 +| `rexpocket-netbird.apk` | 內建 Netbird 的 App，大約大 30 MB；不使用附加元件 | 取代 `rexpocket.apk` |
++| `rexpocket-debug.apk` | `rexpocket.apk` 的偵錯建置：較慢，供偵錯器使用 | 只在偵錯時 |
++
++`rexpocket.apk` 和 `rexpocket-netbird.apk` 以發布版本的方式建置（經 R8 縮減、附基準設定檔、不可偵錯），所以可以覆蓋安裝在先前的偵錯建置上；每個 APK 的 R8 對應檔在該次執行的 `rexpocket-mapping` 成品裡。見 [docs/design/r8.md](docs/design/r8.md)。
 +
 +`rexpocket.apk` 和 `rexpocket-netbird.apk` 是同一個 App，可以互相覆蓋安裝，主機都會保留。附加元件是另一個
 +App：要和 `rexpocket.apk` 來自同一次執行或同一個發布版本，因為 RexPocket 只和用自己金鑰簽署的附加元件溝通。
@@ -411,7 +449,7 @@ index b079b920e0a4fd86d355bfd524e5bfee31ced1dc..a6290514449e629a69dade21fe59e19f
  ## 電腦端設定
  
  Rex 要能從手機連到：區域網路、tailnet，或 SSH 都可以。
-@@ -77,12 +91,17 @@ rex server start --extra-listen :7297 --allow-anonymous
+@@ -88,12 +105,17 @@ rex server start --extra-listen :7297 --allow-anonymous
     - `192.0.2.10`——明文，7297 連接埠
     - `192.0.2.10:7300`——換個連接埠
     - `my-mac.tail1234.ts.net` 或 `100.x` 位址——透過 Tailscale，443 連接埠，TLS
@@ -431,7 +469,7 @@ index b079b920e0a4fd86d355bfd524e5bfee31ced1dc..a6290514449e629a69dade21fe59e19f
  3. **開啟分頁。** 在主頁點一個分頁。工作階段旁邊的加號會新增分頁，主機的選單可以新增工作階段。
  4. **終端機裡：**
     - 點窗格開始輸入。拖曳可回捲，雙指縮放可改字級，長按可選取；長按連結可以開啟它。
-@@ -128,10 +147,12 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再
+@@ -139,10 +161,12 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再
    `rex __internal dial-stdio`，把標準輸入輸出接到那台機器上 Rex 自己的 Unix socket。App 記住第一次
    看到的主機金鑰，之後每次連線都比對；金鑰變了就不再重試，等你確認新的。主機直連，位址在 tailnet 上時
    走內建的 tailnet 節點。
@@ -447,7 +485,7 @@ index b079b920e0a4fd86d355bfd524e5bfee31ced1dc..a6290514449e629a69dade21fe59e19f
  
  ### 讓 tailnet 更快
  
-@@ -149,7 +170,7 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再
+@@ -160,7 +184,7 @@ App 會把最近幾小時的日誌留在手機上，所以問題發生之後再
  
  APK 在 `app/build/outputs/apk/debug/`；`:app:assembleRelease` 會建置一個以發布金鑰簽署的版本（見下文「發布」）。只建置
  arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/` 這個 Go 模組建置，包含 `tailscale.com` 的 tsnet 程式庫
@@ -456,7 +494,7 @@ index b079b920e0a4fd86d355bfd524e5bfee31ced1dc..a6290514449e629a69dade21fe59e19f
  （可用 `REX_TEST_HOST` / `REX_TEST_PORT` 修改），沒有 Rex 時會略過。窗格生命週期情境（在電腦或手機上關閉分頁和窗格、交還與接管、重新連線）每次建置都會對測試 JVM 裡的 `ScriptedRex` 執行，有真實 Rex 在監聽時也會對它執行，見 [docs/design/testing.md](docs/design/testing.md#rex-integration)。 SSH 測試需要 `REX_SSH_HOST`、`REX_SSH_USER` 指向一台機器，並用 `REX_SSH_KEY` 或 `REX_SSH_PASSWORD` 提供憑證才會執行；`REX_SSH_PORT`、`REX_SSH_HOST_KEY`、`REX_SSH_KEY_PASSPHRASE`、`REX_SSH_SOCKS` 可選。
  
  ### 發布
-@@ -175,6 +196,9 @@ arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/`
+@@ -186,6 +210,9 @@ arm64-v8a。`app/libs/tailnet.aar` 已經放在儲存庫裡，它由 `tailnet/`
    官方的 libghostty-vt，授權見 `app/src/main/assets/licenses/Ghostty-MIT.txt`。
  - [Tailscale](https://github.com/tailscale/tailscale)，Tailscale Inc. 及貢獻者，BSD-3-Clause——App 內的
    Tailscale 節點就是它的 tsnet 程式庫。
@@ -467,10 +505,10 @@ index b079b920e0a4fd86d355bfd524e5bfee31ced1dc..a6290514449e629a69dade21fe59e19f
    [eddsa](https://github.com/str4d/ed25519-java)，Str4d 與貢獻者，CC0——Android 自帶的安全提供者
    沒有給 JSch 的 Ed25519 實作。
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
-index 6ec8afeb22f1674de9b6746d24916e94f6f92e62..a06e5a24fccfd153daa6f5d1133d7f10a839f6bf 100644
+index 2d33a3d6da9097e6220e35875c2847445eecc772..2f1e630a811c7981bbd97fbd7d4256be1729517d 100644
 --- a/app/build.gradle.kts
 +++ b/app/build.gradle.kts
-@@ -170,6 +170,24 @@ gradle.taskGraph.whenReady {
+@@ -200,6 +200,24 @@ gradle.taskGraph.whenReady {
      }
  }
  
@@ -495,7 +533,7 @@ index 6ec8afeb22f1674de9b6746d24916e94f6f92e62..a06e5a24fccfd153daa6f5d1133d7f10
  dependencies {
      testImplementation("junit:junit:4.13.2")
      // Screens driven and captured on the JVM: see docs/design/testing.md.
-@@ -209,6 +227,10 @@ dependencies {
+@@ -239,6 +257,10 @@ dependencies {
      implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
      implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
      implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -508,6 +546,18 @@ index 6ec8afeb22f1674de9b6746d24916e94f6f92e62..a06e5a24fccfd153daa6f5d1133d7f10
 +    implementation(files(tailnetLibrary))
 +    if (withAddon) implementation(project(":netbirdaddon-api"))
  }
+diff --git a/app/proguard-rules.pro b/app/proguard-rules.pro
+index 1aafe5b3f6aa7cd2a2f1e4639c5048da4f81fec4..1acda588ba99ee3d5cd909e886e4ab8c23248919 100644
+--- a/app/proguard-rules.pro
++++ b/app/proguard-rules.pro
+@@ -36,6 +36,7 @@
+ # The tailnet library's Go code calls the Kotlin implementations of its Platform interfaces through
+ # the interface methods, which the AAR's rules keep; keep the implementing classes' overrides too.
+ -keep class * implements me.leaver.rexpocket.go.tailnet.Platform { *; }
++-keep class * implements me.leaver.rexpocket.go.netbird.Platform { *; }
+ 
+ # Names that end up in diagnostics and the problem report (javaClass.simpleName of exceptions
+ # and of TailnetStage): keep them readable without the mapping file.
 diff --git a/app/src/androidTest/java/me/leaver/rexpocket/net/TailnetNodeInstrumentedTest.kt b/app/src/androidTest/java/me/leaver/rexpocket/net/TailnetNodeInstrumentedTest.kt
 index e96e8095cf085fe6116628944dde55e59a185050..c27abde50778ce2c20be64b3032db0efb7419b7c 100644
 --- a/app/src/androidTest/java/me/leaver/rexpocket/net/TailnetNodeInstrumentedTest.kt
@@ -614,7 +664,7 @@ index 710e3b6bdb206fbc746b627299c08d46c21d81d3..ac29b3729f742c0e0b67f53a7da21b4d
          private fun lastKey(id: String) = "last:$id"
          private fun panesKey(id: String) = "panes:$id"
 diff --git a/app/src/main/java/me/leaver/rexpocket/net/TailnetBox.kt b/app/src/main/java/me/leaver/rexpocket/net/TailnetBox.kt
-index 24fef104fe4fd256251b07697e5668948dec02d4..0cd17a2c694b923150c230a114b31228b99a06ac 100644
+index c87340ea2d68594c9f08be5687cbc4f0dd876b3e..42222ed22b1e1c7aa89440a93ee31502f249c2a3 100644
 --- a/app/src/main/java/me/leaver/rexpocket/net/TailnetBox.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/net/TailnetBox.kt
 @@ -159,7 +159,7 @@ abstract class TailnetBox(protected val context: Context) : TailnetNode {
@@ -729,7 +779,7 @@ index 4903013f4d38d05dabe3f0300923d0fab1087c89..6164075373c50dbe7813faabe57f3dc2
          Group(stringResource(R.string.conn_group_open)) {
              ChoiceRow(
 diff --git a/app/src/main/java/me/leaver/rexpocket/ui/Connections.kt b/app/src/main/java/me/leaver/rexpocket/ui/Connections.kt
-index 985f20e4a6b3ddc686aea39f1e3a27abaefe225d..b2c3c993674354bc135a9322db9ad139f7d72975 100644
+index 9910d027f8536f3882d2e3b9c1b8318dfdce867f..79ed616a65a8bc216c7f9b2c2650ba82eb583ffd 100644
 --- a/app/src/main/java/me/leaver/rexpocket/ui/Connections.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/ui/Connections.kt
 @@ -95,6 +95,7 @@ import me.leaver.rexpocket.data.HostStore
@@ -749,7 +799,7 @@ index 985f20e4a6b3ddc686aea39f1e3a27abaefe225d..b2c3c993674354bc135a9322db9ad139
              policyId = accountOf(backend),
          )
          }
-@@ -525,8 +526,14 @@ class Connections private constructor(private val app: Application, val nodes: T
+@@ -541,8 +542,14 @@ class Connections private constructor(private val app: Application, val nodes: T
      private fun nodeFor(backend: TailnetBackend): TailnetNode = nodes[backend]
  
      /** The credentials and settings a backend's node starts with. */
@@ -765,7 +815,7 @@ index 985f20e4a6b3ddc686aea39f1e3a27abaefe225d..b2c3c993674354bc135a9322db9ad139
      }
  
      private fun remember() = store.setConnectedHosts(_links.value.keys.toList() + parked)
-@@ -900,6 +907,8 @@ class Connections private constructor(private val app: Application, val nodes: T
+@@ -916,6 +923,8 @@ class Connections private constructor(private val app: Application, val nodes: T
              } else {
                  0
              }
@@ -774,7 +824,7 @@ index 985f20e4a6b3ddc686aea39f1e3a27abaefe225d..b2c3c993674354bc135a9322db9ad139
              val trace = { line: String -> if (BuildConfig.DEBUG) Log.i(CONN_TAG, line) }
              // The SSH tunnel is per host and outlives a reconnect attempt: only the channels under it
              // come and go. Every Rex connection of this host goes through the same route.
-@@ -918,13 +927,14 @@ class Connections private constructor(private val app: Application, val nodes: T
+@@ -934,13 +943,14 @@ class Connections private constructor(private val app: Application, val nodes: T
                          credentials = credentials,
                          hostKey = target.sshHostKey.takeIf { it.isNotEmpty() },
                          socksPort = socksPort,
@@ -790,7 +840,7 @@ index 985f20e4a6b3ddc686aea39f1e3a27abaefe225d..b2c3c993674354bc135a9322db9ad139
              val s = PocketSession(
                  endpoint,
                  httpFactory = httpFactory,
-@@ -1018,6 +1028,7 @@ class Connections private constructor(private val app: Application, val nodes: T
+@@ -1034,6 +1044,7 @@ class Connections private constructor(private val app: Application, val nodes: T
                      // One host, one trusted key, at every address: another key is never this host's.
                      hostKey = target.sshHostKey.takeIf { it.isNotEmpty() },
                      socksPort = via.socksPort,
@@ -798,7 +848,7 @@ index 985f20e4a6b3ddc686aea39f1e3a27abaefe225d..b2c3c993674354bc135a9322db9ad139
                  )
              },
              trace = { line -> if (BuildConfig.DEBUG) Log.i(CONN_TAG, line) },
-@@ -1047,7 +1058,7 @@ class Connections private constructor(private val app: Application, val nodes: T
+@@ -1063,7 +1074,7 @@ class Connections private constructor(private val app: Application, val nodes: T
                  Diagnostics.event(CONN_TAG, "dial address ${routes.indexOf(route) + 1} of ${routes.size}${if (route.main) " (its own)" else ""} tailnet=${route.viaTailnet}")
                  if (route.viaTailnet) {
                      val port = readyTailnet(link, route.endpoint.host)
@@ -808,10 +858,10 @@ index 985f20e4a6b3ddc686aea39f1e3a27abaefe225d..b2c3c993674354bc135a9322db9ad139
                      dialer.setVia(route, RouteVia())
                  }
 diff --git a/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt b/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt
-index ef683019a7d64495d2bfd8fec90ac6d1bd6d65b6..0f77b6035b08908a37e8c283605d9242f8b43e30 100644
+index e048992ef2b2283dba613c999894ed7d749fc07c..688dbe89043ccfbe74c8cc4e471171e4a79a2fdc 100644
 --- a/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/ui/HomeScreen.kt
-@@ -1523,15 +1523,21 @@ internal fun TailnetDialog(
+@@ -1536,15 +1536,21 @@ internal fun TailnetDialog(
      status: TailnetStatus,
      error: TailnetFailure?,
      onDismiss: () -> Unit,
@@ -834,7 +884,7 @@ index ef683019a7d64495d2bfd8fec90ac6d1bd6d65b6..0f77b6035b08908a37e8c283605d9242
      AlertDialog(
          onDismissRequest = onDismiss,
          containerColor = Colors.surface,
-@@ -1555,6 +1561,21 @@ internal fun TailnetDialog(
+@@ -1568,6 +1574,21 @@ internal fun TailnetDialog(
                      }
                  }
                  Field(stringResource(R.string.tailscale_hostname), hostname) { hostname = it }
@@ -856,7 +906,7 @@ index ef683019a7d64495d2bfd8fec90ac6d1bd6d65b6..0f77b6035b08908a37e8c283605d9242
                  if (joinedHere) {
                      Text(
                          listOfNotNull(
-@@ -1582,8 +1603,12 @@ internal fun TailnetDialog(
+@@ -1595,8 +1616,12 @@ internal fun TailnetDialog(
                      )
                      Text(stringResource(R.string.tailscale_login_hint), color = Colors.muted, fontSize = TextStyles.label, lineHeight = labelLeading)
                  }
@@ -870,7 +920,7 @@ index ef683019a7d64495d2bfd8fec90ac6d1bd6d65b6..0f77b6035b08908a37e8c283605d9242
                      color = Colors.muted,
                      fontSize = TextStyles.label,
                      lineHeight = labelLeading,
-@@ -1591,7 +1616,7 @@ internal fun TailnetDialog(
+@@ -1604,7 +1629,7 @@ internal fun TailnetDialog(
              }
          },
          confirmButton = {
@@ -880,10 +930,10 @@ index ef683019a7d64495d2bfd8fec90ac6d1bd6d65b6..0f77b6035b08908a37e8c283605d9242
                      stringResource(if (joinedHere) R.string.action_save else R.string.tailscale_join),
                      color = Colors.accent,
 diff --git a/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt b/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt
-index 656d7a00573d8a8a2663171c1c302f300fb1b3fb..0b97f42ece1f7c2375d1293be7b83471cc1eef2a 100644
+index e31a806468fa4f72c3fe79e8d6e4daa2d536bde2..c06652efde5c069687703b62593dc5cfe40ae6f2 100644
 --- a/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/ui/RexApp.kt
-@@ -436,9 +436,9 @@ internal fun RexPocketApp(
+@@ -442,9 +442,9 @@ internal fun RexPocketApp(
                  status = tailnetStatus,
                  error = tailnetError,
                  onDismiss = { tailnetOpen = false },
@@ -896,10 +946,10 @@ index 656d7a00573d8a8a2663171c1c302f300fb1b3fb..0b97f42ece1f7c2375d1293be7b83471
                  },
                  onLeave = {
 diff --git a/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt b/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt
-index 4d115df52c5d69bceec33ae3b0fd968a771b2192..4dbe8e2b903012bfddae5f6a6736ddac83583a6b 100644
+index 17410f713e44b3e9dfc1b1a664fffdbeda872aa5..d37d9453b1357adbe26384d734b23bc291135a96 100644
 --- a/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/ui/RexViewModel.kt
-@@ -79,6 +79,7 @@ import me.leaver.rexpocket.core.ConnectStep
+@@ -80,6 +80,7 @@ import me.leaver.rexpocket.core.ConnectStep
  import me.leaver.rexpocket.core.TailnetStage
  import me.leaver.rexpocket.core.explainTailnetProblem
  import me.leaver.rexpocket.core.tailnetStage
@@ -907,7 +957,7 @@ index 4d115df52c5d69bceec33ae3b0fd968a771b2192..4dbe8e2b903012bfddae5f6a6736ddac
  import me.leaver.rexpocket.net.TailnetConfig
  import me.leaver.rexpocket.net.TailnetNode
  import me.leaver.rexpocket.net.TailnetStatus
-@@ -874,21 +875,22 @@ class RexViewModel @JvmOverloads constructor(
+@@ -878,21 +879,22 @@ class RexViewModel @JvmOverloads constructor(
      /**
       * Joins the tailnet of [backend] under [hostname] (blank means the device's own name). The node
       * starts here, not on the first connect, so the app can hand out the login link while the user is
@@ -936,7 +986,7 @@ index 4d115df52c5d69bceec33ae3b0fd968a771b2192..4dbe8e2b903012bfddae5f6a6736ddac
          control.begin()
      }
  
-@@ -1590,6 +1592,7 @@ class RexViewModel @JvmOverloads constructor(
+@@ -1610,6 +1612,7 @@ class RexViewModel @JvmOverloads constructor(
                  if (it.sshUser.isNotBlank()) add(it.sshUser)
              }
              add(tailnet.value.hostname)
@@ -986,7 +1036,7 @@ index c60d5e6974c4ebbd438caa11d1e2a542d221880a..c617cb3212a9e8f6bf5206e3cbb98e78
      }
  }
 diff --git a/app/src/main/java/me/leaver/rexpocket/update/Updater.kt b/app/src/main/java/me/leaver/rexpocket/update/Updater.kt
-index bcfdcf89afc264b8ebe9c94dee38492d4d1b4159..2dcf4dc48d1bd518e475f8d3e7e8dbf54bca5b92 100644
+index bf414edf1ac3bd0f0c11a84552471aef517fb35e..a296c6909e0b90248f979fe4c8b0d863dccfdbcd 100644
 --- a/app/src/main/java/me/leaver/rexpocket/update/Updater.kt
 +++ b/app/src/main/java/me/leaver/rexpocket/update/Updater.kt
 @@ -21,6 +21,7 @@ import me.leaver.rexpocket.core.UpdateChannel
@@ -997,7 +1047,7 @@ index bcfdcf89afc264b8ebe9c94dee38492d4d1b4159..2dcf4dc48d1bd518e475f8d3e7e8dbf5
  import okhttp3.OkHttpClient
  import okhttp3.Request
  import java.io.File
-@@ -155,7 +156,7 @@ class Updater(context: Context) {
+@@ -159,7 +160,7 @@ class Updater(context: Context) {
          val release = try {
              val feed = get(FEED)
              if (!feed.isSuccessful) throw HttpStatusException(feed.code, "releases")
@@ -1007,7 +1057,7 @@ index bcfdcf89afc264b8ebe9c94dee38492d4d1b4159..2dcf4dc48d1bd518e475f8d3e7e8dbf5
              // Offline or GitHub is down: nothing to say while it is only the app starting up.
              Diagnostics.event(TAG, "check failed: ${e.javaClass.simpleName}: ${e.message}")
 diff --git a/app/src/main/res/values-zh-rTW/strings.xml b/app/src/main/res/values-zh-rTW/strings.xml
-index 0fc329ebea84e3ebfbf14a67937d6d056147d9ac..0fc2021eece0f9d39e38b141703fa5d761b2df52 100644
+index 567c452aa0ceaf13c1bf3847a26fa0e9fe82721a..f7caa20850f0a1c35047d9602e0d7159c94a7b56 100644
 --- a/app/src/main/res/values-zh-rTW/strings.xml
 +++ b/app/src/main/res/values-zh-rTW/strings.xml
 @@ -52,7 +52,14 @@
@@ -1038,7 +1088,7 @@ index e0b642514c2cd62d2593da7341939b94a0995c59..c1290a25061bdd16bf6f7d1adf8eda94
  
      <string name="connect_step_start_tailnet">正在啟動 %1$s…</string>
 diff --git a/app/src/main/res/values-zh/strings.xml b/app/src/main/res/values-zh/strings.xml
-index 8e6207589a645d1ea85fba21ff56eb9e5fc1f4d7..27c38885534854541efbbf02372e6759d56559d1 100644
+index d534a4abf616e74af2a6940218c8a33a22621d08..9af71b18e1ee6692fa09718839f79fe5d5f4f485 100644
 --- a/app/src/main/res/values-zh/strings.xml
 +++ b/app/src/main/res/values-zh/strings.xml
 @@ -52,7 +52,14 @@
@@ -1069,7 +1119,7 @@ index f67a32b7fdd4f543f92ad6251caf2fae9974c572..9d34e9655f7252530d618fb72be46f72
  
      <string name="connect_step_start_tailnet">正在启动 %1$s…</string>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 44f8c2ed936771aefe969c30aad82f36eb7e13ee..d2670bd1a02598c456a249b508a39578385969de 100644
+index 5bfeea566ccaf231bb1396b66304867fe7282756..3ed26ef9f6034ac3671a8a86a2aaf59db488af7f 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -52,7 +52,14 @@
@@ -1224,11 +1274,24 @@ index a0659e8aff7500a78e01d011c8b7a4d596857c4c..df86f56efe905ba4c5ccaf3bf8ffc602
  
      /** A Rex client for the address in use, with its time limit for the hello. */
      fun client(apiRevision: Int = 7): RexClient {
+diff --git a/core/src/main/kotlin/me/leaver/rexpocket/core/PocketSession.kt b/core/src/main/kotlin/me/leaver/rexpocket/core/PocketSession.kt
+index 6b1d58b6cedb77af6b7b30bd8cb735feecce13f9..5ab2d58c22c0dea6f7fe871932f72117f21b9ea7 100644
+--- a/core/src/main/kotlin/me/leaver/rexpocket/core/PocketSession.kt
++++ b/core/src/main/kotlin/me/leaver/rexpocket/core/PocketSession.kt
+@@ -456,7 +456,7 @@ class PocketSession(
+ 
+     /**
+      * The phone's network changed. A connection on it is redialed at once, as its socket died with
+-     * the network. With [roams] it goes through a tailnet tunnel instead (Tailscale's
++     * the network. With [roams] it goes through a tailnet tunnel instead (Tailscale's or Netbird's
+      * userspace TCP over WireGuard), which follows the phone onto the new network: a live one is
+      * asked first and kept when it answers, so a roam costs no new connection, no re-read of every
+      * pane and no new snapshot.
 diff --git a/core/src/main/kotlin/me/leaver/rexpocket/core/RexClient.kt b/core/src/main/kotlin/me/leaver/rexpocket/core/RexClient.kt
-index 8a7e6ab4da6b70b82fa1f55892093aa7f82631ed..8485278a58500e4231a2388302ee430836b273a7 100644
+index b5cad75cd38e548bafca3729fe2a3dee74f8b4a4..8344ea845e23624e8d4e8aaa7a1a6fe82625e667 100644
 --- a/core/src/main/kotlin/me/leaver/rexpocket/core/RexClient.kt
 +++ b/core/src/main/kotlin/me/leaver/rexpocket/core/RexClient.kt
-@@ -266,10 +266,13 @@ class RexClient(
+@@ -272,10 +272,13 @@ class RexClient(
           * idle connection left by an earlier attempt, perhaps dead with the network it was on, is
           * never what a new attempt dials on.
           */
@@ -1245,7 +1308,7 @@ index 8a7e6ab4da6b70b82fa1f55892093aa7f82631ed..8485278a58500e4231a2388302ee4308
                  }
              }
 diff --git a/core/src/main/kotlin/me/leaver/rexpocket/core/SshTunnel.kt b/core/src/main/kotlin/me/leaver/rexpocket/core/SshTunnel.kt
-index 8e36fd37accf43002ccb9f9d92b8940ea4c7fb6b..fa5b1eca10f4ddd5764760bffde906c06c986a7c 100644
+index a66f66ff4bea8de28d439b8e085e37a0dc1558ce..fda4d709f931835dd198a50d027a46cd30c6ca36 100644
 --- a/core/src/main/kotlin/me/leaver/rexpocket/core/SshTunnel.kt
 +++ b/core/src/main/kotlin/me/leaver/rexpocket/core/SshTunnel.kt
 @@ -46,6 +46,8 @@ data class SshSettings(
@@ -1539,7 +1602,7 @@ index 2e514625137992b38567187ba68b038fefc6307f..d38d855511d03e2816f0c8a044c33931
      }
  }
 diff --git a/docs/design/backlog.md b/docs/design/backlog.md
-index 47095b7031406fa60c509857dec2d73b5987bba8..c00801fe69130fd3cdbe82018a8815d802b9a0c1 100644
+index 310492f55f10ddcaac9cae8f7fef30fc21b14853..0f9f20a4b824653ae4f8ccd054da2f63f8c63b6f 100644
 --- a/docs/design/backlog.md
 +++ b/docs/design/backlog.md
 @@ -17,7 +17,7 @@ says how the person would hit each one. The fixes are then batched.
@@ -1634,7 +1697,7 @@ index 2ce29d197f0dc064bcfd19ebc2dbef59ebd31f4c..30febd8fc484eb2b95f5274225b5faaa
 +// both sides of its binding share. See docs/design/tailnet-backends.md.
 +include(":netbirdaddon", ":netbirdaddon-api")
 diff --git a/tools/build-tailnet.sh b/tools/build-tailnet.sh
-index dd3bc4da2b0357e40d276200ffc27af1acb94b89..d0e2a60f17570a8c6799d4703ff647ee0d3a3651 100755
+index a8f5be7779d4b9b073499a5edc306fd9bf4523ef..00875450bb59c7a62d3b823b9206bb69d9cde893 100755
 --- a/tools/build-tailnet.sh
 +++ b/tools/build-tailnet.sh
 @@ -1,11 +1,18 @@
@@ -1661,9 +1724,9 @@ index dd3bc4da2b0357e40d276200ffc27af1acb94b89..d0e2a60f17570a8c6799d4703ff647ee
  #
  # Requires: Go (go.mod's toolchain is fetched when GOTOOLCHAIN allows it), JDK 17, an Android NDK
  # and the Android SDK. gomobile is installed into GOBIN by this script.
-@@ -41,20 +48,39 @@ TAGS="$TAGS,ts_omit_flashappliance,ts_omit_systray,ts_omit_dbus,ts_omit_networkm
- TAGS="$TAGS,ts_omit_resolved,ts_omit_iptables,ts_omit_sdnotify,ts_omit_syslog,ts_omit_completion"
- TAGS="$TAGS,ts_omit_qrcodes,ts_omit_cli"
+@@ -53,20 +60,39 @@ TAGS="$TAGS,ts_omit_linkspeed,ts_omit_linuxdnsfight,ts_omit_usermetrics,ts_omit_
+ TAGS="$TAGS,ts_omit_remoteconfig,ts_omit_runtimemetrics,ts_omit_listenrawdisco,ts_omit_webbrowser"
+ TAGS="$TAGS,ts_omit_useexitnode"
  
 -mkdir -p "$ROOT/app/libs"
 +# The Netbird build: its tag, and its own output so the default library stays as it is. The add-on
