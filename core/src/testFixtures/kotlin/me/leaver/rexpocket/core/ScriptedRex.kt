@@ -501,6 +501,9 @@ class ScriptedRex(
     /** RESUMEs refused because they counted other than the bytes sent. */
     val resumesRefused = AtomicInteger()
 
+    /** Data connections opened, whether or not a HELLO or RESUME followed. */
+    val dataSocketsOpened = AtomicInteger()
+
     /**
      * Rex ends [block]'s streams with 1013 `data reconnect required`: more output piled up while
      * their client was away than it could keep, so each must start over with a new ticket.
@@ -1227,6 +1230,10 @@ class ScriptedRex(
     }
 
     private fun data() = object : WebSocketListener() {
+        override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
+            dataSocketsOpened.incrementAndGet()
+        }
+
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
             webSocket.close(code, reason)
             // A stream its client closes with 1000 ends; any other close waits for a resume.

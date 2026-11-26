@@ -142,4 +142,44 @@ class StreamFloodTest {
             assertEquals(want, got.toString())
         }
     }
+
+    /** The ticket is asked for while the data socket opens: Rex has the socket before the ticket is answered. */
+    @Test
+    fun theTicketIsAskedForWhileTheSocketOpens() = runBlocking {
+        ScriptedRex().use { rex ->
+            val control = RexClient()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            try {
+                control.connect(rex.endpoint)
+                control.call("session.bootstrap", JSONObject().put("event_scope", "session"))
+                val sid = control.call(
+                    "session.create",
+                    JSONObject().put("label", "ticket").put(
+                        "initial_windows",
+                        JSONArray().put(JSONObject().put("layout", JSONObject().put("block", JSONObject().put("flavor", "com.superlogical.terminal.shell")))),
+                    ),
+                ).getString("session_id")
+                val block = parseView(control.call("session.attach", JSONObject().put("session_id", sid)).getJSONObject("view")).focusedBlock()!!.id
+                var openBeforeTicket = -1
+                val stream = TerminalStream(rex.endpoint, { RexClient.defaultHttp() }) {
+                    // A slow control connection: by the time the ticket comes, the socket is open.
+                    withTimeout(5_000) { while (rex.dataSocketsOpened.get() == 0) delay(10) }
+                    openBeforeTicket = rex.dataSocketsOpened.get()
+                    control.call(
+                        "data.connect",
+                        JSONObject().put("session_id", sid).put("block_id", block)
+                            .put("data_ref_id", "terminal").put("subprotocol", TerminalStream.PROTOCOL),
+                    ).getString("ticket")
+                }
+                val snapshots = AtomicInteger()
+                scope.launch { stream.feeds().collect { if (it is TerminalFeed.Snapshot) snapshots.incrementAndGet() } }
+                withTimeout(10_000) { while (snapshots.get() == 0) delay(20) }
+                assertEquals(1, openBeforeTicket)
+                stream.close()
+            } finally {
+                control.close()
+                scope.cancel()
+            }
+        }
+    }
 }

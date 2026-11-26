@@ -215,10 +215,15 @@ class TerminalStream(
     /** An attempt given up for a fresh one, not a failure of the stream. */
     private class Retried : CancellationException("retrying now")
 
-    /** Opens one connection and waits for its WELCOME. */
-    private suspend fun open(): Connected {
+    /**
+     * Opens one connection and waits for its WELCOME. A new stream's ticket is asked for while the
+     * socket opens, not before: the HELLO that carries it goes once both are there, which saves a
+     * round trip each time a pane is opened.
+     */
+    private suspend fun open(): Connected = coroutineScope {
         val resuming = resumeToken != null && received > 0
-        val hello = handshake()
+        val hello = async { handshake() }
+        val opened = CompletableDeferred<WebSocket>()
         val welcome = CompletableDeferred<Connected>()
         // Each connection gets its own: a socket that failed still reports its close afterwards,
         // and the next connection must not take that close for its own.
@@ -229,10 +234,12 @@ class TerminalStream(
             .url(endpointOf().ws("/api/data"))
             .header("Sec-WebSocket-Protocol", PROTOCOL)
             .build()
-        val ws = httpFactory().newWebSocket(request, listener(hello, welcome, frames))
+        val ws = httpFactory().newWebSocket(request, listener(opened, welcome, frames))
         active = ws
         try {
-            return welcome.await().also {
+            val handshake = hello.await()
+            opened.await().send(ByteString.of(*handshake))
+            welcome.await().also {
                 // A HELLO starts a new stream, and a RESUME counts that stream's bytes alone: counted
                 // on from the old one, Rex refused every later resume and the pane was drawn again.
                 if (!resuming) received = 0
@@ -252,12 +259,12 @@ class TerminalStream(
     }
 
     private fun listener(
-        hello: ByteArray,
+        opened: CompletableDeferred<WebSocket>,
         welcome: CompletableDeferred<Connected>,
         frames: Channel<Frame>,
     ) = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            webSocket.send(ByteString.of(*hello))
+            opened.complete(webSocket)
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
@@ -289,11 +296,13 @@ class TerminalStream(
             val dropped = DroppedStream(describe(code, reason), fatal = code == CLOSE_BLOCK_CLOSED)
             // Rex could not keep the stream: a RESUME would only be refused, so the next attempt says HELLO.
             if (code == CLOSE_RECONNECT_REQUIRED && welcome.isCompleted) resumeToken = null
+            opened.completeExceptionally(dropped)
             if (!welcome.isCompleted) welcome.completeExceptionally(dropped)
             deliver(frames, Frame.Closed(dropped))
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            opened.completeExceptionally(t)
             if (!welcome.isCompleted) welcome.completeExceptionally(t)
             deliver(frames, Frame.Closed(t))
         }
