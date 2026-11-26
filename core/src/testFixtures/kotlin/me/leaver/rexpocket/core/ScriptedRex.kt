@@ -487,6 +487,11 @@ class ScriptedRex(
         synchronized(this) { screens.getOrPut(block) { StringBuilder() }.append(text) }
     }
 
+    /** The program in [block] writes [bytes]: sent on each open stream of the pane, as its output. */
+    fun output(block: String, bytes: ByteArray) {
+        streams.filter { it.block == block && it.socket != null }.forEach { it.send(bytes) }
+    }
+
     /** What [block] shows, as Rex's `format` gives it as text: what was written to it, which a shell echoes. */
     fun screenOf(block: String): String = synchronized(this) { screens[block]?.toString().orEmpty() }
 

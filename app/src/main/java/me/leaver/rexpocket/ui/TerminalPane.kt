@@ -32,6 +32,7 @@ import me.leaver.rexpocket.core.DoubleTapAction
 import me.leaver.rexpocket.core.GestureSettings
 import me.leaver.rexpocket.core.LongPressAction
 import me.leaver.rexpocket.core.TerminalFeed
+import me.leaver.rexpocket.core.coalesced
 import me.leaver.rexpocket.core.keyboardAfterDoubleTap
 import me.leaver.rexpocket.core.keyboardAfterTap
 import me.leaver.rexpocket.diagnostics.Diagnostics
@@ -118,6 +119,8 @@ internal fun TerminalPane(
     val currentGrid = rememberUpdatedState(onGrid)
     val currentCopyOutput = rememberUpdatedState(onCopyOutput)
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
+    // The one thread at a time the pane's output is read and fed on.
+    val feedThread = remember { Dispatchers.Default.limitedParallelism(1) }
 
     LaunchedEffect(blockId, attempt) {
         // How long a picture takes to arrive is the number that says whether the tunnel under it is
@@ -126,28 +129,34 @@ internal fun TerminalPane(
         val stream = StreamMeter(blockId)
         // The stream reports its own failures; anything that still escapes must not take the app down.
         try {
-            feeds(blockId).collect { feed ->
-                when (feed) {
-                    is TerminalFeed.Snapshot -> {
-                        Diagnostics.event(CONN_TAG, "pane $blockId: ${feed.bytes.size} bytes after ${SystemClock.elapsedRealtime() - askedAt}ms")
-                        val restored = withContext(Dispatchers.Default) {
-                            TerminalSession.restore(feed.bytes)
+            // Read off the main thread, by one reader so the bytes stay in order, with what waited
+            // while the emulator was busy joined into one write: the main thread only swaps in a
+            // new picture, and a fast program no longer queues a hop through it per network message.
+            var current: TerminalSession? = session
+            withContext(feedThread) {
+                feeds(blockId).coalesced().collect { feed ->
+                    when (feed) {
+                        is TerminalFeed.Snapshot -> {
+                            Diagnostics.event(CONN_TAG, "pane $blockId: ${feed.bytes.size} bytes after ${SystemClock.elapsedRealtime() - askedAt}ms")
+                            val restored = TerminalSession.restore(feed.bytes)
+                            if (restored == null) {
+                                Diagnostics.event(CONN_TAG, "pane $blockId: the snapshot did not restore")
+                                return@collect
+                            }
+                            // The old emulator goes only after the new one is ready, so nothing flashes.
+                            val previous = current
+                            withContext(Dispatchers.Main.immediate) {
+                                bind(restored, input, currentTyped, currentResize)
+                                session = restored
+                                onSession(restored)
+                            }
+                            current = restored
+                            previous?.close()
                         }
-                        if (restored == null) {
-                            Diagnostics.event(CONN_TAG, "pane $blockId: the snapshot did not restore")
-                            return@collect
+                        is TerminalFeed.Output -> {
+                            current?.feedOutput(feed.bytes)
+                            stream.add(feed.bytes.size)
                         }
-                        bind(restored, input, currentTyped, currentResize)
-                        // The old emulator goes only after the new one is ready, so nothing flashes.
-                        val previous = session
-                        session = restored
-                        onSession(restored)
-                        withContext(Dispatchers.Default) { previous?.close() }
-                    }
-                    is TerminalFeed.Output -> {
-                        // One reader, in order: a second coroutine would interleave the bytes.
-                        withContext(Dispatchers.Default) { session?.feedOutput(feed.bytes) }
-                        stream.add(feed.bytes.size)
                     }
                 }
             }

@@ -7,6 +7,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -134,6 +135,8 @@ class TerminalStream(
                 // A drop asked for by reconnectNow is retried at once: its wake is still pending.
                 pause(backoff(attempt))
             } finally {
+                // Nothing reads its frames any more: a reader thread waiting to hand one over lets go.
+                socket.frames.cancel()
                 // A deliberate stop ends the stream; a drop keeps it waiting for a resume.
                 if (stopped) socket.webSocket.close(CLOSE_NORMAL, "bye") else socket.webSocket.cancel()
                 active = null
@@ -161,7 +164,9 @@ class TerminalStream(
         val welcome = CompletableDeferred<Connected>()
         // Each connection gets its own: a socket that failed still reports its close afterwards,
         // and the next connection must not take that close for its own.
-        val frames = Channel<Frame>(Channel.UNLIMITED)
+        // Bounded: when the screen falls behind, OkHttp's reader waits on it (see [deliver]), and
+        // TCP tells Rex to slow down, rather than the phone's heap taking all of a `cat` at once.
+        val frames = Channel<Frame>(FRAMES_BUFFERED)
         val request = Request.Builder()
             .url(endpointOf().ws("/api/data"))
             .header("Sec-WebSocket-Protocol", PROTOCOL)
@@ -175,9 +180,11 @@ class TerminalStream(
                 if (!resuming) received = 0
             }
         } catch (e: CancellationException) {
+            frames.cancel()
             ws.cancel()
             throw e
         } catch (e: Exception) {
+            frames.cancel()
             ws.cancel()
             // Only a refusal that names the token or the stream means it is gone; anything else,
             // and Rex still holds the stream for a resume.
@@ -213,7 +220,7 @@ class TerminalStream(
                 }
                 return
             }
-            frames.trySend(Frame.Bytes(bytes.toByteArray()))
+            deliver(frames, Frame.Bytes(bytes.toByteArray()))
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -225,12 +232,26 @@ class TerminalStream(
             // Rex could not keep the stream: a RESUME would only be refused, so the next attempt says HELLO.
             if (code == CLOSE_RECONNECT_REQUIRED && welcome.isCompleted) resumeToken = null
             if (!welcome.isCompleted) welcome.completeExceptionally(dropped)
-            frames.trySend(Frame.Closed(dropped))
+            deliver(frames, Frame.Closed(dropped))
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             if (!welcome.isCompleted) welcome.completeExceptionally(t)
-            frames.trySend(Frame.Closed(t))
+            deliver(frames, Frame.Closed(t))
+        }
+    }
+
+    /**
+     * Hands [frame] to the reader, waiting for room when it is behind: this runs on OkHttp's own
+     * reader thread for the socket, so waiting there stops reading it and lets TCP push back on
+     * Rex. A reader that is gone has cancelled [frames], and the frame is dropped with it.
+     */
+    private fun deliver(frames: Channel<Frame>, frame: Frame) {
+        if (frames.trySend(frame).isSuccess) return
+        try {
+            runBlocking { frames.send(frame) }
+        } catch (_: Exception) {
+            // Cancelled or closed: nobody reads this connection any more.
         }
     }
 
@@ -304,6 +325,9 @@ class TerminalStream(
         private const val REJECT_CLOSED = 0x03.toByte()
 
         private const val MAX_ATTEMPTS = 5
+
+        /** Messages held for the reader before the socket waits; Rex sends pieces of a few KB to 64 KB. */
+        private const val FRAMES_BUFFERED = 256
 
         private fun backoff(attempt: Int): Long = (300L * attempt).coerceAtMost(2_000L)
 

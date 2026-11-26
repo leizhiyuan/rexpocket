@@ -1,5 +1,11 @@
 package me.leaver.rexpocket.core
 
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.produceIn
+
 /** Splits the first bytes of a Rex terminal stream off: they are a `GHOSTSNP` snapshot of the pane. */
 internal object SnapshotFrame {
     private val MAGIC = "GHOSTSNP".toByteArray(Charsets.US_ASCII)
@@ -50,6 +56,54 @@ sealed interface TerminalFeed {
 }
 
 /**
+ * These feeds with the output that is already waiting joined into one [TerminalFeed.Output] of at
+ * most [maxBytes] (a piece larger than that on its own still goes whole), so a fast program costs
+ * one write into the emulator and one redraw per batch rather than per network message. Order is
+ * kept: a snapshot is never moved past the output around it. What arrives while the collector is
+ * busy waits in a buffer of [buffered] feeds; when that is full, the stream upstream waits.
+ */
+fun Flow<TerminalFeed>.coalesced(maxBytes: Int = COALESCE_MAX_BYTES, buffered: Int = 64): Flow<TerminalFeed> = flow {
+    coroutineScope {
+        val waiting = this@coalesced.buffer(buffered).produceIn(this)
+        var next: TerminalFeed? = null
+        while (true) {
+            val feed = next ?: waiting.receiveCatching().let { it.getOrNull() ?: it.exceptionOrNull()?.let { e -> throw e } ?: return@coroutineScope }
+            next = null
+            if (feed !is TerminalFeed.Output) {
+                emit(feed)
+                continue
+            }
+            var parts: ArrayList<ByteArray>? = null
+            var total = feed.bytes.size
+            while (total < maxBytes) {
+                val more = waiting.tryReceive().getOrNull() ?: break
+                if (more !is TerminalFeed.Output || total + more.bytes.size > maxBytes) {
+                    next = more
+                    break
+                }
+                if (parts == null) parts = arrayListOf(feed.bytes)
+                parts += more.bytes
+                total += more.bytes.size
+            }
+            if (parts == null) {
+                emit(feed)
+            } else {
+                val joined = ByteArray(total)
+                var at = 0
+                for (part in parts) {
+                    part.copyInto(joined, at)
+                    at += part.size
+                }
+                emit(TerminalFeed.Output(joined))
+            }
+        }
+    }
+}
+
+/** The most output [coalesced] joins into one write: a few frames' worth at a fast `cat`. */
+const val COALESCE_MAX_BYTES = 256 * 1024
+
+/**
  * Turns the bytes of a terminal data stream into what the emulator takes. A stream begins with a
  * `GHOSTSNP` snapshot; after it, program output arrives with Rex's own messages in it, each an
  * `ESC _ rex1;<nonce>;<json> ESC \` carrying a resize or a theme. Those are the client's own
@@ -72,6 +126,13 @@ internal class StreamDecoder(private val nonce: ULong) {
     /** Takes the next bytes of the stream and returns what is ready to be shown. */
     fun feed(bytes: ByteArray): List<TerminalFeed> {
         if (bytes.isEmpty()) return emptyList()
+        if (snapshotDone && size == 0) {
+            // The usual case once the picture is in: nothing held back, so the bytes are read
+            // where they are, and handed on as they came when there was nothing of Rex's in them.
+            val text = stripRexMessages(bytes, 0, bytes.size, share = true)
+            if (text.second.isNotEmpty()) consume(text.second)
+            return if (text.first.isEmpty()) emptyList() else listOf(TerminalFeed.Output(text.first))
+        }
         append(bytes)
         val out = ArrayList<TerminalFeed>(2)
         var at = 0
@@ -87,12 +148,8 @@ internal class StreamDecoder(private val nonce: ULong) {
             }
         }
         val text = stripRexMessages(buffer, at, size)
-        if (text != null) {
-            if (text.first.isNotEmpty()) out += TerminalFeed.Output(text.first)
-            consume(text.second)
-        } else {
-            size = 0
-        }
+        if (text.first.isNotEmpty()) out += TerminalFeed.Output(text.first)
+        consume(text.second)
         return out
     }
 
@@ -114,37 +171,55 @@ internal class StreamDecoder(private val nonce: ULong) {
         size = rest.size
     }
 
-    /** Output from [from], up to [end], and the unfinished message held back (if any). */
-    private fun stripRexMessages(buffer: ByteArray, from: Int, end: Int): Pair<ByteArray, ByteArray>? {
-        val out = java.io.ByteArrayOutputStream(end - from)
+    /**
+     * Output from [from], up to [end], and the unfinished message held back (empty if none). Runs
+     * between escapes are copied whole, not byte by byte; with [share], [buffer] itself is the
+     * output when it is all output.
+     */
+    private fun stripRexMessages(buffer: ByteArray, from: Int, end: Int, share: Boolean = false): Pair<ByteArray, ByteArray> {
+        val out = ByteArray(end - from)
+        var n = 0
+        // The output not copied yet starts at [run].
+        var run = from
         var i = from
+        fun take(upTo: Int) {
+            buffer.copyInto(out, n, run, upTo)
+            n += upTo - run
+        }
         while (i < end) {
-            // An escape sequence split by the end of this message: the next byte says whether it is
-            // one of Rex's, so it waits.
-            if (buffer[i] == ESC && i + 1 >= end) {
-                return out.toByteArray() to buffer.copyOfRange(i, end)
-            }
-            if (buffer[i] == ESC && buffer[i + 1] == APC) {
-                when (val match = matchRexMessage(buffer, i, end)) {
-                    is RexMatch.Mine -> i = match.end
-                    RexMatch.Partial -> {
-                        if (end - i <= MAX_HELD) {
-                            return out.toByteArray() to buffer.copyOfRange(i, end)
-                        }
-                        out.write(buffer[i].toInt())
-                        i++
-                    }
-                    RexMatch.NotMine -> {
-                        out.write(buffer[i].toInt())
-                        i++
-                    }
-                }
+            if (buffer[i] != ESC) {
+                i++
                 continue
             }
-            out.write(buffer[i].toInt())
-            i++
+            // An escape sequence split by the end of this message: the next byte says whether it is
+            // one of Rex's, so it waits.
+            if (i + 1 >= end) {
+                take(i)
+                return out.copyOf(n) to buffer.copyOfRange(i, end)
+            }
+            if (buffer[i + 1] != APC) {
+                i++
+                continue
+            }
+            when (val match = matchRexMessage(buffer, i, end)) {
+                is RexMatch.Mine -> {
+                    take(i)
+                    i = match.end
+                    run = i
+                }
+                RexMatch.Partial -> {
+                    if (end - i <= MAX_HELD) {
+                        take(i)
+                        return out.copyOf(n) to buffer.copyOfRange(i, end)
+                    }
+                    i++
+                }
+                RexMatch.NotMine -> i++
+            }
         }
-        return out.toByteArray() to ByteArray(0)
+        if (share && run == 0 && from == 0 && end == buffer.size) return buffer to NOTHING
+        take(end)
+        return (if (n == out.size) out else out.copyOf(n)) to NOTHING
     }
 
     /** Whether the APC at [start] is one of Rex's, complete ([RexMatch.Mine]) or still arriving. */
@@ -182,6 +257,8 @@ internal class StreamDecoder(private val nonce: ULong) {
         const val APC = '_'.code.toByte()
         const val ST = '\\'.code.toByte()
         const val SEMICOLON = ';'.code.toByte()
+
+        val NOTHING = ByteArray(0)
 
         /** A program that prints the start of a Rex message and never ends it must not stall the screen. */
         const val MAX_HELD = 64 * 1024
