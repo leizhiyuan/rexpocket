@@ -104,8 +104,11 @@ person wants them, not as long as the screen. Code: `WatchService` (the anchor),
   when the network changes or comes back. Away from the screen a host that stays down is retried
   with the same backoff, but capped at a minute instead of 8 s (`MAX_AWAY_BACKOFF_MS`); the screen
   coming back, a network change and a notification's Reply skip the wait. No wake locks and no
-  alarms: OkHttp's 30 s ping keeps a live socket honest, and Doze lets a foreground service's network
-  through (more so once exempt).
+  alarms. The WebSocket ping is every 120 s, Rex's own schedule: a 30 s one was outgoing data
+  before Tailscale's 45 s idle timeout, so a tailnet path's 3 s disco heartbeat never stopped. While
+  the screen is on, each host's control connection is also asked a quick `session.list` every 30 s
+  and replaced when it goes unanswered for 4 s (`livenessLoop`). Doze lets a foreground service's
+  network through (more so once exempt).
 - **The watch notification** says how many hosts are connected and names them (with each one's
   state, and the joined tailnet's, when there are several), opens the app, and has Stop and, while
   the tailnet and the hosts number two at most, one action for each (a notification has room for

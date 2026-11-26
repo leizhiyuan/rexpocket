@@ -99,7 +99,7 @@ class ForegroundTest {
     /**
      * A control socket that looks open but no longer answers - the network under it went away
      * while the app was in the background - is found out within seconds of coming back, not after
-     * OkHttp's 30 s ping, and replaced.
+     * OkHttp's 120 s ping, and replaced.
      */
     @Test
     fun comingBackReplacesAConnectionThatNoLongerAnswers() = runBlocking {

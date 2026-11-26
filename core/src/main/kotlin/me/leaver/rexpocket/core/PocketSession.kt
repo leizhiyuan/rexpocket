@@ -182,6 +182,8 @@ class PocketSession(
     private val clock: () -> Long = System::currentTimeMillis,
     /** How long a progress bar stays without a new report; see [PocketState.progress]. */
     private val progressStaleMs: Long = PROGRESS_STALE_MS,
+    /** How often the control connection is checked with a quick call while the screen is on. */
+    private val livenessEveryMs: Long = LIVENESS_EVERY_MS,
     /**
      * The host's addresses, when it has others to try: each dial uses the cursor's current one,
      * and one that could not be reached moves it on at once (multi-host.md, "Other addresses").
@@ -402,6 +404,35 @@ class PocketSession(
             if (!alive && clientRef.get() === client) {
                 trace("control connection did not answer after the app came back; reconnecting")
                 reconnectNow()
+            }
+        }
+    }
+
+    /**
+     * While the screen is on, asks [client] a quick question every [livenessEveryMs] and replaces
+     * the connection when it goes unanswered. The WebSocket ping is Rex's 120 s, which is all a
+     * phone in a pocket needs; someone looking at the screen should not wait minutes to see a
+     * dead connection. An answer that is an error is still an answer.
+     */
+    private suspend fun livenessLoop(client: RexClient) {
+        while (true) {
+            active.first { it }
+            delay(livenessEveryMs)
+            if (!active.value) continue
+            val alive = try {
+                client.call("session.list", null, timeoutMs = LIVENESS_MS)
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: RexCallException) {
+                true
+            } catch (e: Exception) {
+                false
+            }
+            if (!alive && clientRef.get() === client) {
+                trace("control connection did not answer its check; reconnecting")
+                reconnectNow()
+                return
             }
         }
     }
@@ -1144,6 +1175,7 @@ class PocketSession(
                 launch { inputLoop(client) }
                 launch { loadSessionViews(_state.value.sessions.map { it.id }, skip = _state.value.activeSessionId) }
                 launch { statusLoop() }
+                launch { livenessLoop(client) }
                 val cause = client.awaitClosed()
                 throw ConnectionDroppedException(cause?.message ?: "Control connection dropped", cause)
             }
@@ -2405,6 +2437,13 @@ private const val PANE_RETRY_MAX_MS = 5_000L
  * half-minute a dead socket takes to be noticed otherwise.
  */
 private const val LIVENESS_MS = 4_000L
+
+/**
+ * How often, on screen, the control connection is asked a quick question. The WebSocket ping
+ * follows Rex's 120 s schedule (a 30 s one kept a tailnet's 3 s path heartbeat running all night),
+ * so this is what finds a dead connection quickly while someone looks.
+ */
+private const val LIVENESS_EVERY_MS = 30_000L
 
 /** How soon after its program's exit a pane closing is taken to be closed by that exit. */
 private const val EXIT_CLOSES_MS = 5_000L

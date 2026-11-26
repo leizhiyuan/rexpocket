@@ -243,6 +243,9 @@ class RexClient(
     }
 
     companion object {
+        /** The WebSocket ping, on Rex's own schedule. */
+        const val PING_INTERVAL_S = 120L
+
         /**
          * What every connection attempt's client shares: one dispatcher, so a host retried all
          * night reuses its threads instead of leaving each attempt's idle for a minute. Its limits
@@ -254,7 +257,10 @@ class RexClient(
                 .dispatcher(Dispatcher().apply { maxRequests = Int.MAX_VALUE; maxRequestsPerHost = Int.MAX_VALUE })
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(0, TimeUnit.MILLISECONDS)
-                .pingInterval(30, TimeUnit.SECONDS)
+                // Rex pings every 120 s and asks clients to do the same (rex-protocol, "Staying Connected").
+                // A 30 s ping kept a tailnet path's 3 s heartbeat running all night; on screen the
+                // session's own check finds a dead connection sooner.
+                .pingInterval(PING_INTERVAL_S, TimeUnit.SECONDS)
                 .build()
         }
 

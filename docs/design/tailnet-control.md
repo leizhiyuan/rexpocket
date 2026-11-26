@@ -229,16 +229,18 @@ session where it is, with a toast.
 
 What costs battery is the node's own traffic while it is up: WireGuard keepalives to the peers it
 talks to, the control-plane long poll (Tailscale's map request), DERP's keepalive, and the wakeups
-of the network stack in the Go runtime. A Rex connection on top adds OkHttp's 30 s ping and Rex's
-status events. Without a measurement on a phone, the shape of the cost is:
+of the network stack in the Go runtime. A Rex connection on top adds a WebSocket ping every 120 s
+(Rex's schedule; longer than Tailscale's 45 s idle timeout, so the path's 3 s heartbeat stops
+between pings) and Rex's status events. Without a measurement on a phone, the shape of the cost is:
 
 - **Tailnet up, no host** costs the node's idle traffic: one long-poll connection to the control
   plane and one to the home DERP region, each with a keepalive of the order of a minute, and
   nothing per peer once no connection uses one (WireGuard sends no keepalive on an idle session
   unless asked to). This is what "Always" keeps up in the background, so the first host connects
   in the time a Rex handshake takes instead of the node's start (a few seconds, more on a cold
-  network). It is cheaper than keeping hosts connected, which adds each host's WebSocket, its 30 s
-  ping, a WireGuard session kept warm to that peer, and Rex's status traffic.
+  network). It is cheaper than keeping hosts connected, which adds each host's WebSocket, its 120 s
+  ping (and a 30 s check while on screen), a WireGuard session kept warm to that peer, and Rex's
+  status traffic.
 - **Follow** (the default) costs nothing beyond the hosts the person keeps: the node goes once they
   do, after the linger.
 - **Let go** costs nothing while away.

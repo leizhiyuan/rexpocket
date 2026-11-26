@@ -111,7 +111,7 @@ class SshTunnel(
             .connectTimeout(CONNECT_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
             .readTimeout(0, TimeUnit.MILLISECONDS)
             .writeTimeout(0, TimeUnit.MILLISECONDS)
-            .pingInterval(30, TimeUnit.SECONDS)
+            .pingInterval(RexClient.PING_INTERVAL_S, TimeUnit.SECONDS)
             // A failure here is the host's answer, not a flaky route: the app retries on its own.
             .retryOnConnectionFailure(false)
             .build()
