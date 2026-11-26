@@ -48,7 +48,7 @@ android {
     }
 
     // CI's phone builds: -Prexpocket.debugKeystore names a debug key kept between runs, so each debug
-    // APK installs over the last. Without it a debug build signs with this computer's own debug key.
+    // and optimized APK installs over the last. Without it they sign with this computer's own debug key.
     (findProperty("rexpocket.debugKeystore") as String?)?.let { path ->
         signingConfigs.create("ciDebug") {
             storeFile = file(path)
@@ -61,9 +61,37 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 in full mode (AGP's default), with the rules in proguard-rules.pro: what JSch,
+            // libghostty's JNI_OnLoad and the tailnet library find by name. See docs/design/r8.md.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }
+        // The release build signed with the debug key instead of the release one: what CI's phone
+        // builds publish as rexpocket.apk (android-apk.yml). Minified, not debuggable, with the
+        // baseline profile, so it runs as a release does; signed like the debug build (with
+        // -Prexpocket.debugKeystore, CI's kept key), so it installs over a debug install as an update.
+        create("optimized") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.findByName("ciDebug") ?: signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
+        // The optimized build with every class the instrumented tests call kept (renamed still):
+        // device-test.yml runs a set of the tests against it to catch a missing keep rule. Only
+        // what -Prexpocket.testBuildType=minified asks for; see docs/design/r8.md.
+        create("minified") {
+            initWith(getByName("optimized"))
+            proguardFile("proguard-test-keep.pro")
+            testProguardFiles("proguard-test.pro")
+        }
+    }
+    (findProperty("rexpocket.testBuildType") as String?)?.let { testBuildType = it }
+
+    // The app is translated into English, Simplified and Traditional Chinese only; the other
+    // languages AndroidX ships would only label its own few strings in a language the app is not in.
+    androidResources {
+        localeFilters += listOf("en", "zh", "zh-rTW")
     }
 
     buildFeatures {
@@ -90,6 +118,8 @@ android {
     sourceSets {
         getByName("test").java.srcDir("src/sharedTest/java")
         getByName("androidTest").java.srcDir("src/sharedTest/java")
+        // The test host activity the Compose tests need, for the tests run against the minified build.
+        getByName("minified").manifest.srcFile("src/debug/AndroidManifest.xml")
     }
 
     packaging {

@@ -1,10 +1,15 @@
 name: android-apk
 
-# Builds the debug APKs for testing on a phone, all signed with the kept debug key:
+# Builds the APKs for testing on a phone, all signed with the kept debug key:
 #   rexpocket.apk                 the app, Tailscale built in, and Netbird through the add-on
 #   rexpocket-netbird-addon.apk   the Netbird add-on, a separate app (me.leaver.rexpocket.netbird)
 #   rexpocket-netbird.apk         the app with Netbird embedded; it replaces rexpocket.apk
-# Download them from the run's Artifacts section.
+#   rexpocket-debug.apk           rexpocket.apk as a debug build, for a debugger or Layout Inspector
+# rexpocket.apk and rexpocket-netbird.apk are the `optimized` build type: the release build (R8,
+# shrunk resources, baseline profile, not debuggable) signed with that key, so each installs over
+# the last, and over an earlier debug build, as an update. See docs/design/r8.md.
+# Download them from the run's rexpocket-apks artifact; R8's mapping.txt for each optimized APK is in
+# rexpocket-mapping, for retracing a stack trace from Diagnostics.
 on:
   workflow_dispatch:
   push:
@@ -66,13 +71,20 @@ jobs:
       - name: Signing key fingerprint
         run: keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 "SHA256:"
 
-      - name: Build the default debug APK
-        run: ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" :app:assembleDebug
+      - name: Build the default APK, optimized and debug
+        run: ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" :app:assembleOptimized :app:assembleDebug
 
-      - name: Keep the default APK aside
+      - name: Keep the default APKs aside
         run: |
-          mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket.apk
+          mkdir -p out mapping
+          cp app/build/outputs/apk/optimized/app-optimized.apk out/rexpocket.apk
+          cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket-debug.apk
+          cp app/build/outputs/mapping/optimized/mapping.txt mapping/rexpocket-mapping.txt
+          # What is found by name kept its name (docs/design/r8.md); the device tests check it runs.
+          SEEDS=app/build/outputs/mapping/optimized/seeds.txt
+          grep -qxF 'me.leaver.rexpocket.terminal.GhosttyVt: int[] decodePng(byte[])' "$SEEDS"
+          grep -qxF 'me.leaver.rexpocket.core.Ed25519Signature: Ed25519Signature()' "$SEEDS"
+          grep -qxF 'me.leaver.rexpocket.core.Ed25519KeyPairGen: Ed25519KeyPairGen()' "$SEEDS"
 
       - name: Build the Netbird add-on's library
         run: REXPOCKET_NETBIRD=addon sh tools/build-tailnet.sh
@@ -85,16 +97,18 @@ jobs:
       - name: Build the Netbird library
         run: REXPOCKET_NETBIRD=1 sh tools/build-tailnet.sh
 
-      - name: Build the debug APK with Netbird
-        run: ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" -Prexpocket.netbird=true :app:assembleDebug
+      - name: Build the optimized APK with Netbird
+        run: ./gradlew --no-daemon -Prexpocket.debugKeystore="$HOME/.android/debug.keystore" -Prexpocket.netbird=true :app:assembleOptimized
 
       - name: Keep the Netbird APK aside
-        run: cp app/build/outputs/apk/debug/app-debug.apk out/rexpocket-netbird.apk
+        run: |
+          cp app/build/outputs/apk/optimized/app-optimized.apk out/rexpocket-netbird.apk
+          cp app/build/outputs/mapping/optimized/mapping.txt mapping/rexpocket-netbird-mapping.txt
 
       - name: Check the APKs carry the kept key, and which one offers the add-on
         run: |
           WANT=$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 "SHA256:" | awk '{print $2}' | tr -d ':' | tr 'A-F' 'a-f')
-          for apk in out/rexpocket.apk out/rexpocket-netbird-addon.apk out/rexpocket-netbird.apk; do
+          for apk in out/rexpocket.apk out/rexpocket-debug.apk out/rexpocket-netbird-addon.apk out/rexpocket-netbird.apk; do
             GOT=$("$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --print-certs "$apk" | grep -m1 "SHA-256 digest" | awk '{print $NF}')
             echo "$apk $GOT"
             [ "$GOT" = "$WANT" ] || { echo "signed with another key than the kept one"; exit 1; }
@@ -106,16 +120,38 @@ jobs:
             echo "rexpocket-netbird.apk offers the add-on"; exit 1
           fi
           [ "$("$AAPT2" dump packagename out/rexpocket-netbird-addon.apk)" = me.leaver.rexpocket.netbird ]
+          # The optimized APKs are not debuggable and carry the baseline profile; the debug one is
+          # debuggable. All of the app's are the same package and version, so each installs over the others.
+          for apk in out/rexpocket.apk out/rexpocket-netbird.apk; do
+            badging=$("$AAPT2" dump badging "$apk")
+            if grep -q application-debuggable <<< "$badging"; then echo "$apk is debuggable"; exit 1; fi
+            unzip -l "$apk" > listing.txt
+            grep -q 'assets/dexopt/baseline.prof$' listing.txt || { echo "$apk has no baseline profile"; exit 1; }
+          done
+          badging=$("$AAPT2" dump badging out/rexpocket-debug.apk)
+          grep -q application-debuggable <<< "$badging" || { echo "rexpocket-debug.apk is not debuggable"; exit 1; }
+          versions=$(for apk in out/rexpocket.apk out/rexpocket-debug.apk out/rexpocket-netbird.apk; do
+            "$AAPT2" dump badging "$apk" > badging.txt
+            head -1 badging.txt | awk '{ print $2, $3 }'
+          done | sort -u)
+          echo "$versions"
+          [ "$(printf '%s\n' "$versions" | wc -l)" = 1 ] || { echo "the app's APKs differ in package or version"; exit 1; }
 
       - name: Sizes
         run: |
           for apk in out/*.apk; do
             echo "$(basename "$apk"): $(stat -c %s "$apk") bytes"
-            unzip -l "$apk" | awk '$4 ~ /^lib\/.*\.so$/ { print "  " $4 ": " $1 " bytes" }'
+            unzip -l "$apk" | awk '$4 ~ /^(lib\/.*\.so|classes[0-9]*\.dex|resources\.arsc|assets\/dexopt\/baseline\.prof)$/ { print "  " $4 ": " $1 " bytes" }'
           done | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rexpocket-debug-apks
+          name: rexpocket-apks
           path: out/*.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rexpocket-mapping
+          path: mapping/*.txt
           if-no-files-found: error

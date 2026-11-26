@@ -47,6 +47,18 @@ TAGS="$TAGS,ts_omit_portlist,ts_omit_wakeonlan,ts_omit_advertiseexitnode,ts_omit
 TAGS="$TAGS,ts_omit_flashappliance,ts_omit_systray,ts_omit_dbus,ts_omit_networkmanager"
 TAGS="$TAGS,ts_omit_resolved,ts_omit_iptables,ts_omit_sdnotify,ts_omit_syslog,ts_omit_completion"
 TAGS="$TAGS,ts_omit_qrcodes,ts_omit_cli"
+# More of the same, about 0.7 MB less native code: control-plane debugging and metrics, the cloud and
+# Linux helpers, sign-ins with OAuth clients and workload identity (the app signs in in the browser or
+# with an auth key), captive-portal detection, the policy store and exit-node use. Kept on purpose:
+# useroutes (subnet routes to reach a host), tailnetlock (tailnets that turn lock on) and posture
+# (tailnets that check devices). serve and acme cannot go: tsnet itself calls them.
+TAGS="$TAGS,ts_omit_ace,ts_omit_c2n,ts_omit_captiveportal,ts_omit_clientmetrics,ts_omit_cliconndiag"
+TAGS="$TAGS,ts_omit_colorable,ts_omit_cloud,ts_omit_conn25,ts_omit_connreject,ts_omit_debugeventbus"
+TAGS="$TAGS,ts_omit_debugportmapper,ts_omit_hujsonconf,ts_omit_identityfederation,ts_omit_oauthkey"
+TAGS="$TAGS,ts_omit_serviceclientprefs,ts_omit_favorites,ts_omit_syspolicy,ts_omit_tundevstats"
+TAGS="$TAGS,ts_omit_linkspeed,ts_omit_linuxdnsfight,ts_omit_usermetrics,ts_omit_netlog"
+TAGS="$TAGS,ts_omit_remoteconfig,ts_omit_runtimemetrics,ts_omit_listenrawdisco,ts_omit_webbrowser"
+TAGS="$TAGS,ts_omit_useexitnode"
 
 # The Netbird build: its tag, and its own output so the default library stays as it is. The add-on
 # has no Tailscale node, so its library is the Netbird package alone, about 20 MB less native code.

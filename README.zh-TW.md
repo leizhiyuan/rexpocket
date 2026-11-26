@@ -65,7 +65,7 @@
 
 ## 要裝哪個 APK
 
-[android-apk 工作流程](.github/workflows/android-apk.yml) 每次執行都會在 `rexpocket-debug-apks` 成品裡留下三個
+[android-apk 工作流程](.github/workflows/android-apk.yml) 每次執行都會在 `rexpocket-apks` 成品裡留下四個
 APK，用同一把金鑰簽署：
 
 | APK | 是什麼 | 怎麼裝 |
@@ -73,6 +73,9 @@ APK，用同一把金鑰簽署：
 | `rexpocket.apk` | App 本體，內建 Tailscale | 一般裝這個 |
 | `rexpocket-netbird-addon.apk` | Netbird 附加元件：一個沒有圖示的獨立 App，為 `rexpocket.apk` 執行 Netbird | 要用 Netbird 時與 `rexpocket.apk` 一起裝 |
 | `rexpocket-netbird.apk` | 內建 Netbird 的 App，大約大 30 MB；不使用附加元件 | 取代 `rexpocket.apk` |
+| `rexpocket-debug.apk` | `rexpocket.apk` 的偵錯建置：較慢，供偵錯器使用 | 只在偵錯時 |
+
+`rexpocket.apk` 和 `rexpocket-netbird.apk` 以發布版本的方式建置（經 R8 縮減、附基準設定檔、不可偵錯），所以可以覆蓋安裝在先前的偵錯建置上；每個 APK 的 R8 對應檔在該次執行的 `rexpocket-mapping` 成品裡。見 [docs/design/r8.md](docs/design/r8.md)。
 
 `rexpocket.apk` 和 `rexpocket-netbird.apk` 是同一個 App，可以互相覆蓋安裝，主機都會保留。附加元件是另一個
 App：要和 `rexpocket.apk` 來自同一次執行或同一個發布版本，因為 RexPocket 只和用自己金鑰簽署的附加元件溝通。

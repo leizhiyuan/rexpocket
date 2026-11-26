@@ -85,14 +85,19 @@ switched without leaving the terminal it was showing, and the dock is one hand's
 
 ## Which APK to install
 
-Each run of the [android-apk workflow](.github/workflows/android-apk.yml) leaves three APKs in its
-`rexpocket-debug-apks` artifact, all signed with the same key:
+Each run of the [android-apk workflow](.github/workflows/android-apk.yml) leaves four APKs in its
+`rexpocket-apks` artifact, all signed with the same key:
 
 | APK | What it is | Install it |
 | --- | --- | --- |
 | `rexpocket.apk` | The app, with Tailscale built in | The usual choice |
 | `rexpocket-netbird-addon.apk` | The Netbird add-on: a separate app, with no icon, that runs Netbird for `rexpocket.apk` | Beside `rexpocket.apk`, for Netbird |
 | `rexpocket-netbird.apk` | The app with Netbird built in, about 30 MB larger; it does not use the add-on | Instead of `rexpocket.apk` |
+| `rexpocket-debug.apk` | `rexpocket.apk` as a debug build: slower, for a debugger | Only to debug |
+
+`rexpocket.apk` and `rexpocket-netbird.apk` are built as a release is (minified by R8, with a
+baseline profile, not debuggable), so they install over an earlier debug build as an update; R8's
+mapping for each is in the run's `rexpocket-mapping` artifact. See [docs/design/r8.md](docs/design/r8.md).
 
 `rexpocket.apk` and `rexpocket-netbird.apk` are the same app, so either one installs over the other
 and keeps its hosts. The add-on is an app of its own: take it from the same run or release as
@@ -291,6 +296,7 @@ which erases the app's hosts and tailnet login.
    `build: release <version>`.
 3. `./gradlew :app:assembleRelease`. The build stops if the key is not set; it never falls back to the
    debug key. Check the result with `apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk`.
+   Keep `app/build/outputs/mapping/release/mapping.txt` with the release, to retrace its stack traces.
 4. Publish a GitHub release tagged `v<version>` with that one APK attached, named
    `RexPocket-<version>.apk`. Mark it a pre-release for an alpha, beta or rc: an installed pre-release
    follows pre-releases, an installed finished build only takes finished ones. Do not replace the APK of

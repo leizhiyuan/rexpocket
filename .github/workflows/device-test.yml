@@ -9,6 +9,11 @@ name: device-test
 # x86_64 one: both native libraries are built for x86_64 from the same sources and pinned versions,
 # and -Prexpocket.abi=x86_64 packs them. The release build and the scripts it uses are unchanged; the
 # x86_64 copies of the build scripts below exist only on the runner.
+#
+# The `minified` job runs a set of the tests against R8's output instead of the debug build: the
+# release build's rules plus proguard-test-keep.pro, so that a missing keep rule (something JSch,
+# libghostty or the tailnet library finds by name) fails here and not on a phone. Its SSH checks
+# sign in to a real OpenSSH server started on the runner. See docs/design/r8.md.
 on:
   workflow_dispatch:
   push:
@@ -21,14 +26,19 @@ jobs:
   device-test:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    name: device-test (API ${{ matrix.api-level }}, ${{ matrix.build }})
     strategy:
       fail-fast: false
       matrix:
-        api-level: [30, 34]
+        include:
+          - { api-level: 30, build: debug, task: Debug, script: run-tests.sh }
+          - { api-level: 34, build: debug, task: Debug, script: run-tests.sh }
+          - { api-level: 34, build: minified, task: Minified, script: run-minified.sh }
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
-      # The arm64 libghostty is not built: this APK carries the x86_64 one.
-      GRADLE_ARGS: -x :app:buildGhostty -Prexpocket.netbird=true -Prexpocket.abi=x86_64
+      # The arm64 libghostty is not built: this APK carries the x86_64 one. The tests run against
+      # the build type named by testBuildType: debug, or minified.
+      GRADLE_ARGS: -x :app:buildGhostty -Prexpocket.netbird=true -Prexpocket.abi=x86_64 -Prexpocket.testBuildType=${{ matrix.build }}
     steps:
       - uses: actions/checkout@v4
 
@@ -65,6 +75,7 @@ jobs:
       # The Netbird add-on's tests run the default build of the app (the one that offers the add-on)
       # beside the add-on itself, which needs its own library.
       - name: Build the Netbird add-on's library for x86_64
+        if: matrix.build == 'debug'
         run: |
           REXPOCKET_NETBIRD=addon sh tools/build-tailnet-x86_64.sh
           unzip -l netbirdaddon/libs/tailnet-netbird-addon.aar | grep 'jni/'
@@ -78,8 +89,93 @@ jobs:
 
       - name: Build the app and test APKs
         run: |
-          ./gradlew --no-daemon $GRADLE_ARGS :app:assembleDebug :app:assembleDebugAndroidTest
-          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep 'lib/'
+          ./gradlew --no-daemon $GRADLE_ARGS :app:assemble${{ matrix.task }} :app:assemble${{ matrix.task }}AndroidTest
+          unzip -l app/build/outputs/apk/${{ matrix.build }}/app-${{ matrix.build }}.apk | grep -E 'lib/|baseline.prof'
+
+      # A real OpenSSH server on the runner, which the emulator reaches as 10.0.2.2: one port with an
+      # Ed25519 host key, one with an RSA one; sign-in with a password, an Ed25519 key or an RSA key.
+      - name: Start an SSH server for the minified tests
+        if: matrix.build == 'minified'
+        run: |
+          test -x /usr/sbin/sshd || { sudo apt-get update -q && sudo apt-get install -y -q openssh-server; }
+          D="$RUNNER_TEMP/sshd"; mkdir -p "$D"
+          ssh-keygen -q -t ed25519 -N '' -f "$D/host_ed25519"
+          ssh-keygen -q -t rsa -b 3072 -N '' -f "$D/host_rsa"
+          ssh-keygen -q -t ed25519 -N '' -C ci-ed25519 -f "$D/user_ed25519"
+          ssh-keygen -q -t rsa -b 3072 -N '' -C ci-rsa -f "$D/user_rsa"
+          cat "$D/user_ed25519.pub" "$D/user_rsa.pub" > "$D/authorized_keys"
+          echo "$(id -un):rexpocket-ci" | sudo chpasswd
+          sudo mkdir -p /run/sshd
+          for kind in ed25519:2222 rsa:2223; do
+            k=${kind%%:*}; port=${kind##*:}
+            printf '%s\n' "Port $port" "ListenAddress 0.0.0.0" "HostKey $D/host_$k" "PidFile $D/sshd-$k.pid" \
+              "AuthorizedKeysFile $D/authorized_keys" "StrictModes no" "UsePAM yes" "PasswordAuthentication yes" \
+              "PubkeyAuthentication yes" "KbdInteractiveAuthentication no" > "$D/sshd-$k.conf"
+            sudo /usr/sbin/sshd -f "$D/sshd-$k.conf" -E "$D/sshd-$k.log"
+          done
+          sleep 1
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i "$D/user_ed25519" -p 2222 "$(id -un)@127.0.0.1" true
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i "$D/user_rsa" -p 2223 "$(id -un)@127.0.0.1" true
+          {
+            echo "SSH_USER=$(id -un)"
+            echo "SSH_KEY_ED25519=$(base64 -w0 < "$D/user_ed25519")"
+            echo "SSH_KEY_RSA=$(base64 -w0 < "$D/user_rsa")"
+          } >> "$GITHUB_ENV"
+
+      - name: Write the minified test script
+        if: matrix.build == 'minified'
+        # The tests that reach what R8 could break: the terminal and libghostty's JNI (with a Kitty
+        # PNG), SSH and key generation, the tailnet library's Go callbacks and status screen, the
+        # tiles and background service, backup and restore, host import, the update feed, and the
+        # names Diagnostics shows. Each class on its own, as in run-tests.sh.
+        run: |
+          cat > "$RUNNER_TEMP/run-minified.sh" <<'SH'
+          set -u
+          adb shell getprop ro.build.version.sdk
+          mkdir -p out
+          status=0
+          for class in \
+              me.leaver.rexpocket.MinifiedSmokeTest \
+              me.leaver.rexpocket.net.TailnetNodeInstrumentedTest \
+              me.leaver.rexpocket.data.HostStoreTest \
+              me.leaver.rexpocket.ui.TerminalViewTest \
+              me.leaver.rexpocket.ui.TerminalImeTest \
+              me.leaver.rexpocket.ui.FullScreenTest \
+              me.leaver.rexpocket.ui.LaunchTest \
+              me.leaver.rexpocket.ui.MultiHostTest \
+              me.leaver.rexpocket.ui.TailnetStatusTest \
+              me.leaver.rexpocket.ui.TailnetControlTest \
+              me.leaver.rexpocket.ui.HostImportScreenTest \
+              me.leaver.rexpocket.ui.SettingsBackupScreenTest \
+              me.leaver.rexpocket.ui.HostCheckScreenTest \
+              me.leaver.rexpocket.ui.HostsAndSecurityTest \
+              me.leaver.rexpocket.ui.TilesScreenTest \
+              me.leaver.rexpocket.ui.ShareTest \
+              me.leaver.rexpocket.alerts.BackgroundServiceTest; do
+            adb logcat -c || true
+            if ./gradlew --no-daemon -q $GRADLE_ARGS :app:connectedMinifiedAndroidTest \
+                -Pandroid.testInstrumentationRunnerArguments.class="$class" \
+                -Pandroid.testInstrumentationRunnerArguments.sshHost=10.0.2.2 \
+                -Pandroid.testInstrumentationRunnerArguments.sshPortEd25519=2222 \
+                -Pandroid.testInstrumentationRunnerArguments.sshPortRsa=2223 \
+                -Pandroid.testInstrumentationRunnerArguments.sshUser="$SSH_USER" \
+                -Pandroid.testInstrumentationRunnerArguments.sshPassword=rexpocket-ci \
+                -Pandroid.testInstrumentationRunnerArguments.sshKeyEd25519="$SSH_KEY_ED25519" \
+                -Pandroid.testInstrumentationRunnerArguments.sshKeyRsa="$SSH_KEY_RSA"; then
+              echo "RESULT $class: passed"
+            else
+              echo "RESULT $class: FAILED"
+              status=1
+            fi
+            mkdir -p "out/$class"
+            cp -r app/build/reports/androidTests "out/$class/" 2>/dev/null || true
+            cp -r app/build/outputs/androidTest-results "out/$class/" 2>/dev/null || true
+            adb logcat -d > "out/$class/logcat.txt" || true
+            grep -E "SIGSEGV|Fatal signal|FATAL EXCEPTION|UnsatisfiedLinkError|NoSuchMethodError|NoSuchFieldError|ClassNotFoundException|JNI DETECTED" "out/$class/logcat.txt" | head -20 || true
+          done
+          cp app/build/outputs/mapping/minified/mapping.txt out/ 2>/dev/null || true
+          exit $status
+          SH
 
       - name: Write the test script
         # Each class runs on its own, so a native crash in one does not hide the results of the rest.
@@ -92,6 +188,7 @@ jobs:
           mkdir -p out
           status=0
           for class in \
+              me.leaver.rexpocket.MinifiedSmokeTest \
               me.leaver.rexpocket.net.TailnetNodeInstrumentedTest \
               me.leaver.rexpocket.data.FontPreferenceTest \
               me.leaver.rexpocket.data.HostStoreTest \
@@ -250,7 +347,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: sh "$RUNNER_TEMP/run-tests.sh"
+          script: sh "$RUNNER_TEMP/${{ matrix.script }}"
 
       - name: Keep the test reports
         if: always()
@@ -261,20 +358,20 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: device-test-reports-api${{ matrix.api-level }}
+          name: device-test-reports-api${{ matrix.api-level }}${{ matrix.build == 'minified' && '-minified' || '' }}
           path: out/
           if-no-files-found: warn
 
       # The same screen tests on the JVM (Robolectric), and the screenshots for review (Roborazzi):
       # see docs/design/testing.md. Once per run, not per emulator. Robolectric's Android 15 wants Java 21.
       - uses: actions/setup-java@v4
-        if: always() && matrix.api-level == 34
+        if: always() && matrix.api-level == 34 && matrix.build == 'debug'
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Screen tests and screenshots on the JVM
-        if: always() && matrix.api-level == 34
+        if: always() && matrix.api-level == 34 && matrix.build == 'debug'
         run: |
           # These tests do not load libghostty, so the host build of it is skipped.
           mkdir -p native/.build/host
@@ -299,7 +396,7 @@ jobs:
             --tests 'me.leaver.rexpocket.ui.ScreenshotsTest'
 
       - uses: actions/upload-artifact@v4
-        if: always() && matrix.api-level == 34
+        if: always() && matrix.api-level == 34 && matrix.build == 'debug'
         with:
           name: screenshots
           path: |

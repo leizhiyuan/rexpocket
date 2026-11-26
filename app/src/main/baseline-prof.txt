@@ -1,0 +1,12 @@
+HSPLme/leaver/rexpocket/**;->**(**)**
+Lme/leaver/rexpocket/**;
+HSPLcom/jcraft/jsch/**;->**(**)**
+Lcom/jcraft/jsch/**;
+HSPLnet/i2p/crypto/eddsa/**;->**(**)**
+Lnet/i2p/crypto/eddsa/**;
+HSPLokhttp3/**;->**(**)**
+Lokhttp3/**;
+HSPLokio/**;->**(**)**
+Lokio/**;
+HSPLgo/**;->**(**)**
+Lgo/**;
