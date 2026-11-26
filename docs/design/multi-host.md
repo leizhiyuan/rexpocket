@@ -109,8 +109,9 @@ person wants them, not as long as the screen. Code: `WatchService` (the anchor),
   or address set (not for DNS, routes or a rotated privacy address), 2 s after a burst settles
   (`LinkChanges`), and on a return to the screen only when the watch did not hold the network while
   away or the network changed meanwhile. Away from the screen a host that stays down is retried
-  with the same backoff, but capped at a minute instead of 8 s (`MAX_AWAY_BACKOFF_MS`); the screen
-  coming back, a network change and a notification's Reply skip the wait. No wake locks and no
+  with the same backoff, but capped at a minute instead of 8 s (`MAX_AWAY_BACKOFF_MS`), then at
+  5 and 15 minutes as it stays down (`awayBackoffCap`: after about 10 minutes, then about an hour
+  of failures); the screen coming back, a network change and a notification's Reply skip the wait. No wake locks and no
   alarms. The WebSocket ping is every 120 s, Rex's own schedule: a 30 s one was outgoing data
   before Tailscale's 45 s idle timeout, so a tailnet path's 3 s disco heartbeat never stopped. While
   the screen is on, each host's control connection is also asked a quick `session.list` every 30 s

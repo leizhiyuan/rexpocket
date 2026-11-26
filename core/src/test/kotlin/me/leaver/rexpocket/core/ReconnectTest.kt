@@ -44,6 +44,29 @@ class ReconnectTest {
         }
     }
 
+    /**
+     * Away from the screen a host that stays off is tried every minute at first, then less often:
+     * 5 minutes after about ten minutes of failures, 15 after about an hour, not every minute all night.
+     */
+    @Test
+    fun aHostOffAllNightIsTriedLessAndLessOften() {
+        assertEquals(60_000L, awayBackoffCap(1))
+        assertEquals(60_000L, awayBackoffCap(17))
+        assertEquals(300_000L, awayBackoffCap(18))
+        assertEquals(900_000L, awayBackoffCap(28))
+        assertEquals(900_000L, awayBackoffCap(500))
+        // Tries in the first night of eight hours: 9 to reach the minute, 8 at it, 10 at 5 minutes, then every 15.
+        var t = 0L
+        var n = 0
+        var backoff = 400L
+        while (t < 8 * 3_600_000L) {
+            n++
+            backoff = (backoff * 2).coerceAtMost(awayBackoffCap(n))
+            t += backoff
+        }
+        assertTrue("$n tries in a night", n < 60)
+    }
+
     /** "Retry now" skips the rest of the backoff instead of waiting up to eight seconds. */
     @Test
     fun retryNowSkipsTheBackoff() = runBlocking {

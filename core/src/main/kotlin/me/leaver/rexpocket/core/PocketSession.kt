@@ -354,6 +354,8 @@ class PocketSession(
         runnerScope = scope
         val job = scope.launch {
             var backoff = MIN_BACKOFF_MS
+            // Failed attempts in a row, for the away cap: a host off all night is tried less and less.
+            var failures = 0
             while (isActive) {
                 try {
                     runConnection()
@@ -363,7 +365,11 @@ class PocketSession(
                     if (!isActive) break
                     trace("connection ended: " + generateSequence(e as Throwable) { it.cause }.joinToString(" <- ") { "${it.javaClass.simpleName}: ${it.message}" })
                     // A connection that was up starts over from the shortest wait.
-                    if (_state.value.phase == Phase.Live) backoff = MIN_BACKOFF_MS
+                    if (_state.value.phase == Phase.Live) {
+                        backoff = MIN_BACKOFF_MS
+                        failures = 0
+                    }
+                    failures++
                     val problem = e.toProblem()
                     updateState {
                         it.copy(
@@ -379,8 +385,9 @@ class PocketSession(
                     val woken = withTimeoutOrNull(backoff) { retry.receive() } != null
                     // Away from the screen (background mode) a host that stays down is tried less
                     // often: a network change, or the screen coming back, wakes the wait at once.
-                    val cap = if (active.value) MAX_BACKOFF_MS else MAX_AWAY_BACKOFF_MS
+                    val cap = if (active.value) MAX_BACKOFF_MS else awayBackoffCap(failures)
                     backoff = if (woken) MIN_BACKOFF_MS else (backoff * 2).coerceAtMost(cap)
+                    if (woken) failures = 0
                     // A wrong key or an unconfirmed host key stays wrong until the person changes it.
                     if (e.isFatalConnectionProblem()) break
                 }
@@ -2482,6 +2489,24 @@ private const val MAX_BACKOFF_MS = 8_000L
 
 /** The longest wait between attempts while the app is away: a minute, so a host that is off costs little. */
 private const val MAX_AWAY_BACKOFF_MS = 60_000L
+
+/**
+ * The longest wait between attempts away from the screen after [failures] failed attempts in a
+ * row: a minute at first, then 5 minutes once the host has been off for about ten minutes, then
+ * 15 minutes after about an hour. A network change, the screen coming back and a notification's
+ * Reply still try at once.
+ */
+internal fun awayBackoffCap(failures: Int): Long = when {
+    failures < AWAY_SLOWER_AFTER -> MAX_AWAY_BACKOFF_MS
+    failures < AWAY_SLOWEST_AFTER -> 5 * 60_000L
+    else -> 15 * 60_000L
+}
+
+/** About 2 minutes of doubling to the minute, then 8 tries a minute apart. */
+private const val AWAY_SLOWER_AFTER = 18
+
+/** Then 10 tries 5 minutes apart. */
+private const val AWAY_SLOWEST_AFTER = 28
 
 /** How long to wait before taking a pane the first time, and the longest wait after retries. */
 private const val FIRST_TAKE_BACK_MS = 1_000L
