@@ -168,8 +168,8 @@ such:
   (docs:mac-settings, Include idle processes in activity).
 - The priority order, from the search words Rex gives Show Activity by Priority: "blocked failed
   done working idle" (docs:mac-actions). The screenshot agrees for the two groups it shows (Failed
-  above Done). The exact captions of the other groups are **unconfirmed**; the app uses Waiting,
-  Failed, Done, Running, from the setting names "programs waiting for you", "Error", "Done",
+  above Done). The exact captions of the other groups are **unconfirmed**; the app uses Blocked,
+  Failed, Done, Working, after the priority words and the setting names "programs waiting for you", "Error", "Done",
   "Working" (docs:mac-settings, Program Activity).
 - Idle tabs are shown only until seen, unless **Include idle processes in activity** is on
   (docs:mac-settings). `done` is "the result is ready to look at and the user has not seen it yet"

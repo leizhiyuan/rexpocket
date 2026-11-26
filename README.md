@@ -29,7 +29,7 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   the whole terminal first, then its output as it comes. Colours, scrollback and full-screen
   programs are exactly as on the desk.
 - **Made for the phone.** Typing goes straight into the pane. A floating dock holds the keyboard,
-  Return and a key row: `esc`, `C-c`, arrows that repeat while held, Tab, Return, `ctrl`, paste, a paperclip and `/`.
+  Return and a key row: `esc`, `C-c`, arrows that repeat while held, Tab, Return, `ctrl`, paste, a paperclip, a folder (Insert path) and `/`.
   `Fn` pins a panel of Home, End, PgUp, PgDn, Ins, Del, F1-F12 and the symbols a phone keyboard
   buries; the row's modifiers apply to them. Settings → Terminal → Arrange keys puts the keys of
   both pills in any order, adds and removes them - any key of `Fn`, such as F10, can go right on the
@@ -48,7 +48,23 @@ switched without leaving the terminal it was showing, and the dock is one hand's
   share it.
 - **Files and images.** Pick any file on the phone and send it to the pane you are looking at.
   Rex stores it on the computer and types its path itself, so a screenshot can go straight into an
-  agent's prompt.
+  agent's prompt. **Insert path** (the folder key, or ⋮ › Insert path) browses the computer's
+  folders from where the program is, with a breadcrumb back up, and types the picked folder's or
+  file's path into the pane, quoted for the shell.
+- **New tabs from templates.** A session's New tab offers a blank tab and your **launch
+  templates** - a name, a folder and a command, such as `claude` in `~/proj` - and the command
+  palette lists them too, with your Rex **custom actions**.
+- **Text size** from 50% to 333%: pinch, or ⋮ › Text size (− / +, Reset, the columns and rows it
+  fits), with a default for new tabs in Settings › Appearance.
+- **Help in the app.** ⋮ › Help and guide finds a feature in your words and shows where it is; a
+  quick tour walks the home once.
+- **Private when you want.** Settings › Security locks the app behind the phone's fingerprint,
+  face or screen lock and can block screenshots and the picture in recent apps.
+- **Hosts from a link, settings in a file.** A `rexpocket://add` link or QR code (from
+  `tools/host-link.sh` on the computer) fills in Add host; Settings › Backup exports and imports
+  hosts and settings, SSH keys only sealed with a passphrase you choose.
+- **Quick Settings tiles and a widget.** A tile connects a host or tailnet, another switches
+  background mode; the home-screen widget counts what is blocked, failed, done and working.
 - **Background alerts.** Optional: the app stays connected while it is away and notifies you when a
   program waits for approval, an answer or a login, or fails. Tap the alert to open that pane.
 - **Works beside the desk.** The phone holds only the pane it shows and sizes it to the phone; the
@@ -169,7 +185,9 @@ own SSH daemon. How the transport works is described in
      **Settings › Reopen the last tab on launch** (off by default) - and never once you have
      touched anything: whatever you opened meanwhile stays open.
 6. **Background alerts:** Settings › Background alerts, and allow notifications. A quiet
-   notification shows while the app watches; its **Stop** turns alerts off. The app does not start
+   notification shows while the app watches; its **Stop** turns alerts off. An alert answers
+   from the shade - Approve, Deny, Reply or Interrupt - and **Mute tab** silences a noisy tab (the
+   tab's ⋮ unmutes it). The app does not start
    on its own after a reboot, and Android's battery saving can delay an alert.
 
 ## Reporting a problem

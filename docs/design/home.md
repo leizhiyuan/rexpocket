@@ -94,7 +94,7 @@ report (seen done and failed ones left out, as everywhere), arranged as Rex arra
   caption and its tabs in Rex's order.
 - **Include idle** (Rex's "Include idle processes in activity"): off, an idle tab is there until
   it was seen - shown on the phone, Mark as seen, or a desk looking at it, as done and failed
-  are; on, always. Idle is in the Activity view only: never in Needs you, Running, the counts or
+  are; on, always. Idle is in the Activity view only: never in Needs you, Working, the counts or
   the dots. While it is off and seen idle tabs are left out, a line under the controls says so:
   "2 idle tabs hidden · Show", which turns it on.
 
@@ -102,7 +102,7 @@ The two choices are a pair of chips and a switch row at the top of the list, eve
 said as selected or on; they are kept, with the chip, and go in the settings backup. A row is the
 same row as Needs you's - tap opens the pane that reported, long press and ⋮ the tab sheet, the
 same TalkBack actions, Reply, Approve and Deny on a waiting row, Interrupt on a busy one - so the
-Activity view is Needs you and Running together, with idle, and Rex's two arrangements; those two
+Activity view is Needs you and Working together, with idle, and Rex's two arrangements; those two
 chips stay as they were, for the one-handed "what needs me" and "what runs".
 
 **All, Needs you, Working** are chips (the Working chip was Running until 2026-11-24; its stored
@@ -112,7 +112,7 @@ or finished and was not seen. **Working is anything working**: every tab with a 
 any pane, root or child, whatever else it has - so a tab can be in both, and its row says both
 ("working · 1 done" in Working, "done · working" in Needs you). The dot is always the tab's most
 pressing state, in Rex's order. A tab with no records, or only idle ones, is in neither. Each is a
-flat list (Needs you in Rex's priority order, Running newest first) under each host's header (no
+flat list (Needs you in Rex's priority order, Working newest first) under each host's header (no
 folds), with Reply
 (never for `auth`, as in notifications) and Interrupt on Needs you's rows, **Mark as seen** on a
 done or failed one (with Undo, TalkBack "Mark build as seen"), and a line for each host that is
@@ -187,7 +187,7 @@ optional `templates` list, so older files load). Code: `LaunchTemplate` (core), 
 
 ## Status of tabs never opened
 
-Every tab of every session has its state on the home, in Running, Needs you and Activity, without
+Every tab of every session has its state on the home, in Working, Needs you and Activity, without
 being opened. Each pane is read once (`program_status`, `pwd`, `process`, `title`) when its view is
 first known, and then follows Rex's status events. A session the phone has not attached on this
 connection may send none (a Mac did not, though the guide says `event_scope: all` brings them):

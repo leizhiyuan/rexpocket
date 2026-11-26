@@ -33,9 +33,7 @@ What to look for:
   reset.
 - **Gesture-only features:** something only a gesture reaches. Pinch-to-zoom in the terminal
   is the known one: someone using the app didn't know it existed, and an omp table wrapped at
-  52 columns until they found it. Planned fix: a Text size row in the tab ⋮ menu (− / +, Reset,
-  showing the current columns), a one-time "Pinch to change text size" hint, and a default size
-  in Settings › Appearance that the backup carries. Check other gestures the same way: long
+  52 columns until they found it (fixed: see below). Check other gestures the same way: long
   press, swipe, double tap.
 
 **Done: the terminal and key bar.** The pinch has a Text size row in the ⋮ menu (− / +, Reset, the
@@ -63,7 +61,7 @@ actions, from the table above, are built too (home.md, "Launch templates"; comma
 
 Areas, one per scout:
 - Home and its sheets (done: see above);
-- the terminal and key bar;
+- the terminal and key bar (done: see above);
 - hosts, import and backup (done: each host's whole list of other addresses, Try other addresses
   and tailnet account in Export and the backup, Forget host key, an other address typed and not
   added kept by Save, the terminal font, key bar and gestures in the backup, Reset to defaults on
