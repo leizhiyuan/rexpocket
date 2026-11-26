@@ -315,16 +315,42 @@ internal class TerminalView(context: Context) : View(context) {
         setIsLongpressEnabled(false)
     }
 
+    /**
+     * The size a pinch in progress is at, in sp, or 0 with none. During the gesture the last frame
+     * is drawn scaled to it; the size is set once, when the fingers lift: each size set refits the
+     * grid, which has libghostty reflow all of the history and Rex the program, so setting it at
+     * every step of a pinch made the gesture lag on a long history.
+     */
+    private var pinchSp = 0f
+    private var pinchX = 0f
+    private var pinchY = 0f
+
     private val pinch = ScaleGestureDetector(
         context,
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                pinchSp = fontSizeSp
+                pinchX = detector.focusX
+                pinchY = detector.focusY
+                return true
+            }
+
             override fun onScale(detector: ScaleGestureDetector): Boolean {
-                val target = (fontSizeSp * detector.scaleFactor).coerceIn(MIN_FONT_SP, MAX_FONT_SP)
-                // A change too small to move a cell is kept for the next event, which a refusal does.
-                if (abs(target - fontSizeSp) < PINCH_STEP_SP) return false
+                pinchSp = (pinchSp * detector.scaleFactor).coerceIn(MIN_FONT_SP, MAX_FONT_SP)
+                invalidate()
+                return true
+            }
+
+            override fun onScaleEnd(detector: ScaleGestureDetector) {
+                val target = pinchSp
+                pinchSp = 0f
+                // A change too small to move a cell is no change.
+                if (abs(target - fontSizeSp) < PINCH_STEP_SP) {
+                    invalidate()
+                    return
+                }
                 fontSizeSp = target
                 onFontSizeChanged?.invoke(target)
-                return true
             }
         },
     )
@@ -384,10 +410,13 @@ internal class TerminalView(context: Context) : View(context) {
 
     private fun measureFont() {
         val px = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, fontSizeSp, resources.displayMetrics)
-        regular.typeface = typeface
-        bold.typeface = Typeface.create(typeface, Typeface.BOLD)
-        italic.typeface = Typeface.create(typeface, Typeface.ITALIC)
-        boldItalic.typeface = Typeface.create(typeface, Typeface.BOLD_ITALIC)
+        // Its styles are made once per typeface, not on every size change.
+        if (regular.typeface !== typeface) {
+            regular.typeface = typeface
+            bold.typeface = Typeface.create(typeface, Typeface.BOLD)
+            italic.typeface = Typeface.create(typeface, Typeface.ITALIC)
+            boldItalic.typeface = Typeface.create(typeface, Typeface.BOLD_ITALIC)
+        }
         for (paint in listOf(regular, bold, italic, boldItalic)) paint.textSize = px
         cellWidth = regular.measureText("M").coerceAtLeast(1f)
         val metrics = regular.fontMetrics
@@ -431,6 +460,19 @@ internal class TerminalView(context: Context) : View(context) {
         val frame = selection?.frame ?: currentFrame()
         canvas.drawColor(frame?.background ?: theme.background)
         if (frame == null) return
+        if (pinchSp > 0f) {
+            // Pinching: the grid as it is, scaled about the fingers, until they lift.
+            val scale = pinchSp / fontSizeSp
+            canvas.save()
+            canvas.scale(scale, scale, pinchX, pinchY)
+            drawFrame(canvas, frame)
+            canvas.restore()
+            return
+        }
+        drawFrame(canvas, frame)
+    }
+
+    private fun drawFrame(canvas: Canvas, frame: TerminalFrame) {
         val columns = min(frame.columns, ceil(width / cellWidth).toInt())
         val rows = min(frame.rows, ceil(height / cellHeight).toInt())
         val images = if (frame.images.isEmpty()) emptyList() else frame.images.sortedWith(compareBy({ it.layer }, { it.z }))
