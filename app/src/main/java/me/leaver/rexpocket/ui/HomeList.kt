@@ -786,7 +786,14 @@ internal class TreeEnv(
     /** Whether a host's notifications are off (its page's Notifications from this host): its row says so. */
     val silenced: (hostId: String) -> Boolean = { false },
 ) {
-    fun ref(host: SavedHost) = HostRef(host, lives[host.id])
+    private val refs = HashMap<String, HostRef>()
+
+    /** [host] with its connection; the same instance each time for this env, so a row given it can skip. */
+    fun ref(host: SavedHost): HostRef {
+        val live = lives[host.id]
+        refs[host.id]?.let { if (it.host === host && it.live === live) return it }
+        return HostRef(host, live).also { refs[host.id] = it }
+    }
 
     /** Whether a session's tabs show: its fold on a live host, this screen's choice on one that is not. */
     fun sessionOpen(ref: HostRef, sessionId: String): Boolean = searching || sessionUnfolded(folds, openCached, ref, sessionId)

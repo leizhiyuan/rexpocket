@@ -9,6 +9,7 @@ import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -21,6 +22,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.leaver.rexpocket.core.PaneProgress
 import me.leaver.rexpocket.core.ProgressState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -92,5 +95,39 @@ class RecompositionTest {
         compose.waitForIdle()
         // The sweep moves in draw alone.
         assertEquals("recompositions over 30 frames of the sweep", before, recompositions())
+    }
+
+    private fun opsCalling(onRetry: (String) -> Unit) = HomeOps(
+        connect = {}, retry = onRetry, cancel = {}, disconnect = {}, newSession = {}, newTab = { _, _ -> },
+        openSession = { _, _ -> }, openTab = { _, _, _ -> }, openPane = { _, _, _, _ -> }, manage = { _, _ -> },
+        foldHost = { _, _ -> }, foldSession = { _, _, _ -> }, foldSessions = { _, _, _ -> }, editHost = {},
+        copyAddress = {}, tailnetDetails = {},
+    )
+
+    /**
+     * The home's ops stay one instance while the home recomposes, so the rows handed them can skip;
+     * a button still runs what the home built last, and new seen marks (which their queries read)
+     * make new ops.
+     */
+    @Test
+    fun theHomeKeepsItsOpsAndTheyRunTheLatestActions() {
+        var round by mutableIntStateOf(0)
+        var marks by mutableStateOf(mapOf("a" to "1"))
+        val retried = mutableListOf<String>()
+        val seen = mutableListOf<HomeOps>()
+        compose.setContent {
+            val r = round
+            seen += rememberHomeOps(marks, opsCalling { retried += "$it@$r" })
+        }
+        compose.runOnIdle { round = 1 }
+        compose.runOnIdle { round = 2 }
+        compose.runOnIdle { seen.last().retry("mac") }
+        assertEquals(3, seen.size)
+        assertSame(seen[0], seen[1])
+        assertSame(seen[0], seen[2])
+        assertEquals(listOf("mac@2"), retried)
+        compose.runOnIdle { marks = mapOf("a" to "2") }
+        compose.waitForIdle()
+        assertNotSame(seen[0], seen.last())
     }
 }

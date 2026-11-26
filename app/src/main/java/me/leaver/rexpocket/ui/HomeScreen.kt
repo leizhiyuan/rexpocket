@@ -457,7 +457,10 @@ internal fun HomeScreen(
             else -> Unit
         }
     }
-    val ops = HomeOps(
+    // The same ops while what their queries read is: a row handed them can skip composing again.
+    val ops = rememberHomeOps(
+        seenMarks,
+        HomeOps(
         connect = onConnect,
         retry = onRetry,
         cancel = onDisconnect,
@@ -522,6 +525,7 @@ internal fun HomeScreen(
         interrupt = onInterrupt,
         answer = { hostId, sessionId, windowId, blockId, record, approve -> onAnswer(hostId, sessionId, windowId, blockId, promptStamp(record), approve) },
         templates = { hostId, sessionId -> templateSheets.open(hostId, sessionId) },
+        ),
     )
     var picking by rememberSaveable { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -567,27 +571,34 @@ internal fun HomeScreen(
     } else {
         val q = query.trim().lowercase()
         val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        val tree = TreeEnv(
-            hosts = hosts,
-            lives = lives,
-            folds = folds,
-            openCached = openCached,
-            query = q,
-            searching = q.isNotEmpty(),
-            opening = opening,
-            detailHostId = connected?.id?.takeIf { detail },
-            cachedSessions = cachedSessions,
-            ops = ops,
-            sheets = sheets,
-            network = tailnetName(tailnet.backend),
-            stage = tailnetStage,
-            authUrl = tailnetStatus.authUrl,
-            onSignIn = onSignIn,
-            onDevices = { tailnetDetails = true },
-            onTailnet = onTailnet,
-            parked = { hostParked(it, tailnetView) },
-            silenced = { !background.of(it).notify },
-        )
+        // Kept while what it holds is the same, as are its rows, so the home's rows can skip
+        // composing again when the home recomposes for something else.
+        val detailHostId = connected?.id?.takeIf { detail }
+        val network = tailnetName(tailnet.backend)
+        val authUrl = tailnetStatus.authUrl
+        val tree = remember(hosts, lives, folds, openCached, q, opening, detailHostId, cachedSessions, ops, sheets, network, tailnetStage, authUrl, onSignIn, onTailnet, tailnetView, background) {
+            TreeEnv(
+                hosts = hosts,
+                lives = lives,
+                folds = folds,
+                openCached = openCached,
+                query = q,
+                searching = q.isNotEmpty(),
+                opening = opening,
+                detailHostId = detailHostId,
+                cachedSessions = cachedSessions,
+                ops = ops,
+                sheets = sheets,
+                network = network,
+                stage = tailnetStage,
+                authUrl = authUrl,
+                onSignIn = onSignIn,
+                onDevices = { tailnetDetails = true },
+                onTailnet = onTailnet,
+                parked = { hostParked(it, tailnetView) },
+                silenced = { !background.of(it).notify },
+            )
+        }
         val treeRows = tree.rows()
         // The filters cover every connected host; a host the phone is not connected to has nothing
         // to list, since only a live connection hears its programs.

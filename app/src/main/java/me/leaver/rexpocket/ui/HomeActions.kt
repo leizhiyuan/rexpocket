@@ -6,9 +6,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.ui.res.stringResource
@@ -127,6 +129,53 @@ internal class HomeOps(
     /** Opens the launch templates of a host, to run one in [sessionId] (null: in a new session) or manage them. */
     val templates: (hostId: String, sessionId: String?) -> Unit = { _, _ -> },
 )
+
+
+/**
+ * These ops with every action handed on to [latest]'s - the ones the home built last - and its
+ * queries ([HomeOps.seen], [HomeOps.markOf]), which rows read as they compose, its own. A row given
+ * the same ops can then skip composing again while the home around it does.
+ */
+internal fun HomeOps.forwarding(latest: () -> HomeOps): HomeOps = HomeOps(
+    connect = { a -> latest().connect(a) },
+    retry = { a -> latest().retry(a) },
+    cancel = { a -> latest().cancel(a) },
+    disconnect = { a -> latest().disconnect(a) },
+    newSession = { a -> latest().newSession(a) },
+    newTab = { a0, a1 -> latest().newTab(a0, a1) },
+    openSession = { a0, a1 -> latest().openSession(a0, a1) },
+    openTab = { a0, a1, a2 -> latest().openTab(a0, a1, a2) },
+    openPane = { a0, a1, a2, a3 -> latest().openPane(a0, a1, a2, a3) },
+    manage = { a0, a1 -> latest().manage(a0, a1) },
+    foldHost = { a0, a1 -> latest().foldHost(a0, a1) },
+    foldSession = { a0, a1, a2 -> latest().foldSession(a0, a1, a2) },
+    foldSessions = { a0, a1, a2 -> latest().foldSessions(a0, a1, a2) },
+    editHost = { a -> latest().editHost(a) },
+    copyAddress = { a -> latest().copyAddress(a) },
+    tailnetDetails = { latest().tailnetDetails() },
+    seen = seen,
+    markSeen = { a0, a1 -> latest().markSeen(a0, a1) },
+    markOf = markOf,
+    moveHost = { a0, a1 -> latest().moveHost(a0, a1) },
+    removeHost = { a -> latest().removeHost(a) },
+    page = { a -> latest().page(a) },
+    markSeenAll = { a -> latest().markSeenAll(a) },
+    reply = { a0, a1, a2, a3 -> latest().reply(a0, a1, a2, a3) },
+    interrupt = { a0, a1, a2 -> latest().interrupt(a0, a1, a2) },
+    answer = { a0, a1, a2, a3, a4, a5 -> latest().answer(a0, a1, a2, a3, a4, a5) },
+    templates = { a0, a1 -> latest().templates(a0, a1) },
+)
+
+/**
+ * [fresh], kept the same instance across the home's compositions for as long as [seenMarks] (what
+ * its queries read) is the same; its actions always run the latest [fresh]'s.
+ */
+@Composable
+internal fun rememberHomeOps(seenMarks: Any?, fresh: HomeOps): HomeOps {
+    val latest = remember { arrayOfNulls<HomeOps>(1) }
+    SideEffect { latest[0] = fresh }
+    return remember(seenMarks) { fresh.forwarding { latest[0] ?: fresh } }
+}
 
 /**
  * What a waiting or busy tab can be answered with, as Needs you's rows have it: Approve and Deny
