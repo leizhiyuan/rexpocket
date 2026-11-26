@@ -54,7 +54,6 @@
     <string name="keys_copy_json">Copy all as JSON</string>
     <string name="keys_share_json">Share all as JSON</string>
     <string name="keys_done">Done</string>
-    <string name="host_fallbacks">Other addresses: %1$s</string>
     <string name="import_entry">Entry %1$d: %2$s</string>
     <string name="import_entry_named">Entry %1$d (%2$s): %3$s</string>
     <string name="import_problem_too_large">the list is larger than 64 KiB.</string>

@@ -18,7 +18,6 @@
     <string name="quick_replies_full">清單已滿</string>
     <string name="quick_reply_send">傳送 %1$s</string>
     <string name="quick_reply_insert">把 %1$s 放進文字</string>
-    <string name="quick_reply_actions">%1$s 的動作</string>
     <string name="palette_group_quick_reply">快速回覆</string>
 
     <string name="key_quick_replies">快速回覆</string>

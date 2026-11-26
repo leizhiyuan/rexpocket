@@ -69,7 +69,6 @@
     <string name="tile_label">RexPocket</string>
     <string name="tile_pick">輕觸以選擇</string>
     <string name="tile_gone">已移除 · 輕觸以選擇</string>
-    <string name="tile_picker_title">這個圖塊要連線什麼？</string>
     <string name="tile_add">新增圖塊</string>
     <string name="tile_add_body">在快速設定中連線和中斷。長按圖塊可回到這裡。</string>
     <string name="tile_added">在圖塊 %1$d 上</string>

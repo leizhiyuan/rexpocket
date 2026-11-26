@@ -757,7 +757,7 @@ fun settingChanges(backup: SettingsBackup, current: CurrentSettings, plan: Impor
     }
     backup.tailnets?.forEach { t ->
         val now = current.tailnets.firstOrNull { it.sameAccount(t) }
-        if (now?.policy != t.policy || now == null) add(SettingChange(SettingKey.TailnetChoices, now?.policy, t.policy, host = t.label(backendName(t.backend))))
+        if (now?.policy != t.policy) add(SettingChange(SettingKey.TailnetChoices, now?.policy, t.policy, host = t.label(backendName(t.backend))))
     }
     backup.tiles?.forEach { t ->
         val now = current.tiles.firstOrNull { it.slot == t.slot }

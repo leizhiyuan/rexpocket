@@ -69,7 +69,6 @@
     <string name="tile_label">RexPocket</string>
     <string name="tile_pick">点按选择</string>
     <string name="tile_gone">已移除 · 点按选择</string>
-    <string name="tile_picker_title">这个磁贴要连接什么？</string>
     <string name="tile_add">添加磁贴</string>
     <string name="tile_add_body">在快捷设置中连接和断开。长按磁贴可回到这里。</string>
     <string name="tile_added">在磁贴 %1$d 上</string>

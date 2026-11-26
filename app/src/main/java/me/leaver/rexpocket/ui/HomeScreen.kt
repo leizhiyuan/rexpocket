@@ -1872,7 +1872,7 @@ internal fun HostDialog(
                             }
                         }
                         SshKeyActions(
-                            hostName = label.trim().ifBlank { parsed?.host.orEmpty() },
+                            hostName = label.trim().ifBlank { parsed.host.orEmpty() },
                             privateKey = privateKey,
                             passphrase = passphrase,
                             onGenerated = { key ->
@@ -1966,7 +1966,7 @@ internal fun HostDialog(
                         report = report,
                         running = report?.finished == false,
                         enabled = canSave && target != null,
-                        pinned = (if (sameSshHost && !forgotten) initial?.sshHostKey else null)?.ifBlank { null },
+                        pinned = (if (sameSshHost && !forgotten) initial.sshHostKey else null)?.ifBlank { null },
                         trusted = trusted,
                         onRun = { target?.let { tester.start(it, others) } },
                         onCancel = tester::cancel,

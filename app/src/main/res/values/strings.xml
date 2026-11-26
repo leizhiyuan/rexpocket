@@ -212,17 +212,13 @@
     <string name="diagnostics_issue">Open an issue</string>
     <string name="diagnostics_copied">Report copied</string>
     <string name="diagnostics_report_failed">Could not make the report</string>
-    <string name="search_hint">Search hosts, sessions and tabs</string>
     <string name="search_none">Nothing matches</string>
-    <string name="session_cached">Cached</string>
-    <string name="session_tap_open">Tap to open</string>
     <string name="host_not_connected">Not connected</string>
     <plurals name="session_count">
         <item quantity="one">%1$d session</item>
         <item quantity="other">%1$d sessions</item>
     </plurals>
     <string name="action_enter">Enter</string>
-    <string name="session_open_to_load">Open to see tabs</string>
     <string name="no_tabs">No tabs</string>
     <string name="pane_none_title">No pane open</string>
     <string name="pane_none_body">Choose a tab on the left: its terminal opens here, and the list stays beside it.</string>
@@ -235,8 +231,6 @@
     <string name="closed_sessions">Back to sessions</string>
     <string name="empty_session_title">No tabs in this session</string>
     <string name="empty_session_body">Its last tab was closed. The session is still on the host; open a new tab to use it.</string>
-    <string name="action_show_active">Activity</string>
-    <string name="no_activity">No program is blocked, failed, done or working</string>
     <string name="activity_offline">Connect to a host to see its activity</string>
     <string name="activity_waiting">Blocked</string>
     <string name="activity_failed">Failed</string>
@@ -344,8 +338,6 @@
     <string name="keybar_always">Key bar shown</string>
     <string name="error_operation_failed">Operation failed</string>
     <string name="state_folded">Folded</string>
-    <string name="filter_on">On</string>
-    <string name="filter_off">Off</string>
     <string name="action_clear">Clear</string>
     <string name="state_selected">Selected</string>
     <string name="holder_phone">This phone</string>
@@ -360,7 +352,6 @@
     <string name="alerts_title">Background alerts</string>
     <string name="alerts_on">On</string>
     <string name="alerts_off">Off</string>
-    <string name="alerts_blocked">Notifications are off for RexPocket</string>
     <string name="alerts_channel_watch">Watching in the background</string>
     <string name="alerts_channel_watch_body">The quiet notification that keeps RexPocket connected while it is in the background.</string>
     <string name="alerts_channel_attention">Needs you</string>
@@ -381,7 +372,6 @@
     <string name="notifications_background_body">Keeps RexPocket connected while it is away - also after you swipe it from recent apps, and after the phone restarts or the app updates - so it can tell you about the programs below.</string>
     <string name="notifications_android">Allowed by Android</string>
     <string name="notifications_allowed">Yes</string>
-    <string name="notifications_not_allowed">No</string>
     <string name="notifications_not_allowed_body">Android shows nothing from RexPocket until you allow it.</string>
     <string name="notifications_group_when">Tell me when</string>
     <string name="notifications_waiting">A program is blocked on me</string>

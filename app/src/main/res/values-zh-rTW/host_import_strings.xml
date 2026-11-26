@@ -53,7 +53,6 @@
     <string name="keys_copy_json">全部複製為 JSON</string>
     <string name="keys_share_json">全部分享為 JSON</string>
     <string name="keys_done">完成</string>
-    <string name="host_fallbacks">其他位址：%1$s</string>
     <string name="import_entry">第 %1$d 項：%2$s</string>
     <string name="import_entry_named">第 %1$d 項（%2$s）：%3$s</string>
     <string name="import_problem_too_large">清單超過 64 KiB。</string>

@@ -518,7 +518,7 @@ object Alerts {
             .setSubText(note.host)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setProgress(100, if (busy) 0 else percent ?: 0, busy && p.state == ProgressState.Indeterminate)
+            .setProgress(100, if (busy) 0 else percent, busy && p.state == ProgressState.Indeterminate)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setContentIntent(tap)

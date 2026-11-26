@@ -19,7 +19,6 @@
     <string name="quick_replies_full">The list is full</string>
     <string name="quick_reply_send">Send %1$s</string>
     <string name="quick_reply_insert">Put %1$s in the text</string>
-    <string name="quick_reply_actions">Actions for %1$s</string>
     <string name="palette_group_quick_reply">Quick reply</string>
 
     <string name="key_quick_replies">Quick replies</string>

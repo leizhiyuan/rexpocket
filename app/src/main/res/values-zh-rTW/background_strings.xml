@@ -16,7 +16,6 @@
     <string name="bg_host_kept">保持連線</string>
     <string name="bg_host_not_kept">不在背景保持</string>
     <string name="bg_host_silent">靜音</string>
-    <string name="bg_stay">在背景保持連線</string>
     <string name="bg_stay_body">關閉後，RexPocket 離開螢幕一分鐘後會中斷這台主機，回來時再重新連線。</string>
     <string name="bg_always">一律連線</string>
     <string name="bg_always_body">RexPocket 每次啟動時都會連線，包括重新啟動後或中斷連線後，並在背景保持連線。</string>
@@ -26,9 +25,6 @@
     <string name="bg_stopped_title">背景提醒已停止</string>
     <string name="bg_stopped_body">Android 沒有讓 RexPocket 在背景重新啟動。開啟它即可重新連線；設定 › 背景與通知中列出了需要允許的項目。</string>
     <string name="bg_watch_starting">正在連線…</string>
-    <string name="bg_host_live">已連線</string>
-    <string name="bg_host_trying">正在重新連線</string>
-    <string name="bg_host_failed">未連線</string>
     <string name="bg_disconnect_host">中斷 %1$s</string>
     <plurals name="bg_watch_title">
         <item quantity="other">已連線 %1$d 台主機</item>

@@ -160,7 +160,7 @@ class AlertPlanner(
                 continue
             }
             val folded = before?.kind == AlertKind.Message && now - before.at < foldMs
-            shown[block] = Shown(kind, if (folded) before!!.at else now)
+            shown[block] = Shown(kind, if (folded) before.at else now)
             moves += AlertMove.Post(block, kind, loud = !folded)
         }
         return moves

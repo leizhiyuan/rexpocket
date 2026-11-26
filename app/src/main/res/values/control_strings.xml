@@ -80,7 +80,6 @@
     <string name="tile_label">RexPocket</string>
     <string name="tile_pick">Tap to choose</string>
     <string name="tile_gone">Removed · tap to choose</string>
-    <string name="tile_picker_title">What should this tile connect?</string>
     <string name="tile_add">Add a tile</string>
     <string name="tile_add_body">Connect and disconnect from Quick Settings. Long-press the tile to come back here.</string>
     <string name="tile_added">On tile %1$d</string>

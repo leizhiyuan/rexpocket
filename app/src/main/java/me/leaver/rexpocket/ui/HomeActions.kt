@@ -566,9 +566,9 @@ internal fun HomeSheetsHost(
         return
     }
     (open.target as? ManageTarget.Session)?.let { t ->
-        ref!!.state.views[t.sessionId]?.label?.let { labels[HomeFolds.sessionKey(t.hostId, t.sessionId)] = it }
+        ref.state.views[t.sessionId]?.label?.let { labels[HomeFolds.sessionKey(t.hostId, t.sessionId)] = it }
     }
-    val live = ref!!.isLive
+    val live = ref.isLive
     when (open) {
         is HomeDialog.Rename -> RenameDialog(
             title = stringResource(if (open.target is ManageTarget.Tab) R.string.menu_rename_tab else R.string.menu_rename_session),

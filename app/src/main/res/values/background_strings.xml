@@ -17,7 +17,6 @@
     <string name="bg_host_kept">Stays connected</string>
     <string name="bg_host_not_kept">Not in the background</string>
     <string name="bg_host_silent">Silent</string>
-    <string name="bg_stay">Stay connected in the background</string>
     <string name="bg_stay_body">Off, RexPocket lets this host go a minute after it leaves the screen, and connects it again when you come back.</string>
     <string name="bg_always">Always connected</string>
     <string name="bg_always_body">Connects whenever RexPocket starts, also after a restart or a Disconnect, and stays connected in the background.</string>
@@ -27,9 +26,6 @@
     <string name="bg_stopped_title">Background alerts stopped</string>
     <string name="bg_stopped_body">Android did not let RexPocket start again in the background. Open it to reconnect; Settings › Background and notifications shows what to allow.</string>
     <string name="bg_watch_starting">Connecting…</string>
-    <string name="bg_host_live">connected</string>
-    <string name="bg_host_trying">reconnecting</string>
-    <string name="bg_host_failed">not connected</string>
     <string name="bg_disconnect_host">Disconnect %1$s</string>
     <plurals name="bg_watch_title">
         <item quantity="one">Connected to %1$d host</item>
