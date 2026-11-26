@@ -10,7 +10,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -63,12 +62,13 @@ internal fun ProgressLine(progress: PaneProgress, modifier: Modifier = Modifier,
     val words = if (merged) "" else progressWords(progress)
     val fraction = progress.fraction
     val moving = progress.state == ProgressState.Indeterminate
+    // The sweep's place is read in draw, not here: it changes on every frame, and only the bar's
+    // drawing needs it, not the bar's composition.
     val sweep = if (moving) {
         val transition = rememberInfiniteTransition(label = "progress")
-        val at by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(1_200, easing = LinearEasing), RepeatMode.Restart), label = "sweep")
-        at
+        transition.animateFloat(0f, 1f, infiniteRepeatable(tween(1_200, easing = LinearEasing), RepeatMode.Restart), label = "sweep")
     } else {
-        0f
+        null
     }
     Canvas(
         modifier.fillMaxWidth().height(height).testTag(PROGRESS_TAG).then(
@@ -87,7 +87,7 @@ internal fun ProgressLine(progress: PaneProgress, modifier: Modifier = Modifier,
         when {
             moving -> {
                 val piece = size.width * 0.3f
-                val left = -piece + (size.width + piece) * sweep
+                val left = -piece + (size.width + piece) * (sweep?.value ?: 0f)
                 drawRoundRect(tint, topLeft = Offset(left.coerceAtLeast(0f), 0f), size = Size((left + piece).coerceAtMost(size.width) - left.coerceAtLeast(0f), size.height), cornerRadius = radius)
             }
             fraction == null -> drawRoundRect(tint, cornerRadius = radius)

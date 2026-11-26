@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -17,6 +18,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import me.leaver.rexpocket.core.PaneProgress
+import me.leaver.rexpocket.core.ProgressState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -72,5 +75,22 @@ class RecompositionTest {
         compose.waitForIdle()
         assertEquals(-50f, top(), 0.5f)
         assertEquals("composed once, re-placed every step", 1, compositions)
+    }
+
+    /** How many times the window's Recomposer has recomposed something and applied it. */
+    private fun recompositions(): Long = Recomposer.runningRecomposers.value.sumOf { it.changeCount }
+
+    @Test
+    fun anIndeterminateBarSweepsWithoutComposingAgain() {
+        val busy = PaneProgress(ProgressState.Indeterminate, null)
+        compose.mainClock.autoAdvance = false
+        compose.setContent { ProgressLine(busy, Modifier.size(200.dp, 4.dp)) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        val before = recompositions()
+        repeat(30) { compose.mainClock.advanceTimeByFrame() }
+        compose.waitForIdle()
+        // The sweep moves in draw alone.
+        assertEquals("recompositions over 30 frames of the sweep", before, recompositions())
     }
 }
