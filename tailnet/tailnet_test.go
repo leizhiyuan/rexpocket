@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"tailscale.com/envknob"
 )
 
 type fakePlatform struct{ interfaces string }
@@ -78,5 +80,14 @@ func TestAppDirsFillWhatAndroidLeavesEmpty(t *testing.T) {
 	}
 	if fi, err := os.Stat(filepath.Join(dir, "logs")); err != nil || !fi.IsDir() {
 		t.Errorf("logs directory not made: %v", err)
+	}
+}
+
+// The node never uploads its log to Tailscale's log service: the app reads none of it, and it
+// costs a wakeup and data in the background and names the tailnet's peers to a third party.
+func TestTheNodeOptsOutOfLogUploads(t *testing.T) {
+	install()
+	if !envknob.NoLogsNoSupport() {
+		t.Fatal("TS_NO_LOGS_NO_SUPPORT is not set after install")
 	}
 }

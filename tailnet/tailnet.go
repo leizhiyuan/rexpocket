@@ -22,8 +22,10 @@ import (
 
 	"golang.org/x/sys/unix"
 	"me.leaver.rexpocket/tailnet/internal/dials"
+	"tailscale.com/envknob"
 	"tailscale.com/ipn"
 	"tailscale.com/ipn/ipnstate"
+	"tailscale.com/logtail"
 	"tailscale.com/net/netmon"
 	"tailscale.com/net/socks5"
 	"tailscale.com/tailcfg"
@@ -57,6 +59,12 @@ var installOnce sync.Once
 
 func install() {
 	installOnce.Do(func() {
+		// No log uploads to Tailscale's log service (logtail): the app reads none of it, and each
+		// upload is a radio wakeup and data in the background, with the tailnet's peer names and
+		// endpoints in it. Opting out (TS_NO_LOGS_NO_SUPPORT) makes logpolicy's transport a no-op
+		// and tells the control plane; Disable stops logtail buffering lines to disk at all.
+		envknob.SetNoLogsNoSupport()
+		logtail.Disable()
 		netmon.RegisterInterfaceGetter(interfaces)
 		installSocketHook()
 	})

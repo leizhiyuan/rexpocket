@@ -231,7 +231,11 @@ What costs battery is the node's own traffic while it is up: WireGuard keepalive
 talks to, the control-plane long poll (Tailscale's map request), DERP's keepalive, and the wakeups
 of the network stack in the Go runtime. A Rex connection on top adds a WebSocket ping every 120 s
 (Rex's schedule; longer than Tailscale's 45 s idle timeout, so the path's 3 s heartbeat stops
-between pings) and Rex's status events. Without a measurement on a phone, the shape of the cost is:
+between pings) and Rex's status events.
+The node does not upload its log to Tailscale's log service: `install()` in tailnet.go opts out
+(`envknob.SetNoLogsNoSupport`, `logtail.Disable`), as the app reads none of it and each upload is a
+wakeup and data in the background with the peers' names in it. Without a measurement on a phone,
+the shape of the cost is:
 
 - **Tailnet up, no host** costs the node's idle traffic: one long-poll connection to the control
   plane and one to the home DERP region, each with a keepalive of the order of a minute, and
