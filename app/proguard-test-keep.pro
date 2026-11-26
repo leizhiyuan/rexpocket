@@ -14,4 +14,3 @@
 -keep,allowobfuscation class androidx.** { *; }
 -keep,allowobfuscation class okhttp3.** { *; }
 -keep,allowobfuscation class okio.** { *; }
--keep,allowobfuscation class org.json.** { *; }

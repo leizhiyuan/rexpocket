@@ -241,7 +241,12 @@ dependencies {
     // The empty activity the Compose test rule hosts its content in is declared in
     // src/debug/AndroidManifest.xml, not by ui-test-manifest: that one is exported, and the debug
     // APK is the one people install.
-    implementation(project(":core"))
+    // :core is a JVM module and brings org.json:json for its own tests and JVM use. Android has
+    // org.json built in, and that copy is the one that runs: packing the Maven one as well let R8
+    // optimize against it (its JSONException is a RuntimeException, Android's is not), and the
+    // optimized APK failed verification at launch. Only the JVM unit tests take the Maven copy.
+    implementation(project(":core")) { exclude(group = "org.json", module = "json") }
+    testImplementation("org.json:json:20240303")
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
@@ -263,4 +268,9 @@ dependencies {
     // with REXPOCKET_NETBIRD=1 instead.
     implementation(files(tailnetLibrary))
     if (withAddon) implementation(project(":netbirdaddon-api"))
+}
+
+// The instrumented tests run on Android's org.json too (see the :core dependency above).
+configurations.configureEach {
+    if (name.contains("AndroidTest")) exclude(group = "org.json", module = "json")
 }
