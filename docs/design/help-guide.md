@@ -134,6 +134,9 @@ object, all in `ui/guide/`.
   view model as the rows themselves do.
 - **TalkBack.** When the spotlight shows, its title and hint are announced; the card is a node with
   Got it (Next and Skip tour in the tour), so it is found by swiping and dismissed by a double tap.
+  The card is a traversal group with a `traversalIndex` before its window's content, so the first
+  swipe after the announcement lands on it rather than going through the whole screen; a sheet's
+  layer orders the same, the card being in that sheet's window (`GuideEdgeTest`).
   The ring is drawing only, the control keeps its own label and actions.
 - Colours are the theme's tokens, so dark and light follow; the card is at most 360 dp wide and sits
   under the control, or over it when there is no room under it, inside what the window shows: the

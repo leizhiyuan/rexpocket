@@ -3,6 +3,7 @@ package me.leaver.rexpocket.ui
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -125,6 +126,21 @@ class GuideEdgeTest {
         assertEquals("the press folded a row under the card", folds, m.folds.value)
         assertTrue("a sheet opened under the card", compose.onAllNodes(hasTestTag(ACTION_SHEET_TAG)).fetchSemanticsNodes().isEmpty())
         assertEquals(GuideSpot.HomeNeedsYou, guide.shown)
+    }
+
+    /**
+     * TalkBack reaches the card first: it is a traversal group put before the screen it lies over,
+     * so a swipe after the announcement lands on its words and then Got it, not on the home's rows.
+     */
+    @Test
+    fun theCardIsFirstForTalkBack() {
+        start()
+        compose.runOnUiThread { guide.show(guideEntry("needs_you")!!) }
+        awaitShown(GuideSpot.HomeNeedsYou)
+        val card = compose.onNodeWithTag(SPOTLIGHT_CARD_TAG, useUnmergedTree = true).fetchSemanticsNode().config
+        assertTrue("the card is not a traversal group", card.getOrElse(SemanticsProperties.IsTraversalGroup) { false })
+        val index = card.getOrElse(SemanticsProperties.TraversalIndex) { 0f }
+        assertTrue("the card is not before the screen in traversal order: $index", index < 0f)
     }
 
     /** Help's sheet, on an entry's page, is there again after a rotation, as the home's other sheets are. */

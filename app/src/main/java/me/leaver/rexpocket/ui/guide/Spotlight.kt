@@ -57,6 +57,9 @@ import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
@@ -265,7 +268,7 @@ private fun SpotlightOverlay(spotlight: Spotlight, target: Rect, guide: Guide, l
     // so it is the last handler added, which is asked first.
     BackHandler { guide.dismiss() }
     LaunchedEffect(spotlight) {
-        // TalkBack says it as it appears; the card is then a node with its buttons.
+        // TalkBack says it as it appears; the card is then the first node, with its buttons.
         @Suppress("DEPRECATION")
         view.announceForAccessibility(spotlight.title + ". " + spotlight.text)
     }
@@ -346,6 +349,10 @@ private fun SpotlightCard(spotlight: Spotlight, guide: Guide) {
     Column(
         Modifier.widthIn(max = CARD_MAX).clip(RoundedCornerShape(Radius.card)).background(Colors.raised)
             .testTag(SPOTLIGHT_CARD_TAG)
+            // TalkBack's first stop: a group of its own put before the screen it lies over (in its
+            // window's layer, so a sheet's card leads the sheet), so a swipe after the announcement
+            // goes to its words and buttons rather than through every row first.
+            .semantics { isTraversalGroup = true; traversalIndex = -1f }
             // The card is the spotlight's own: a press on its words stops here, rather than going
             // through to the row under it. Its buttons still take theirs.
             .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
