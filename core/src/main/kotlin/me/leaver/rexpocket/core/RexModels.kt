@@ -392,6 +392,20 @@ private val TITLE_SPINNER = Regex("(^|\\s)[\\u2801-\\u28FF](\\s|$)")
 fun titleSaysWorking(title: String?): Boolean = title != null && TITLE_SPINNER.containsMatchIn(title)
 
 /**
+ * Whether [a] and [b] are the same title but for the spinner's frame: "π ⠋ ROTATE" and "π ⠙ ROTATE".
+ * Such a change says nothing new - the program is still at work - and comes several times a second.
+ */
+fun sameTitleButSpinner(a: String?, b: String?): Boolean {
+    if (a == null || b == null || !titleSaysWorking(a) || !titleSaysWorking(b)) return false
+    return withoutSpinner(a) == withoutSpinner(b)
+}
+
+private fun withoutSpinner(title: String): String =
+    TITLE_SPINNER.replace(title) { frame -> frame.value.replace(SPINNER_FRAME, "\u2800") }
+
+private val SPINNER_FRAME = Regex("[\\u2801-\\u28FF]")
+
+/**
  * [records] with a `working` record added when the pane's program [title] says it works and no
  * record Rex holds does - working or blocked. Rex drops a `working` record at a shell prompt mark
  * (`program_status_removed`, reason `prompt`), and an agent does not report a state it already

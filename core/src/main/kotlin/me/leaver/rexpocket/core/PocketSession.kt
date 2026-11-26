@@ -1408,9 +1408,13 @@ class PocketSession(
             }
             "title_changed" -> {
                 val title = programTitle(body)
+                val was = titleOf[block]
                 if (title == null) titleOf -= block else titleOf[block] = title
                 reportedDuringRead += block
-                publishStatus()
+                // An agent's spinner turns several times a second while it works: a new frame
+                // changes nothing that is shown but the frame, so it is kept for the next state
+                // published, not published on its own.
+                if (!sameTitleButSpinner(was, title)) publishStatus()
             }
             "clipboard_written" -> onCopied(block, body)
             "child_exited" -> {
@@ -1553,19 +1557,25 @@ class PocketSession(
             val busy = held.filterValues { records -> records.values.any { it.state == "working" || it.state == "blocked" } }.keys
             val all = LinkedHashMap<String, List<ProgramRecord>>()
             for ((block, records) in held) if (records.isNotEmpty()) all[block] = rootFirst(records.values)
+            // Each map that came out the same is the one already published, so whoever shows it
+            // (every row on the home) sees the same instance and need not be composed again.
+            val deskSeen = st.deskSeen.filterKeys { it in summary }
             st.copy(
-                blockStatus = summary,
-                records = all,
-                busy = HashSet(busy),
-                statusSince = HashMap(sinceOf),
+                blockStatus = kept(st.blockStatus, summary),
+                records = kept(st.records, all),
+                busy = kept(st.busy, HashSet(busy)),
+                statusSince = kept(st.statusSince, HashMap(sinceOf)),
                 pwd = st.view?.focusedBlock()?.id?.let { pwds[it] },
-                programs = programs,
-                titles = HashMap(titleOf),
-                deskSeen = st.deskSeen.filterKeys { it in summary },
+                programs = kept(st.programs, programs),
+                titles = kept(st.titles, HashMap(titleOf)),
+                deskSeen = kept(st.deskSeen, deskSeen),
             )
         }
         noteDeskLooks()
     }
+
+    /** [old] when [new] holds the same, else [new], which must not change once published. */
+    private fun <T> kept(old: T, new: T): T = if (old == new) old else new
 
     /** [records] in Rex's order: the root record first, each parent before its children (ids sort that way). */
     private fun rootFirst(records: Collection<ProgramRecord>): List<ProgramRecord> = records.sortedBy { it.id }

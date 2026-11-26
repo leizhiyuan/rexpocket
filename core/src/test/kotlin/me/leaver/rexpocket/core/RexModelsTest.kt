@@ -1,7 +1,9 @@
 package me.leaver.rexpocket.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RexModelsTest {
@@ -207,6 +209,18 @@ class RexModelsTest {
         zoomedBlockId = null,
         blocks = blocks.map { BlockInfo(it, it, null, null, null) },
     )
+
+    @Test
+    fun aSpinnerFrameIsTheSameTitleAndAnythingElseIsNot() {
+        assertTrue(sameTitleButSpinner("π ⠋ ROTATE: preview", "π ⠙ ROTATE: preview"))
+        assertTrue(sameTitleButSpinner("⠐ Claude Code", "⠂ Claude Code"))
+        assertFalse(sameTitleButSpinner("π ⠋ ROTATE: preview", "π ⠋ ROTATE: the preview"))
+        // The spinner stopping, or starting, is news.
+        assertFalse(sameTitleButSpinner("π ⠋ ROTATE: preview", "π ROTATE: preview"))
+        assertFalse(sameTitleButSpinner("π ROTATE: preview", "π ⠋ ROTATE: preview"))
+        assertFalse(sameTitleButSpinner(null, "⠋ pi"))
+        assertFalse(sameTitleButSpinner("vim", "vim"))
+    }
 
     private fun record(state: String) = ProgramRecord("r", state, null, null, null, null, null)
 }
