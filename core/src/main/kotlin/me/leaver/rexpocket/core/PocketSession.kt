@@ -184,6 +184,8 @@ class PocketSession(
     private val progressStaleMs: Long = PROGRESS_STALE_MS,
     /** How often the control connection is checked with a quick call while the screen is on. */
     private val livenessEveryMs: Long = LIVENESS_EVERY_MS,
+    /** How often, on screen, the panes of sessions whose status events may not come are read again. */
+    private val statusSweepMs: Long = STATUS_SWEEP_MS,
     /**
      * The host's addresses, when it has others to try: each dial uses the cursor's current one,
      * and one that could not be reached moves it on at once (multi-host.md, "Other addresses").
@@ -2286,7 +2288,7 @@ class PocketSession(
     }
 
     private fun sweepInterval(failed: Int): Long {
-        val base = if (active.value) STATUS_SWEEP_MS else STATUS_SWEEP_AWAY_MS
+        val base = if (active.value) statusSweepMs else STATUS_SWEEP_AWAY_MS
         return (base shl failed.coerceAtMost(4)).coerceAtMost(STATUS_SWEEP_MAX_MS)
     }
 
@@ -2323,16 +2325,17 @@ class PocketSession(
         reportedDuringRead -= block
         val payload = JSONObject().put("session_id", sid).put("block_id", block).put("args", JSONObject())
         val records = try {
-            coroutineScope {
-                // The title too: a spinner in it is how some agents say they work (withTitleWork).
-                val title = async { runCatching { rpc("com.superlogical.terminal.title", payload) }.getOrNull() }
-                val status = parseProgramRecords(rpc("com.superlogical.terminal.program_status", payload)).associateBy { it.id }
-                title.await()?.let { answer ->
+            val status = parseProgramRecords(rpc("com.superlogical.terminal.program_status", payload)).associateBy { it.id }
+            // The title too, when no record says the program works or asks: a spinner in it is how
+            // some agents say they work once Rex dropped their record (withTitleWork). With such a
+            // record the title changes nothing, and is not asked for.
+            if (status.values.none { it.state == "working" || it.state == "blocked" }) {
+                runCatching { rpc("com.superlogical.terminal.title", payload) }.getOrNull()?.let { answer ->
                     val named = programTitle(answer)
                     if (block !in reportedDuringRead) if (named == null) titleOf -= block else titleOf[block] = named
                 }
-                status
             }
+            status
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {

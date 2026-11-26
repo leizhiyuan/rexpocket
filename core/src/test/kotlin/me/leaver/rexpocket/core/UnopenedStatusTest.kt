@@ -8,6 +8,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 
@@ -185,5 +186,43 @@ class RealRexUnopenedStatusTest : UnopenedStatusTest() {
 
     override suspend fun settle(desk: Desk, rex: RexUnderTest, sid: String, block: String, title: String) {
         desk.type(sid, block, "$title\n")
+    }
+}
+
+/**
+ * What the sweep costs: a pane whose program says it works or asks needs no title read, as a
+ * spinning title only stands in for a record Rex no longer holds (withTitleWork).
+ */
+class SweepCostTest {
+    @Test
+    fun aPaneWithAWorkingRecordIsNotAskedItsTitle() = runBlocking {
+        val rex = ScriptedRex(blockEventsOnlyWhenAttached = true)
+        val desk = Desk(rex.endpoint, platform = "macos")
+        val phone = PocketSession(rex.endpoint, statusSweepMs = 400)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            desk.connect()
+            val (opened, _) = desk.newSession(tabs = 1)
+            val (_, tabs) = desk.newSession(tabs = 1)
+            val (_, block) = tabs[0]
+            rex.report(block, "working", app = "omp")
+            phone.start(scope, preferredSessionId = opened)
+            withTimeout(15_000) { phone.awaitReady() }
+            phone.openSession(opened)
+            fun count(method: String) = rex.calls.count { it.startsWith("com.superlogical.terminal.$method") && it.endsWith(block) }
+            withTimeout(10_000) { while (count("program_status") < 4) delay(50) }
+            assertEquals("working in the unopened tab", "working", phone.state.value.blockStatus[block]?.state)
+            // The first read takes the title with everything else; the sweeps after it do not.
+            assertEquals("title reads", 1, count("title"))
+            // A pane with no record is asked its title again: a spinner may be all it says.
+            rex.report(block, null)
+            val before = count("title")
+            withTimeout(10_000) { while (count("title") < before + 2) delay(50) }
+        } finally {
+            phone.stop()
+            scope.cancel()
+            desk.close()
+            rex.close()
+        }
     }
 }

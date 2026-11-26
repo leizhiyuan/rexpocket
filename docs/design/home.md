@@ -193,8 +193,10 @@ first known, and then follows Rex's status events. A session the phone has not a
 connection may send none (a Mac did not, though the guide says `event_scope: all` brings them):
 its panes' `program_status` and its `session.view` are read again every 12 s while the app is on
 screen and every minute while only background alerts run, backing off to 2 min while the reads
-fail, until a status event comes from that session. Rex has no call for many panes at once, so
-one sweep is a burst of calls sent together. Details in rex-parity.md, "Status of sessions the
+fail, until a status event comes from that session. A pane's `title` is read with it only when no
+record says its program works or asks, since a spinning title only stands in for a dropped record
+(`SweepCostTest`). Rex has no call for many panes at once, so one sweep is a burst of calls sent
+together. Details in rex-parity.md, "Status of sessions the
 phone never opened"; `UnopenedStatusTest` (scripted and real Rex).
 
 A tab also counts as working when its program's title spins (a braille frame such as ⠇ standing
