@@ -44,8 +44,8 @@ class TerminalStream(
      */
     private val visible: StateFlow<Boolean>? = null,
     private val awayGraceMs: Long = AWAY_GRACE_MS,
-    /** How long Rex keeps a stream that dropped for a RESUME; see [feeds]. */
-    private val resumeWindowMs: Long = RESUME_WINDOW_MS,
+    /** How long a dropped stream can be resumed; null for what Rex's WELCOME says, less a margin. See [feeds]. */
+    private val resumeWindowMs: Long? = null,
     private val ticket: suspend () -> String,
 ) {
     constructor(endpoint: Endpoint, httpFactory: () -> OkHttpClient, trace: (String) -> Unit = {}, ticket: suspend () -> String) :
@@ -54,6 +54,9 @@ class TerminalStream(
     /** Stream bytes handed over so far: what a RESUME tells Rex it does not need again. */
     @Volatile private var received = 0L
     @Volatile private var resumeToken: ByteString? = null
+
+    /** How long Rex said it keeps this stream for a resume, in ms; 0 when it did not say. */
+    @Volatile private var rexKeepsMs = 0L
     @Volatile private var active: WebSocket? = null
     @Volatile private var stopped = false
 
@@ -86,8 +89,8 @@ class TerminalStream(
      * With the app away from the screen for [awayGraceMs], the stream is dropped - without a close,
      * so Rex keeps it - and nothing is read until the app is back: a busy pane no one looks at costs
      * no data, radio or emulator time, while its notifications still come on the control
-     * connection. Back within Rex's minute, the stream resumes where it stopped, cheaply; later
-     * than that Rex has let it go, so the stream starts over with a ticket and a snapshot at once,
+     * connection. Back within the time Rex's WELCOME said it keeps a stream (a minute), the stream
+     * resumes where it stopped, cheaply; later than that Rex has let it go, so the stream starts over with a ticket and a snapshot at once,
      * rather than first being refused a RESUME.
      */
     fun feeds(): Flow<TerminalFeed> = flow {
@@ -98,7 +101,8 @@ class TerminalStream(
             if (parkedAt != 0L) {
                 visible?.first { it }
                 val away = elapsed(parkedAt)
-                if (away >= resumeWindowMs) resumeToken = null
+                val window = resumeWindowMs ?: if (rexKeepsMs > 0) rexKeepsMs - RESUME_MARGIN_MS else RESUME_WINDOW_MS
+                if (away >= window) resumeToken = null
                 trace("stream back after ${away}ms let go while away: " + if (resumeToken != null) "resuming" else "starting over")
                 parkedAt = 0L
             }
@@ -272,6 +276,7 @@ class TerminalStream(
                 when (val answer = parseWelcome(bytes.toByteArray())) {
                     is Welcome.Ok -> {
                         resumeToken = answer.token
+                        rexKeepsMs = answer.keepMs
                         welcome.complete(Connected(webSocket, answer.nonce, frames))
                     }
                     is Welcome.Rejected -> welcome.completeExceptionally(
@@ -338,7 +343,10 @@ class TerminalStream(
                 // is the least significant, so Rex's own messages carry it in decimal.
                 var nonce = 0uL
                 for (i in 0 until 8) nonce = nonce or (bytes[WELCOME_BYTES - 8 + i].toUByte().toULong() shl (8 * i))
-                Welcome.Ok(bytes.copyOfRange(1, 1 + TOKEN_BYTES).toByteString(), nonce)
+                // Before it, after three zero bytes, how long Rex keeps the stream for a resume.
+                var keep = 0L
+                for (i in 0 until 4) keep = keep or ((bytes[WELCOME_BYTES - 12 + i].toLong() and 0xff) shl (8 * i))
+                Welcome.Ok(bytes.copyOfRange(1, 1 + TOKEN_BYTES).toByteString(), nonce, keep)
             }
         OP_REJECT.toByte() -> Welcome.Rejected(bytes.getOrElse(1) { REJECT_UNKNOWN })
         else -> Welcome.Rejected(REJECT_UNKNOWN)
@@ -360,7 +368,7 @@ class TerminalStream(
     }
 
     private sealed interface Welcome {
-        class Ok(val token: ByteString, val nonce: ULong) : Welcome
+        class Ok(val token: ByteString, val nonce: ULong, val keepMs: Long) : Welcome
         class Rejected(val reason: Byte) : Welcome
     }
 
@@ -397,10 +405,13 @@ class TerminalStream(
         const val AWAY_GRACE_MS = 60_000L
 
         /**
-         * How long Rex keeps a dropped stream for a RESUME: a minute, less a margin, so a resume
-         * is not sent just as Rex lets the stream go.
+         * How long a dropped stream is resumed when Rex did not say how long it keeps one: its
+         * minute (Rex 0.1.0-preview.22), less [RESUME_MARGIN_MS].
          */
         const val RESUME_WINDOW_MS = 55_000L
+
+        /** Taken off the time Rex keeps a stream, so a RESUME is not sent just as Rex lets it go. */
+        const val RESUME_MARGIN_MS = 5_000L
 
         /** Messages held for the reader before the socket waits; Rex sends pieces of a few KB to 64 KB. */
         private const val FRAMES_BUFFERED = 256

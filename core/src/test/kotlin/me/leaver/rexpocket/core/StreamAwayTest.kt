@@ -39,7 +39,7 @@ class StreamAwayTest {
         return Pane(rex, control, sid, block, AtomicInteger())
     }
 
-    private fun stream(p: Pane, visible: MutableStateFlow<Boolean>, traced: MutableList<String>, resumeWindowMs: Long) =
+    private fun stream(p: Pane, visible: MutableStateFlow<Boolean>, traced: MutableList<String>, resumeWindowMs: Long?) =
         TerminalStream({ p.rex.endpoint }, { RexClient.defaultHttp() }, { traced += it }, visible, awayGraceMs = 300, resumeWindowMs = resumeWindowMs) {
             p.tickets.incrementAndGet()
             p.control.call(
@@ -49,7 +49,7 @@ class StreamAwayTest {
             ).getString("ticket")
         }
 
-    private fun run(resumeWindowMs: Long, awayMs: Long, check: (snapshots: Int, tickets: Int, refused: Int, output: String) -> Unit) = runBlocking {
+    private fun run(resumeWindowMs: Long?, awayMs: Long, check: (snapshots: Int, tickets: Int, refused: Int, output: String) -> Unit) = runBlocking {
         ScriptedRex().use { rex ->
             val p = pane(rex)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -93,8 +93,9 @@ class StreamAwayTest {
         }
     }
 
+    /** Within the minute ScriptedRex's WELCOME says it keeps a stream, as Rex's does. */
     @Test
-    fun backWithinRexsMinuteTheStreamResumes() = run(resumeWindowMs = 60_000, awayMs = 200) { snapshots, tickets, refused, _ ->
+    fun backWithinRexsMinuteTheStreamResumes() = run(resumeWindowMs = null, awayMs = 200) { snapshots, tickets, refused, _ ->
         assertEquals("snapshots", 1, snapshots)
         assertEquals("tickets", 1, tickets)
         assertEquals("refused", 0, refused)
