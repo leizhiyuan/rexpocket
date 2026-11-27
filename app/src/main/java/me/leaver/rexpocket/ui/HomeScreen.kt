@@ -294,7 +294,7 @@ internal fun HomeScreen(
                             sessions.forEach { row ->
                                 val sessionExpanded = row.session.id !in collapsedSessions || searchOpen
                                 val openingThis = opening == Opening.Existing(row.session.id)
-                                item(key = "session-${row.session.id}") {
+                                item(key = sessionRowKey(host.id, row.session.id)) {
                                     SessionHeader(
                                         row = row,
                                         live = live,
@@ -311,7 +311,7 @@ internal fun HomeScreen(
                                     )
                                 }
                                 if (sessionExpanded) {
-                                    item(key = "tabs-${row.session.id}") {
+                                    item(key = tabsRowKey(host.id, row.session.id)) {
                                         if (row.tabs.isEmpty()) {
                                             EmptyTabs(
                                                 text = when {
@@ -1298,6 +1298,15 @@ internal fun HostDialog(
         )
     }
 }
+
+/**
+ * The LazyColumn key of a session row. A key names an item, so it carries the host too: one
+ * server can be saved as two hosts, and both rows list the same session IDs.
+ */
+internal fun sessionRowKey(hostId: String, sessionId: String): String = "session-$hostId-$sessionId"
+
+/** The LazyColumn key of the tabs under a session row, unique for the same reason. */
+internal fun tabsRowKey(hostId: String, sessionId: String): String = "tabs-$hostId-$sessionId"
 
 internal fun asSavedHost(
     initial: SavedHost?,
